@@ -56,7 +56,7 @@ Answers:
 
 > For this ticker, with this Planned Entry and this Initial Stop, how many shares fit the allowed risk?
 
-Its Entry, Stop, Commission, Slippage and resulting Trade Size belong to one planned Trade only.
+Its Entry, Stop, Commission, Slippage and resulting Trade Size belong to one planned Trade only. At the portfolio-summary layer it also aggregates all planned rows so it can explain the risk/capital footprint of the planned basket, not only the currently edited ticker.
 
 ### Combined Verdict
 
@@ -95,7 +95,7 @@ Primary metrics:
 - `Realized P&L`
 - `Unrealized P&L`
 - `Stock Market Value`
-- `Available Cash` or `Estimated Available Cash`
+- `Estimated Available Cash`
 - `Risk per Trade`
 - `Max Active Risk`
 - `Active Risk`
@@ -109,11 +109,20 @@ Account Equity = Initial Capital + Total Realized P&L + Total Unrealized P&L
 
 If market-price coverage is partial, the panel must visibly mark Account Equity as partial and list the affected ticker(s). It must not silently substitute a complete-looking number.
 
-### Available-cash rule
+### Estimated available-cash rule
 
-The earlier UI derived cash from initial capital, realized P&L, and stock cost basis. This follow-up may display the same estimate for continuity, but the label must explicitly say `Estimated Available Cash` unless there is an authoritative cash ledger.
+For continuity with the old UI and until an authoritative cash ledger exists:
 
-The planner must not infer margin availability. If planned position value exceeds estimated available cash, Panel 4 reports a funding gap and enters `REVIEW REQUIRED` rather than silently creating synthetic margin.
+```text
+Estimated Available Cash
+  = max(0, Initial Capital + Total Realized P&L - Open Position Cost Basis)
+```
+
+Open Position Cost Basis is the AVCO cost basis of currently open positions. Values are converted once from kVND-domain accounting units to VND presentation units.
+
+Because deposits, withdrawals, taxes, financing and broker cash movements are not modeled by this formula, the UI must always label this metric `Estimated Available Cash`, never authoritative `Available Cash`.
+
+The planner must not infer margin availability. If planned position value exceeds estimated available cash, Panel 4 reports a funding gap and enters an advisory state rather than silently creating synthetic margin.
 
 ### Advisor output
 
@@ -122,7 +131,7 @@ Panel 1 emits a short deterministic explanation generated from thresholds and ev
 - remaining known risk budget and risk-cap utilization;
 - whether the active-risk cap is unconfigured;
 - whether current Active Risk is unknown because one or more open Trades lack stop evidence;
-- whether Account Equity or cash is only partially known.
+- whether Account Equity or cash is only partially/approximately known.
 
 No generative AI is used.
 
@@ -161,6 +170,8 @@ Recommended server row shape:
 
 `activeRiskVnd: null` means unknown evidence. It must never be replaced by zero.
 
+A legacy/open AVCO holding that is not linked to a normalized QEO-137 Trade must be shown as unlinked/unknown for Active Risk. Compatibility `stopLoss` fields on old transactions may still be displayed as historical UI context, but they are not promoted to canonical risk evidence for the Combined Verdict.
+
 ### Aggregates
 
 Footer shows:
@@ -170,7 +181,7 @@ Footer shows:
 - total Realized P&L;
 - Estimated Available Cash;
 - known Active Risk;
-- number of open Trades with unknown risk.
+- number of open Trades/holdings with unknown risk.
 
 The table is a portfolio reality view, not a sizing calculator.
 
@@ -311,10 +322,13 @@ When current open-Trade risk contains unknown evidence, projected known risk may
 Use deterministic precedence so the same inputs always produce the same verdict:
 
 1. `UNAVAILABLE` — authenticated risk context failed to load.
-2. `RISK UNKNOWN` — one or more existing open Trades have unknown risk evidence.
-3. `REVIEW REQUIRED` — Account Equity is partial, Max Active Risk is not configured, a funding gap exists, or the plan has another non-fatal evidence/configuration deficiency.
-4. `EXCEEDS PLAN` — complete known projected Active Risk exceeds configured Max Active Risk.
-5. `WITHIN PLAN` — evidence is sufficiently complete, Max Active Risk is configured, funding is sufficient, and projected risk stays within plan.
+2. `RISK UNKNOWN` — one or more existing open Trades/holdings have unknown canonical risk evidence.
+3. `REVIEW REQUIRED` — risk evidence/configuration is incomplete in a way that makes a cap comparison unreliable, including partial Account Equity or missing Max Active Risk.
+4. `EXCEEDS PLAN` — with complete enough evidence and a configured cap, current + planned known Active Risk exceeds Max Active Risk.
+5. `REVIEW REQUIRED` — risk comparison is otherwise valid but capital/funding needs review, including a positive funding gap.
+6. `WITHIN PLAN` — evidence is sufficiently complete, Max Active Risk is configured, funding is sufficient, and projected risk stays within plan.
+
+This order deliberately prevents incomplete evidence from producing a false `EXCEEDS PLAN` or `WITHIN PLAN`, while still allowing a real risk-cap breach to take precedence over a separate funding warning when evidence is complete.
 
 `EXCEEDS PLAN` is advisory for a plan. It must not block recording a real fill elsewhere in the product.
 
@@ -328,7 +342,7 @@ Focuses on portfolio capacity, remaining risk budget, funding gap, and evidence 
 
 **Trade Size Advisor**
 
-Focuses on the active or selected planned ticker's Entry/Stop-derived size and how changing stop distance affects size.
+Summarizes the cumulative planned basket — number of planned tickers, total planned position value and total planned risk — and may additionally highlight the currently selected planned ticker's Entry/Stop-derived size. This lets both advisors comment on the overall portfolio outcome while keeping per-ticker sizing mechanics explicit.
 
 The Combined Verdict is rendered separately and must not be presented as an AI confidence score.
 
@@ -373,7 +387,9 @@ PortfolioCapitalAllocation
 └── CombinedPortfolioSimulation
 ```
 
-`PortfolioCapitalAllocation` owns cross-panel planning state and constructs shared portfolio metrics.
+`PortfolioCapitalAllocation` owns cross-panel planning state, constructs shared portfolio metrics, and owns one authenticated risk-sizing-context load for the active portfolio. Panels receive the same resolved context snapshot; they must not issue independent duplicate requests that can drift in time.
+
+A focused hook/controller such as `usePortfolioRiskSizingContext(portfolioId)` may encapsulate loading/error/abort behavior, but the network boundary remains one request per active portfolio snapshot.
 
 The risk-sizing domain remains under `modules/portfolio/risk-sizing/`.
 
@@ -389,7 +405,32 @@ These functions must be framework-independent and deterministic. React component
 
 The existing `calculateTradeSize()`, `buildAccountEquityContext()`, `projectActiveRisk()`, `calculateOptimalF()`, and terminology metadata remain canonical and should be reused rather than forked.
 
-## 11. Authenticated risk context
+## 11. Data flow
+
+The intended data flow is one-way:
+
+```text
+Portfolio AVCO positions + current prices + total realized P&L
+                     │
+                     ├──> Account Equity / allocation snapshot
+                     │
+Authenticated risk-sizing API
+(Money Management Plan + Active Risk evidence)
+                     │
+                     └──> shared risk context snapshot
+
+Active Trade draft
+  └── calculateTradeSize()
+      └── Add/Replace PlannedTrade
+          └── PlannedTrade[]
+              └── simulatePlannedTrades()
+                  └── deriveCombinedVerdict()
+                      └── Panel 4 + both advisor messages
+```
+
+Changing or removing a planned row recomputes the simulation from `PlannedTrade[]`; it does not incrementally mutate cached portfolio totals.
+
+## 12. Authenticated risk context
 
 The existing `/api/portfolio/[portfolioId]/risk-sizing` boundary remains the only client-accessible source for Money Management Plan and open-Trade risk evidence.
 
@@ -403,7 +444,7 @@ API failure is fail-closed:
 - Combined Verdict is `UNAVAILABLE`;
 - no zero Active Risk or fake `Insufficient History` is fabricated.
 
-## 12. Error and incomplete-evidence handling
+## 13. Error and incomplete-evidence handling
 
 The UI must distinguish these states:
 
@@ -412,14 +453,14 @@ The UI must distinguish these states:
 - costs consume risk budget: no valid Trade Size;
 - quantity below one supported regular lot: no executable regular-lot size;
 - Account Equity partial: visible warning + `REVIEW REQUIRED` for combined portfolio verdict;
-- current open Trade missing Stop/fill evidence: `RISK UNKNOWN`;
+- current open Trade/holding missing canonical Stop/fill linkage: `RISK UNKNOWN`;
 - Max Active Risk absent: `REVIEW REQUIRED`, not `WITHIN PLAN`;
 - funding gap: `REVIEW REQUIRED`, no implicit margin;
 - risk API failure: `UNAVAILABLE`.
 
 A problem in one draft must not corrupt current portfolio metrics or previously valid planned rows.
 
-## 13. Terminology and copy
+## 14. Terminology and copy
 
 Continue the QEO-131/QEO-139 terminology contract.
 
@@ -446,7 +487,7 @@ The old certainty sentence about eliminating account ruin must not return.
 
 Stop Distance is derived from Entry and Initial Stop; it is never a fixed input percentage.
 
-## 14. Advanced information
+## 15. Advanced information
 
 Keep the existing collapsed Advanced section:
 
@@ -458,7 +499,7 @@ Optimal f remains informational only and never changes Risk per Trade, Trade Siz
 
 The Advanced section is not one of the two advisors.
 
-## 15. Testing strategy
+## 16. Testing strategy
 
 Implementation follows RED → GREEN TDD.
 
@@ -476,7 +517,17 @@ Add pure tests for:
 - partial Account Equity cannot yield WITHIN PLAN;
 - unknown current risk cannot yield WITHIN PLAN;
 - missing Max Active Risk cannot yield WITHIN PLAN;
+- complete evidence + cap breach yields EXCEEDS PLAN even if a separate funding gap also exists;
 - adequate cash + complete risk evidence + under-cap risk yields WITHIN PLAN.
+
+### Server/read-model tests
+
+If per-Trade risk rows are exposed, lock:
+
+- aggregate Active Risk equals the sum of known breakdown rows;
+- unknown rows carry `activeRiskVnd: null`;
+- legacy/unlinked holdings do not become known risk from compatibility stop fields;
+- one authenticated API response contains plan, aggregate risk and breakdown from one calculation snapshot.
 
 ### UI contract tests
 
@@ -489,6 +540,7 @@ Lock:
 - same ticker replaces/edits its existing planned row rather than duplicating it;
 - multiple different tickers coexist in Planned Trades;
 - Panel 4 renders before/planned/after values and both advisor messages;
+- both advisor messages use the same shared risk-context snapshot;
 - switching portfolio clears planner state;
 - fixed `7% stoploss` canonical path does not return;
 - no certainty/risk-elimination copy returns;
@@ -507,7 +559,7 @@ Keep:
 - production build;
 - DB drift check, with no migration expected.
 
-## 16. Acceptance criteria
+## 17. Acceptance criteria
 
 The follow-up is accepted when:
 
@@ -518,13 +570,13 @@ The follow-up is accepted when:
 5. Current unknown risk remains unknown and prevents a false `WITHIN PLAN` verdict.
 6. The UI never assumes synthetic margin when planned capital exceeds estimated cash.
 7. QEO-139 stop-first formulas, cost/slippage treatment, regular-lot rounding, >2% acknowledgement and canonical terminology remain unchanged.
-8. Both deterministic advisor messages are explainable from visible portfolio/trade inputs.
+8. Both deterministic advisor messages are explainable from visible portfolio/trade inputs and both can comment on the resulting overall portfolio state.
 9. Combined Verdict follows the documented deterministic precedence.
 10. Portfolio switching never leaks drafts or planned rows between portfolios.
 11. No production database migration is required.
 12. Existing QEO-137/QEO-138/QEO-139 and AVCO regression gates remain green.
 
-## 17. Implementation boundary
+## 18. Implementation boundary
 
 This is a QEO-139 presentation/read-model follow-up, not a rollback of QEO-139.
 
