@@ -84,6 +84,51 @@ export type ProjectedRiskResult = {
   unknownRiskTradeCount: number
 }
 
+export type PlannedTrade = {
+  id: string
+  ticker: string
+  plannedEntryKvnd: number
+  initialStopKvnd: number
+  riskPercent: number
+  estimatedCommissionVnd: number
+  slippageAllowanceVnd: number
+  riskAmountVnd: number
+  riskPerShareVnd: number
+  tradeSizeShares: number
+  positionValueVnd: number
+  riskAddedVnd: number
+}
+
+export type PortfolioAllocationSnapshot = {
+  initialCapitalVnd: number
+  totalRealizedPnlVnd: number
+  openPositionCostBasisVnd: number
+  stockMarketValueVnd: number
+  totalUnrealizedPnlVnd: number
+  estimatedAvailableCashVnd: number
+  missingPriceTickers: string[]
+  marketPriceCoverageComplete: boolean
+}
+
+export type CombinedVerdict =
+  | "UNAVAILABLE"
+  | "RISK UNKNOWN"
+  | "REVIEW REQUIRED"
+  | "EXCEEDS PLAN"
+  | "WITHIN PLAN"
+
+export type PortfolioPlanSimulation = {
+  plannedPositionValueVnd: number
+  plannedRiskAddedVnd: number
+  projectedKnownActiveRiskVnd: number
+  projectedRiskPercent: number | null
+  maxActiveRiskVnd: number | null
+  remainingRiskBudgetVnd: number | null
+  projectedEstimatedCashVnd: number
+  fundingGapVnd: number
+  verdict: CombinedVerdict
+}
+
 export type RiskTermSourceKind = "book" | "product" | "extension"
 
 export type RiskSizingTerm = {
