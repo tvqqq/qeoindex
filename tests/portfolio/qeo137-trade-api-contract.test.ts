@@ -12,6 +12,7 @@ const routePaths = [
   "../../app/api/portfolio/[id]/trades/[tradeId]/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/fills/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/stops/route.ts",
+  "../../app/api/portfolio/[id]/trades/[tradeId]/stops/[stopEventId]/fills/route.ts",
   "../../app/api/portfolio/[id]/trades/[tradeId]/journal/route.ts",
 ] as const
 
@@ -149,6 +150,8 @@ test("Trade routes delegate every lifecycle/evidence operation to the domain ser
     "detachFillFromTrade",
     "addStopEvent",
     "listStopEvents",
+    "linkExitFillToStopEvent",
+    "listStopExitFillLinks",
     "addJournalEntry",
     "listJournalEntries",
   ]) {
@@ -161,6 +164,7 @@ test("HTTP boundary maps validation/not-found/conflict errors explicitly", () =>
 
   assert.match(all, /TradeDomainError/)
   assert.match(all, /NOT_FOUND/)
+  assert.match(all, /EXIT_FILL_ALREADY_LINKED/)
   assert.match(all, /409/)
   assert.match(all, /400/)
   assert.match(all, /404/)
