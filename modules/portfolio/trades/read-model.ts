@@ -36,6 +36,7 @@ type FillReadRow = {
   price: number
   fee: number
   transaction_date: string
+  created_at?: string
   [key: string]: unknown
 }
 
@@ -44,6 +45,15 @@ type StopReadRow = {
   stop_type: string
   price: number
   effective_at: string
+  created_at: string
+  [key: string]: unknown
+}
+
+type StopExitFillLinkReadRow = {
+  stop_event_id: string
+  transaction_id: string
+  trade_id: string
+  ticker: string
   created_at: string
   [key: string]: unknown
 }
@@ -60,11 +70,15 @@ type JournalReadRow = {
   [key: string]: unknown
 }
 
+export type TradeStopEventReadModel = StopReadRow & {
+  linkedExitFills: FillReadRow[]
+}
+
 export type TradeReadModel = {
   trade: TradeReadRow
   fills: FillReadRow[]
   fillHistory: TradeFillHistoryEntry[]
-  stopEvents: StopReadRow[]
+  stopEvents: TradeStopEventReadModel[]
   journalEntries: JournalReadRow[]
   moneyManagementPlanId: string | null
   latestStop: {
@@ -113,6 +127,14 @@ function latestStopEvent(events: StopReadRow[]): StopReadRow | null {
   }).at(-1) ?? null
 }
 
+function compareFills(a: FillReadRow, b: FillReadRow): number {
+  const sessionDiff = a.transaction_date.localeCompare(b.transaction_date)
+  if (sessionDiff !== 0) return sessionDiff
+  const createdDiff = timestampMs(a.created_at) - timestampMs(b.created_at)
+  if (createdDiff !== 0) return createdDiff
+  return a.id.localeCompare(b.id)
+}
+
 function initialRiskState(trade: TradeReadRow): "available" | "partial" | "unknown" {
   const present = INITIAL_RISK_KEYS.filter((key) => trade[key] != null).length
   if (present === 0) return "unknown"
@@ -124,24 +146,43 @@ export function buildTradeReadModel({
   trade,
   fills,
   stopEvents,
+  stopExitFillLinks = [],
   journalEntries,
 }: {
   trade: TradeReadRow
   fills: FillReadRow[]
   stopEvents: StopReadRow[]
+  stopExitFillLinks?: StopExitFillLinkReadRow[]
   journalEntries: JournalReadRow[]
 }): TradeReadModel {
   const groupedFills = fills.filter(
     (fill) => fill.trade_id === trade.id && fill.ticker === trade.ticker,
   )
   const fillHistory = deriveTradeFillHistory(groupedFills, trade.ticker)
-  const chronologicalStops = [...stopEvents].sort((a, b) => {
-    const effectiveDiff = timestampMs(a.effective_at) - timestampMs(b.effective_at)
-    if (effectiveDiff !== 0) return effectiveDiff
-    const createdDiff = timestampMs(a.created_at) - timestampMs(b.created_at)
-    if (createdDiff !== 0) return createdDiff
-    return a.id.localeCompare(b.id)
-  })
+  const fillById = new Map(
+    groupedFills
+      .filter((fill) => fill.action === "sell")
+      .map((fill) => [fill.id, fill] as const),
+  )
+  const scopedStopExitFillLinks = stopExitFillLinks.filter(
+    (link) => link.trade_id === trade.id && link.ticker === trade.ticker,
+  )
+  const chronologicalStops: TradeStopEventReadModel[] = [...stopEvents]
+    .sort((a, b) => {
+      const effectiveDiff = timestampMs(a.effective_at) - timestampMs(b.effective_at)
+      if (effectiveDiff !== 0) return effectiveDiff
+      const createdDiff = timestampMs(a.created_at) - timestampMs(b.created_at)
+      if (createdDiff !== 0) return createdDiff
+      return a.id.localeCompare(b.id)
+    })
+    .map((stop) => ({
+      ...stop,
+      linkedExitFills: scopedStopExitFillLinks
+        .filter((link) => link.stop_event_id === stop.id)
+        .map((link) => fillById.get(link.transaction_id) ?? null)
+        .filter((fill): fill is FillReadRow => fill != null)
+        .sort(compareFills),
+    }))
   const chronologicalJournal = [...journalEntries].sort((a, b) => {
     const occurredDiff = timestampMs(a.occurred_at) - timestampMs(b.occurred_at)
     if (occurredDiff !== 0) return occurredDiff
