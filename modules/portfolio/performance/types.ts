@@ -1,3 +1,5 @@
+import type { EquityPoint } from "../risk-engine/types.ts"
+
 export type PerformancePopulation = "live" | "paper" | "combined"
 
 export type PerformanceTradeInput = {
@@ -170,4 +172,46 @@ export type BenchmarkComparison = {
   alphaPercent: number | null
   completeness: "complete" | "insufficient"
   reason: string | null
+}
+
+export type AccountLedgerSet = {
+  daily: AccountLedgerPeriod[]
+  weekly: AccountLedgerPeriod[]
+  monthly: AccountLedgerPeriod[]
+  annual: AccountLedgerPeriod[]
+}
+
+export type PerformanceReadModel = {
+  scorecards: {
+    live: TradingScorecard
+    paper: TradingScorecard
+    combined: TradingScorecard
+  }
+  tradingLedgers: {
+    live: PeriodLedgerSet
+    paper: PeriodLedgerSet
+    combined: PeriodLedgerSet
+  }
+  accountLedgers: AccountLedgerSet
+  equity: {
+    points: EquityPoint[]
+    accountTotalReturnPercent: number | null
+    maxDrawdownPercent: number | null
+    averageDrawdownPercent: number | null
+    episodes: DrawdownEpisode[]
+    completeness: "complete" | "insufficient"
+  }
+  benchmark: BenchmarkComparison
+  segments: {
+    live: PerformanceSegment[]
+    paper: PerformanceSegment[]
+    combined: PerformanceSegment[]
+  }
+  evidence: {
+    eligibleTradeCount: number
+    excludedClosedTradeCount: number
+    legacyUngroupedTransactionCount: number
+    tradeGroupingCompleteness: "complete" | "partial" | "insufficient"
+    equityCompleteness: "complete" | "insufficient"
+  }
 }
