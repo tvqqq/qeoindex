@@ -54,6 +54,7 @@ test("wider stop reduces Trade Size and narrower stop increases it", () => {
 
 test("missing or invalid stop evidence never produces a ready size", () => {
   assert.equal(calculateTradeSize({ ...baseInput, initialStopKvnd: null }).status, "incomplete")
+  assert.equal(calculateTradeSize({ ...baseInput, initialStopKvnd: 0 }).status, "invalid_stop_direction")
   assert.equal(calculateTradeSize({ ...baseInput, initialStopKvnd: 100 }).status, "zero_stop_distance")
   assert.equal(calculateTradeSize({ ...baseInput, initialStopKvnd: 101 }).status, "invalid_stop_direction")
 })
