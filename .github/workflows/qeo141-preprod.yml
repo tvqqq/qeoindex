@@ -41,3 +41,5 @@ jobs:
         run: node --test tests/portfolio/qeo141-risk-state.test.ts
       - name: QEO-141 Server and API contract
         run: node --test tests/portfolio/qeo141-risk-server-api.test.ts
+      - name: QEO-141 QEO-139 reconciliation contract
+        run: node --test tests/portfolio/qeo141-qeo139-reconciliation.test.ts
