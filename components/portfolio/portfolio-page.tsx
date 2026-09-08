@@ -66,6 +66,14 @@ const PortfolioRiskPlan = dynamic(
   { ssr: false },
 )
 
+const PortfolioRiskDashboard = dynamic(
+  () =>
+    import("@/components/portfolio/risk-engine/portfolio-risk-dashboard").then(
+      (m) => m.PortfolioRiskDashboard,
+    ),
+  { ssr: false },
+)
+
 const PortfolioBenchmarkChart = dynamic(
   () =>
     import("@/components/portfolio/portfolio-benchmark-chart").then(
@@ -520,6 +528,10 @@ export function PortfolioPage() {
               currentPrices={currentPrices}
               loading={loadingPortfolio || loadingTx}
             />
+
+            {activePortfolioId && (
+              <PortfolioRiskDashboard key={activePortfolioId} portfolioId={activePortfolioId} />
+            )}
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
               <div className="min-w-0 rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
