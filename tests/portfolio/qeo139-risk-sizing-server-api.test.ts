@@ -11,16 +11,18 @@ function read(relative: string) {
   return fs.readFileSync(full, "utf8")
 }
 
-test("risk-sizing server and route are ownership-scoped and read-only", () => {
+test("risk-sizing server and route delegate canonical portfolio risk and remain read-only", () => {
   const server = read("modules/portfolio/risk-sizing/server.ts")
   const route = read("app/api/portfolio/[id]/risk-sizing/route.ts")
 
   assert.match(server, /export async function getRiskSizingContext/)
+  assert.match(server, /getPortfolioRiskContext/)
   assert.match(server, /getRiskPlanOverview/)
-  assert.match(server, /\.eq\("portfolio_id", portfolioId\)/)
-  assert.match(server, /\.eq\("user_id", context\.user\.id\)/)
-  assert.match(server, /\.in\("status", \["open", "partially_closed"\]\)/)
   assert.match(server, /openTradeRisks/)
+  assert.doesNotMatch(server, /computeOpenTradeRiskContext/)
+  assert.doesNotMatch(server, /portfolio_trade_stop_events/)
+  assert.doesNotMatch(server, /\.from\("portfolio_trades"\)/)
+  assert.doesNotMatch(server, /\.from\("portfolio_transactions"\)/)
   assert.doesNotMatch(server, /\.(?:insert|update|delete|upsert)\(/)
 
   assert.match(route, /requireApiUser\(\)/)
