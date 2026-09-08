@@ -4,6 +4,7 @@ import { memo, useMemo } from "react"
 
 import type { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
 import { TradeSizeCalculator } from "@/components/portfolio/risk-sizing/trade-size-calculator"
+import { useRiskSizingContext } from "@/components/portfolio/risk-sizing/use-risk-sizing-context"
 import type { PortfolioPosition } from "@/modules/portfolio/pnl"
 import { buildAccountEquityContext } from "@/modules/portfolio/risk-sizing/calculator"
 
@@ -24,6 +25,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
 }: PortfolioCapitalAllocationProps) {
   const activePortfolio = portfolios.find((portfolio) => portfolio.id === activePortfolioId)
   const initialCapitalVnd = Number(activePortfolio?.initial_capital ?? 0)
+  const { context: riskContext, loading: loadingContext, error: contextError } = useRiskSizingContext(activePortfolioId)
 
   const accountEquityContext = useMemo(() => buildAccountEquityContext({
     initialCapitalVnd,
@@ -42,8 +44,10 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
 
   return (
     <TradeSizeCalculator
-      portfolioId={activePortfolioId}
       accountEquityContext={accountEquityContext}
+      riskContext={riskContext}
+      loadingContext={loadingContext}
+      contextError={contextError}
     />
   )
 })
