@@ -5,6 +5,8 @@ on:
     paths:
       - "modules/portfolio/risk-engine/**"
       - "modules/portfolio/risk-sizing/**"
+      - "components/portfolio/**"
+      - "app/api/portfolio/**"
       - "tests/portfolio/qeo141-*.test.ts"
       - "docs/superpowers/specs/2026-09-08-qeo-141-active-risk-engine-design.md"
       - "docs/superpowers/plans/2026-09-08-qeo-141-active-risk-engine.md"
@@ -43,3 +45,5 @@ jobs:
         run: node --test tests/portfolio/qeo141-risk-server-api.test.ts
       - name: QEO-141 QEO-139 reconciliation contract
         run: node --test tests/portfolio/qeo141-qeo139-reconciliation.test.ts
+      - name: QEO-141 Tài sản risk UI contract
+        run: node --test tests/portfolio/qeo141-risk-ui.test.ts
