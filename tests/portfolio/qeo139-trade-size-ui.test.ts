@@ -69,7 +69,8 @@ test("four-panel portfolio workflow restores Panels 1 and 2 without per-Trade fi
   const allocation = read(allocationPath)
   const panel1 = read(panel1Path)
   const panel2 = read(panel2Path)
-  const composed = `${allocation}\n${panel1}\n${panel2}`
+  const combined = read(combinedPath)
+  const composed = `${allocation}\n${panel1}\n${panel2}\n${combined}`
 
   for (const heading of [
     "1. Portfolio Allocation Advisor",
