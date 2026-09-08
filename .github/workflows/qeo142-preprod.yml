@@ -24,3 +24,5 @@ jobs:
         run: node --test tests/portfolio/qeo142-closed-trades.test.ts
       - name: QEO-142 Trading Scorecard
         run: node --test tests/portfolio/qeo142-scorecard.test.ts
+      - name: QEO-142 Drawdown episodes
+        run: node --test tests/portfolio/qeo142-drawdown-episodes.test.ts
