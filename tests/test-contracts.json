@@ -669,6 +669,15 @@
       ]
     },
     {
+      "path": "tests/portfolio/qeo139-planned-trade-simulation.test.ts",
+      "owner": "portfolio",
+      "invariant": "Preserve deterministic multi-ticker planned portfolio simulation and fail-closed combined verdict semantics.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/portfolio/qeo139-risk-projection.test.ts",
       "owner": "portfolio",
       "invariant": "QEO-139 keeps projected Active Risk deterministic, cap-aware, and fail-closed when open Trade risk is unknown.",
