@@ -20,6 +20,7 @@ test("risk-sizing server and route are ownership-scoped and read-only", () => {
   assert.match(server, /\.eq\("portfolio_id", portfolioId\)/)
   assert.match(server, /\.eq\("user_id", context\.user\.id\)/)
   assert.match(server, /\.in\("status", \["open", "partially_closed"\]\)/)
+  assert.match(server, /openTradeRisks/)
   assert.doesNotMatch(server, /\.(?:insert|update|delete|upsert)\(/)
 
   assert.match(route, /requireApiUser\(\)/)
@@ -39,7 +40,7 @@ test("active-risk helper reuses canonical Trade read model and AVCO accounting",
   assert.doesNotMatch(source, /stop_loss_1|stop_loss_2|stop_loss_3/)
 })
 
-test("known Active Risk uses linked logical Trades and keeps missing stop risk unknown", async () => {
+test("known Active Risk exposes per-Trade breakdown from the same aggregate pass and keeps missing stop risk unknown", async () => {
   assert.equal(fs.existsSync(activeRiskPath), true, "active-risk.ts must exist")
   const { computeOpenTradeRiskContext } = await import("../../modules/portfolio/risk-sizing/active-risk.ts")
 
@@ -62,6 +63,17 @@ test("known Active Risk uses linked logical Trades and keeps missing stop risk u
   const result = computeOpenTradeRiskContext({ trades, fills, stopEvents: [] })
   assert.equal(result.knownActiveRiskVnd, 5_000_000)
   assert.equal(result.unknownRiskTradeCount, 1)
+  assert.deepEqual(result.breakdown.map((row) => row.riskStatus), ["known", "unknown"])
+  assert.deepEqual(result.breakdown.map((row) => row.ticker), ["FPT", "VIC"])
+  assert.equal(result.breakdown[0]?.openQty, 1000)
+  assert.equal(result.breakdown[0]?.avgCostKvnd, 100)
+  assert.equal(result.breakdown[0]?.latestStopKvnd, 95)
+  assert.equal(result.breakdown[0]?.activeRiskVnd, 5_000_000)
+  assert.equal(result.breakdown[1]?.activeRiskVnd, null)
+  assert.equal(
+    result.breakdown.reduce((sum, row) => sum + (row.activeRiskVnd ?? 0), 0),
+    result.knownActiveRiskVnd,
+  )
 })
 
 test("trailing stop above average entry reduces known downside Trade Risk to zero", async () => {
