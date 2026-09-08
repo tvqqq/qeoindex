@@ -11,16 +11,18 @@ function read(relative: string) {
   return fs.readFileSync(full, "utf8")
 }
 
-test("risk-sizing server and route are ownership-scoped and read-only", () => {
+test("risk-sizing server and route delegate canonical portfolio risk and remain read-only", () => {
   const server = read("modules/portfolio/risk-sizing/server.ts")
   const route = read("app/api/portfolio/[id]/risk-sizing/route.ts")
 
   assert.match(server, /export async function getRiskSizingContext/)
+  assert.match(server, /getPortfolioRiskContext/)
   assert.match(server, /getRiskPlanOverview/)
-  assert.match(server, /\.eq\("portfolio_id", portfolioId\)/)
-  assert.match(server, /\.eq\("user_id", context\.user\.id\)/)
-  assert.match(server, /\.in\("status", \["open", "partially_closed"\]\)/)
   assert.match(server, /openTradeRisks/)
+  assert.doesNotMatch(server, /computeOpenTradeRiskContext/)
+  assert.doesNotMatch(server, /portfolio_trade_stop_events/)
+  assert.doesNotMatch(server, /\.from\("portfolio_trades"\)/)
+  assert.doesNotMatch(server, /\.from\("portfolio_transactions"\)/)
   assert.doesNotMatch(server, /\.(?:insert|update|delete|upsert)\(/)
 
   assert.match(route, /requireApiUser\(\)/)
@@ -32,12 +34,17 @@ test("risk-sizing server and route are ownership-scoped and read-only", () => {
   assert.doesNotMatch(route, /export async function (?:POST|PATCH|PUT|DELETE)/)
 })
 
-test("active-risk helper reuses canonical Trade read model and AVCO accounting", () => {
-  const source = read("modules/portfolio/risk-sizing/active-risk.ts")
-  assert.match(source, /buildTradeReadModel/)
-  assert.match(source, /computePortfolioPositions/)
-  assert.match(source, /fill\.trade_id === trade\.id/)
-  assert.doesNotMatch(source, /stop_loss_1|stop_loss_2|stop_loss_3/)
+test("active-risk adapter delegates to canonical Trade read model and AVCO accounting", () => {
+  const adapter = read("modules/portfolio/risk-sizing/active-risk.ts")
+  const canonical = read("modules/portfolio/risk-engine/active-risk.ts")
+
+  assert.match(adapter, /computeOpenTradeActiveRisk/)
+  assert.doesNotMatch(adapter, /Math\.max\(0,\s*position\.avgCost/)
+
+  assert.match(canonical, /buildTradeReadModel/)
+  assert.match(canonical, /computePortfolioPositions/)
+  assert.match(canonical, /fill\.trade_id === trade\.id/)
+  assert.doesNotMatch(canonical, /stop_loss_1|stop_loss_2|stop_loss_3/)
 })
 
 test("known Active Risk exposes per-Trade breakdown from the same aggregate pass and keeps missing stop risk unknown", async () => {

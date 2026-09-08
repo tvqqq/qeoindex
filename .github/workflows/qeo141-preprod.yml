@@ -1,0 +1,74 @@
+name: QEO-141 Portfolio Risk Engine
+
+on:
+  pull_request:
+    paths:
+      - "modules/portfolio/risk-engine/**"
+      - "modules/portfolio/risk-sizing/**"
+      - "modules/portfolio/risk-plan/**"
+      - "modules/portfolio/trades/**"
+      - "modules/portfolio/pnl.ts"
+      - "modules/market/realtime/intraday-5m-service.ts"
+      - "components/portfolio/**"
+      - "app/api/portfolio/**"
+      - "tests/portfolio/qeo141-*.test.ts"
+      - "tests/portfolio/qeo139-*.test.ts"
+      - "tests/portfolio-pnl.test.ts"
+      - "tests/test-contracts.json"
+      - "docs/superpowers/specs/2026-09-08-qeo-141-active-risk-engine-design.md"
+      - "docs/superpowers/plans/2026-09-08-qeo-141-active-risk-engine.md"
+      - ".github/workflows/qeo141-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo141-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portfolio-risk-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-141 Active Risk contract
+        run: node --test tests/portfolio/qeo141-active-risk.test.ts
+      - name: QEO-141 Account Equity and Drawdown contract
+        run: node --test tests/portfolio/qeo141-equity-drawdown.test.ts
+      - name: QEO-141 Guardrail evidence contract
+        run: node --test tests/portfolio/qeo141-guardrail-evidence.test.ts
+      - name: QEO-141 Risk State contract
+        run: node --test tests/portfolio/qeo141-risk-state.test.ts
+      - name: QEO-141 Server and API contract
+        run: node --test tests/portfolio/qeo141-risk-server-api.test.ts
+      - name: QEO-141 QEO-139 reconciliation contract
+        run: node --test tests/portfolio/qeo141-qeo139-reconciliation.test.ts
+      - name: QEO-141 Tài sản risk UI contract
+        run: node --test tests/portfolio/qeo141-risk-ui.test.ts
+      - name: QEO-139 regression suite
+        run: >-
+          node --test
+          tests/portfolio/qeo139-risk-sizing.test.ts
+          tests/portfolio/qeo139-risk-projection.test.ts
+          tests/portfolio/qeo139-planned-trade-simulation.test.ts
+          tests/portfolio/qeo139-risk-sizing-server-api.test.ts
+          tests/portfolio/qeo139-trade-size-ui.test.ts
+      - name: Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
+      - name: Canonical test manifest
+        run: pnpm test:manifest
+      - name: Application lint
+        run: pnpm lint:touched
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm exec next build
