@@ -16,6 +16,10 @@ function unavailable(reason: string): BenchmarkComparison {
   }
 }
 
+function normalizePercent(value: number): number {
+  return Number(value.toFixed(10))
+}
+
 function validDailyEquity(points: readonly EquityPoint[]): Map<string, number> {
   const result = new Map<string, number>()
   for (const point of points) {
@@ -60,13 +64,13 @@ export function buildBenchmarkComparison({
   const points: BenchmarkPoint[] = commonDates.map((date) => {
     const equity = equityByDate.get(date)!
     const index = indexByDate.get(date)!
-    const portfolioReturnPercent = ((equity / portfolioBaseline) - 1) * 100
-    const vnindexReturnPercent = ((index / indexBaseline) - 1) * 100
+    const portfolioReturnPercent = normalizePercent(((equity / portfolioBaseline) - 1) * 100)
+    const vnindexReturnPercent = normalizePercent(((index / indexBaseline) - 1) * 100)
     return {
       date,
       portfolioReturnPercent,
       vnindexReturnPercent,
-      alphaPercent: portfolioReturnPercent - vnindexReturnPercent,
+      alphaPercent: normalizePercent(portfolioReturnPercent - vnindexReturnPercent),
     }
   })
 
