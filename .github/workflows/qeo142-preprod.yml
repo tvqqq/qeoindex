@@ -22,3 +22,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: QEO-142 Closed Trade normalization
         run: node --test tests/portfolio/qeo142-closed-trades.test.ts
+      - name: QEO-142 Trading Scorecard
+        run: node --test tests/portfolio/qeo142-scorecard.test.ts
