@@ -1,8 +1,10 @@
 import type {
   CombinedVerdict,
+  OpenTradeRiskBreakdown,
   PlannedTrade,
   PortfolioAllocationSnapshot,
   PortfolioPlanSimulation,
+  PortfolioRiskCoverage,
 } from "./types.ts"
 
 export function buildPortfolioAllocationSnapshot(input: {
@@ -17,13 +19,13 @@ export function buildPortfolioAllocationSnapshot(input: {
   currentPricesKvnd: Record<string, number>
 }): PortfolioAllocationSnapshot {
   const totalRealizedPnlVnd = input.totalRealizedPnlKvnd * 1000
-  let openPositionCostBasisVnd = 0
+  let stockCostBasisVnd = 0
   let stockMarketValueVnd = 0
   let totalUnrealizedPnlVnd = 0
   const missingPriceTickers: string[] = []
 
   for (const position of input.positions) {
-    openPositionCostBasisVnd += position.totalInvested * 1000
+    stockCostBasisVnd += position.totalInvested * 1000
 
     const currentPriceKvnd = input.currentPricesKvnd[position.ticker]
     const hasCurrentPrice = Number.isFinite(currentPriceKvnd)
@@ -38,21 +40,79 @@ export function buildPortfolioAllocationSnapshot(input: {
   return {
     initialCapitalVnd: input.initialCapitalVnd,
     totalRealizedPnlVnd,
-    openPositionCostBasisVnd,
-    stockMarketValueVnd,
     totalUnrealizedPnlVnd,
+    stockCostBasisVnd,
+    stockMarketValueVnd,
     estimatedAvailableCashVnd: Math.max(
       0,
-      input.initialCapitalVnd + totalRealizedPnlVnd - openPositionCostBasisVnd,
+      input.initialCapitalVnd + totalRealizedPnlVnd - stockCostBasisVnd,
     ),
     missingPriceTickers,
-    marketPriceCoverageComplete: missingPriceTickers.length === 0,
+  }
+}
+
+export function upsertPlannedTrade(current: PlannedTrade[], next: PlannedTrade): PlannedTrade[] {
+  const existingIndex = current.findIndex((trade) => trade.ticker === next.ticker)
+  if (existingIndex < 0) return [...current, next]
+  return current.map((trade, index) => (index === existingIndex ? next : trade))
+}
+
+export function removePlannedTrade(current: PlannedTrade[], ticker: string): PlannedTrade[] {
+  return current.filter((trade) => trade.ticker !== ticker)
+}
+
+export function summarizePortfolioRiskCoverage(input: {
+  positions: Array<{ ticker: string }>
+  openTradeRisks: OpenTradeRiskBreakdown[]
+}): PortfolioRiskCoverage {
+  const unknownNormalizedTradeCount = input.openTradeRisks.filter(
+    (row) => row.riskStatus === "unknown",
+  ).length
+  let unlinkedHoldingCount = 0
+
+  const holdingRisks = input.positions.map((position) => {
+    const linked = input.openTradeRisks.filter((row) => row.ticker === position.ticker)
+    const unknownTradeCount = linked.filter((row) => row.riskStatus === "unknown").length
+
+    if (linked.length === 0) {
+      unlinkedHoldingCount += 1
+      return {
+        ticker: position.ticker,
+        activeRiskVnd: null,
+        riskStatus: "unknown" as const,
+        linkedTradeCount: 0,
+        unknownTradeCount: 0,
+      }
+    }
+
+    if (unknownTradeCount > 0) {
+      return {
+        ticker: position.ticker,
+        activeRiskVnd: null,
+        riskStatus: "unknown" as const,
+        linkedTradeCount: linked.length,
+        unknownTradeCount,
+      }
+    }
+
+    return {
+      ticker: position.ticker,
+      activeRiskVnd: linked.reduce((sum, row) => sum + (row.activeRiskVnd ?? 0), 0),
+      riskStatus: "known" as const,
+      linkedTradeCount: linked.length,
+      unknownTradeCount: 0,
+    }
+  })
+
+  return {
+    holdingRisks,
+    unknownRiskItemCount: unknownNormalizedTradeCount + unlinkedHoldingCount,
   }
 }
 
 function deriveCombinedVerdict(input: {
   riskContextAvailable: boolean
-  unknownRiskTradeCount: number
+  unknownRiskItemCount: number
   accountEquityComplete: boolean
   maxActiveRiskPercent: number | null
   fundingGapVnd: number
@@ -60,7 +120,7 @@ function deriveCombinedVerdict(input: {
   maxActiveRiskVnd: number | null
 }): CombinedVerdict {
   if (!input.riskContextAvailable) return "UNAVAILABLE"
-  if (input.unknownRiskTradeCount > 0) return "RISK UNKNOWN"
+  if (input.unknownRiskItemCount > 0) return "RISK UNKNOWN"
   if (!input.accountEquityComplete || input.maxActiveRiskPercent == null) {
     return "REVIEW REQUIRED"
   }
@@ -78,10 +138,9 @@ export function simulatePlannedTrades(input: {
   accountEquityVnd: number
   accountEquityComplete: boolean
   estimatedAvailableCashVnd: number
-  stockMarketValueVnd: number
   knownActiveRiskVnd: number
   maxActiveRiskPercent: number | null
-  unknownRiskTradeCount: number
+  unknownRiskItemCount: number
   riskContextAvailable: boolean
   plannedTrades: PlannedTrade[]
 }): PortfolioPlanSimulation {
@@ -115,9 +174,10 @@ export function simulatePlannedTrades(input: {
     remainingRiskBudgetVnd,
     projectedEstimatedCashVnd,
     fundingGapVnd,
+    unknownRiskItemCount: input.unknownRiskItemCount,
     verdict: deriveCombinedVerdict({
       riskContextAvailable: input.riskContextAvailable,
-      unknownRiskTradeCount: input.unknownRiskTradeCount,
+      unknownRiskItemCount: input.unknownRiskItemCount,
       accountEquityComplete: input.accountEquityComplete,
       maxActiveRiskPercent: input.maxActiveRiskPercent,
       fundingGapVnd,
