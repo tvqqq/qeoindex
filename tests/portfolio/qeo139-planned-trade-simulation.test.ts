@@ -129,15 +129,15 @@ test("deterministic advisor messages describe evidence, funding, and planned bas
     plannedTrades: [planned("MSN", 100_000_000, 10_000_000)],
   })
 
-  assert.match(describePortfolioAdvisor(fundingGap), /funding gap/i)
-  assert.match(describePortfolioAdvisor(unknownRisk), /unknown/i)
+  assert.match(describePortfolioAdvisor(fundingGap), /thiếu nguồn tiền/i)
+  assert.match(describePortfolioAdvisor(unknownRisk), /chưa xác định/i)
   assert.match(describeTradeAdvisor([planned("MSN", 100_000_000, 5_000_000)]), /MSN/)
   assert.match(
     describeTradeAdvisor([
       planned("MSN", 100_000_000, 5_000_000),
       planned("VIC", 120_000_000, 6_000_000),
     ]),
-    /2 planned Trades/i,
+    /2 giao dịch dự kiến/i,
   )
 
   const messages = [
