@@ -1,12 +1,19 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
-import type { OpenTradeRiskBreakdown } from "@/modules/portfolio/risk-sizing/types"
+import type { OpenTradeRiskBreakdown, RiskState } from "@/modules/portfolio/risk-sizing/types"
 
 export type RiskSizingClientContext = {
+  configuredDefaultTradeRiskPercent: number
+  effectiveDefaultTradeRiskPercent: number
   defaultTradeRiskPercent: number
   riskSource: "money_management_plan" | "onboarding_default"
+  riskState: RiskState
+  riskStateReasons: string[]
+  accountEquityVnd: number | null
+  accountEquityCompleteness: "complete" | "insufficient"
+  accountEquityMissingPriceTickers: string[]
   maxActiveRiskPercent: number | null
   knownActiveRiskVnd: number
   unknownRiskTradeCount: number
@@ -30,8 +37,10 @@ export function useRiskSizingContext(portfolioId: string): {
   const [context, setContext] = useState<RiskSizingClientContext | null>(null)
   const [loading, setLoading] = useState(Boolean(portfolioId))
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
+    const requestId = ++requestIdRef.current
     setContext(null)
     setError(null)
 
@@ -51,19 +60,19 @@ export function useRiskSizingContext(portfolioId: string): {
       .then(async (response) => {
         const body = (await response.json()) as RiskSizingResponse
         if (!response.ok || !body.ok || !body.context) {
-          throw new Error(body.error ?? "Không thể tải risk-sizing context.")
+          throw new Error(body.error ?? "Không thể tải ngữ cảnh tính khối lượng.")
         }
         return body.context
       })
       .then((nextContext) => {
-        if (!controller.signal.aborted) setContext(nextContext)
+        if (!controller.signal.aborted && requestIdRef.current === requestId) setContext(nextContext)
       })
       .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        setError(cause instanceof Error ? cause.message : "Không thể tải risk-sizing context.")
+        if (controller.signal.aborted || requestIdRef.current !== requestId) return
+        setError(cause instanceof Error ? cause.message : "Không thể tải ngữ cảnh tính khối lượng.")
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
+        if (!controller.signal.aborted && requestIdRef.current === requestId) setLoading(false)
       })
 
     return () => controller.abort()
