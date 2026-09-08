@@ -3,6 +3,8 @@ import test from "node:test"
 
 import {
   buildPortfolioAllocationSnapshot,
+  describePortfolioAdvisor,
+  describeTradeAdvisor,
   removePlannedTrade,
   simulatePlannedTrades,
   summarizePortfolioRiskCoverage,
@@ -103,6 +105,47 @@ test("verdict precedence fails closed before complete-evidence risk and funding 
     "EXCEEDS PLAN",
   )
   assert.equal(simulatePlannedTrades({ ...base, estimatedAvailableCashVnd: 50_000_000 }).verdict, "REVIEW REQUIRED")
+})
+
+test("deterministic advisor messages describe evidence, funding, and planned basket without prediction", () => {
+  const fundingGap = simulatePlannedTrades({
+    accountEquityVnd: 1_000_000_000,
+    accountEquityComplete: true,
+    estimatedAvailableCashVnd: 50_000_000,
+    knownActiveRiskVnd: 10_000_000,
+    maxActiveRiskPercent: 10,
+    unknownRiskItemCount: 0,
+    riskContextAvailable: true,
+    plannedTrades: [planned("MSN", 100_000_000, 10_000_000)],
+  })
+  const unknownRisk = simulatePlannedTrades({
+    accountEquityVnd: 1_000_000_000,
+    accountEquityComplete: true,
+    estimatedAvailableCashVnd: 500_000_000,
+    knownActiveRiskVnd: 10_000_000,
+    maxActiveRiskPercent: 10,
+    unknownRiskItemCount: 2,
+    riskContextAvailable: true,
+    plannedTrades: [planned("MSN", 100_000_000, 10_000_000)],
+  })
+
+  assert.match(describePortfolioAdvisor(fundingGap), /funding gap/i)
+  assert.match(describePortfolioAdvisor(unknownRisk), /unknown/i)
+  assert.match(describeTradeAdvisor([planned("MSN", 100_000_000, 5_000_000)]), /MSN/)
+  assert.match(
+    describeTradeAdvisor([
+      planned("MSN", 100_000_000, 5_000_000),
+      planned("VIC", 120_000_000, 6_000_000),
+    ]),
+    /2 planned Trades/i,
+  )
+
+  const messages = [
+    describePortfolioAdvisor(fundingGap),
+    describePortfolioAdvisor(unknownRisk),
+    describeTradeAdvisor([planned("MSN", 100_000_000, 5_000_000)]),
+  ].join("\n")
+  assert.doesNotMatch(messages, /will rise|expected target|probability|confidence score/i)
 })
 
 test("portfolio snapshot keeps realized P&L, AVCO cost basis, market value, and missing-price provenance separate", () => {
