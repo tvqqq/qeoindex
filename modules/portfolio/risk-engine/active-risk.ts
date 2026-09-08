@@ -85,7 +85,9 @@ export function computeOpenTradeActiveRisk({
 
     rows.push({
       ...common,
-      activeRiskVnd: Math.max(0, position.avgCost - readModel.latestStop.price) * position.openQty * 1000,
+      activeRiskVnd: Math.round(
+        Math.max(0, position.avgCost - readModel.latestStop.price) * position.openQty * 1000,
+      ),
       riskStatus: "known",
       reason: null,
     })
