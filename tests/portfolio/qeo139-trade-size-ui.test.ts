@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const calculatorPath = "components/portfolio/risk-sizing/trade-size-calculator.tsx"
+const advisorPath = "components/portfolio/risk-sizing/trade-size-advisor.tsx"
 const hookPath = "components/portfolio/risk-sizing/use-risk-sizing-context.ts"
 const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
@@ -80,6 +81,34 @@ test("four-panel portfolio workflow restores Panels 1 and 2 without per-Trade fi
 
   assert.match(allocation, /lg:grid-cols-2/)
   assert.doesNotMatch(panel1, /plannedEntry|initialStop/)
+})
+
+test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", () => {
+  const advisor = read(advisorPath)
+  const allocation = read(allocationPath)
+
+  for (const label of [
+    "Ticker",
+    "Risk per Trade",
+    "Planned Entry",
+    "Initial Stop",
+    "Estimated Commission",
+    "Slippage Allowance",
+    "Add Planned Trade",
+    "Planned Trades",
+    "Edit",
+    "Remove",
+  ]) {
+    assert.match(advisor, new RegExp(escapeRegExp(label)), `Trade Size Advisor missing ${label}`)
+  }
+
+  assert.match(advisor, /calculateTradeSize/)
+  assert.match(advisor, /\.toUpperCase\(\)/)
+  assert.match(allocation, /<TradeSizeAdvisor/)
+  assert.match(allocation, /upsertPlannedTrade/)
+  assert.match(allocation, /removePlannedTrade/)
+  assert.doesNotMatch(advisor, /method:\s*["'](?:POST|PUT|PATCH)["']/i)
+  assert.doesNotMatch(advisor, /localStorage|sessionStorage|indexedDB/i)
 })
 
 test("legacy fixed-stop assumptions and unsafe risk claims are removed from the allocation surface", () => {
