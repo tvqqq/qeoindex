@@ -32,6 +32,7 @@ interface MarketBubblesProps {
   stocks: MarketBubbleStock[]
   onOpenStockDetail?: (ticker: string) => void
   defaultPeriod?: BubblePeriod
+  asOfDate?: string | null
 }
 
 function formatNumber(value: number | null | undefined, decimals = 2) {
@@ -89,6 +90,7 @@ export function MarketBubbles({
   stocks,
   onOpenStockDetail,
   defaultPeriod = "1D",
+  asOfDate,
 }: MarketBubblesProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number }>({
@@ -466,12 +468,12 @@ export function MarketBubbles({
 
         {/* Right Side: Status Badge */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.07] px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-wider text-cyan-300 shadow-sm">
+          <div className="flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.07] px-3.5 py-1.5 font-mono text-[11px] font-bold tracking-wide text-cyan-300 shadow-sm">
             <span className="relative flex size-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75 motion-reduce:animate-none" />
               <span className="relative inline-flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
             </span>
-            <span>Top {topStocks.length} · {period}</span>
+            <span>Top {topStocks.length} · {period}{asOfDate ? ` · snapshot ${asOfDate}` : ""}</span>
           </div>
         </div>
       </div>

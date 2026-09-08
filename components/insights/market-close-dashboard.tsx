@@ -103,25 +103,21 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
         }
       `}</style>
 
-      {/* 1. Market Bubbles Section */}
-      <section aria-labelledby="market-overview-title" className="space-y-3">
+      {/* 1. Market Bubbles Section (canonical Top Stocks universe, tối đa 200 mã) */}
+      <section aria-labelledby="market-overview-title" aria-label="Top Stocks canonical" className="space-y-3">
         <Card className={cn(surface, "overflow-hidden py-0")}>
-          <CardHeader className="flex flex-col gap-2 border-b border-white/[0.07] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardHeader className="flex flex-row items-center border-b border-white/[0.07] bg-black/10 px-4 py-3.5 sm:px-5">
             <div className="flex items-center gap-3.5">
               <span className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300 shadow-sm">
                 <CircleDot className="size-4 sm:size-5" />
               </span>
-              <div>
-                <p className="text-[10px] font-mono font-black uppercase tracking-[0.22em] text-teal-300/80">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-teal-300">
                   Market bubbles
                 </p>
-                <h2 id="market-overview-title" className="mt-0.5 text-lg font-bold text-white tracking-tight font-sans">
+                <h2 id="market-overview-title" className="mt-0.5 text-base sm:text-lg font-bold tracking-tight text-white font-sans">
                   Bubbles · Bản đồ giao dịch thị trường
                 </h2>
-                <p className="mt-0.5 text-sm text-slate-300 italic font-medium">
-                  Top Stocks canonical; xếp theo KLGD TB 50 phiên giảm dần, hiển thị toàn bộ universe (tối đa 200 mã). Kích thước theo biến động giá.
-                </p>
-                <p className="mt-1 text-[11px] font-mono text-slate-400">Nguồn KFSP · snapshot {bubbleAsOfDate ?? "—"} · thiếu dữ liệu không được bù</p>
               </div>
             </div>
           </CardHeader>
@@ -130,6 +126,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
               stocks={bubbleStocks}
               onOpenStockDetail={onOpenStockDetail}
               defaultPeriod="1D"
+              asOfDate={bubbleAsOfDate}
             />
           </CardContent>
         </Card>
