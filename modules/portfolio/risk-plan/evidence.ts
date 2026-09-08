@@ -7,7 +7,11 @@ import type {
   RiskProfileMetricEvidenceMap,
 } from "./types.ts"
 
-type EvidenceTrade = PerformanceTradeInput
+type EvidenceTrade = Pick<PerformanceTradeInput, "id" | "ticker" | "status" | "closed_at">
+  & Partial<Pick<
+    PerformanceTradeInput,
+    "mode" | "timeframe" | "system_tags" | "setup_tags" | "initial_risk_amount"
+  >>
 
 function parseRequiredDate(value: string, label: string): Date {
   const date = new Date(value)
@@ -21,6 +25,22 @@ function oneYearBefore(value: Date): string {
   const start = new Date(value.getTime())
   start.setUTCFullYear(start.getUTCFullYear() - 1)
   return start.toISOString()
+}
+
+function toPerformanceTrade(trade: EvidenceTrade): PerformanceTradeInput {
+  // Compatibility defaults keep the historical pure helper callable by QEO-138 tests.
+  // Production callers supply these canonical fields from portfolio_trades in server.ts.
+  return {
+    id: trade.id,
+    ticker: trade.ticker,
+    mode: trade.mode ?? "live",
+    status: trade.status,
+    timeframe: trade.timeframe ?? null,
+    system_tags: trade.system_tags ?? [],
+    setup_tags: trade.setup_tags ?? [],
+    initial_risk_amount: trade.initial_risk_amount ?? null,
+    closed_at: trade.closed_at,
+  }
 }
 
 function metricEvidence({
@@ -75,7 +95,7 @@ export function buildRiskProfileEvidence({
   })
 
   const normalized = deriveClosedTradeOutcomes({
-    trades: closedCandidates,
+    trades: closedCandidates.map(toPerformanceTrade),
     fills,
   })
   const outcomes = normalized.outcomes
