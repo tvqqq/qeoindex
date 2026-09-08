@@ -23,6 +23,16 @@ export type StopRiskRow = {
   created_at: string
 }
 
+export type OpenTradeRiskBreakdown = {
+  tradeId: string
+  ticker: string
+  openQty: number | null
+  avgCostKvnd: number | null
+  latestStopKvnd: number | null
+  activeRiskVnd: number | null
+  riskStatus: "known" | "unknown"
+}
+
 export function computeOpenTradeRiskContext({
   trades,
   fills,
@@ -32,8 +42,7 @@ export function computeOpenTradeRiskContext({
   fills: RawTransaction[]
   stopEvents: StopRiskRow[]
 }) {
-  let knownActiveRiskVnd = 0
-  let unknownRiskTradeCount = 0
+  const breakdown: OpenTradeRiskBreakdown[] = []
 
   for (const trade of trades) {
     const linkedFills = fills.filter((fill) => fill.trade_id === trade.id && fill.ticker === trade.ticker)
@@ -51,13 +60,35 @@ export function computeOpenTradeRiskContext({
     })
 
     if (!position || !(position.openQty > 0) || !readModel.latestStop) {
-      unknownRiskTradeCount += 1
+      breakdown.push({
+        tradeId: trade.id,
+        ticker: trade.ticker,
+        openQty: position?.openQty ?? null,
+        avgCostKvnd: position?.avgCost ?? null,
+        latestStopKvnd: readModel.latestStop?.price ?? null,
+        activeRiskVnd: null,
+        riskStatus: "unknown",
+      })
       continue
     }
 
-    const downsidePerShareKvnd = Math.max(0, position.avgCost - readModel.latestStop.price)
-    knownActiveRiskVnd += downsidePerShareKvnd * position.openQty * 1000
+    const activeRiskVnd = Math.max(0, position.avgCost - readModel.latestStop.price) * position.openQty * 1000
+    breakdown.push({
+      tradeId: trade.id,
+      ticker: trade.ticker,
+      openQty: position.openQty,
+      avgCostKvnd: position.avgCost,
+      latestStopKvnd: readModel.latestStop.price,
+      activeRiskVnd,
+      riskStatus: "known",
+    })
   }
 
-  return { knownActiveRiskVnd, unknownRiskTradeCount }
+  const knownActiveRiskVnd = breakdown.reduce(
+    (sum, row) => sum + (row.activeRiskVnd ?? 0),
+    0,
+  )
+  const unknownRiskTradeCount = breakdown.filter((row) => row.riskStatus === "unknown").length
+
+  return { knownActiveRiskVnd, unknownRiskTradeCount, breakdown }
 }
