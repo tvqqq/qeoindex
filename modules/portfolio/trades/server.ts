@@ -519,6 +519,7 @@ export async function readPortfolioTradeContext(
   }
 
   const transactions = (allTransactions.data ?? []) as FillRow[]
+  const legacyTransactions = transactions.filter((row) => row.trade_id === null)
   const groupedCount = transactions.filter((row) => row.trade_id != null).length
   const legacyGrouping = transactions.length === 0 || groupedCount === transactions.length
     ? "grouped"
@@ -529,6 +530,7 @@ export async function readPortfolioTradeContext(
   return {
     portfolioId,
     moneyManagementPlanRef: null,
+    legacyTransactions,
     completeness: { legacyGrouping },
     trades: trades.map((trade) =>
       buildTradeReadModel({
