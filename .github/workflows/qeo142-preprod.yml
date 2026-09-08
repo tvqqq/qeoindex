@@ -1,0 +1,24 @@
+name: QEO-142 Performance Preprod
+
+on:
+  pull_request:
+    paths:
+      - 'modules/portfolio/performance/**'
+      - 'tests/portfolio/qeo142-*.test.ts'
+      - '.github/workflows/qeo142-preprod.yml'
+
+jobs:
+  qeo142:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-142 Closed Trade normalization
+        run: node --test tests/portfolio/qeo142-closed-trades.test.ts
