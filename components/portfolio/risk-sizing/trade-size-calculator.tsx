@@ -149,6 +149,7 @@ export function TradeSizeCalculator({
   )
 
   const hasUnknownRisk = (riskContext?.unknownRiskTradeCount ?? 0) > 0
+  const riskContextUnavailable = !loadingContext && riskContext == null
   const ready = result.status === "ready"
 
   return (
@@ -272,15 +273,15 @@ export function TradeSizeCalculator({
         </div>
 
         {contextError ? (
-          <div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">{contextError}</div>
+          <div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">Risk context unavailable: {contextError}</div>
         ) : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <RiskCard term="activeRisk" value={loadingContext ? "Loading…" : formatVnd(projectedRisk.knownActiveRiskVnd)} />
-          <RiskCard term="maxActiveRisk" value={projectedRisk.maxActiveRiskVnd == null ? "Not configured" : formatVnd(projectedRisk.maxActiveRiskVnd)} />
-          <RiskCard term="remainingRiskBudget" value={projectedRisk.remainingRiskBudgetVnd == null ? "Not configured" : formatVnd(projectedRisk.remainingRiskBudgetVnd)} />
+          <RiskCard term="activeRisk" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : formatVnd(projectedRisk.knownActiveRiskVnd)} />
+          <RiskCard term="maxActiveRisk" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : projectedRisk.maxActiveRiskVnd == null ? "Not configured" : formatVnd(projectedRisk.maxActiveRiskVnd)} />
+          <RiskCard term="remainingRiskBudget" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : projectedRisk.remainingRiskBudgetVnd == null ? "Not configured" : formatVnd(projectedRisk.remainingRiskBudgetVnd)} />
           <RiskCard term="riskAddedByPlannedTrade" value={ready ? formatVnd(projectedRisk.plannedTradeRiskVnd) : "—"} />
-          <RiskCard term="projectedActiveRisk" value={ready ? formatVnd(projectedRisk.projectedKnownActiveRiskVnd) : "—"} />
+          <RiskCard term="projectedActiveRisk" value={loadingContext ? "Loading…" : riskContextUnavailable ? "Unavailable" : ready ? formatVnd(projectedRisk.projectedKnownActiveRiskVnd) : "—"} />
         </div>
 
         {!loadingContext && hasUnknownRisk ? (
@@ -302,7 +303,7 @@ export function TradeSizeCalculator({
             <h3 className="text-sm font-extrabold uppercase tracking-wide text-white">Advanced Evidence</h3>
             <p className="mt-1 text-[11px] text-[var(--color-muted-2)]">Win/Payoff evidence and informational Optimal f.</p>
           </div>
-          <Badge>Evidence: {riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>
+          <Badge>Evidence: {riskContextUnavailable ? "Unavailable" : riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>
         </summary>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -310,7 +311,9 @@ export function TradeSizeCalculator({
             term="winRatio"
             value={loadingContext
               ? "Loading…"
-              : riskContext?.winRatioPercent == null
+              : riskContextUnavailable
+                ? "Unavailable"
+                : riskContext?.winRatioPercent == null
                 ? "Insufficient History"
                 : formatPercent(riskContext.winRatioPercent)}
           />
@@ -318,7 +321,9 @@ export function TradeSizeCalculator({
             term="payoffRatio"
             value={loadingContext
               ? "Loading…"
-              : riskContext?.payoffRatio == null
+              : riskContextUnavailable
+                ? "Unavailable"
+                : riskContext?.payoffRatio == null
                 ? "Insufficient History"
                 : formatRatio(riskContext.payoffRatio)}
           />
@@ -326,7 +331,9 @@ export function TradeSizeCalculator({
             term="optimalF"
             value={loadingContext
               ? "Loading…"
-              : optimalF.status === "available" && optimalF.value != null
+              : riskContextUnavailable
+                ? "Unavailable"
+                : optimalF.status === "available" && optimalF.value != null
                 ? formatPercent(optimalF.value * 100)
                 : optimalF.status === "invalid"
                   ? "Invalid Evidence"
