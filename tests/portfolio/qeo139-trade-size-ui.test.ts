@@ -4,6 +4,7 @@ import test from "node:test"
 
 const calculatorPath = "components/portfolio/risk-sizing/trade-size-calculator.tsx"
 const advisorPath = "components/portfolio/risk-sizing/trade-size-advisor.tsx"
+const combinedPath = "components/portfolio/risk-sizing/combined-portfolio-simulation.tsx"
 const hookPath = "components/portfolio/risk-sizing/use-risk-sizing-context.ts"
 const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
@@ -109,6 +110,27 @@ test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", (
   assert.match(allocation, /removePlannedTrade/)
   assert.doesNotMatch(advisor, /method:\s*["'](?:POST|PUT|PATCH)["']/i)
   assert.doesNotMatch(advisor, /localStorage|sessionStorage|indexedDB/i)
+})
+
+test("combined simulation panel renders before planned after states and both deterministic advisors", () => {
+  const combined = read(combinedPath)
+  const allocation = read(allocationPath)
+
+  for (const label of [
+    "Before",
+    "Planned",
+    "After",
+    "Portfolio Allocation Advisor",
+    "Trade Size Advisor",
+    "Combined Verdict",
+    "Projected Active Risk",
+    "Funding Gap",
+  ]) {
+    assert.match(combined, new RegExp(escapeRegExp(label)), `Combined Portfolio Simulation missing ${label}`)
+  }
+
+  assert.match(allocation, /<CombinedPortfolioSimulation/)
+  assert.doesNotMatch(combined, /confidence score|will rise|expected target|probability/i)
 })
 
 test("monolithic calculator is retired after ticker-first advisor migration", () => {
