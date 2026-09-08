@@ -32,12 +32,17 @@ test("risk-sizing server and route are ownership-scoped and read-only", () => {
   assert.doesNotMatch(route, /export async function (?:POST|PATCH|PUT|DELETE)/)
 })
 
-test("active-risk helper reuses canonical Trade read model and AVCO accounting", () => {
-  const source = read("modules/portfolio/risk-sizing/active-risk.ts")
-  assert.match(source, /buildTradeReadModel/)
-  assert.match(source, /computePortfolioPositions/)
-  assert.match(source, /fill\.trade_id === trade\.id/)
-  assert.doesNotMatch(source, /stop_loss_1|stop_loss_2|stop_loss_3/)
+test("active-risk adapter delegates to canonical Trade read model and AVCO accounting", () => {
+  const adapter = read("modules/portfolio/risk-sizing/active-risk.ts")
+  const canonical = read("modules/portfolio/risk-engine/active-risk.ts")
+
+  assert.match(adapter, /computeOpenTradeActiveRisk/)
+  assert.doesNotMatch(adapter, /Math\.max\(0,\s*position\.avgCost/)
+
+  assert.match(canonical, /buildTradeReadModel/)
+  assert.match(canonical, /computePortfolioPositions/)
+  assert.match(canonical, /fill\.trade_id === trade\.id/)
+  assert.doesNotMatch(canonical, /stop_loss_1|stop_loss_2|stop_loss_3/)
 })
 
 test("known Active Risk exposes per-Trade breakdown from the same aggregate pass and keeps missing stop risk unknown", async () => {
