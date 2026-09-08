@@ -37,3 +37,5 @@ jobs:
         run: node --test tests/portfolio/qeo141-equity-drawdown.test.ts
       - name: QEO-141 Guardrail evidence contract
         run: node --test tests/portfolio/qeo141-guardrail-evidence.test.ts
+      - name: QEO-141 Risk State contract
+        run: node --test tests/portfolio/qeo141-risk-state.test.ts
