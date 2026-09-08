@@ -47,3 +47,21 @@ export type DrawdownSnapshot = {
   drawdownPercent: number | null
   completeness: "complete" | "insufficient"
 }
+
+export type RiskRuleEvidence = {
+  ruleId: string
+  severity: "reduce" | "pause"
+  configuredThreshold: number | string | null
+  observedValue: number | string | null
+  status: "triggered" | "clear" | "insufficient"
+  reason: string
+  source: "money_management_plan" | "canonical_closed_trades" | "account_equity" | "active_risk"
+}
+
+export type PortfolioRiskStateResult = {
+  state: "NORMAL" | "REDUCE_RISK" | "PAUSE_AND_REVIEW" | "UNKNOWN"
+  triggers: RiskRuleEvidence[]
+  insufficientRules: RiskRuleEvidence[]
+  configuredDefaultTradeRiskPercent: number
+  effectiveDefaultTradeRiskPercent: number
+}
