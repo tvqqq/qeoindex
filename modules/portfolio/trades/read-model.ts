@@ -1,3 +1,4 @@
+import { deriveTradeCloseReview, type TradeCloseReview } from "./review.ts"
 import type { TradeMode, TradeStatus } from "./types.ts"
 
 type TradeReadRow = {
@@ -76,6 +77,7 @@ export type TradeReadModel = {
     riskAmountPerShare: number | null
     tradeSize: number | null
   }
+  closeReview: TradeCloseReview
   completeness: {
     stopState: "known" | "unknown"
     initialRiskState: "available" | "partial" | "unknown"
@@ -160,6 +162,12 @@ export function buildTradeReadModel({
         }
       : null
   const moneyManagementPlanId = trade.money_management_plan_id ?? null
+  const closeReview = deriveTradeCloseReview({
+    status: trade.status,
+    ticker: trade.ticker,
+    fills: groupedFills,
+    initialRiskAmountVnd: trade.initial_risk_amount ?? null,
+  })
 
   return {
     trade,
@@ -175,6 +183,7 @@ export function buildTradeReadModel({
       riskAmountPerShare: trade.initial_risk_amount_per_share ?? null,
       tradeSize: trade.planned_trade_size ?? null,
     },
+    closeReview,
     completeness: {
       stopState: latestStop ? "known" : "unknown",
       initialRiskState: initialRiskState(trade),
