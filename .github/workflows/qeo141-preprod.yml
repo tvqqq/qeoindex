@@ -33,3 +33,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: QEO-141 Active Risk contract
         run: node --test tests/portfolio/qeo141-active-risk.test.ts
+      - name: QEO-141 Account Equity and Drawdown contract
+        run: node --test tests/portfolio/qeo141-equity-drawdown.test.ts
