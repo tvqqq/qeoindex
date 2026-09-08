@@ -1,0 +1,35 @@
+name: QEO-141 Portfolio Risk Engine
+
+on:
+  pull_request:
+    paths:
+      - "modules/portfolio/risk-engine/**"
+      - "modules/portfolio/risk-sizing/**"
+      - "tests/portfolio/qeo141-*.test.ts"
+      - "docs/superpowers/specs/2026-09-08-qeo-141-active-risk-engine-design.md"
+      - "docs/superpowers/plans/2026-09-08-qeo-141-active-risk-engine.md"
+      - ".github/workflows/qeo141-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo141-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portfolio-risk-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-141 Active Risk contract
+        run: node --test tests/portfolio/qeo141-active-risk.test.ts
