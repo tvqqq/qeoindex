@@ -10,6 +10,7 @@ const tooltipPath = "components/portfolio/risk-sizing/risk-metric-tooltip.tsx"
 const allocationPath = "components/portfolio/portfolio-capital-allocation.tsx"
 const panel1Path = "components/portfolio/risk-sizing/portfolio-allocation-advisor.tsx"
 const panel2Path = "components/portfolio/risk-sizing/portfolio-current-state.tsx"
+const uiPolicyPath = "components/portfolio/risk-sizing/planner-ui-policy.ts"
 const pagePath = "components/portfolio/portfolio-page.tsx"
 const terminologyPath = "modules/portfolio/risk-sizing/terminology.ts"
 const pnlPath = "modules/portfolio/pnl.ts"
@@ -97,6 +98,28 @@ test("Panel 2 never promotes compatibility stopLoss fields into canonical risk e
   assert.match(panel2, /riskCoverage\.holdingRisks/)
   assert.match(panel2, /openTradeRisks/)
   assert.doesNotMatch(panel2, /position\.stopLoss|stopLoss1|stopLoss2|stopLoss3/)
+})
+
+test("ui-first production pass exposes consistent planner hierarchy and one explicit unavailable-action policy", () => {
+  const allocation = read(allocationPath)
+  const panel1 = read(panel1Path)
+  const panel2 = read(panel2Path)
+  const advisor = read(advisorPath)
+  const combined = read(combinedPath)
+  const policy = read(uiPolicyPath)
+  const surface = `${allocation}\n${panel1}\n${panel2}\n${advisor}\n${combined}`
+
+  assert.match(allocation, /data-planner-workspace/)
+  assert.match(panel1, /data-planner-panel="allocation"/)
+  assert.match(panel2, /data-planner-panel="current-state"/)
+  assert.match(advisor, /data-planner-advisor="trade-size"/)
+  assert.match(combined, /data-planner-panel="simulation"/)
+  assert.match(combined, /Before[\s\S]*Planned[\s\S]*After/)
+
+  assert.match(policy, /export function showPlannerUnavailableAlert/)
+  assert.match(policy, /window\.alert/)
+  assert.match(policy, /đang được hoàn thiện/i)
+  assert.doesNotMatch(surface, /window\.alert/)
 })
 
 test("ticker-first Trade Size Advisor owns ephemeral planned basket behavior", () => {
