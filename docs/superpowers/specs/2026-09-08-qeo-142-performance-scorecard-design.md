@@ -79,7 +79,7 @@ export type ClosedTradeOutcome = {
 }
 ```
 
-The implementation should reuse `deriveTradeCloseReview()` rather than duplicate close accounting.
+The implementation reuses `deriveTradeCloseReview()` rather than duplicating close accounting.
 
 ### Gross / fee / net invariant
 
@@ -98,11 +98,18 @@ Commission   = sum(Total Fees)
 Net P/L      = Gross Profit + Gross Loss - Commission
 ```
 
+`Gross Profit` / `Gross Loss` classify each Trade by **gross** P/L sign because Commission Ratio is a pre-commission source formula. Winner / loser counts classify by **net** P/L sign after fees. These classifications may therefore differ for a Trade whose gross profit is smaller than its fees; that is intentional and must be tested.
+
 All money exposed by the performance read model is integer VND at the domain boundary.
 
 ### Winner/loser classification
 
 Winner / loser / breakeven uses **net P/L after fees**, matching existing QEO-140 close-review semantics.
+
+- `averageWinVnd` = arithmetic mean of positive net Trade P/L;
+- `largestWinVnd` = maximum positive net Trade P/L;
+- `averageLossVnd` = arithmetic mean of negative net Trade P/L and remains negative;
+- `largestLossVnd` = minimum (most negative) net Trade P/L.
 
 Gross P/L is used only where the Scorecard formula explicitly needs gross profit/loss or Commission Ratio.
 
@@ -136,8 +143,8 @@ The Scorecard also exposes:
 - gross profit;
 - gross loss;
 - commission;
-- total net P/L;
-- total P/L % when a valid Account Equity denominator exists;
+- total documented closed-Trade net P/L;
+- documented closed-Trade P/L % when portfolio initial capital is valid;
 - average winning Trade;
 - average losing Trade;
 - largest winning Trade;
@@ -148,6 +155,26 @@ The Scorecard also exposes:
 - Max Drawdown %;
 - Average Drawdown %;
 - Advanced informational Optimal f.
+
+### Two percentage concepts must remain separate
+
+The Scorecard may show a **documented closed-Trade P/L %** for the selected Trade population:
+
+```text
+Documented Closed-Trade P/L %
+= Sum of selected eligible closed-Trade Net P/L / Portfolio Initial Capital × 100
+```
+
+It is unavailable when initial capital is not positive/finite. For `paper` or `combined` it is explicitly a ratio to the shared portfolio baseline, not a separate paper-account return.
+
+The Account Equity section separately exposes **Account Total Return %**:
+
+```text
+Account Total Return %
+= (Current/End Account Equity - Initial Capital) / Initial Capital × 100
+```
+
+These two percentages must not share a label or be substituted for one another. Account Total Return is portfolio-wide mark-to-market; documented closed-Trade P/L % is a closed-Trade analytics ratio.
 
 ### Consecutive-loss definition
 
@@ -183,11 +210,11 @@ It is informational/aggressive only. It never mutates or recommends an automatic
 
 ## 6. Drawdown episodes
 
-QEO-142 uses the same complete Account Equity points that QEO-141 uses.
+QEO-142 uses the same Account Equity points that QEO-141 uses.
 
 ### Episode definition
 
-1. Establish an all-time peak from complete points.
+1. Establish an all-time peak from a continuous sequence of complete points.
 2. A drawdown episode starts at the first subsequent complete point below that peak.
 3. The reference peak remains fixed for that episode.
 4. Episode depth is the deepest percentage decline from the reference peak.
@@ -205,7 +232,9 @@ Average Drawdown % = arithmetic mean(Episode Depth %)
 
 If any Account Equity point required to establish continuity within the analyzed range is incomplete, Max Drawdown and Average Drawdown for that range are unavailable.
 
-QEO-142 must not silently skip missing historical points and calculate a shallower drawdown.
+QEO-142 must not silently skip an incomplete historical point and calculate a shallower drawdown.
+
+A range with a complete curve but no drawdown episode has `Max Drawdown = 0%` because zero is then an observed complete result. `Average Drawdown` is unavailable because no episode exists to average. This is distinct from incomplete evidence.
 
 ## 7. Period ledgers
 
@@ -229,9 +258,17 @@ A logical Trade belongs to a period by its canonical `closedAt`, converted to `A
 
 Individual exit fill dates do not create multiple ledger Trade entries.
 
-### Trading metrics per period
+### Trading ledgers are population-specific
 
-Each period includes:
+Trading ledgers are generated independently for:
+
+- `live`;
+- `paper`;
+- `combined`.
+
+`combined` is never used implicitly. The selected UI population controls Scorecard, trading-ledger and segmentation Trade metrics together.
+
+Each trading period includes:
 
 - Trade count;
 - winner / loser / breakeven count;
@@ -239,15 +276,15 @@ Each period includes:
 - gross loss;
 - commission;
 - net P/L;
-- running documented net P/L;
+- running documented net P/L for that same selected population;
 - largest / average win;
 - largest / average loss.
 
-These fields use only eligible documented logical Trades.
+These fields use only eligible documented logical Trades in the selected population.
 
-### Account metrics per period
+### Account ledgers are portfolio-wide
 
-Account metrics use the canonical Account Equity series and all canonical accounting transactions, including legacy accounting rows:
+Account metrics are one shared portfolio-wide series because current storage does not define independent live/paper account capital. They use the canonical Account Equity series and all canonical accounting transactions, including legacy accounting rows:
 
 - start Account Equity;
 - end Account Equity;
@@ -255,23 +292,31 @@ Account metrics use the canonical Account Equity series and all canonical accoun
 - period worst drawdown %;
 - completeness.
 
+For a period with account evidence:
+
+- **start Account Equity** = last complete Account Equity point strictly before local period start; for the first analyzable period, the complete `baseline` initial-capital point is the start anchor;
+- **end Account Equity** = last Account Equity point inside that local period;
+- if the end point is incomplete, or any point from the selected start anchor through the end point is incomplete, the period return/drawdown is unavailable.
+
 ```text
 Period Return % = (End Equity - Start Equity) / Start Equity × 100
 ```
 
-Period return is unavailable when either endpoint is incomplete or start equity <= 0.
+Period return is unavailable when start/end evidence is incomplete or start equity <= 0.
 
-Period drawdown is the worst canonical running-peak drawdown observed during the period. It is unavailable if required equity continuity for the period is incomplete.
+Period drawdown is the worst canonical running-peak drawdown observed during the period, while the running peak itself remains anchored to all complete history before and within that period. It is unavailable if required equity continuity is incomplete.
+
+Periods with no Account Equity point inside the period do not fabricate account metrics. A trading period may therefore have documented Trade metrics while its account-return fields are unavailable.
 
 ### Important separation
 
-Trade metrics and Account Equity metrics are intentionally separate.
+Trading ledgers and Account ledgers are separate canonical structures joined by period key for presentation.
 
 Legacy ungrouped transactions can affect Account Equity/accounting but must not inflate Trade count, Win Ratio, Payoff Ratio or other documented-Trade statistics.
 
 ## 8. Live / paper isolation
 
-Closed-Trade scorecards support three explicit populations:
+Closed-Trade Scorecards, trading ledgers and Trade-based segmentation support three explicit populations:
 
 - `live`;
 - `paper`;
@@ -281,7 +326,7 @@ No implicit mixing is allowed.
 
 UI selection defaults to `live` when at least one eligible live Trade exists. If no eligible live Trade exists and paper Trades exist, default to `paper`. `combined` requires explicit user selection.
 
-Account Equity remains portfolio-wide because current transaction/account-capital storage does not define independent live and paper NAV accounts. The UI/read model must state this limitation rather than fabricate separate Account Equity curves.
+Account Equity, Account Drawdown and benchmark remain portfolio-wide because current transaction/account-capital storage does not define independent live and paper NAV accounts. The UI/read model must state this limitation rather than fabricate separate Account Equity curves.
 
 ## 9. Diagnostic segmentation
 
@@ -326,16 +371,22 @@ PerformanceReadModel {
     combined: TradingScorecard
   }
 
-  ledgers: {
-    daily: PerformanceLedgerPeriod[]
-    weekly: PerformanceLedgerPeriod[]
-    monthly: PerformanceLedgerPeriod[]
-    annual: PerformanceLedgerPeriod[]
+  tradingLedgers: {
+    live: PeriodLedgerSet
+    paper: PeriodLedgerSet
+    combined: PeriodLedgerSet
+  }
+
+  accountLedgers: {
+    daily: AccountLedgerPeriod[]
+    weekly: AccountLedgerPeriod[]
+    monthly: AccountLedgerPeriod[]
+    annual: AccountLedgerPeriod[]
   }
 
   equity: {
     points: EquityPoint[]
-    totalReturnPercent: number | null
+    accountTotalReturnPercent: number | null
     maxDrawdownPercent: number | null
     averageDrawdownPercent: number | null
     episodes: DrawdownEpisode[]
@@ -350,7 +401,11 @@ PerformanceReadModel {
     completeness: "complete" | "insufficient"
   }
 
-  segments: PerformanceSegment[]
+  segments: {
+    live: PerformanceSegment[]
+    paper: PerformanceSegment[]
+    combined: PerformanceSegment[]
+  }
 
   evidence: {
     eligibleTradeCount: number
@@ -361,6 +416,8 @@ PerformanceReadModel {
   }
 }
 ```
+
+`PeriodLedgerSet` contains `daily`, `weekly`, `monthly`, and `annual` trading-period arrays.
 
 The route is a thin authenticated, `force-dynamic`, `no-store` adapter. Database/provider queries belong to a server/domain boundary, not the route.
 
@@ -391,13 +448,17 @@ Return % at t = (Value_t - Value_baseline) / Value_baseline × 100
 Alpha % at t = Portfolio Return % - VN-Index Return %
 ```
 
-The first common baseline value must be positive and finite.
+Portfolio and VN-Index each use their own positive finite value at that same first common date as their baseline value. The date is shared; the baseline values are not numerically shared.
+
+If no common complete date exists, the comparison is unavailable.
 
 ## 12. QEO-138 / QEO-139 reconciliation
 
 QEO-138 must consume the canonical Scorecard core for Win Ratio and Payoff Ratio evidence instead of maintaining a second closed-Trade outcome implementation.
 
 Its existing provenance/completeness wrapper can remain, but metric values and eligible population must come from the QEO-142 performance core.
+
+QEO-138 profile evidence remains based on the canonical combined eligible closed-Trade population unless its existing product contract explicitly requests another mode. This preserves current profile semantics and prevents the UI's temporary live/paper selection from changing stored profile evidence.
 
 QEO-139 therefore continues to receive Win/Payoff/Optimal-f inputs through the same canonical population after QEO-142 lands.
 
@@ -415,6 +476,8 @@ Within `Hiệu suất`, render in this order:
 4. Benchmark vs VN-Index;
 5. Diagnostic Segmentation;
 6. Advanced — Optimal f.
+
+A shared `Live | Paper | Kết hợp` selector controls only Trade-based Scorecard, trading-ledger and segmentation facts. Account Equity/Drawdown and benchmark remain visibly labeled as portfolio-wide.
 
 ### Language policy
 
@@ -490,28 +553,32 @@ Use RED → GREEN per slice.
 Minimum deterministic tests:
 
 1. multi-fill closed Trade counts once;
-2. close-review net P/L + fees reconciles to gross P/L;
+2. close-review net P/L + fees reconciles to gross P/L, including gross-positive/net-negative fee edge case;
 3. Win Ratio formula and zero-sample unavailable state;
 4. Payoff Ratio requires winner + loser and never emits Infinity;
 5. Commission Ratio unavailable when Gross Profit <= 0;
-6. average/largest win/loss;
-7. deterministic loss-run ordering, largest and average consecutive losses;
-8. latest rolling-25 result and shorter-sample metadata;
-9. drawdown episode start/depth/recovery/current unrecovered episode;
-10. incomplete equity continuity makes drawdown analytics unavailable;
-11. Daily/Weekly/Monthly/Annual `Asia/Ho_Chi_Minh` boundaries;
-12. period gross/loss/fees/net reconciliation;
-13. period return endpoint completeness rules;
-14. live/paper filters cannot mix unless `combined` is explicitly requested;
-15. legacy `trade_id = null` rows do not enter Trade stats;
-16. segmentation is non-additive and marks `n < 5` as small sample;
-17. Optimal f validity and informational-only contract;
-18. server/API auth, ownership, no-store and thin-route boundary;
-19. benchmark uses canonical Account Equity and never fake-zeroes unavailable comparison;
-20. QEO-138 Win/Payoff values reconcile exactly with QEO-142;
-21. `Hiệu suất` UI terminology/tooltips and explicit incomplete states;
-22. existing AVCO, QEO-137, QEO-138, QEO-139, QEO-140, QEO-141 and benchmark regressions remain green;
-23. lint, TypeScript and production build pass on the final exact head.
+6. average/largest win/loss with negative loss semantics;
+7. documented closed-Trade P/L % remains distinct from Account Total Return %;
+8. deterministic loss-run ordering, largest and average consecutive losses;
+9. latest rolling-25 result and shorter-sample metadata;
+10. drawdown episode start/depth/recovery/current unrecovered episode;
+11. complete no-drawdown curve returns Max Drawdown 0 but Average Drawdown unavailable;
+12. incomplete equity continuity makes drawdown analytics unavailable;
+13. Daily/Weekly/Monthly/Annual `Asia/Ho_Chi_Minh` boundaries;
+14. period start anchor uses prior complete point/baseline and period end uses last point inside period;
+15. period gross/loss/fees/net reconciliation;
+16. trading ledgers isolate live/paper/combined and never use combined implicitly;
+17. account ledger remains portfolio-wide while Trade metrics are mode-filtered;
+18. live/paper Scorecard filters cannot mix unless `combined` is explicitly selected;
+19. legacy `trade_id = null` rows do not enter Trade stats but remain in account-equity accounting;
+20. segmentation is non-additive and marks `n < 5` as small sample;
+21. Optimal f validity and informational-only contract;
+22. server/API auth, ownership, no-store and thin-route boundary;
+23. benchmark uses canonical Account Equity, first common complete date, and never fake-zeroes unavailable comparison;
+24. QEO-138 Win/Payoff values reconcile exactly with the canonical combined QEO-142 population;
+25. `Hiệu suất` UI terminology/tooltips and explicit incomplete states;
+26. existing AVCO, QEO-137, QEO-138, QEO-139, QEO-140, QEO-141 and benchmark regressions remain green;
+27. lint, TypeScript and production build pass on the final exact head.
 
 ## 17. Acceptance summary
 
@@ -520,9 +587,10 @@ QEO-142 is complete only when:
 - one closed logical Trade counts once regardless of fills;
 - Scorecard formulas are deterministic and use explicit unavailable states;
 - gross P/L, fees and net P/L reconcile to canonical accounting;
+- Trade-based Scorecards/ledgers/segments obey explicit live/paper/combined populations;
+- Account ledgers remain portfolio-wide and are not mislabeled as mode-specific NAV;
 - period ledgers reconcile to the same eligible Trade population;
 - Account Equity/Drawdown uses QEO-141 semantics;
-- live and paper Trade statistics cannot mix accidentally;
 - benchmark portfolio return is based on canonical Account Equity;
 - legacy ungrouped rows do not pollute Scorecard statistics;
 - QEO-138/QEO-139 consume the same canonical Win/Payoff facts;
