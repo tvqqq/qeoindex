@@ -189,16 +189,17 @@ function accountPeriodsForKind(
         && ordered.slice(0, end.index + 1).every(completeEquity)
       const anchor = anchorIndex >= 0 ? ordered[anchorIndex]! : null
       const endPoint = end.point
-      const valid = allHistoryThroughEndComplete
-        && anchor != null
-        && completeEquity(anchor)
-        && completeEquity(endPoint)
-        && anchor.equityVnd > 0
 
-      if (!valid) {
+      if (
+        !allHistoryThroughEndComplete
+        || anchor == null
+        || !completeEquity(anchor)
+        || !completeEquity(endPoint)
+        || !(anchor.equityVnd > 0)
+      ) {
         return {
           key,
-          startEquityVnd: completeEquity(anchor as EquityPoint) ? anchor.equityVnd : null,
+          startEquityVnd: anchor != null && completeEquity(anchor) ? anchor.equityVnd : null,
           endEquityVnd: completeEquity(endPoint) ? endPoint.equityVnd : null,
           returnPercent: null,
           worstDrawdownPercent: null,
