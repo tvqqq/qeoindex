@@ -150,3 +150,24 @@ export type PerformanceSegment = {
   netPnlVnd: number
   smallSample: boolean
 }
+
+export type BenchmarkIndexPoint = {
+  date: string
+  close: number
+}
+
+export type BenchmarkPoint = {
+  date: string
+  portfolioReturnPercent: number
+  vnindexReturnPercent: number
+  alphaPercent: number
+}
+
+export type BenchmarkComparison = {
+  points: BenchmarkPoint[]
+  portfolioReturnPercent: number | null
+  vnindexReturnPercent: number | null
+  alphaPercent: number | null
+  completeness: "complete" | "insufficient"
+  reason: string | null
+}
