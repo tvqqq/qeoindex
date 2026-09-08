@@ -1,9 +1,10 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { Activity, Award, CircleHelp, TrendingUp } from "lucide-react"
 
-import { PortfolioBenchmarkChart } from "@/components/portfolio/portfolio-benchmark-chart"
 import type { BenchmarkComparison } from "@/modules/portfolio/performance/types"
+import { BenchmarkReturnChart } from "./benchmark-return-chart"
 import { performanceTermTitle } from "./terminology"
 
 function formatPercent(value: number | null): string {
@@ -61,7 +62,7 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkComparison }
         <span className="flex items-center gap-1.5"><span className="h-0.5 w-3.5 bg-[#e2b93b]" /> VN-Index</span>
         <span className="ml-auto font-normal text-slate-600">toàn danh mục · không đổi theo bộ lọc Trade</span>
       </div>
-      <PortfolioBenchmarkChart dataPoints={benchmark.points} />
+      <BenchmarkReturnChart dataPoints={benchmark.points} />
     </section>
   )
 }
@@ -75,7 +76,7 @@ function BenchmarkMetric({
 }: {
   label: string
   value: string
-  icon: React.ReactNode
+  icon: ReactNode
   detail: string
   title: string
 }) {
