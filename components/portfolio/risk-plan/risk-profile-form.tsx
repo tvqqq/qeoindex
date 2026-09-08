@@ -8,7 +8,7 @@ import {
   riskProfilePointsForWinRatio,
 } from "@/modules/portfolio/risk-plan/scoring"
 import { PointSlider, type ProfilePointValue } from "./point-slider"
-import { RiskTermTooltip } from "./risk-term-tooltip"
+import { RiskTermTooltip, riskPlanLabelVi } from "./risk-term-tooltip"
 
 type EvidenceEntry = {
   source: string
@@ -82,19 +82,19 @@ const QUESTIONS: Array<{
     field: "activeReturn12mPoints",
     attemptField: "active_return_12m_points",
     label: "12-Month Active Trading Return",
-    help: "Tỷ suất giao dịch chủ động 12 tháng. QeoIndex chỉ tự điền khi có lịch sử Account Equity đủ chuẩn; thiếu dữ liệu phải để Insufficient History.",
+    help: "Tỷ suất giao dịch chủ động 12 tháng. QeoIndex chỉ tự điền khi có lịch sử vốn tài khoản đủ chuẩn; thiếu dữ liệu phải giữ trạng thái chưa đủ lịch sử.",
   },
   {
     field: "winRatioPoints",
     attemptField: "win_ratio_points",
     label: "Win Ratio",
-    help: "Tỷ lệ Trade thắng trên tổng số logical Trade đã đóng. Không đếm từng Fill thành một Trade riêng.",
+    help: "Tỷ lệ giao dịch thắng trên tổng số giao dịch logic đã đóng. Không đếm từng lần khớp lệnh thành một giao dịch riêng.",
   },
   {
     field: "personalRiskTolerancePoints",
     attemptField: "personal_risk_tolerance_points",
     label: "Personal Risk Tolerance",
-    help: "Mức chịu rủi ro cá nhân do chính bạn tự đánh giá. Điểm profile không tự động cho phép tăng Risk per Trade.",
+    help: "Mức chịu rủi ro cá nhân do chính bạn tự đánh giá. Điểm hồ sơ không tự động cho phép tăng rủi ro mỗi giao dịch.",
   },
   {
     field: "experiencePoints",
@@ -106,19 +106,31 @@ const QUESTIONS: Array<{
     field: "payoffRatioPoints",
     attemptField: "payoff_ratio_points",
     label: "Payoff Ratio",
-    help: "Average Winning Trade chia cho giá trị tuyệt đối của Average Losing Trade, tính trên closed logical Trades đủ dữ liệu.",
+    help: "Lãi bình quân của giao dịch thắng chia cho trị tuyệt đối của lỗ bình quân của giao dịch thua, tính trên các giao dịch logic đã đóng đủ dữ liệu.",
   },
 ]
 
+function completenessLabel(value: EvidenceEntry["completeness"]): string {
+  if (value === "complete") return "đầy đủ"
+  if (value === "partial") return "một phần"
+  return "chưa đủ"
+}
+
+function scoreBandLabel(value: RiskProfileAttempt["score_band"]): string {
+  if (value === "low") return "thấp"
+  if (value === "middle") return "trung bình"
+  return "cao"
+}
+
 function evidenceText(entry: EvidenceEntry | undefined, suffix = "") {
   if (!entry || entry.value == null || entry.completeness === "insufficient") {
-    return "Insufficient History"
+    return "Chưa đủ lịch sử"
   }
-  const sample = entry.sampleSize == null ? "" : ` · ${entry.sampleSize} Trades`
+  const sample = entry.sampleSize == null ? "" : ` · ${entry.sampleSize} giao dịch`
   const period = entry.periodStart && entry.periodEnd
     ? ` · ${entry.periodStart.slice(0, 10)} → ${entry.periodEnd.slice(0, 10)}`
     : ""
-  return `${entry.value.toFixed(2)}${suffix}${sample}${period} · ${entry.completeness}`
+  return `${entry.value.toFixed(2)}${suffix}${sample}${period} · ${completenessLabel(entry.completeness)}`
 }
 
 function fromAttempt(attempt: RiskProfileAttempt): FormState {
@@ -204,11 +216,11 @@ export function RiskProfileForm({
         body: JSON.stringify(form),
       })
       const payload = await response.json().catch(() => null) as { error?: string } | null
-      if (!response.ok) throw new Error(payload?.error || "Không thể lưu Risk Profile.")
+      if (!response.ok) throw new Error(payload?.error || "Không thể lưu Hồ sơ rủi ro.")
       await onSaved()
       setEditing(false)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Không thể lưu Risk Profile.")
+      setError(cause instanceof Error ? cause.message : "Không thể lưu Hồ sơ rủi ro.")
     } finally {
       setSaving(false)
     }
@@ -224,14 +236,14 @@ export function RiskProfileForm({
     <section className="rounded-2xl border border-[#2a2e40] bg-[#0b0f16] p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-ticker text-base font-extrabold text-white">Risk Profile</h3>
+          <h3 className="font-ticker text-base font-extrabold text-white">Hồ sơ rủi ro</h3>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
-            Sáu câu, mỗi câu 5 / 10 / 15 điểm. Product bands: 30–45, 50–65, 70–90; các khoảng này chỉ diễn giải profile và không tự động thay đổi Risk per Trade.
+            Sáu câu, mỗi câu 5 / 10 / 15 điểm. Các dải diễn giải của sản phẩm: 30–45, 50–65, 70–90; các khoảng này chỉ diễn giải hồ sơ và không tự động thay đổi rủi ro mỗi giao dịch.
           </p>
         </div>
         {latestAttempt && !editing && (
           <Button type="button" size="sm" variant="outline" onClick={beginRetake}>
-            Retake / Chỉnh sửa
+            Đánh giá lại / Chỉnh sửa
           </Button>
         )}
       </div>
@@ -240,9 +252,9 @@ export function RiskProfileForm({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-500/20 bg-purple-500/[0.06] p-3">
             <div>
-              <div className="text-xs text-slate-400">Latest saved Risk Profile</div>
+              <div className="text-xs text-slate-400">Hồ sơ rủi ro được lưu gần nhất</div>
               <div className="mt-1 text-lg font-extrabold text-white">
-                {latestAttempt.total_score} points <span className="text-sm text-purple-300">· {latestAttempt.score_band}</span>
+                {latestAttempt.total_score} điểm <span className="text-sm text-purple-300">· {scoreBandLabel(latestAttempt.score_band)}</span>
               </div>
             </div>
             <div className="text-right text-xs text-slate-500">
@@ -259,7 +271,7 @@ export function RiskProfileForm({
                   {metric && <div className="mt-1 text-xs text-slate-500">{evidenceText(metric, metricSuffix)}</div>}
                 </div>
                 <div className="shrink-0 rounded-lg border border-purple-500/20 bg-purple-500/10 px-3 py-1.5 text-sm font-extrabold text-purple-300">
-                  {latestAttempt[question.attemptField]} points
+                  {latestAttempt[question.attemptField]} điểm
                 </div>
               </div>
             )
@@ -283,7 +295,7 @@ export function RiskProfileForm({
                   </div>
                   <div className="mt-3">
                     <PointSlider
-                      label={question.label}
+                      label={riskPlanLabelVi(question.label)}
                       value={form[question.field]}
                       onChange={(value) => setForm((current) => ({ ...current, [question.field]: value }))}
                     />
@@ -305,7 +317,7 @@ export function RiskProfileForm({
               </Button>
             )}
             <Button type="button" size="sm" disabled={!complete || saving} onClick={() => void submit()}>
-              {saving ? "Đang lưu…" : latestAttempt ? "Save New Attempt" : "Save Risk Profile"}
+              {saving ? "Đang lưu…" : latestAttempt ? "Lưu lần đánh giá mới" : "Lưu Hồ sơ rủi ro"}
             </Button>
           </div>
         </>
