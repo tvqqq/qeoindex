@@ -35,3 +35,5 @@ jobs:
         run: node --test tests/portfolio/qeo141-active-risk.test.ts
       - name: QEO-141 Account Equity and Drawdown contract
         run: node --test tests/portfolio/qeo141-equity-drawdown.test.ts
+      - name: QEO-141 Guardrail evidence contract
+        run: node --test tests/portfolio/qeo141-guardrail-evidence.test.ts
