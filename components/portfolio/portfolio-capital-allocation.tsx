@@ -10,7 +10,6 @@ import { PortfolioCurrentState } from "@/components/portfolio/risk-sizing/portfo
 import { TradeSizeAdvisor } from "@/components/portfolio/risk-sizing/trade-size-advisor"
 import { useRiskSizingContext } from "@/components/portfolio/risk-sizing/use-risk-sizing-context"
 import type { PortfolioPosition } from "@/modules/portfolio/pnl"
-import { buildAccountEquityContext } from "@/modules/portfolio/risk-sizing/calculator"
 import {
   buildPortfolioAllocationSnapshot,
   removePlannedTrade,
@@ -41,12 +40,21 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
   const [manualAccountEquityVnd, setManualAccountEquityVnd] = useState<number | null>(null)
   const [plannedTrades, setPlannedTrades] = useState<PlannedTrade[]>([])
 
-  const portfolioAccountEquityContext = useMemo(() => buildAccountEquityContext({
-    initialCapitalVnd,
-    totalRealizedPnlKvnd,
-    positions: positions.map(({ ticker, openQty, avgCost }) => ({ ticker, openQty, avgCost })),
-    currentPricesKvnd: currentPrices,
-  }), [initialCapitalVnd, totalRealizedPnlKvnd, positions, currentPrices])
+  const portfolioAccountEquityContext = useMemo<AccountEquityContext>(() => {
+    const canonical = riskSizing.context
+    if (canonical?.accountEquityVnd != null && canonical.accountEquityCompleteness === "complete") {
+      return {
+        valueVnd: canonical.accountEquityVnd,
+        source: "portfolio_mark_to_market",
+        missingPriceTickers: [],
+      }
+    }
+    return {
+      valueVnd: canonical?.accountEquityVnd ?? initialCapitalVnd,
+      source: "portfolio_partial",
+      missingPriceTickers: canonical?.accountEquityMissingPriceTickers ?? positions.map(({ ticker }) => ticker),
+    }
+  }, [initialCapitalVnd, positions, riskSizing.context])
 
   const effectiveAccountEquityContext: AccountEquityContext = manualAccountEquityVnd != null
     ? { valueVnd: manualAccountEquityVnd, source: "manual", missingPriceTickers: [] }
