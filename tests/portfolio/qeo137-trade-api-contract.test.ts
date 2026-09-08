@@ -50,6 +50,8 @@ test("Trade server exposes the narrow lifecycle and evidence contract", () => {
     "detachFillFromTrade",
     "addStopEvent",
     "listStopEvents",
+    "linkExitFillToStopEvent",
+    "listStopExitFillLinks",
     "addJournalEntry",
     "listJournalEntries",
     "readPortfolioTradeContext",
@@ -103,6 +105,25 @@ test("canonical portfolio Trade context uses deterministic read-model assembly",
   assert.match(source, /trade_id/)
   assert.match(source, /portfolio_trade_stop_events/)
   assert.match(source, /portfolio_trade_journal_entries/)
+})
+
+test("QEO-140 stop-to-exit-fill linking validates explicit sell evidence and stays append-only", () => {
+  const source = serverSource()
+
+  const block = source.match(
+    /export async function linkExitFillToStopEvent[\s\S]*?export async function listStopExitFillLinks/,
+  )?.[0] ?? ""
+  assert.ok(block, "stop-to-exit-fill server functions must exist")
+  assert.match(block, /transaction\.trade_id\s*!==\s*tradeId/)
+  assert.match(block, /transaction\.ticker\s*!==\s*trade\.ticker/)
+  assert.match(block, /transaction\.action\s*!==\s*"sell"/)
+  assert.match(block, /FILL_NOT_LINKED/)
+  assert.match(block, /INVALID_EXIT_FILL_ACTION/)
+  assert.match(block, /EXIT_FILL_ALREADY_LINKED/)
+  assert.match(block, /\.from\("portfolio_trade_stop_exit_fills"\)/)
+  assert.match(block, /\.insert\(\{/)
+  assert.doesNotMatch(block, /\.update\(/)
+  assert.doesNotMatch(block, /\.delete\(/)
 })
 
 test("Trade HTTP routes are thin authenticated adapters, not direct Supabase owners", () => {
