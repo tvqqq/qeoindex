@@ -164,15 +164,15 @@ export function TradeSizeAdvisor({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-amber-200">
-              <Calculator className="h-4 w-4" /> Stop-first sizing
+              <Calculator className="h-4 w-4" /> Tính khối lượng từ mức dừng lỗ
             </div>
             <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-              Ticker là identity của một planned Trade. Entry, Stop, Commission, Slippage và Trade Size chỉ thuộc ticker đó.
+              Mã cổ phiếu là định danh của một giao dịch dự kiến. Giá vào lệnh, mức dừng lỗ, phí, trượt giá và khối lượng chỉ thuộc giao dịch của mã đó.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge>{riskProvenance}</Badge>
-            <Badge>{DEFAULT_REGULAR_LOT_SHARES}-share regular lot</Badge>
+            <Badge>{riskProvenanceLabel(riskProvenance)}</Badge>
+            <Badge>Lô chẵn {DEFAULT_REGULAR_LOT_SHARES} cổ phiếu</Badge>
           </div>
         </div>
       </div>
@@ -180,8 +180,8 @@ export function TradeSizeAdvisor({
       <div className="grid gap-3 md:grid-cols-2">
         <label className="space-y-2 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 md:col-span-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-200">Ticker</span>
-            <span className="text-[9px] font-bold text-slate-500">One row per ticker</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-200">Mã cổ phiếu</span>
+            <span className="text-[9px] font-bold text-slate-500">Mỗi mã chỉ có một dòng kế hoạch</span>
           </div>
           <Input
             value={tickerInput}
@@ -206,7 +206,7 @@ export function TradeSizeAdvisor({
           suffix="%"
         />
         <MetricInput term="plannedEntry" value={plannedEntryInput} onChange={setPlannedEntryInput} step="0.1" suffix="k₫" placeholder="VD: 68.0" />
-        <MetricInput term="initialStop" value={initialStopInput} onChange={setInitialStopInput} step="0.1" suffix="k₫" placeholder="Xác định từ market/system logic" />
+        <MetricInput term="initialStop" value={initialStopInput} onChange={setInitialStopInput} step="0.1" suffix="k₫" placeholder="Xác định từ cấu trúc thị trường/hệ thống" />
         <MetricInput term="estimatedCommission" value={commissionInput} onChange={setCommissionInput} step="1000" suffix="VNĐ" />
         <MetricInput term="slippageAllowance" value={slippageInput} onChange={setSlippageInput} step="1000" suffix="VNĐ" />
       </div>
@@ -219,37 +219,37 @@ export function TradeSizeAdvisor({
             onChange={(event) => setAdvancedAcknowledged(event.target.checked)}
             className="mt-0.5 h-4 w-4"
           />
-          <span>Tôi xác nhận đây là advanced manual override trên mức 2%; hệ thống không tự động đề xuất tăng risk vượt ngưỡng này.</span>
+          <span>Tôi xác nhận đây là mức rủi ro thủ công nâng cao trên 2%; hệ thống không tự động đề xuất tăng rủi ro vượt ngưỡng này.</span>
         </label>
       ) : null}
 
       {accountEquityContext.source === "portfolio_partial" ? (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-100">
-          Account Equity đang partial vì thiếu market price cho: {accountEquityContext.missingPriceTickers.join(", ") || "một số ticker"}. Review dữ liệu hoặc dùng manual Account Equity tại Panel 1.
+          Vốn tài khoản đang là dữ liệu một phần vì thiếu giá thị trường cho: {accountEquityContext.missingPriceTickers.join(", ") || "một số mã"}. Hãy rà soát dữ liệu hoặc nhập vốn tài khoản thủ công tại mục 1.
         </div>
       ) : null}
 
       {riskContextError ? (
         <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
-          Risk context unavailable: {riskContextError}
+          Không thể tải ngữ cảnh rủi ro: {riskContextError}
         </div>
       ) : null}
 
       <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4 text-[10px] leading-relaxed text-slate-400">
-        <p className="font-black uppercase tracking-wide text-slate-200">Initial Stop guidance</p>
+        <p className="font-black uppercase tracking-wide text-slate-200">Hướng dẫn xác định mức dừng lỗ ban đầu</p>
         <p className="mt-1.5">
-          Đặt stop từ structural support/resistance, volatility hoặc price activity, hay trading-system rule. Trailing stop chỉ áp dụng sau entry khi Trade phát triển. Actual loss có thể vượt planned stop do gap, liquidity, volatility, overnight moves và slippage.
+          Đặt mức dừng lỗ từ hỗ trợ/kháng cự cấu trúc, biến động hoặc hoạt động giá, hoặc quy tắc của hệ thống giao dịch. Dừng lỗ kéo theo chỉ áp dụng sau khi vào lệnh và giao dịch phát triển. Mức lỗ thực tế có thể vượt mức dự kiến do gap giá, thanh khoản, biến động, chuyển động qua đêm và trượt giá.
         </p>
       </div>
 
       <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.045] to-black/20 p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Deterministic output</p>
-            <p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-white">Trade Size Result</p>
-            <p className="mt-1 text-[10px] text-slate-500">Ready khi Ticker + Entry + Stop + risk budget tạo được regular-lot Trade Size.</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Kết quả xác định</p>
+            <p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-white">Kết quả khối lượng giao dịch</p>
+            <p className="mt-1 text-[10px] text-slate-500">Sẵn sàng khi mã cổ phiếu + giá vào + mức dừng lỗ + ngân sách rủi ro tạo được một khối lượng theo lô chẵn.</p>
           </div>
-          {editingTicker ? <Badge>Editing {editingTicker}</Badge> : null}
+          {editingTicker ? <Badge>Đang sửa {editingTicker}</Badge> : null}
         </div>
 
         {result.status === "ready" ? (
@@ -258,7 +258,7 @@ export function TradeSizeAdvisor({
             <MetricRow term="stopDistance" value={`${formatKvnd(result.stopDistanceKvnd)} · ${formatPercent(result.stopDistancePercent)}`} />
             <MetricRow term="riskPerShare" value={formatVnd(result.riskPerShareVnd)} />
             <MetricRow term="availableTradeRiskBudget" value={formatVnd(result.availableRiskBudgetVnd)} />
-            <MetricRow term="tradeSize" value={`${result.tradeSizeShares.toLocaleString("vi-VN")} shares`} emphasized />
+            <MetricRow term="tradeSize" value={`${result.tradeSizeShares.toLocaleString("vi-VN")} cổ phiếu`} emphasized />
             <MetricRow term="positionValue" value={formatVnd(result.positionValueVnd)} />
             <MetricRow term="riskAddedByPlannedTrade" value={formatVnd(result.totalRiskConsumptionVnd)} />
           </div>
@@ -269,7 +269,7 @@ export function TradeSizeAdvisor({
         )}
 
         {result.status === "ready" && normalizedTicker.length === 0 ? (
-          <p className="mt-3 text-[11px] font-bold text-amber-200">Nhập Ticker trước khi thêm planned Trade.</p>
+          <p className="mt-3 text-[11px] font-bold text-amber-200">Nhập mã cổ phiếu trước khi thêm giao dịch dự kiến.</p>
         ) : null}
 
         <button
@@ -283,21 +283,21 @@ export function TradeSizeAdvisor({
               : "cursor-not-allowed border-white/5 bg-white/[0.03] text-slate-600",
           )}
         >
-          Add Planned Trade
+          Thêm giao dịch dự kiến
         </button>
       </div>
 
       <section className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
           <div>
-            <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Planned Trades</h4>
-            <p className="mt-1 text-[10px] text-slate-500">Planning workspace only · ephemeral client state · not saved.</p>
+            <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Các giao dịch dự kiến</h4>
+            <p className="mt-1 text-[10px] text-slate-500">Chỉ dùng trong phiên lập kế hoạch · trạng thái tạm trên trình duyệt · không được lưu.</p>
           </div>
-          <Badge>{plannedTrades.length} ticker{plannedTrades.length === 1 ? "" : "s"}</Badge>
+          <Badge>{plannedTrades.length} mã</Badge>
         </div>
 
         {plannedTrades.length === 0 ? (
-          <div className="mt-3 rounded-xl border border-dashed border-white/[0.07] bg-black/15 py-6 text-center text-[10px] text-slate-500">Chưa có planned Trade.</div>
+          <div className="mt-3 rounded-xl border border-dashed border-white/[0.07] bg-black/15 py-6 text-center text-[10px] text-slate-500">Chưa có giao dịch dự kiến.</div>
         ) : (
           <div className="mt-3 space-y-3">
             {plannedTrades.map((trade) => (
@@ -306,7 +306,7 @@ export function TradeSizeAdvisor({
                   <div>
                     <p className="text-base font-black tracking-wide text-amber-200">{trade.ticker}</p>
                     <p className="mt-1 text-[10px] text-slate-500">
-                      Planned Entry {formatKvnd(trade.plannedEntryKvnd)} · Initial Stop {formatKvnd(trade.initialStopKvnd)} · Risk per Trade {formatPercent(trade.riskPercent)}
+                      Giá vào dự kiến {formatKvnd(trade.plannedEntryKvnd)} · Dừng lỗ ban đầu {formatKvnd(trade.initialStopKvnd)} · Rủi ro mỗi giao dịch {formatPercent(trade.riskPercent)}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -315,21 +315,21 @@ export function TradeSizeAdvisor({
                       onClick={() => editPlannedTrade(trade)}
                       className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-bold text-slate-200 transition hover:bg-white/5"
                     >
-                      <Pencil className="h-3 w-3" /> Edit
+                      <Pencil className="h-3 w-3" /> Sửa
                     </button>
                     <button
                       type="button"
                       onClick={() => removePlannedTrade(trade.ticker)}
                       className="inline-flex items-center gap-1 rounded-lg border border-rose-500/20 px-2.5 py-1.5 text-[10px] font-bold text-rose-200 transition hover:bg-rose-500/10"
                     >
-                      <Trash2 className="h-3 w-3" /> Remove
+                      <Trash2 className="h-3 w-3" /> Xóa
                     </button>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-3">
-                  <SmallMetric label="Trade Size" value={`${trade.tradeSizeShares.toLocaleString("vi-VN")} shares`} />
-                  <SmallMetric label="Position Value" value={formatVnd(trade.positionValueVnd)} />
-                  <SmallMetric label="Risk Added" value={formatVnd(trade.riskAddedVnd)} />
+                  <SmallMetric label="Khối lượng giao dịch" value={`${trade.tradeSizeShares.toLocaleString("vi-VN")} cổ phiếu`} />
+                  <SmallMetric label="Giá trị vị thế" value={formatVnd(trade.positionValueVnd)} />
+                  <SmallMetric label="Rủi ro tăng thêm" value={formatVnd(trade.riskAddedVnd)} />
                 </div>
               </article>
             ))}
@@ -340,51 +340,51 @@ export function TradeSizeAdvisor({
       <details className="group rounded-2xl border border-white/[0.07] bg-black/20 p-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
           <div>
-            <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Advanced Evidence</h4>
-            <p className="mt-1 text-[10px] text-slate-500">Win/Payoff evidence and informational Optimal f.</p>
+            <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Bằng chứng nâng cao</h4>
+            <p className="mt-1 text-[10px] text-slate-500">Dữ liệu tỷ lệ thắng, tỷ lệ lãi/lỗ và Optimal f để tham khảo.</p>
           </div>
-          <Badge>Evidence: {riskContextUnavailable ? "Unavailable" : riskContext?.evidenceCompleteness ?? "insufficient"}</Badge>
+          <Badge>Bằng chứng: {evidenceCompletenessLabel(riskContextUnavailable ? "unavailable" : riskContext?.evidenceCompleteness ?? "insufficient")}</Badge>
         </summary>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <RiskCard
             term="winRatio"
             value={loadingRiskContext
-              ? "Loading…"
+              ? "Đang tải…"
               : riskContextUnavailable
-                ? "Unavailable"
+                ? "Không khả dụng"
                 : riskContext?.winRatioPercent == null
-                  ? "Insufficient History"
+                  ? "Chưa đủ lịch sử"
                   : formatPercent(riskContext.winRatioPercent)}
           />
           <RiskCard
             term="payoffRatio"
             value={loadingRiskContext
-              ? "Loading…"
+              ? "Đang tải…"
               : riskContextUnavailable
-                ? "Unavailable"
+                ? "Không khả dụng"
                 : riskContext?.payoffRatio == null
-                  ? "Insufficient History"
+                  ? "Chưa đủ lịch sử"
                   : formatRatio(riskContext.payoffRatio)}
           />
           <RiskCard
             term="optimalF"
             value={loadingRiskContext
-              ? "Loading…"
+              ? "Đang tải…"
               : riskContextUnavailable
-                ? "Unavailable"
+                ? "Không khả dụng"
                 : optimalF.status === "available" && optimalF.value != null
                   ? formatPercent(optimalF.value * 100)
                   : optimalF.status === "invalid"
-                    ? "Invalid Evidence"
-                    : "Insufficient History"}
+                    ? "Bằng chứng không hợp lệ"
+                    : "Chưa đủ lịch sử"}
           />
         </div>
 
         <div className="mt-4 rounded-xl border border-purple-500/20 bg-purple-500/[0.07] p-3 text-xs leading-relaxed text-slate-300">
-          <p className="font-bold text-purple-200">Optimal f is informational only.</p>
+          <p className="font-bold text-purple-200">Optimal f chỉ dùng để tham khảo.</p>
           <p className="mt-1">
-            It is more aggressive than the zero-ROR sizing examples, is not auto-applied to Risk per Trade or Trade Size, and is not a zero-ROR guarantee. QeoIndex only shows the deterministic value when Win Ratio and Payoff Ratio evidence are available.
+            Optimal f mạnh tay hơn các ví dụ sizing zero-ROR, không được tự động áp vào rủi ro mỗi giao dịch hoặc khối lượng giao dịch, và không bảo đảm Risk of Ruin bằng 0. QeoIndex chỉ hiển thị giá trị xác định khi có đủ bằng chứng về tỷ lệ giao dịch thắng và tỷ lệ lãi/lỗ bình quân.
           </p>
         </div>
       </details>
@@ -494,18 +494,34 @@ function formatRatio(value: number | null): string {
   return `${value.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}:1`
 }
 
+function riskProvenanceLabel(value: RiskProvenance): string {
+  switch (value) {
+    case "Money Management Plan": return "Từ Kế hoạch quản trị vốn"
+    case "Onboarding default": return "Mặc định khởi tạo"
+    case "Manual override": return "Điều chỉnh thủ công"
+    case "Planned Trade": return "Từ giao dịch dự kiến"
+  }
+}
+
+function evidenceCompletenessLabel(value: string): string {
+  if (value === "complete") return "đầy đủ"
+  if (value === "partial") return "một phần"
+  if (value === "unavailable") return "không khả dụng"
+  return "chưa đủ"
+}
+
 function statusHelp(status: TradeSizeStatus): string {
   switch (status) {
-    case "incomplete": return "Nhập Planned Entry và Initial Stop trước khi tính Trade Size."
-    case "invalid_account_equity": return "Account Equity phải lớn hơn 0."
-    case "invalid_risk_percent": return "Risk per Trade phải lớn hơn 0 và không vượt 100%."
-    case "advanced_override_required": return "Risk per Trade trên 2% cần advanced acknowledgement rõ ràng."
-    case "invalid_entry": return "Planned Entry phải lớn hơn 0."
-    case "invalid_stop_direction": return "Với long Trade, Initial Stop phải thấp hơn Planned Entry."
-    case "zero_stop_distance": return "Initial Stop trùng Planned Entry nên không có khoảng risk hợp lệ."
-    case "invalid_cost": return "Estimated Commission và Slippage Allowance phải là số không âm."
-    case "costs_consume_risk_budget": return "Estimated costs đã dùng hết Risk Amount; không còn risk budget cho Trade Size."
-    case "below_regular_lot": return "Không có valid regular-lot Trade Size dưới risk budget đã chọn."
-    case "ready": return "Ready."
+    case "incomplete": return "Nhập giá vào lệnh dự kiến và mức dừng lỗ ban đầu trước khi tính khối lượng giao dịch."
+    case "invalid_account_equity": return "Vốn tài khoản phải lớn hơn 0."
+    case "invalid_risk_percent": return "Rủi ro mỗi giao dịch phải lớn hơn 0 và không vượt 100%."
+    case "advanced_override_required": return "Rủi ro mỗi giao dịch trên 2% cần xác nhận nâng cao rõ ràng."
+    case "invalid_entry": return "Giá vào lệnh dự kiến phải lớn hơn 0."
+    case "invalid_stop_direction": return "Với giao dịch mua, mức dừng lỗ ban đầu phải thấp hơn giá vào lệnh dự kiến."
+    case "zero_stop_distance": return "Mức dừng lỗ ban đầu trùng giá vào lệnh dự kiến nên không có khoảng rủi ro hợp lệ."
+    case "invalid_cost": return "Phí giao dịch ước tính và phần đệm trượt giá phải là số không âm."
+    case "costs_consume_risk_budget": return "Chi phí ước tính đã dùng hết số tiền rủi ro; không còn ngân sách rủi ro để tạo khối lượng giao dịch."
+    case "below_regular_lot": return "Không có khối lượng lô chẵn hợp lệ dưới ngân sách rủi ro đã chọn."
+    case "ready": return "Sẵn sàng."
   }
 }
