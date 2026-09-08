@@ -21,6 +21,8 @@ const FILL_SELECT = "id,portfolio_id,user_id,trade_id,ticker,action,quantity,pri
 
 const STOP_SELECT = "id,trade_id,portfolio_id,user_id,ticker,stop_type,price,quantity_covered,signal,reason,effective_at,created_at" as const
 
+const STOP_EXIT_FILL_LINK_SELECT = "id,stop_event_id,transaction_id,trade_id,portfolio_id,user_id,ticker,exit_action,created_at" as const
+
 const JOURNAL_SELECT = "id,trade_id,portfolio_id,user_id,ticker,phase,note,emotion_tags,behavior_tags,adherence_status,override_reason,occurred_at,created_at,updated_at" as const
 
 const PLAN_FIELDS = [
@@ -88,6 +90,18 @@ type FillRow = Record<string, unknown> & {
   transaction_date: string
 }
 
+type StopExitFillLinkRow = Record<string, unknown> & {
+  id: string
+  stop_event_id: string
+  transaction_id: string
+  trade_id: string
+  portfolio_id: string
+  user_id: string
+  ticker: string
+  exit_action: "sell"
+  created_at: string
+}
+
 function requireUuid(value: string, label: string) {
   if (!UUID_RE.test(value)) throw new TradeDomainError("INVALID_ID", `${label} is invalid`)
   return value
@@ -153,6 +167,26 @@ async function loadOwnedTrade(
   if (result.error) dbFailure("load-trade", result.error)
   if (!result.data) throw new TradeDomainError("NOT_FOUND", "Trade was not found")
   return result.data as TradeRow
+}
+
+async function loadOwnedStopEvent(
+  context: ServerAuthContext,
+  portfolioId: string,
+  tradeId: string,
+  stopEventId: string,
+) {
+  requireUuid(stopEventId, "Stop event ID")
+  const result = await context.supabase
+    .from("portfolio_trade_stop_events")
+    .select(STOP_SELECT)
+    .eq("id", stopEventId)
+    .eq("trade_id", tradeId)
+    .eq("portfolio_id", portfolioId)
+    .eq("user_id", context.user.id)
+    .maybeSingle()
+  if (result.error) dbFailure("load-stop-event", result.error)
+  if (!result.data) throw new TradeDomainError("NOT_FOUND", "Stop event was not found")
+  return result.data
 }
 
 function normalizedPlanPatch(trade: TradeRow, input: unknown) {
@@ -439,6 +473,81 @@ export async function listStopEvents(
   return result.data ?? []
 }
 
+export async function linkExitFillToStopEvent(
+  context: ServerAuthContext,
+  portfolioId: string,
+  tradeId: string,
+  stopEventId: string,
+  transactionId: string,
+) {
+  const trade = await loadOwnedTrade(context, portfolioId, tradeId)
+  await loadOwnedStopEvent(context, portfolioId, tradeId, stopEventId)
+  const transaction = await loadOwnedFill(context, portfolioId, transactionId)
+
+  if (transaction.trade_id !== tradeId) {
+    throw new TradeDomainError("FILL_NOT_LINKED", "Transaction is not attached to this Trade")
+  }
+  if (transaction.ticker !== trade.ticker) {
+    throw new TradeDomainError("TICKER_MISMATCH", "Transaction ticker does not match Trade ticker")
+  }
+  if (transaction.action !== "sell") {
+    throw new TradeDomainError("INVALID_EXIT_FILL_ACTION", "Only sell transactions may be linked to a stop event")
+  }
+
+  const existing = await context.supabase
+    .from("portfolio_trade_stop_exit_fills")
+    .select(STOP_EXIT_FILL_LINK_SELECT)
+    .eq("transaction_id", transactionId)
+    .eq("portfolio_id", portfolioId)
+    .eq("user_id", context.user.id)
+    .maybeSingle()
+  if (existing.error) dbFailure("load-stop-exit-fill-link", existing.error)
+  if (existing.data) {
+    if (existing.data.stop_event_id === stopEventId) return existing.data as StopExitFillLinkRow
+    throw new TradeDomainError("EXIT_FILL_ALREADY_LINKED", "Transaction is already linked to another stop event")
+  }
+
+  const result = await context.supabase
+    .from("portfolio_trade_stop_exit_fills")
+    .insert({
+      stop_event_id: stopEventId,
+      transaction_id: transactionId,
+      trade_id: tradeId,
+      portfolio_id: portfolioId,
+      user_id: context.user.id,
+      ticker: trade.ticker,
+      exit_action: "sell",
+    })
+    .select(STOP_EXIT_FILL_LINK_SELECT)
+    .single()
+  if (result.error || !result.data) dbFailure("link-stop-exit-fill", result.error)
+  return result.data as StopExitFillLinkRow
+}
+
+export async function listStopExitFillLinks(
+  context: ServerAuthContext,
+  portfolioId: string,
+  tradeId: string,
+  stopEventId?: string,
+) {
+  await loadOwnedTrade(context, portfolioId, tradeId)
+  if (stopEventId) await loadOwnedStopEvent(context, portfolioId, tradeId, stopEventId)
+
+  let query = context.supabase
+    .from("portfolio_trade_stop_exit_fills")
+    .select(STOP_EXIT_FILL_LINK_SELECT)
+    .eq("trade_id", tradeId)
+    .eq("portfolio_id", portfolioId)
+    .eq("user_id", context.user.id)
+  if (stopEventId) query = query.eq("stop_event_id", stopEventId)
+
+  const result = await query
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+  if (result.error) dbFailure("list-stop-exit-fill-links", result.error)
+  return (result.data ?? []) as StopExitFillLinkRow[]
+}
+
 export async function addJournalEntry(
   context: ServerAuthContext,
   portfolioId: string,
@@ -543,4 +652,4 @@ export async function readPortfolioTradeContext(
   }
 }
 
-export { TRADE_SELECT, FILL_SELECT, STOP_SELECT, JOURNAL_SELECT }
+export { TRADE_SELECT, FILL_SELECT, STOP_SELECT, STOP_EXIT_FILL_LINK_SELECT, JOURNAL_SELECT }
