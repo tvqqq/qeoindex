@@ -107,3 +107,36 @@ export type DrawdownAnalytics = {
   episodes: DrawdownEpisode[]
   completeness: "complete" | "insufficient"
 }
+
+export type TradingLedgerPeriod = {
+  key: string
+  tradeCount: number
+  winnerCount: number
+  loserCount: number
+  breakevenCount: number
+  grossProfitVnd: number
+  grossLossVnd: number
+  commissionVnd: number
+  netPnlVnd: number
+  runningNetPnlVnd: number
+  averageWinVnd: number | null
+  averageLossVnd: number | null
+  largestWinVnd: number | null
+  largestLossVnd: number | null
+}
+
+export type AccountLedgerPeriod = {
+  key: string
+  startEquityVnd: number | null
+  endEquityVnd: number | null
+  returnPercent: number | null
+  worstDrawdownPercent: number | null
+  completeness: "complete" | "insufficient"
+}
+
+export type PeriodLedgerSet = {
+  daily: TradingLedgerPeriod[]
+  weekly: TradingLedgerPeriod[]
+  monthly: TradingLedgerPeriod[]
+  annual: TradingLedgerPeriod[]
+}
