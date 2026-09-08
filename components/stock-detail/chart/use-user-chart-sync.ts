@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   DEFAULT_INDICATOR_CONFIG,
+  type ChartViewSettings,
   type ChartStyle,
   type ChartTimeframe,
   type DrawingObject,
   type IndicatorConfig,
 } from "./stock-chart-types"
+import {
+  defaultChartViewSettings,
+  normalizeChartViewSettings,
+  readCachedChartViewSettings,
+  writeCachedChartViewSettings,
+} from "./chart-view-settings"
 import {
   backupLegacyLocalSettings,
   deserializeUserChartSettings,
@@ -28,6 +35,7 @@ import {
 
 interface UseUserChartSyncOptions {
   ticker: string
+  preferredTimeframe?: ChartTimeframe | null
   defaultTimeframe?: ChartTimeframe
   defaultChartStyle?: ChartStyle
   defaultIndicators?: IndicatorConfig
@@ -48,6 +56,8 @@ interface ChartSyncGeneration {
   localDrawingEditIntent: boolean
   remoteSettings: UserChartSettingsPayloadV2 | null
   unresolvedLegacyDrawings: LegacyDrawing[]
+  remoteViewSettings: ChartViewSettings | null
+  viewSettingsScope: string | null
 }
 
 interface PendingChartSave {
@@ -100,12 +110,13 @@ function mergeUnresolvedLegacyDrawings(
 
 export function useUserChartSync({
   ticker,
+  preferredTimeframe = null,
   defaultTimeframe = "1D",
   defaultChartStyle = "candles",
   defaultIndicators = DEFAULT_INDICATOR_CONFIG,
 }: UseUserChartSyncOptions) {
   const [timeframe, setTimeframe] = useState<ChartTimeframe>(() => {
-    return readLocalChartSettings(ticker).settings?.timeframe || defaultTimeframe
+    return preferredTimeframe ?? readLocalChartSettings(ticker).settings?.timeframe ?? defaultTimeframe
   })
   const [chartStyle, setChartStyle] = useState<ChartStyle>(() => {
     return readLocalChartSettings(ticker).settings?.chartStyle || defaultChartStyle
@@ -144,6 +155,8 @@ export function useUserChartSync({
     localDrawingEditIntent: false,
     remoteSettings: null,
     unresolvedLegacyDrawings: [],
+    remoteViewSettings: null,
+    viewSettingsScope: null,
   })
   const generationsRef = useRef(new Map<number, ChartSyncGeneration>())
   const localRevisionRef = useRef(0)
@@ -151,6 +164,8 @@ export function useUserChartSync({
   const pendingSaveRef = useRef(new Map<number, PendingChartSave>())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryHydrationRef = useRef<(() => void) | null>(null)
+  const viewSettingsScopeRef = useRef<string | null>(null)
+  const [viewSettings, setViewSettings] = useState<ChartViewSettings>(() => defaultChartViewSettings())
   const [drawingSyncStatus, setDrawingSyncStatus] = useState<DrawingSyncStatus>("hydrating")
 
   const normalizedTicker = ticker.toUpperCase()
@@ -201,6 +216,9 @@ export function useUserChartSync({
     const merged = { ...pending, payload }
     pendingSaveRef.current.set(generation.id, merged)
     writeLocalPayload(payload)
+    if (generation.localFieldIntents.has("viewSettings") && generation.viewSettingsScope && payload.viewSettings) {
+      writeCachedChartViewSettings(generation.viewSettingsScope, payload.viewSettings)
+    }
   }, [writeLocalPayload])
 
   // Remote coalesced queue execution worker. Each generation owns its ticker
@@ -285,10 +303,12 @@ export function useUserChartSync({
       requestRevision: localRevisionRef.current,
       hydrated: false,
       hydrationFailed: false,
-      localFieldIntents: new Set(),
+      localFieldIntents: new Set(preferredTimeframe ? ["timeframe"] : []),
       localDrawingEditIntent: false,
       remoteSettings: null,
       unresolvedLegacyDrawings: [],
+      remoteViewSettings: null,
+      viewSettingsScope: null,
     }
     generationSequenceRef.current = generation.id
     generationsRef.current.set(generation.id, generation)
@@ -304,6 +324,8 @@ export function useUserChartSync({
       generation.hydrated = false
       generation.hydrationFailed = false
       generation.remoteSettings = null
+      generation.remoteViewSettings = null
+      generation.viewSettingsScope = null
       if (!isCancelled && activeGenerationRef.current.id === generation.id) {
         setDrawingSyncStatus("hydrating")
       }
@@ -318,7 +340,7 @@ export function useUserChartSync({
           local.unresolvedLegacyDrawings,
         )
         unresolvedLegacyDrawingsRef.current = generation.unresolvedLegacyDrawings
-        if (local.timeframe) setTimeframe(local.timeframe)
+        setTimeframe(preferredTimeframe ?? local.timeframe ?? defaultTimeframe)
         if (local.chartStyle) setChartStyle(local.chartStyle)
         if (local.indicators) setIndicators({ ...defaultIndicators, ...local.indicators })
         if (Array.isArray(local.drawings)) {
@@ -336,9 +358,24 @@ export function useUserChartSync({
         if (!body.ok || !body.data) throw new Error("Chart settings response was missing data")
 
         const { settings: remote } = deserializeUserChartSettings(body.data)
+        const remoteViewSettings = normalizeChartViewSettings(body.viewSettings ?? remote.viewSettings)
+        const scope = typeof body.viewSettingsScope === "string"
+          ? body.viewSettingsScope
+          : typeof remote.viewSettingsScope === "string" ? remote.viewSettingsScope : null
+        const viewSettingsConfigured = body.viewSettingsConfigured === true
         generation.remoteSettings = remote
+        generation.remoteViewSettings = remoteViewSettings
+        generation.viewSettingsScope = scope
         const current = !isCancelled && activeGenerationRef.current.id === generation.id
-        if (current) setDrawingSyncStatus("ready")
+        if (current && !generation.localFieldIntents.has("viewSettings")) {
+          setDrawingSyncStatus("ready")
+          viewSettingsScopeRef.current = scope
+          setViewSettings(remoteViewSettings)
+          if (scope) writeCachedChartViewSettings(scope, remoteViewSettings)
+        } else if (current) {
+          setDrawingSyncStatus("ready")
+          viewSettingsScopeRef.current = scope
+        }
         const revisionMatches = shouldApplyRemoteChartSettings(
           requestRevision,
           localRevisionRef.current,
@@ -355,6 +392,18 @@ export function useUserChartSync({
         if (canApplyField("timeframe")) setTimeframe(remote.timeframe)
         if (canApplyField("chartStyle")) setChartStyle(remote.chartStyle)
         if (canApplyField("indicators")) setIndicators({ ...DEFAULT_INDICATOR_CONFIG, ...remote.indicators })
+        if (
+          current
+          && viewSettingsConfigured
+          && !generation.localFieldIntents.has("indicators")
+          && canApplyField("viewSettings")
+        ) {
+          setIndicators({ ...DEFAULT_INDICATOR_CONFIG, ...remoteViewSettings.indicatorVisibility })
+        }
+        if (current && canApplyField("viewSettings")) {
+          setViewSettings(remoteViewSettings)
+          if (scope) writeCachedChartViewSettings(scope, remoteViewSettings)
+        }
         if (canApplyField("drawings") && !generation.localDrawingEditIntent) {
           setAllDrawings(remote.drawings.map((d) => persistedV2ToRuntimeDrawing(d)))
         }
@@ -362,6 +411,10 @@ export function useUserChartSync({
       } catch (err) {
         generation.hydrationFailed = true
         if (!isCancelled && activeGenerationRef.current.id === generation.id) {
+          const cachedViewSettings = viewSettingsScopeRef.current
+            ? readCachedChartViewSettings(viewSettingsScopeRef.current)
+            : null
+          if (cachedViewSettings) setViewSettings(cachedViewSettings)
           setDrawingSyncStatus("offline")
           setSaveStatus("offline")
           console.warn("[useUserChartSync] Failed to fetch remote settings, using local:", err)
@@ -386,7 +439,7 @@ export function useUserChartSync({
       isCancelled = true
       if (retryHydrationRef.current === retry) retryHydrationRef.current = null
     }
-  }, [defaultChartStyle, defaultIndicators, defaultTimeframe, drainSaveQueue, mergeRemoteFieldsIntoPendingSave, ticker])
+  }, [defaultChartStyle, defaultIndicators, defaultTimeframe, drainSaveQueue, mergeRemoteFieldsIntoPendingSave, preferredTimeframe, ticker])
 
   const retryChartHydration = useCallback(() => {
     retryHydrationRef.current?.()
@@ -399,6 +452,7 @@ export function useUserChartSync({
       newStyle: ChartStyle,
       newIndicators: IndicatorConfig,
       newDrawings: (DrawingObject | PersistedDrawingV2)[],
+      newViewSettings?: ChartViewSettings,
     ) => {
       const generation = activeGenerationRef.current
       const currentTicker = currentTickerRef.current
@@ -426,6 +480,12 @@ export function useUserChartSync({
         indicators: newIndicators,
         drawingsSchemaVersion: 2,
         drawings: persistedDrawings,
+        ...((newViewSettings ?? (generation.localFieldIntents.has("viewSettings")
+          ? pendingSaveRef.current.get(generation.id)?.payload.viewSettings
+          : undefined)) ? {
+          viewSettings: newViewSettings ?? pendingSaveRef.current.get(generation.id)?.payload.viewSettings,
+          ...(generation.viewSettingsScope ? { viewSettingsScope: generation.viewSettingsScope } : {}),
+        } : {}),
         ...(unresolvedLegacyDrawingsRef.current.length > 0
           ? { unresolvedLegacyDrawings: unresolvedLegacyDrawingsRef.current }
           : {}),
@@ -440,6 +500,9 @@ export function useUserChartSync({
         payload,
       })
       setSaveStatus("saving")
+      if (generation.viewSettingsScope && newViewSettings) {
+        writeCachedChartViewSettings(generation.viewSettingsScope, newViewSettings)
+      }
 
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
@@ -501,6 +564,16 @@ export function useUserChartSync({
     [chartStyle, indicators, markLocalFieldIntent, scheduleSave, timeframe],
   )
 
+  const updateViewSettings = useCallback(
+    (nextSettings: ChartViewSettings | ((prev: ChartViewSettings) => ChartViewSettings)) => {
+      markLocalFieldIntent("viewSettings")
+      const next = typeof nextSettings === "function" ? nextSettings(viewSettings) : nextSettings
+      setViewSettings(next)
+      scheduleSave(timeframe, chartStyle, indicators, allDrawings, next)
+    },
+    [allDrawings, chartStyle, indicators, markLocalFieldIntent, scheduleSave, timeframe, viewSettings],
+  )
+
   const addDrawing = useCallback(
     (d: DrawingObject) => {
       const runtimeDrawing = d as RuntimeDrawingObject
@@ -541,6 +614,8 @@ export function useUserChartSync({
     setChartStyle: updateChartStyle,
     indicators,
     setIndicators: updateIndicators,
+    viewSettings,
+    setViewSettings: updateViewSettings,
     drawings,
     setDrawings: updateDrawings,
     addDrawing,

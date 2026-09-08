@@ -20,6 +20,13 @@ interface StockTradingViewChartDataProps {
   onToggleMaximize?: () => void
   currentPrice?: number
   changePct?: number
+  navigationTimeframe?: ChartTimeframeNavigationRequest | null
+  onTimeframeChange?: (timeframe: ChartTimeframe) => void
+}
+
+export interface ChartTimeframeNavigationRequest {
+  ticker: string
+  timeframe: ChartTimeframe
 }
 
 interface TimeframeEventDetail {
@@ -37,6 +44,7 @@ function HistoryBoundChart({
   onToggleMaximize,
   currentPrice,
   changePct,
+  navigationTimeframe,
 }: StockTradingViewChartDataProps & { timeframe: ChartTimeframe }) {
   const {
     bars,
@@ -117,6 +125,7 @@ function HistoryBoundChart({
           onToggleMaximize={onToggleMaximize}
           currentPrice={currentPrice}
           changePct={changePct}
+          navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
         />
       </CanonicalMinuteBarsContext.Provider>
 
@@ -163,21 +172,30 @@ function HistoryBoundChart({
 }
 
 export function StockTradingViewChartData(props: StockTradingViewChartDataProps) {
-  const [timeframe, setTimeframe] = useState<ChartTimeframe>(() => readStoredChartTimeframe(props.ticker) ?? "1D")
+  const { navigationTimeframe, onTimeframeChange, ticker } = props
+  const requestedTimeframe = navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase()
+    ? navigationTimeframe.timeframe
+    : null
+  const [timeframe, setTimeframe] = useState<ChartTimeframe>(
+    () => requestedTimeframe ?? readStoredChartTimeframe(ticker) ?? "1D",
+  )
 
   useEffect(() => {
-    setTimeframe(readStoredChartTimeframe(props.ticker) ?? "1D")
-  }, [props.ticker])
+    const nextTimeframe = requestedTimeframe ?? readStoredChartTimeframe(ticker) ?? "1D"
+    setTimeframe(nextTimeframe)
+    onTimeframeChange?.(nextTimeframe)
+  }, [onTimeframeChange, requestedTimeframe, ticker])
 
   useEffect(() => {
     const onTimeframe = (event: Event) => {
       const detail = (event as CustomEvent<TimeframeEventDetail>).detail
-      if (!detail || detail.ticker !== props.ticker.toUpperCase()) return
+      if (!detail || detail.ticker !== ticker.toUpperCase()) return
       setTimeframe(detail.timeframe)
+      onTimeframeChange?.(detail.timeframe)
     }
     window.addEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
     return () => window.removeEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
-  }, [props.ticker])
+  }, [onTimeframeChange, ticker])
 
   return <HistoryBoundChart {...props} timeframe={timeframe} />
 }

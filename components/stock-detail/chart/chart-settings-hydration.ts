@@ -1,6 +1,6 @@
 import type { UserChartSettingsPayloadV2 } from "./drawings/drawing-serialization"
 
-export type ChartSettingsField = "timeframe" | "chartStyle" | "indicators" | "drawings"
+export type ChartSettingsField = "timeframe" | "chartStyle" | "indicators" | "drawings" | "viewSettings"
 
 /** Drawing edits are accepted only after the remote collection is known. */
 export function canEditChartDrawings(

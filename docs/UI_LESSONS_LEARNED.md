@@ -20,6 +20,39 @@ The `/insights` shell could briefly disappear when Supabase refreshed a token. T
 
 The fix keeps server-verified content mounted during hydration and transient token-refresh failures, ignores stale overlapping sync responses, and only leaves the authenticated shell when the browser session is actually absent. Auth refresh is a background consistency operation; it must not become a page-level loading transition.
 
+## Chart layering and pointer ownership are contracts
+
+The native Lightweight Charts canvas owns empty-plot pan, zoom, and crosshair.
+The non-interactive indicator canvas sits above it for aligned fills and VPVR.
+The drawing SVG must sit above both: its root captures pointers only while a
+drawing tool is active, while rendered objects and handles remain interactive
+in cursor mode. The production regression placed native canvases above the
+drawing SVG, so clicks panned the chart and created no object despite passing
+source tests. Verify stacking and actual hit targets in a real browser.
+
+## Keep global view settings separate from ticker drawings
+
+Presentation choices that a user expects across symbols, such as indicator
+opacity, line width, line style and pane layout, belong to the authenticated
+user view scope. Drawings belong to the ticker payload and retain their
+timeframe visibility metadata. A view sync must not overwrite a symbol's
+drawings or treat an empty remote drawing response as an intentional clear.
+
+## MACD color encodes sign; opacity encodes intensity
+
+MACD histogram color is determined by the value's sign: non-negative bars use
+the positive color and negative bars use red. Opacity may express magnitude or
+user preference, but it must never change the sign color. Crosshair labels must
+read the exact current MACD, signal and histogram values from the active bar.
+
+## Source tests do not replace production pointer evidence
+
+Source and unit tests are useful for keyboard guards, data boundaries, event
+wiring and persistence contracts. They cannot prove canvas-over-SVG stacking,
+pointer hit testing, fullscreen resize behavior, or remote hydration timing.
+Material chart interaction changes require a real-browser check with pointer,
+keyboard and screenshot evidence in addition to source-level gates.
+
 ## Mandatory UI performance rules
 
 ### 1. Treat realtime, chart, canvas, and dense-table screens as performance-sensitive by default

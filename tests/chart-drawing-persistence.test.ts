@@ -17,6 +17,10 @@ import {
   mergeRemoteChartSettingsIntoPending,
   shouldApplyRemoteChartSettings,
 } from "../components/stock-detail/chart/chart-settings-hydration.ts"
+import {
+  normalizeChartViewSettings,
+  validateChartViewSettings,
+} from "../components/stock-detail/chart/chart-view-settings.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -246,6 +250,50 @@ test("field-level chart hydration keeps a local timeframe while preserving remot
     true,
   )
   assert.equal(localEditWins.drawings[0]?.id, "local-drawing")
+})
+
+test("global chart view validates and normalizes without leaking ticker fields", () => {
+  const normalized = normalizeChartViewSettings({
+    indicatorStyles: { ma: { color: "#ABCDEF", opacity: 2, width: 9, lineStyle: "invalid" } },
+    indicatorVisibility: { showMa: true, showVolumeProfile: true },
+    rsiCollapsed: true,
+  })
+  assert.deepEqual(normalized.indicatorStyles.ma, {
+    color: "#ABCDEF", opacity: 1, width: 4, lineStyle: "solid",
+  })
+  assert.equal(normalized.indicatorVisibility.showMa, true)
+  assert.equal(normalized.indicatorVisibility.showVolumeProfile, true)
+  assert.equal(normalized.rsiCollapsed, true)
+  assert.equal(normalized.macdCollapsed, false)
+  assert.equal(validateChartViewSettings(normalized).valid, true)
+})
+
+test("remote hydration never injects global view into an ordinary ticker save", () => {
+  const pending: UserChartSettingsPayloadV2 = {
+    ticker: "VIC", timeframe: "1D", chartStyle: "candles",
+    indicators: originalIndicators(), drawingsSchemaVersion: 2, drawings: [],
+  }
+  const remote = {
+    ...pending,
+    viewSettings: normalizeChartViewSettings({}),
+    viewSettingsScope: "account-scope",
+  }
+  const ordinary = mergeRemoteChartSettingsIntoPending(pending, remote, new Set(), false)
+  assert.equal(ordinary.viewSettings, undefined)
+  assert.equal(ordinary.viewSettingsScope, undefined)
+
+  const localView = normalizeChartViewSettings({ rsiCollapsed: true })
+  const edited = mergeRemoteChartSettingsIntoPending(
+    { ...pending, viewSettings: localView, viewSettingsScope: "account-scope" },
+    remote,
+    new Set(["viewSettings"]),
+    false,
+  )
+  assert.equal(edited.viewSettings?.rsiCollapsed, true)
+  assert.equal(edited.viewSettingsScope, "account-scope")
+
+  const syncCode = source("components/stock-detail/chart/use-user-chart-sync.ts")
+  assert.match(syncCode, /pendingSaveRef\.current\.get\(generation\.id\)\?\.payload\.viewSettings/)
 })
 
 test("failed chart hydration blocks every full-payload remote save", () => {

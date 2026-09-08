@@ -4,10 +4,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 
 import { StockAiSidebar } from "./stock-ai-sidebar"
 import { StockCompanyHeader } from "./stock-company-header"
+import { adjacentWatchlistTicker, shouldIgnoreStockDetailShortcut } from "./stock-detail-shortcuts"
 import { StockTradingViewChartData } from "./stock-tradingview-chart-data"
 import { StockTabsPanel } from "./stock-tabs-panel"
 import { StockWatchlistSidebar } from "./stock-watchlist-sidebar"
+import type { ChartTimeframe } from "./chart/stock-chart-types"
 import type { StockDetailData } from "./types"
+import type { ChartTimeframeNavigationRequest } from "./stock-tradingview-chart-data"
 import { AiLoader } from "@/components/smoothui/ai-loader"
 import { TopNav } from "@/components/top-nav"
 import { cn } from "@/modules/shared/ui/cn"
@@ -16,6 +19,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   const [currentData, setCurrentData] = useState<StockDetailData>(initialData)
   const [activeTicker, setActiveTicker] = useState<string>(initialData.ticker)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [chartNavigationTimeframe, setChartNavigationTimeframe] = useState<ChartTimeframeNavigationRequest | null>(null)
 
   // In-memory cache for loaded tickers to make back-and-forth switching instantaneous
   const cacheRef = useRef<Record<string, StockDetailData>>({
@@ -23,11 +27,30 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   })
   const abortControllerRef = useRef<AbortController | null>(null)
   const centerColumnRef = useRef<HTMLElement>(null)
+  const currentChartTimeframeRef = useRef<ChartTimeframe>("1D")
+  const chartNavigationTimeframeRef = useRef<ChartTimeframeNavigationRequest | null>(null)
+  const visibleWatchlistTickersRef = useRef<string[]>(initialData.watchlist.map((item) => item.ticker))
+
+  const handleChartTimeframeChange = useCallback((timeframe: ChartTimeframe) => {
+    currentChartTimeframeRef.current = timeframe
+  }, [])
+
+  const handleVisibleWatchlistChange = useCallback((tickers: string[]) => {
+    const normalized = tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean)
+    const previous = visibleWatchlistTickersRef.current
+    if (previous.length === normalized.length && previous.every((ticker, index) => ticker === normalized[index])) return
+    visibleWatchlistTickersRef.current = normalized
+  }, [])
 
   const handleSelectTicker = useCallback(
     async (ticker: string) => {
       const sym = ticker.trim().toUpperCase()
       if (!sym || sym === activeTicker) return
+
+      if (chartNavigationTimeframeRef.current && chartNavigationTimeframeRef.current.ticker !== sym) {
+        chartNavigationTimeframeRef.current = null
+        setChartNavigationTimeframe(null)
+      }
 
       // Abort any ongoing request
       if (abortControllerRef.current) {
@@ -98,6 +121,40 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
 
   const [isChartMaximized, setIsChartMaximized] = useState(false)
 
+  useEffect(() => {
+    const handleChartShortcut = (event: KeyboardEvent) => {
+      if (shouldIgnoreStockDetailShortcut(event)) return
+
+      const isBackquote = event.key === "`" || event.code === "Backquote"
+      if (isBackquote) {
+        event.preventDefault()
+        setIsChartMaximized((value) => !value)
+        return
+      }
+
+      if (!isChartMaximized || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return
+
+      const nextTicker = adjacentWatchlistTicker(
+        visibleWatchlistTickersRef.current,
+        activeTicker,
+        event.key === "ArrowUp" ? "previous" : "next",
+      )
+      if (!nextTicker || nextTicker === activeTicker) return
+
+      event.preventDefault()
+      const navigationRequest = {
+        ticker: nextTicker,
+        timeframe: currentChartTimeframeRef.current,
+      }
+      chartNavigationTimeframeRef.current = navigationRequest
+      setChartNavigationTimeframe(navigationRequest)
+      void handleSelectTicker(nextTicker)
+    }
+
+    window.addEventListener("keydown", handleChartShortcut)
+    return () => window.removeEventListener("keydown", handleChartShortcut)
+  }, [activeTicker, currentData.watchlist, handleSelectTicker, isChartMaximized])
+
   return (
     <div className="min-h-screen w-full bg-[#05070a] text-slate-200 lg:h-screen lg:overflow-hidden flex flex-col">
       {/* Top Navigation Bar */}
@@ -167,6 +224,8 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               onToggleMaximize={() => setIsChartMaximized((prev) => !prev)}
               currentPrice={currentData.price}
               changePct={currentData.changePct}
+              navigationTimeframe={chartNavigationTimeframe}
+              onTimeframeChange={handleChartTimeframeChange}
             />
 
             {/* 6 Tabs Panel: Tổng quan, DN, TA, AI Council (Chỉ hiện khi ở chế độ xem chuẩn) */}
@@ -183,6 +242,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               currentTicker={activeTicker}
               items={currentData.watchlist}
               onSelectTicker={handleSelectTicker}
+              onVisibleTickersChange={handleVisibleWatchlistChange}
               isTransitioning={isTransitioning}
             />
           </aside>

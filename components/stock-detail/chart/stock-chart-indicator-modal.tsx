@@ -3,15 +3,17 @@
 import React from "react"
 import { Check, BarChart2, TrendingUp, Layers, Compass, Sparkles, X } from "lucide-react"
 import { cn } from "@/modules/shared/ui/cn"
-import type { IndicatorConfig } from "./stock-chart-types"
+import type { ChartViewSettings, IndicatorConfig, IndicatorStyleKey } from "./stock-chart-types"
 
 interface IndicatorModalProps {
   config: IndicatorConfig
   onChange: (updated: IndicatorConfig) => void
+  viewSettings: ChartViewSettings
+  onViewSettingsChange: (updated: ChartViewSettings) => void
   onClose: () => void
 }
 
-export function StockChartIndicatorModal({ config, onChange, onClose }: IndicatorModalProps) {
+export function StockChartIndicatorModal({ config, onChange, viewSettings, onViewSettingsChange, onClose }: IndicatorModalProps) {
   const indicators: {
     key: keyof IndicatorConfig
     title: string
@@ -65,6 +67,24 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
 
   const enabledCount = indicators.filter((indicator) => Boolean(config[indicator.key])).length
 
+  const styleKeyFor = (key: keyof IndicatorConfig): IndicatorStyleKey | null => {
+    if (key === "showMa") return "ma"
+    if (key === "showIchimoku") return "ichimoku"
+    if (key === "showQeoBase129") return "qeoBase129"
+    if (key === "showBollinger") return "bollinger"
+    return null
+  }
+
+  const updateStyle = (key: IndicatorStyleKey, patch: Partial<ChartViewSettings["indicatorStyles"][IndicatorStyleKey]>) => {
+    onViewSettingsChange({
+      ...viewSettings,
+      indicatorStyles: {
+        ...viewSettings.indicatorStyles,
+        [key]: { ...viewSettings.indicatorStyles[key], ...patch },
+      },
+    })
+  }
+
   return (
     <div className="absolute left-0 top-8 z-50 w-[340px] max-w-[calc(100vw-24px)] overflow-hidden rounded-lg border border-white/[0.12] bg-[#0b0f15]/98 shadow-[0_18px_52px_rgba(0,0,0,0.82)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
       <div className="flex h-9 items-center justify-between border-b border-white/[0.08] px-2.5">
@@ -87,41 +107,126 @@ export function StockChartIndicatorModal({ config, onChange, onClose }: Indicato
       <div className="max-h-[400px] space-y-0.5 overflow-y-auto p-1.5">
         {indicators.map((ind) => {
           const isEnabled = Boolean(config[ind.key])
+          const styleKey = styleKeyFor(ind.key)
           return (
-            <button
-              key={ind.key}
-              type="button"
-              onClick={() => toggleIndicator(ind.key)}
-              className={cn(
-                "group flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
-                isEnabled
-                  ? "border-cyan-300/20 bg-cyan-300/[0.06] text-slate-100"
-                  : "border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.035] hover:text-slate-200",
-              )}
-            >
-              <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded border border-white/[0.07] bg-white/[0.025]">
-                {ind.icon}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] font-bold text-slate-200">{ind.code}</span>
-                  <div
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
-                      isEnabled
-                        ? "border-cyan-300/50 bg-cyan-300/90 text-[#071016]"
-                        : "border-white/15 bg-transparent text-transparent group-hover:border-white/25",
-                    )}
-                  >
-                    <Check className="size-3 stroke-[3]" />
+            <React.Fragment key={ind.key}>
+              <button
+                type="button"
+                onClick={() => toggleIndicator(ind.key)}
+                className={cn(
+                  "group flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                  isEnabled
+                    ? "border-cyan-300/20 bg-cyan-300/[0.06] text-slate-100"
+                    : "border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.035] hover:text-slate-200",
+                )}
+              >
+                <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded border border-white/[0.07] bg-white/[0.025]">
+                  {ind.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] font-bold text-slate-200">{ind.code}</span>
+                    <div
+                      className={cn(
+                        "flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+                        isEnabled
+                          ? "border-cyan-300/50 bg-cyan-300/90 text-[#071016]"
+                          : "border-white/15 bg-transparent text-transparent group-hover:border-white/25",
+                      )}
+                    >
+                      <Check className="size-3 stroke-[3]" />
+                    </div>
+                  </div>
+                  <div className="mt-0.5 truncate text-[10px] text-slate-400">{ind.title}</div>
+                  <div className="truncate text-[9px] text-slate-600">{ind.desc}</div>
+                </div>
+              </button>
+              {styleKey && (
+                <div className="ml-8 grid grid-cols-[24px_1fr_auto] items-center gap-1.5 px-2 pb-1 text-[9px] text-slate-500" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="color"
+                    value={viewSettings.indicatorStyles[styleKey].color}
+                    aria-label={`${ind.code} color`}
+                    onChange={(event) => updateStyle(styleKey, { color: event.target.value })}
+                    className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                  />
+                  <label className="flex items-center gap-1">
+                    <span>Opacity</span>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1"
+                      step="0.05"
+                      value={viewSettings.indicatorStyles[styleKey].opacity}
+                      aria-label={`${ind.code} opacity`}
+                      onChange={(event) => updateStyle(styleKey, { opacity: Number(event.target.value) })}
+                      className="w-20 accent-cyan-300"
+                    />
+                  </label>
+                  <div className="flex items-center gap-0.5">
+                    {[1, 2, 3, 4].map((width) => (
+                      <button
+                        key={width}
+                        type="button"
+                        onClick={() => updateStyle(styleKey, { width })}
+                        className={cn("rounded px-1", viewSettings.indicatorStyles[styleKey].width === width ? "bg-white/15 text-white" : "text-slate-500")}
+                      >
+                        {width}
+                      </button>
+                    ))}
+                    {(["solid", "dashed", "dotted"] as const).map((lineStyle) => (
+                      <button
+                        key={lineStyle}
+                        type="button"
+                        onClick={() => updateStyle(styleKey, { lineStyle })}
+                        className={cn("rounded px-1", viewSettings.indicatorStyles[styleKey].lineStyle === lineStyle ? "bg-cyan-300/15 text-cyan-200" : "text-slate-500")}
+                        aria-label={`${ind.code} ${lineStyle}`}
+                      >
+                        {lineStyle === "solid" ? "—" : lineStyle === "dashed" ? "- -" : "···"}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <div className="mt-0.5 truncate text-[10px] text-slate-400">{ind.title}</div>
-                <div className="truncate text-[9px] text-slate-600">{ind.desc}</div>
-              </div>
-            </button>
+              )}
+            </React.Fragment>
           )
         })}
+        <div className="mt-2 border-t border-white/[0.08] pt-2">
+          <div className="px-2 pb-1 font-mono text-[9px] uppercase tracking-[0.12em] text-slate-600">Pane styles (fullscreen)</div>
+          {(["volume", "rsi", "macd"] as const).map((styleKey) => (
+            <div key={styleKey} className="grid grid-cols-[52px_24px_1fr_auto] items-center gap-1.5 px-2 py-1 text-[9px] text-slate-500">
+              <span className="font-mono font-bold text-slate-300">{styleKey.toUpperCase()}</span>
+              <input
+                type="color"
+                value={viewSettings.indicatorStyles[styleKey].color}
+                aria-label={`${styleKey} color`}
+                onChange={(event) => updateStyle(styleKey, { color: event.target.value })}
+                className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
+              />
+              <label className="flex items-center gap-1">
+                <span>Opacity</span>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="1"
+                  step="0.05"
+                  value={viewSettings.indicatorStyles[styleKey].opacity}
+                  aria-label={`${styleKey} opacity`}
+                  onChange={(event) => updateStyle(styleKey, { opacity: Number(event.target.value) })}
+                  className="w-20 accent-cyan-300"
+                />
+              </label>
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 3, 4].map((width) => (
+                  <button key={width} type="button" onClick={() => updateStyle(styleKey, { width })} className={cn("rounded px-1", viewSettings.indicatorStyles[styleKey].width === width ? "bg-white/15 text-white" : "text-slate-500")}>{width}</button>
+                ))}
+                {(["solid", "dashed", "dotted"] as const).map((lineStyle) => (
+                  <button key={lineStyle} type="button" onClick={() => updateStyle(styleKey, { lineStyle })} className={cn("rounded px-1", viewSettings.indicatorStyles[styleKey].lineStyle === lineStyle ? "bg-cyan-300/15 text-cyan-200" : "text-slate-500")}>{lineStyle === "solid" ? "—" : lineStyle === "dashed" ? "- -" : "···"}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

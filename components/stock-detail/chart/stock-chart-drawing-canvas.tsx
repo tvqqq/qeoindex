@@ -15,6 +15,8 @@ import {
 import { cn } from "@/modules/shared/ui/cn"
 import type { DrawingIconType, DrawingObject, DrawingPoint, DrawingTool } from "./stock-chart-types"
 
+export type DrawingGestureState = "idle" | "creating" | "selected" | "body-drag" | "anchor-drag"
+
 interface DrawingCanvasProps {
   width: number
   height: number
@@ -40,10 +42,8 @@ interface DrawingCanvasProps {
 
 const PALETTE_COLORS = ["#00f0ff", "#a855f7", "#10b981", "#f59e0b", "#f43f5e", "#ffffff"]
 
-let drawingSequence = 0
 function createDrawingId(): string {
-  drawingSequence += 1
-  return `draw-${drawingSequence}`
+  return `draw-${globalThis.crypto.randomUUID()}`
 }
 
 function roundCoordinate(value: number): number {
@@ -77,6 +77,7 @@ export function StockChartDrawingCanvas({
   // Active drawing state for new shapes
   const [currentStart, setCurrentStart] = useState<DrawingPoint | null>(null)
   const [currentEnd, setCurrentEnd] = useState<DrawingPoint | null>(null)
+  const [gestureState, setGestureState] = useState<DrawingGestureState>("idle")
 
   // Dragging state for existing shapes / handles
   const [dragState, setDragState] = useState<{
@@ -90,21 +91,28 @@ export function StockChartDrawingCanvas({
   // Keyboard shortcut for deleting selected drawing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('input, textarea, select, [contenteditable], [role="textbox"], dialog, [role="dialog"], [aria-modal="true"]')) return
+      if (e.key === "Escape") {
+        setCurrentStart(null)
+        setCurrentEnd(null)
+        setDragState(null)
+        setGestureState("idle")
+        onSelectDrawing(null)
+        return
+      }
       if (!drawingReady || !selectedId || isLocked) return
       if (e.key === "Delete" || e.key === "Backspace") {
-        const activeEl = document.activeElement
-        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return
+        if (drawings.find((drawing) => drawing.id === selectedId)?.locked) return
         e.preventDefault()
         onDeleteDrawing(selectedId)
-        onSelectDrawing(null)
-      }
-      if (e.key === "Escape") {
         onSelectDrawing(null)
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [drawingReady, selectedId, isLocked, onDeleteDrawing, onSelectDrawing])
+  }, [drawingReady, drawings, selectedId, isLocked, onDeleteDrawing, onSelectDrawing])
 
   if (isHidden) return null
 
@@ -135,7 +143,7 @@ export function StockChartDrawingCanvas({
   }
 
   // Coordinate transforms
-  const getSvgCoordinates = (e: React.MouseEvent): DrawingPoint => {
+  const getSvgCoordinates = (e: { clientX: number; clientY: number }): DrawingPoint => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
     const rect = svg.getBoundingClientRect()
@@ -184,33 +192,64 @@ export function StockChartDrawingCanvas({
     }
   }
 
-  // Mouse Down handler
-  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!drawingReady || isLocked) return
+  const twoPointTool = activeTool === "trendline"
+    || activeTool === "arrow"
+    || activeTool === "ray"
+    || activeTool === "rectangle"
+    || activeTool === "circle"
 
-    // If eraser tool is active, clicking canvas does nothing
+  const commitTwoPointDrawing = (first: DrawingPoint, second: DrawingPoint) => {
+    const dist = Math.hypot(second.x - first.x, second.y - first.y)
+    if (dist <= 3) return
+    const newId = createDrawingId()
+    onAddDrawing({
+      id: newId,
+      tool: activeTool,
+      points: [first, second],
+      color: activeColor,
+      lineWidth,
+    })
+    onSelectDrawing(newId)
+    setGestureState("selected")
+  }
+
+  // Two-point tools use click-click creation. This keeps the first canonical
+  // time/price anchor stable while the pointer renders a live preview.
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!drawingReady || isLocked) return
     if (activeTool === "eraser") return
 
-    // If cursor tool is active, clicking empty area deselects
     if (activeTool === "cursor") {
-      if (e.target === e.currentTarget) {
-        onSelectDrawing(null)
-      }
+      if (e.target === e.currentTarget) onSelectDrawing(null)
       return
     }
 
     const point = getSvgCoordinates(e)
 
+    if (twoPointTool) {
+      if (currentStart) {
+        commitTwoPointDrawing(currentStart, point)
+        setCurrentStart(null)
+        setCurrentEnd(null)
+      } else {
+        setCurrentStart(point)
+        setCurrentEnd(point)
+        setGestureState("creating")
+        e.currentTarget.setPointerCapture(e.pointerId)
+      }
+      return
+    }
+
     if (activeTool === "horizontal") {
       onAddDrawing({
         id: createDrawingId(),
         tool: "horizontal",
-        // A horizontal line only needs one canonical market anchor. Its timestamp
-        // identifies creation context; rendering spans the viewport at the anchor price.
+        // A horizontal line only needs one canonical market anchor.
         points: [point],
         color: activeColor,
         lineWidth,
       })
+      setGestureState("selected")
       return
     }
 
@@ -223,6 +262,7 @@ export function StockChartDrawingCanvas({
         lineWidth,
         iconType: selectedIconType,
       })
+      setGestureState("selected")
       return
     }
 
@@ -239,15 +279,17 @@ export function StockChartDrawingCanvas({
       })
       onSelectDrawing(newId)
       onEditText(newId)
+      setGestureState("selected")
       return
     }
 
     setCurrentStart(point)
     setCurrentEnd(point)
+    setGestureState("creating")
   }
 
   // Mouse Move handler
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!drawingReady) return
     const coords = getSvgCoordinates(e)
 
@@ -279,31 +321,44 @@ export function StockChartDrawingCanvas({
         })
         onUpdateDrawing(dragState.drawingId, { points: newPoints })
       }
+      setGestureState(dragState.handleIndex === null ? "body-drag" : "anchor-drag")
       return
     }
 
     // Creating new shape
-    if (currentStart && !isLocked) {
+    if (currentStart && !isLocked && twoPointTool) {
       setCurrentEnd(coords)
     }
   }
 
   // Mouse Up handler
-  const handleMouseUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!drawingReady) {
       setCurrentStart(null)
       setCurrentEnd(null)
       setDragState(null)
+      setGestureState("idle")
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
       return
     }
     if (dragState) {
       setDragState(null)
+      setGestureState(selectedId ? "selected" : "idle")
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+      return
+    }
+
+    // Two-point objects commit on the second click, so mouse-up only closes a
+    // native drag path and leaves the preview visible between clicks.
+    if (twoPointTool) {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
       return
     }
 
     if (!currentStart || !currentEnd || isLocked) {
       setCurrentStart(null)
       setCurrentEnd(null)
+      setGestureState("idle")
       return
     }
 
@@ -318,6 +373,7 @@ export function StockChartDrawingCanvas({
         lineWidth,
       })
       onSelectDrawing(newId)
+      setGestureState("selected")
     }
 
     setCurrentStart(null)
@@ -346,7 +402,7 @@ export function StockChartDrawingCanvas({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className="absolute inset-0 size-full select-none"
+        className="absolute inset-0 z-20 size-full select-none"
         style={{
           // Leave the chart's native pan/zoom/crosshair handlers in charge when
           // the cursor tool is selected. Drawing gestures opt into the overlay.
@@ -364,9 +420,11 @@ export function StockChartDrawingCanvas({
               ? "crosshair"
               : "default",
         }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        data-drawing-gesture={gestureState}
       >
         <defs>
           <marker
@@ -422,9 +480,10 @@ export function StockChartDrawingCanvas({
             }
           }
 
-          const handleStartBodyDrag = (e: React.MouseEvent) => {
+          const handleStartBodyDrag = (e: React.PointerEvent) => {
             if (!drawingReady || activeTool !== "cursor" || draw.locked || isLocked) return
             e.stopPropagation()
+            svgRef.current?.setPointerCapture(e.pointerId)
             onSelectDrawing(draw.id)
             const coords = getSvgCoordinates(e)
             setDragState({
@@ -441,7 +500,7 @@ export function StockChartDrawingCanvas({
               key={draw.id}
               onClick={handleClickDrawing}
               onDoubleClick={handleDoubleClickDrawing}
-              onMouseDown={handleStartBodyDrag}
+              onPointerDown={handleStartBodyDrag}
               className={cn(
                 activeTool === "eraser" && !draw.locked
                   ? "cursor-pointer hover:opacity-50"
@@ -449,6 +508,10 @@ export function StockChartDrawingCanvas({
                   ? "cursor-grab"
                   : "",
               )}
+              // In cursor mode the SVG root is transparent to native LWC, but
+              // each drawing remains an interactive hit target for selection and
+              // body dragging. Drawing tools make the whole layer interactive.
+              style={{ pointerEvents: drawingReady ? "auto" : "none" }}
             >
               {/* Trendline / Horizontal / Ray */}
               {(draw.tool === "trendline" || draw.tool === "horizontal" || draw.tool === "ray") && (
@@ -608,8 +671,9 @@ export function StockChartDrawingCanvas({
                     stroke="#00f0ff"
                     strokeWidth="2"
                     className="cursor-nwse-resize"
-                    onMouseDown={(e) => {
+                    onPointerDown={(e) => {
                       e.stopPropagation()
+                      svgRef.current?.setPointerCapture(e.pointerId)
                       const coords = getSvgCoordinates(e)
                       setDragState({
                         drawingId: draw.id,
@@ -630,8 +694,9 @@ export function StockChartDrawingCanvas({
                       stroke="#00f0ff"
                       strokeWidth="2"
                       className="cursor-nwse-resize"
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.stopPropagation()
+                        svgRef.current?.setPointerCapture(e.pointerId)
                         const coords = getSvgCoordinates(e)
                         setDragState({
                           drawingId: draw.id,

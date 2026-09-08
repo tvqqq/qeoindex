@@ -86,6 +86,56 @@ export interface IndicatorConfig {
   showQeoBase129?: boolean
 }
 
+export type IndicatorStyleKey =
+  | "ma"
+  | "bollinger"
+  | "ichimoku"
+  | "qeoBase129"
+  | "volume"
+  | "rsi"
+  | "macd"
+
+export type IndicatorLineStyle = "solid" | "dashed" | "dotted"
+
+export interface IndicatorStyle {
+  color: string
+  opacity: number
+  width: number
+  lineStyle: IndicatorLineStyle
+}
+
+export type IndicatorStyles = Record<IndicatorStyleKey, IndicatorStyle>
+
+export interface ChartViewSettings {
+  indicatorStyles: IndicatorStyles
+  indicatorVisibility: Pick<IndicatorConfig, "showMa" | "showRsi" | "showMacd" | "showIchimoku" | "showBollinger" | "showVolumeProfile" | "showQeoBase129">
+  rsiCollapsed: boolean
+  macdCollapsed: boolean
+}
+
+export const DEFAULT_CHART_VIEW_SETTINGS: ChartViewSettings = {
+  indicatorStyles: {
+    ma: { color: "#f8fafc", opacity: 1, width: 1, lineStyle: "solid" },
+    bollinger: { color: "#38bdf8", opacity: 0.86, width: 1, lineStyle: "solid" },
+    ichimoku: { color: "#22c55e", opacity: 0.86, width: 1, lineStyle: "solid" },
+    qeoBase129: { color: "#ec4899", opacity: 0.9, width: 2, lineStyle: "solid" },
+    volume: { color: "#f59e0b", opacity: 0.86, width: 1, lineStyle: "solid" },
+    rsi: { color: "#a78bfa", opacity: 1, width: 2, lineStyle: "solid" },
+    macd: { color: "#38bdf8", opacity: 1, width: 2, lineStyle: "solid" },
+  },
+  indicatorVisibility: {
+    showMa: false,
+    showRsi: true,
+    showMacd: true,
+    showIchimoku: false,
+    showBollinger: false,
+    showVolumeProfile: false,
+    showQeoBase129: false,
+  },
+  rsiCollapsed: false,
+  macdCollapsed: false,
+}
+
 export const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
   showMa: false,
   showRsi: false,

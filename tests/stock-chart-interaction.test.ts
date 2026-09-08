@@ -123,12 +123,13 @@ test("native panes own volume, permanent maximized RSI/MACD and collapse heights
   assert.match(chartCode, /calculateMacdSeries/)
   assert.match(chartCode, /runtime\.HistogramSeries/)
   assert.match(chartCode, /chart\.panes\(\)/)
-  assert.match(chartCode, /setHeight\(isMaximized/)
+  assert.match(chartCode, /panes\[0\]\?\.setHeight\(paneHeights\.main\)/)
+  assert.match(chartCode, /Math\.round\(overlayHeight \* 0\.15\)/)
   assert.match(chartCode, /isRsiCollapsed/)
   assert.match(chartCode, /isMacdCollapsed/)
   assert.match(chartCode, /priceFormat: \{ type: "price", precision: 2, minMove: 0\.01 \}/)
   assert.match(chartCode, /priceFormat: \{ type: "price", precision: 4, minMove: 0\.0001 \}/)
-  assert.doesNotMatch(chartCode, /showRsi|showMacd/)
+  assert.match(chartCode, /indicatorVisibility/)
 })
 
 test("indicator controls cover all persisted overlays with aligned cloud and volume profile", () => {

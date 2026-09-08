@@ -26,9 +26,12 @@ import {
 } from "../modules/market/chart-data/timeframes.ts"
 import {
   ALL_TIMEFRAMES,
-  DEFAULT_INDICATOR_CONFIG,
   QUICK_TIMEFRAMES,
 } from "../components/stock-detail/chart/stock-chart-types.ts"
+import {
+  adjacentWatchlistTicker,
+  shouldIgnoreStockDetailShortcut,
+} from "../components/stock-detail/stock-detail-shortcuts.ts"
 import type { OhlcvBar } from "../modules/shared/technical/indicators.ts"
 
 function source(path: string) {
@@ -283,12 +286,12 @@ test("StockTradingViewChart keeps one native chart instance across compact and m
   assert.match(code, /runtime\.createChart/)
   assert.match(code, /runtime\.CandlestickSeries/)
   assert.match(code, /chart\.panes\(\)/)
-  assert.match(code, /setHeight\(isMaximized/)
-  assert.doesNotMatch(code, /indicators\.showRsi/)
-  assert.doesNotMatch(code, /indicators\.showMacd/)
-  assert.match(code, /indicators\.showIchimoku/)
-  assert.match(code, /indicators\.showBollinger/)
-  assert.match(code, /indicators\.showVolumeProfile/)
+  assert.match(code, /panes\[0\]\?\.setHeight\(paneHeights\.main\)/)
+  assert.match(code, /effectiveIndicators\.showRsi/)
+  assert.match(code, /effectiveIndicators\.showMacd/)
+  assert.match(code, /effectiveIndicators\.showIchimoku/)
+  assert.match(code, /effectiveIndicators\.showBollinger/)
+  assert.match(code, /effectiveIndicators\.showVolumeProfile/)
 
   assert.match(code, /<StockChartDrawingTools/)
   assert.match(code, /<StockChartDrawingCanvas/)
@@ -314,6 +317,45 @@ test("StockDetailWorkstation handles isChartMaximized and hides sidebar/tabs", (
 
   assert.match(workstation, /StockWatchlistSidebar/)
   assert.match(workstation, /onToggleMaximize=\{\(\) => setIsChartMaximized\(\(prev\) => !prev\)\}/)
+})
+
+test("StockDetailWorkstation binds guarded fullscreen shortcuts to watchlist navigation", () => {
+  const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
+
+  assert.match(workstation, /window\.addEventListener\("keydown", handleChartShortcut\)/)
+  assert.match(workstation, /event\.key === "`" \|\| event\.code === "Backquote"/)
+  assert.match(workstation, /event\.key !== "ArrowUp" && event\.key !== "ArrowDown"/)
+  assert.match(workstation, /adjacentWatchlistTicker/)
+  assert.match(workstation, /visibleWatchlistTickersRef\.current/)
+  assert.match(workstation, /if \(!nextTicker \|\| nextTicker === activeTicker\) return/)
+  assert.match(workstation, /event\.preventDefault\(\)/)
+  assert.match(workstation, /navigationTimeframe/)
+  assert.match(workstation, /onTimeframeChange/)
+  assert.match(workstation, /onVisibleTickersChange={handleVisibleWatchlistChange}/)
+  assert.match(source("components/stock-detail/stock-watchlist-sidebar.tsx"), /filteredItems\.map\(\(item\) => item\.ticker\)/)
+})
+
+test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
+  const blockedTarget = {
+    closest: (selectors: string) => selectors.includes("input") ? {} : null,
+  }
+
+  assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)
+  assert.equal(shouldIgnoreStockDetailShortcut({ target: {}, ctrlKey: true }), true)
+  assert.equal(shouldIgnoreStockDetailShortcut({ target: {}, defaultPrevented: true }), true)
+  assert.equal(shouldIgnoreStockDetailShortcut({ target: {}, isComposing: true }), true)
+  assert.equal(shouldIgnoreStockDetailShortcut({ target: {}, keyCode: 229 }), true)
+  assert.equal(shouldIgnoreStockDetailShortcut({ target: {} }), false)
+})
+
+test("fullscreen watchlist navigation stops at both ends without wrapping", () => {
+  const tickers = ["VIC", "VHM", "HPG"]
+
+  assert.equal(adjacentWatchlistTicker(tickers, "VHM", "previous"), "VIC")
+  assert.equal(adjacentWatchlistTicker(tickers, "VHM", "next"), "HPG")
+  assert.equal(adjacentWatchlistTicker(tickers, "VIC", "previous"), null)
+  assert.equal(adjacentWatchlistTicker(tickers, "HPG", "next"), null)
+  assert.equal(adjacentWatchlistTicker(tickers, "MSN", "next"), null)
 })
 
 test("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {

@@ -16,6 +16,7 @@ import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import {
   loadLightweightCharts,
   type LightweightChartApi,
+  type LightweightPriceLineApi,
   type LightweightSeriesApi,
 } from "@/modules/shared/charts/lightweight-charts-runtime"
 import { cn } from "@/modules/shared/ui/cn"
@@ -43,6 +44,7 @@ import {
   DEFAULT_INDICATOR_CONFIG,
   QUICK_TIMEFRAMES,
   type ChartTimeframe,
+  type ChartViewSettings,
   type DrawingIconType,
   type DrawingTool,
   type VolumeProfileData,
@@ -59,6 +61,7 @@ interface StockTradingViewChartProps {
   onToggleMaximize?: () => void
   currentPrice?: number
   changePct?: number
+  navigationTimeframe?: ChartTimeframe | null
 }
 
 const DEFAULT_RIGHT_OFFSET_BARS = 8
@@ -99,6 +102,8 @@ type ChartSeries = {
   macd: LightweightSeriesApi
   macdSignal: LightweightSeriesApi
   macdHistogram: LightweightSeriesApi
+  rsiUpper: LightweightSeriesApi
+  rsiLower: LightweightSeriesApi
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -197,11 +202,40 @@ function futureAxisData(futureTimes: number[]): Record<string, unknown>[] {
   return futureTimes.map((time) => ({ time }))
 }
 
-function volumeData(bars: OhlcvBar[]): Record<string, unknown>[] {
+function rgbaFromHex(hex: string, opacity: number): string {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex)
+  if (!match) return hex
+  const value = Number.parseInt(match[1], 16)
+  const red = (value >> 16) & 255
+  const green = (value >> 8) & 255
+  const blue = value & 255
+  return `rgba(${red},${green},${blue},${Math.min(1, Math.max(0.1, opacity))})`
+}
+
+function lineStyleValue(style: "solid" | "dashed" | "dotted"): number {
+  return style === "dotted" ? 1 : style === "dashed" ? 2 : 0
+}
+
+function applyIndicatorStyle(
+  series: LightweightSeriesApi,
+  style: { color: string; opacity: number; width: number; lineStyle: "solid" | "dashed" | "dotted" },
+  visible: boolean,
+) {
+  series.applyOptions({
+    color: rgbaFromHex(style.color, style.opacity),
+    lineWidth: style.width,
+    lineStyle: lineStyleValue(style.lineStyle),
+    visible,
+  })
+}
+
+function volumeData(bars: OhlcvBar[], opacity = 0.42): Record<string, unknown>[] {
   return bars.map((bar) => ({
     time: bar.time,
     value: bar.volume,
-    color: bar.close >= bar.open ? "rgba(34,201,138,0.42)" : "rgba(255,71,87,0.42)",
+    color: bar.close >= bar.open
+      ? `rgba(34,201,138,${Math.min(1, Math.max(0.1, opacity))})`
+      : `rgba(255,71,87,${Math.min(1, Math.max(0.1, opacity))})`,
   }))
 }
 
@@ -213,6 +247,28 @@ function lineData(values: Array<number | null>, times: number[]): Record<string,
     result.push({ time: times[index], value })
   }
   return result
+}
+
+function constantLineData(value: number, times: number[]): Record<string, unknown>[] {
+  return times.map((time) => ({ time, value }))
+}
+
+function histogramData(
+  values: Array<number | null>,
+  times: number[],
+  opacity = 1,
+): Record<string, unknown>[] {
+  const maxAbs = Math.max(0.000001, ...values.filter((value): value is number => typeof value === "number" && Number.isFinite(value)).map(Math.abs))
+  return values.flatMap((value, index) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || index >= times.length) return []
+    const intensity = 0.35 + (Math.abs(value) / maxAbs) * 0.65
+    const alpha = Math.min(1, Math.max(0.1, opacity * intensity))
+    return [{
+      time: times[index],
+      value,
+      color: value >= 0 ? `rgba(34,197,94,${alpha})` : `rgba(239,68,68,${alpha})`,
+    }]
+  })
 }
 
 function chartSeriesOptions(visible: boolean, color: string, lineWidth = 1): Record<string, unknown> {
@@ -231,6 +287,17 @@ function findBarAtTime(bars: OhlcvBar[], time: number | null): OhlcvBar | null {
   return bars.find((bar) => bar.time === time) ?? null
 }
 
+function valueAtTime(values: Array<number | null>, times: number[], time: number | null): number | null {
+  if (time == null) return null
+  const index = times.indexOf(time)
+  const value = index >= 0 ? values[index] : null
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function formatMetric(value: number | null, digits = 2): string {
+  return value == null ? "—" : value.toFixed(digits)
+}
+
 interface AlignedIndicatorCanvasProps {
   width: number
   height: number
@@ -242,6 +309,10 @@ interface AlignedIndicatorCanvasProps {
   volumeProfile: VolumeProfileData | null
   timeToX: (time: number) => number | null
   priceToY: (price: number) => number | null
+  rsiPaneTop: number
+  rsiPriceToY: (value: number) => number | null
+  showRsiBand: boolean
+  priceAxisGutter: number
 }
 
 /**
@@ -260,6 +331,10 @@ function AlignedIndicatorCanvas({
   volumeProfile,
   timeToX,
   priceToY,
+  rsiPaneTop,
+  rsiPriceToY,
+  showRsiBand,
+  priceAxisGutter,
 }: AlignedIndicatorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -277,6 +352,27 @@ function AlignedIndicatorCanvas({
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, width, height)
     context.save()
+
+    if (showRsiBand) {
+      const rsi70 = rsiPriceToY(70)
+      const rsi30 = rsiPriceToY(30)
+      if (rsi70 != null && rsi30 != null) {
+        const top = rsiPaneTop + Math.min(rsi70, rsi30)
+        const bandHeight = Math.max(1, Math.abs(rsi30 - rsi70))
+        context.fillStyle = "rgba(167,139,250,0.10)"
+        context.fillRect(0, top, width, bandHeight)
+        context.strokeStyle = "rgba(167,139,250,0.42)"
+        context.setLineDash([4, 4])
+        context.beginPath()
+        context.moveTo(0, rsiPaneTop + rsi70)
+        context.lineTo(width, rsiPaneTop + rsi70)
+        context.moveTo(0, rsiPaneTop + rsi30)
+        context.lineTo(width, rsiPaneTop + rsi30)
+        context.stroke()
+        context.setLineDash([])
+      }
+    }
+
     context.beginPath()
     context.rect(0, 0, width, Math.max(0, Math.min(height, clipHeight)))
     context.clip()
@@ -286,7 +382,8 @@ function AlignedIndicatorCanvas({
       const step = centers.length > 1
         ? Math.abs(centers[1] - centers[0])
         : Math.max(Math.abs(centers[0]) * 0.01, 0.01)
-      const maxWidth = Math.min(180, Math.max(56, width * 0.24))
+      const profileRight = Math.max(0, width - priceAxisGutter)
+      const maxWidth = Math.min(180, Math.max(56, profileRight * 0.24))
       for (const bucket of volumeProfile.buckets) {
         const topCoordinate = priceToY(bucket.price + step / 2)
         const bottomCoordinate = priceToY(bucket.price - step / 2)
@@ -296,7 +393,19 @@ function AlignedIndicatorCanvas({
         const widthRatio = Math.max(0, Math.min(1, bucket.volume / volumeProfile.maxBucketVol))
         const barWidth = Math.max(1, maxWidth * widthRatio)
         context.fillStyle = bucket.isPoc ? "rgba(245,158,11,0.54)" : "rgba(245,158,11,0.22)"
-        context.fillRect(Math.max(0, width - barWidth - 4), top, barWidth, bucketHeight)
+        context.fillRect(Math.max(0, profileRight - barWidth - 4), top, barWidth, bucketHeight)
+      }
+      const pocY = priceToY(volumeProfile.pocPrice)
+      if (pocY != null) {
+        context.strokeStyle = "rgba(245,158,11,0.92)"
+        context.lineWidth = 1
+        context.beginPath()
+        context.moveTo(Math.max(0, profileRight - maxWidth - 4), pocY)
+        context.lineTo(profileRight, pocY)
+        context.stroke()
+        context.fillStyle = "rgba(254,215,170,0.95)"
+        context.font = "10px ui-monospace, monospace"
+        context.fillText(`POC ${volumeProfile.pocPrice.toFixed(2)}`, Math.max(2, profileRight - maxWidth), Math.max(11, pocY - 3))
       }
     }
 
@@ -335,7 +444,7 @@ function AlignedIndicatorCanvas({
       context.fill()
     }
     context.restore()
-  }, [clipHeight, height, priceToY, revision, spanA, spanB, timeToX, times, volumeProfile, width])
+  }, [clipHeight, height, priceAxisGutter, priceToY, revision, rsiPaneTop, rsiPriceToY, showRsiBand, spanA, spanB, timeToX, times, volumeProfile, width])
 
   return (
     <canvas
@@ -356,12 +465,15 @@ export function StockTradingViewChart({
   onToggleMaximize,
   currentPrice,
   changePct,
+  navigationTimeframe,
 }: StockTradingViewChartProps) {
   const {
     timeframe,
     setTimeframe,
     indicators,
     setIndicators,
+    viewSettings,
+    setViewSettings,
     drawings,
     addDrawing,
     modifyDrawing,
@@ -372,10 +484,26 @@ export function StockTradingViewChart({
     retryChartHydration,
   } = useUserChartSync({
     ticker,
+    preferredTimeframe: navigationTimeframe,
     defaultTimeframe: "1D",
     defaultChartStyle: "candles",
     defaultIndicators: DEFAULT_INDICATOR_CONFIG,
   })
+
+  // Compact mode is a read-only market summary. It deliberately derives a
+  // display-only indicator set and never writes the user's fullscreen choices.
+  const effectiveIndicators = useMemo(() => isMaximized
+    ? indicators
+    : {
+        ...indicators,
+        showMa: true,
+        showRsi: false,
+        showMacd: false,
+        showIchimoku: false,
+        showBollinger: false,
+        showVolumeProfile: false,
+        showQeoBase129: false,
+      }, [indicators, isMaximized])
 
   const minuteBars = useCanonicalMinuteBars({ ticker, enabled: timeframe === "1m" })
   const displayBars = useMemo(
@@ -406,16 +534,16 @@ export function StockTradingViewChart({
   const ma200 = useMemo(() => calculateSma(displayBars, 200), [displayBars])
   const volumeMa20 = useMemo(() => calculateVolumeSma(displayBars, 20), [displayBars])
   const bollinger = useMemo(
-    () => indicators.showBollinger ? calculateBollingerBands(displayBars, 20, 2) : null,
-    [displayBars, indicators.showBollinger],
+    () => effectiveIndicators.showBollinger ? calculateBollingerBands(displayBars, 20, 2) : null,
+    [displayBars, effectiveIndicators.showBollinger],
   )
   const ichimoku = useMemo(
-    () => indicators.showIchimoku ? calculateIchimokuSeries(displayBars) : null,
-    [displayBars, indicators.showIchimoku],
+    () => effectiveIndicators.showIchimoku ? calculateIchimokuSeries(displayBars) : null,
+    [displayBars, effectiveIndicators.showIchimoku],
   )
   const qeoBase129 = useMemo(
-    () => indicators.showQeoBase129 ? calculateIchimokuBaseSeries(displayBars, 129) : [],
-    [displayBars, indicators.showQeoBase129],
+    () => effectiveIndicators.showQeoBase129 ? calculateIchimokuBaseSeries(displayBars, 129) : [],
+    [displayBars, effectiveIndicators.showQeoBase129],
   )
   const rsi = useMemo(
     () => isMaximized ? calculateRsiSeries(displayBars, 14) : [],
@@ -429,7 +557,7 @@ export function StockTradingViewChart({
   const renderPayload = useMemo(() => ({
     candle: candleData(displayBars),
     futureAxis: futureAxisData(futureTimes),
-    volume: volumeData(displayBars),
+    volume: volumeData(displayBars, viewSettings.indicatorStyles.volume.opacity),
     volumeMa: lineData(volumeMa20, barTimes),
     ma20: lineData(ma20, barTimes),
     ma50: lineData(ma50, barTimes),
@@ -444,9 +572,11 @@ export function StockTradingViewChart({
     ichimokuChikou: lineData(ichimoku?.chikou ?? [], barTimes),
     qeoBase129: lineData(qeoBase129, barTimes),
     rsi: lineData(rsi, barTimes),
+    rsiUpper: constantLineData(70, barTimes),
+    rsiLower: constantLineData(30, barTimes),
     macd: lineData(macd?.macd ?? [], barTimes),
     macdSignal: lineData(macd?.signal ?? [], barTimes),
-    macdHistogram: lineData(macd?.histogram ?? [], barTimes),
+    macdHistogram: histogramData(macd?.histogram ?? [], barTimes, viewSettings.indicatorStyles.macd.opacity),
   }), [
     allTimes,
     barTimes,
@@ -461,6 +591,7 @@ export function StockTradingViewChart({
     qeoBase129,
     rsi,
     volumeMa20,
+    viewSettings,
   ])
 
   const plotContainerRef = useRef<HTMLDivElement>(null)
@@ -468,6 +599,7 @@ export function StockTradingViewChart({
   const chartRef = useRef<LightweightChartApi | null>(null)
   const seriesRef = useRef<ChartSeries | null>(null)
   const chartGenerationRef = useRef(0)
+  const pocPriceLineRef = useRef<LightweightPriceLineApi | null>(null)
   const renderedRef = useRef<RenderedData | null>(null)
   const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)
   const overlayFrameRef = useRef<number | null>(null)
@@ -476,6 +608,7 @@ export function StockTradingViewChart({
   const [dimensions, setDimensions] = useState<ChartDimensions>({ width: 0, height: 0 })
   const [visibleRangeState, setVisibleRangeState] = useState<{ from: number; to: number } | null>(null)
   const [overlayRevision, setOverlayRevision] = useState(0)
+  const [priceAxisGutter, setPriceAxisGutter] = useState(80)
   const [crosshairTime, setCrosshairTime] = useState<number | null>(null)
   const [showTfDropdown, setShowTfDropdown] = useState(false)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
@@ -492,6 +625,12 @@ export function StockTradingViewChart({
   const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
   const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
 
+  useEffect(() => {
+    if (drawingSyncStatus !== "ready") return
+    setIsRsiCollapsed(viewSettings.rsiCollapsed)
+    setIsMacdCollapsed(viewSettings.macdCollapsed)
+  }, [drawingSyncStatus, viewSettings.macdCollapsed, viewSettings.rsiCollapsed])
+
   const scheduleOverlayPaint = useCallback(() => {
     if (typeof window === "undefined" || overlayFrameRef.current !== null) return
     overlayFrameRef.current = window.requestAnimationFrame(() => {
@@ -500,16 +639,50 @@ export function StockTradingViewChart({
     })
   }, [])
 
-  const activeBar = findBarAtTime(displayBars, crosshairTime) ?? displayBars.at(-1) ?? null
+  const isHovering = crosshairTime !== null
+  const activeBar = isHovering
+    ? findBarAtTime(displayBars, crosshairTime)
+    : displayBars.at(-1) ?? null
+  const legendTime = crosshairTime ?? activeBar?.time ?? null
+  const legendValues = {
+    ma20: valueAtTime(ma20, barTimes, legendTime),
+    ma50: valueAtTime(ma50, barTimes, legendTime),
+    ma200: valueAtTime(ma200, barTimes, legendTime),
+    bollingerUpper: valueAtTime(bollinger?.upper ?? [], barTimes, legendTime),
+    bollingerMiddle: valueAtTime(bollinger?.middle ?? [], barTimes, legendTime),
+    bollingerLower: valueAtTime(bollinger?.lower ?? [], barTimes, legendTime),
+    ichimokuKijun: valueAtTime(ichimoku?.kijun ?? [], barTimes, legendTime),
+    qeoBase129: valueAtTime(qeoBase129, barTimes, legendTime),
+    rsi: valueAtTime(rsi, barTimes, legendTime),
+    macd: valueAtTime(macd?.macd ?? [], barTimes, legendTime),
+    macdSignal: valueAtTime(macd?.signal ?? [], barTimes, legendTime),
+    macdHistogram: valueAtTime(macd?.histogram ?? [], barTimes, legendTime),
+  }
   const overlayWidth = dimensions.width || 1000
   const overlayHeight = dimensions.height || (isMaximized ? 640 : 340)
-  const mainPaneHeight = Math.max(
-    1,
-    overlayHeight
-      - VOLUME_PANE_HEIGHT
-      - (isMaximized ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0)
-      - (isMaximized ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0),
-  )
+  const paneHeights = useMemo(() => {
+    if (!isMaximized) return {
+      main: overlayHeight,
+      volume: VOLUME_PANE_HEIGHT,
+      rsi: 0,
+      macd: 0,
+    }
+    const volume = Math.max(72, Math.round(overlayHeight * 0.15))
+    const rsi = isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : Math.max(72, Math.round(overlayHeight * 0.15))
+    const macd = isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : Math.max(72, Math.round(overlayHeight * 0.15))
+    return {
+      main: Math.max(220, overlayHeight - volume - rsi - macd),
+      volume,
+      rsi,
+      macd,
+    }
+  }, [isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
+  const mainPaneHeight = paneHeights.main
+  useEffect(() => {
+    if (!chartReady) return
+    const measured = chartRef.current?.panes()[0]?.getRightPriceScale?.().width?.()
+    if (typeof measured === "number" && measured > 0) setPriceAxisGutter(measured)
+  }, [chartReady, dimensions.width, overlayRevision])
 
   // LWC owns the scales. Drawings are the only SVG overlay and always derive
   // their screen coordinates from current LWC series/time-scale coordinates.
@@ -518,6 +691,9 @@ export function StockTradingViewChart({
   }, [])
   const yToPrice = useCallback((y: number) => {
     return seriesRef.current?.candles.coordinateToPrice?.(y) ?? null
+  }, [])
+  const rsiPriceToY = useCallback((value: number) => {
+    return seriesRef.current?.rsi.priceToCoordinate?.(value) ?? null
   }, [])
   const timeToX = useCallback((time: number) => {
     return bridgeTimeToCoordinate(
@@ -538,13 +714,33 @@ export function StockTradingViewChart({
   }, [allTimes])
 
   const volumeProfile = useMemo(() => {
-    if (!indicators.showVolumeProfile || displayBars.length === 0) return null
+    if (!effectiveIndicators.showVolumeProfile || displayBars.length === 0) return null
     const range = visibleRangeState
     if (!range) return calculateVolumeProfile(displayBars, 20)
     const from = Math.max(0, Math.floor(range.from))
     const to = Math.min(displayBars.length, Math.ceil(range.to) + 1)
     return calculateVolumeProfile(displayBars.slice(from, Math.max(from, to)), 20)
-  }, [displayBars, indicators.showVolumeProfile, visibleRangeState])
+  }, [displayBars, effectiveIndicators.showVolumeProfile, visibleRangeState])
+
+  useEffect(() => {
+    const candles = seriesRef.current?.candles
+    if (!candles) return
+    if (pocPriceLineRef.current) candles.removePriceLine?.(pocPriceLineRef.current)
+    pocPriceLineRef.current = null
+    if (!volumeProfile || !isMaximized) return
+    pocPriceLineRef.current = candles.createPriceLine?.({
+      price: volumeProfile.pocPrice,
+      color: "rgba(245,158,11,0.92)",
+      lineWidth: 1,
+      lineStyle: 2,
+      axisLabelVisible: true,
+      title: "POC",
+    }) ?? null
+    return () => {
+      if (pocPriceLineRef.current) candles.removePriceLine?.(pocPriceLineRef.current)
+      pocPriceLineRef.current = null
+    }
+  }, [chartReady, isMaximized, volumeProfile])
 
   const setLatestVisibleRange = useCallback(() => {
     const chart = chartRef.current
@@ -734,29 +930,45 @@ export function StockTradingViewChart({
           ichimokuChikou: addMainLine("#94a3b8"),
           qeoBase129: addMainLine("#ec4899", 2),
           rsi: chart.addSeries(runtime.LineSeries, {
-            ...chartSeriesOptions(false, "#a78bfa", 1),
+            ...chartSeriesOptions(false, "#a78bfa", 2),
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+            lastValueVisible: true,
+            priceLineVisible: true,
             title: "RSI 14",
+          }, 2),
+          rsiUpper: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#a78bfa", 1),
+            priceScaleId: "right",
+            lineStyle: 2,
+            title: "RSI 70",
+          }, 2),
+          rsiLower: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#a78bfa", 1),
+            priceScaleId: "right",
+            lineStyle: 2,
+            title: "RSI 30",
           }, 2),
           macd: chart.addSeries(runtime.LineSeries, {
             ...chartSeriesOptions(false, "#2196f3", 1),
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
             title: "MACD",
+            lastValueVisible: true,
           }, 3),
           macdSignal: chart.addSeries(runtime.LineSeries, {
             ...chartSeriesOptions(false, "#f97316", 1),
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
             title: "Signal",
+            lastValueVisible: true,
           }, 3),
           macdHistogram: chart.addSeries(runtime.HistogramSeries, {
             visible: false,
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
             priceLineVisible: false,
-            lastValueVisible: false,
+            lastValueVisible: true,
           }, 3),
         }
         chartRef.current = chart
@@ -830,22 +1042,26 @@ export function StockTradingViewChart({
     const series = seriesRef.current
     if (!chart || !series || !chartReady) return
 
-    series.ma20.applyOptions({ visible: indicators.showMa })
-    series.ma50.applyOptions({ visible: indicators.showMa })
-    series.ma200.applyOptions({ visible: indicators.showMa })
-    series.bollingerUpper.applyOptions({ visible: indicators.showBollinger })
-    series.bollingerMiddle.applyOptions({ visible: indicators.showBollinger })
-    series.bollingerLower.applyOptions({ visible: indicators.showBollinger })
-    series.ichimokuTenkan.applyOptions({ visible: indicators.showIchimoku })
-    series.ichimokuKijun.applyOptions({ visible: indicators.showIchimoku })
-    series.ichimokuSpanA.applyOptions({ visible: indicators.showIchimoku })
-    series.ichimokuSpanB.applyOptions({ visible: indicators.showIchimoku })
-    series.ichimokuChikou.applyOptions({ visible: indicators.showIchimoku })
-    series.qeoBase129.applyOptions({ visible: Boolean(indicators.showQeoBase129) })
-    series.rsi.applyOptions({ visible: isMaximized })
-    series.macd.applyOptions({ visible: isMaximized })
-    series.macdSignal.applyOptions({ visible: isMaximized })
-    series.macdHistogram.applyOptions({ visible: isMaximized })
+    const styles = viewSettings.indicatorStyles
+    applyIndicatorStyle(series.ma20, styles.ma, effectiveIndicators.showMa)
+    applyIndicatorStyle(series.ma50, styles.ma, isMaximized && effectiveIndicators.showMa)
+    applyIndicatorStyle(series.ma200, styles.ma, isMaximized && effectiveIndicators.showMa)
+    applyIndicatorStyle(series.volumeMa, styles.volume, isMaximized)
+    applyIndicatorStyle(series.bollingerUpper, styles.bollinger, effectiveIndicators.showBollinger)
+    applyIndicatorStyle(series.bollingerMiddle, styles.bollinger, effectiveIndicators.showBollinger)
+    applyIndicatorStyle(series.bollingerLower, styles.bollinger, effectiveIndicators.showBollinger)
+    applyIndicatorStyle(series.ichimokuTenkan, styles.ichimoku, effectiveIndicators.showIchimoku)
+    applyIndicatorStyle(series.ichimokuKijun, styles.ichimoku, effectiveIndicators.showIchimoku)
+    applyIndicatorStyle(series.ichimokuSpanA, styles.ichimoku, effectiveIndicators.showIchimoku)
+    applyIndicatorStyle(series.ichimokuSpanB, styles.ichimoku, effectiveIndicators.showIchimoku)
+    applyIndicatorStyle(series.ichimokuChikou, styles.ichimoku, effectiveIndicators.showIchimoku)
+    applyIndicatorStyle(series.qeoBase129, styles.qeoBase129, Boolean(effectiveIndicators.showQeoBase129))
+    applyIndicatorStyle(series.rsi, styles.rsi, isMaximized && effectiveIndicators.showRsi)
+    applyIndicatorStyle(series.rsiUpper, { ...styles.rsi, width: 1, opacity: styles.rsi.opacity * 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showRsi)
+    applyIndicatorStyle(series.rsiLower, { ...styles.rsi, width: 1, opacity: styles.rsi.opacity * 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showRsi)
+    applyIndicatorStyle(series.macd, styles.macd, isMaximized && effectiveIndicators.showMacd)
+    applyIndicatorStyle(series.macdSignal, { ...styles.macd, color: "#f97316" }, isMaximized && effectiveIndicators.showMacd)
+    applyIndicatorStyle(series.macdHistogram, styles.macd, isMaximized && effectiveIndicators.showMacd)
 
     const previous = renderedRef.current
     const latest = displayBars.at(-1)
@@ -860,11 +1076,8 @@ export function StockTradingViewChart({
     } else if (canUpdateLatest) {
       const last = displayBars.at(-1)!
       series.candles.update({ time: last.time, open: last.open, high: last.high, low: last.low, close: last.close })
-      series.volume.update({
-        time: last.time,
-        value: last.volume,
-        color: last.close >= last.open ? "rgba(34,201,138,0.42)" : "rgba(255,71,87,0.42)",
-      })
+      const latestVolume = renderPayload.volume.at(-1)
+      if (latestVolume) series.volume.update(latestVolume)
     } else {
       series.candles.setData(renderPayload.candle)
       series.volume.setData(renderPayload.volume)
@@ -884,6 +1097,8 @@ export function StockTradingViewChart({
     series.ichimokuChikou.setData(renderPayload.ichimokuChikou)
     series.qeoBase129.setData(renderPayload.qeoBase129)
     series.rsi.setData(renderPayload.rsi)
+    series.rsiUpper.setData(renderPayload.rsiUpper)
+    series.rsiLower.setData(renderPayload.rsiLower)
     series.macd.setData(renderPayload.macd)
     series.macdSignal.setData(renderPayload.macdSignal)
     series.macdHistogram.setData(renderPayload.macdHistogram)
@@ -919,19 +1134,22 @@ export function StockTradingViewChart({
     barFingerprint,
     futureTimes.length,
     indicators,
+    effectiveIndicators,
     isMaximized,
     renderPayload,
     scheduleOverlayPaint,
     setLatestVisibleRange,
+    viewSettings,
   ])
 
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !chartReady) return
     const panes = chart.panes()
-    panes[1]?.setHeight(VOLUME_PANE_HEIGHT)
-    panes[2]?.setHeight(isMaximized ? (isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0)
-    panes[3]?.setHeight(isMaximized ? (isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT) : 0)
+    panes[0]?.setHeight(paneHeights.main)
+    panes[1]?.setHeight(paneHeights.volume)
+    panes[2]?.setHeight(paneHeights.rsi)
+    panes[3]?.setHeight(paneHeights.macd)
     panes[1]?.getRightPriceScale?.().applyOptions({
       visible: true,
       ticksVisible: true,
@@ -950,12 +1168,29 @@ export function StockTradingViewChart({
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
     scheduleOverlayPaint()
-  }, [chartReady, isMacdCollapsed, isMaximized, isRsiCollapsed, scheduleOverlayPaint])
+  }, [chartReady, isMaximized, paneHeights, scheduleOverlayPaint])
 
   const updateDrawingFlag = useCallback((id: string, key: "hidden" | "locked") => {
     const drawing = drawings.find((item) => item.id === id)
     if (drawing) modifyDrawing(id, { [key]: !drawing[key] })
   }, [drawings, modifyDrawing])
+
+  const handleIndicatorConfigChange = useCallback((next: typeof indicators) => {
+    setIndicators(next)
+    setViewSettings((previous: ChartViewSettings) => ({
+      ...previous,
+      indicatorVisibility: {
+        ...previous.indicatorVisibility,
+        showMa: next.showMa,
+        showRsi: next.showRsi,
+        showMacd: next.showMacd,
+        showIchimoku: next.showIchimoku,
+        showBollinger: next.showBollinger,
+        showVolumeProfile: next.showVolumeProfile,
+        showQeoBase129: Boolean(next.showQeoBase129),
+      },
+    }))
+  }, [setIndicators, setViewSettings])
 
   const editingTextDrawing = editingTextDrawingId
     ? drawings.find((drawing) => drawing.id === editingTextDrawingId) ?? null
@@ -977,6 +1212,7 @@ export function StockTradingViewChart({
     <div className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[#080b10]", isMaximized ? "h-full" : "min-h-[340px]")}>
       <div className="relative z-30 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0d1118] px-2 py-1.5">
         <div className="flex min-w-0 items-center gap-1">
+          {isMaximized && <>
           <div className="relative">
             <button
               type="button"
@@ -1052,12 +1288,16 @@ export function StockTradingViewChart({
             {showIndicatorModal && (
               <StockChartIndicatorModal
                 config={indicators}
-                onChange={setIndicators}
+                onChange={handleIndicatorConfigChange}
+                viewSettings={viewSettings}
+                onViewSettingsChange={setViewSettings}
                 onClose={() => setShowIndicatorModal(false)}
               />
             )}
           </div>
           <span className="hidden rounded border border-white/[0.08] px-1.5 py-1 font-mono text-[9px] text-slate-600 lg:inline">Nến Nhật</span>
+          </>}
+          {!isMaximized && <span className="rounded border border-white/[0.08] px-2 py-1 font-mono text-[10px] text-slate-400">Nến Nhật · Volume · MA20</span>}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -1070,7 +1310,7 @@ export function StockTradingViewChart({
               </span>
             )}
           </div>
-          <button
+          {isMaximized && <button
             type="button"
             title="Tải ảnh biểu đồ"
             onClick={() => void handleExport()}
@@ -1078,23 +1318,29 @@ export function StockTradingViewChart({
           >
             <Camera className="size-3.5" />
             <span className="hidden xl:inline">{exportStatus ?? "Ảnh"}</span>
-          </button>
-          <button
+          </button>}
+          {isMaximized && <button
             type="button"
             title="Khôi phục khung nhìn"
             onClick={handleResetView}
             className="flex size-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
           >
             <RotateCcw className="size-3.5" />
-          </button>
+          </button>}
           {onToggleMaximize && (
             <button
               type="button"
               title={isMaximized ? "Thu nhỏ chart" : "Phóng to chart"}
               onClick={onToggleMaximize}
-              className="flex size-7 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-slate-300 transition-colors hover:bg-white/[0.1] hover:text-white"
+              aria-keyshortcuts="Backquote"
+              className={cn(
+                "flex items-center justify-center gap-1 rounded-md border border-cyan-300/30 bg-cyan-300/[0.08] px-2.5 py-1.5 font-mono text-[10px] font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/[0.16] hover:text-white",
+                isMaximized ? "h-8" : "h-9",
+              )}
             >
               {isMaximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              <span className="hidden sm:inline">{isMaximized ? "Thu nhỏ" : "Toàn màn hình"}</span>
+              <kbd className="hidden rounded border border-cyan-200/20 px-1 text-[9px] text-cyan-200/70 md:inline">`</kbd>
             </button>
           )}
         </div>
@@ -1118,29 +1364,48 @@ export function StockTradingViewChart({
           volumeProfile={volumeProfile}
           timeToX={timeToX}
           priceToY={priceToY}
+          rsiPaneTop={paneHeights.main + paneHeights.volume}
+          rsiPriceToY={rsiPriceToY}
+          showRsiBand={isMaximized && effectiveIndicators.showRsi}
+          priceAxisGutter={priceAxisGutter}
         />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-2">
-          {activeBar ? (
-            <div data-chart-ohlcv-overlay className="flex flex-wrap items-center gap-2 rounded border border-white/[0.06] bg-[#080d13]/95 px-2.5 py-1 font-mono text-[10px] text-slate-400">
-              <span className="text-slate-500">{formatCrosshairTime(activeBar.time, timeframe)}</span>
-              <span>O <b className="text-slate-200">{activeBar.open.toFixed(2)}</b></span>
-              <span>H <b className="text-emerald-300">{activeBar.high.toFixed(2)}</b></span>
-              <span>L <b className="text-rose-300">{activeBar.low.toFixed(2)}</b></span>
-              <span>C <b className={activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar.close.toFixed(2)}</b></span>
-              <span>V <b className="text-slate-200">{formatCompactVolume(activeBar.volume)}</b></span>
+          <div data-chart-ohlcv-overlay className="max-w-[min(86%,920px)] rounded border border-white/[0.08] bg-[#080d13]/95 px-2.5 py-1.5 font-mono text-[11px] leading-5 text-slate-400 shadow-sm">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+              <span className="text-slate-500">{activeBar ? formatCrosshairTime(activeBar.time, timeframe) : isHovering ? "Khoảng trống" : "—"}</span>
+              <span>O <b className="text-slate-200">{activeBar ? activeBar.open.toFixed(2) : "—"}</b></span>
+              <span>H <b className="text-emerald-300">{activeBar ? activeBar.high.toFixed(2) : "—"}</b></span>
+              <span>L <b className="text-rose-300">{activeBar ? activeBar.low.toFixed(2) : "—"}</b></span>
+              <span>C <b className={activeBar && activeBar.close >= activeBar.open ? "text-emerald-300" : "text-rose-300"}>{activeBar ? activeBar.close.toFixed(2) : "—"}</b></span>
+              <span>V <b className="text-slate-200">{activeBar ? formatCompactVolume(activeBar.volume) : "—"}</b></span>
+              {effectiveIndicators.showMa && <>
+                <span className="text-slate-600">MA20 <b className="text-slate-200">{formatMetric(legendValues.ma20)}</b></span>
+                {isMaximized && <>
+                  <span className="text-slate-600">MA50 <b className="text-violet-300">{formatMetric(legendValues.ma50)}</b></span>
+                  <span className="text-slate-600">MA200 <b className="text-orange-300">{formatMetric(legendValues.ma200)}</b></span>
+                </>}
+              </>}
+              {effectiveIndicators.showBollinger && <span className="text-sky-300">BB {formatMetric(legendValues.bollingerUpper)} / {formatMetric(legendValues.bollingerMiddle)} / {formatMetric(legendValues.bollingerLower)}</span>}
+              {effectiveIndicators.showIchimoku && <span className="text-emerald-300">ICHI {formatMetric(legendValues.ichimokuKijun)}</span>}
+              {effectiveIndicators.showQeoBase129 && <span className="text-pink-300">QEOBASE {formatMetric(legendValues.qeoBase129)}</span>}
+              {effectiveIndicators.showVolumeProfile && <span className="text-amber-300">POC {formatMetric(volumeProfile?.pocPrice ?? null)}</span>}
+              {isMaximized && <>
+                <span className="text-violet-300">RSI {formatMetric(legendValues.rsi)}</span>
+                <span className="text-sky-300">MACD {formatMetric(legendValues.macd, 4)}</span>
+                <span className="text-orange-300">SIG {formatMetric(legendValues.macdSignal, 4)}</span>
+                <span className={legendValues.macdHistogram != null && legendValues.macdHistogram >= 0 ? "text-emerald-300" : "text-rose-300"}>HIST {formatMetric(legendValues.macdHistogram, 4)}</span>
+              </>}
             </div>
-          ) : (
-            <div data-chart-ohlcv-overlay className="rounded border border-white/[0.06] bg-[#080d13]/95 px-2.5 py-1 font-mono text-[10px] text-slate-600">OHLCV —</div>
-          )}
+          </div>
           <div className="flex items-center gap-1">
-            {indicators.showVolumeProfile && <span className="rounded border border-amber-300/20 bg-[#0b0f15]/95 px-2 py-1 font-mono text-[9px] text-amber-200/75">Volume Profile · vùng hiển thị</span>}
-            {indicators.showIchimoku && <span className="rounded border border-emerald-300/20 bg-[#0b0f15]/95 px-2 py-1 font-mono text-[9px] text-emerald-200/75">Ichimoku Cloud</span>}
-            {runtimeError && <span className="rounded border border-rose-300/20 bg-[#170d12]/95 px-2 py-1 font-mono text-[9px] text-rose-200">{runtimeError}</span>}
+            {effectiveIndicators.showVolumeProfile && <span className="rounded border border-amber-300/20 bg-[#0b0f15]/95 px-2 py-1 font-mono text-[10px] text-amber-200/90">VPVR xấp xỉ OHLCV</span>}
+            {effectiveIndicators.showIchimoku && <span className="rounded border border-emerald-300/20 bg-[#0b0f15]/95 px-2 py-1 font-mono text-[10px] text-emerald-200/90">Ichimoku Cloud</span>}
+            {runtimeError && <span className="rounded border border-rose-300/20 bg-[#170d12]/95 px-2 py-1 font-mono text-[10px] text-rose-200">{runtimeError}</span>}
           </div>
         </div>
 
-        <StockChartDrawingTools
+        {isMaximized && <StockChartDrawingTools
           activeTool={activeTool}
           onSelectTool={setActiveTool}
           activeColor={activeColor}
@@ -1160,9 +1425,9 @@ export function StockTradingViewChart({
           saveStatus={saveStatus}
           drawingSyncStatus={drawingSyncStatus}
           onRetryDrawingSync={retryChartHydration}
-        />
+        />}
 
-        {isObjectManagerOpen && (
+        {isMaximized && isObjectManagerOpen && (
           <StockChartObjectManager
             drawings={drawings}
             selectedId={selectedDrawingId}
@@ -1179,7 +1444,7 @@ export function StockTradingViewChart({
           />
         )}
 
-        {editingTextDrawing && (
+        {isMaximized && editingTextDrawing && (
           <StockChartTextEditor
             initialText={editingTextDrawing.text ?? ""}
             initialColor={editingTextDrawing.color}
@@ -1212,7 +1477,7 @@ export function StockTradingViewChart({
           </div>
         )}
 
-        <StockChartDrawingCanvas
+        {isMaximized && <StockChartDrawingCanvas
           width={overlayWidth}
           height={overlayHeight}
           drawings={drawings}
@@ -1233,7 +1498,7 @@ export function StockTradingViewChart({
           timeToX={timeToX}
           xToTime={xToTime}
           drawingReady={drawingSyncStatus === "ready"}
-        />
+        />}
 
         {isMaximized && (
           <>
@@ -1241,8 +1506,9 @@ export function StockTradingViewChart({
               type="button"
               title={isRsiCollapsed ? "Mở pane RSI" : "Thu gọn pane RSI"}
               onClick={() => {
-                setIsRsiCollapsed((value) => !value)
                 const next = !isRsiCollapsed
+                setIsRsiCollapsed(next)
+                setViewSettings((previous: ChartViewSettings) => ({ ...previous, rsiCollapsed: next }))
                 chartRef.current?.panes()[2]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
               }}
               className="absolute right-2 top-[62%] z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
@@ -1253,8 +1519,9 @@ export function StockTradingViewChart({
               type="button"
               title={isMacdCollapsed ? "Mở pane MACD" : "Thu gọn pane MACD"}
               onClick={() => {
-                setIsMacdCollapsed((value) => !value)
                 const next = !isMacdCollapsed
+                setIsMacdCollapsed(next)
+                setViewSettings((previous: ChartViewSettings) => ({ ...previous, macdCollapsed: next }))
                 chartRef.current?.panes()[3]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
               }}
               className="absolute right-2 bottom-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
@@ -1265,7 +1532,7 @@ export function StockTradingViewChart({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-2 overflow-x-auto border-t border-white/[0.08] bg-[#070b10] px-2 py-1 text-[10px] font-mono select-none">
+      {isMaximized && <div className="flex shrink-0 items-center justify-between gap-2 overflow-x-auto border-t border-white/[0.08] bg-[#070b10] px-2 py-1 text-[10px] font-mono select-none">
         <div className="flex items-center gap-0.5">
           {[
             { label: "5N", bars: 1250, title: "5 năm gần nhất" },
@@ -1307,7 +1574,7 @@ export function StockTradingViewChart({
             {displayBars.length} nến · vùng trống +{futureTimes.length}
           </span>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }
