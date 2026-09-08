@@ -28,3 +28,5 @@ jobs:
         run: node --test tests/portfolio/qeo142-drawdown-episodes.test.ts
       - name: QEO-142 Period ledgers
         run: node --test tests/portfolio/qeo142-ledgers.test.ts
+      - name: QEO-142 Segmentation
+        run: node --test tests/portfolio/qeo142-segments.test.ts
