@@ -63,7 +63,7 @@ export const PortfolioPositionGrid = memo(function PortfolioPositionGrid({
       {cards.map((card) => (
         <TacticalPositionCard
           key={card.ticker}
-          data={card}
+          position={card}
           onAddTransaction={onAddTransaction}
         />
       ))}
