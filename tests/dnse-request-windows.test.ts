@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { rewriteDnseBoardSubscriptionMessage } from "../modules/market/board/dnse-subscriptions.ts"
 import {
   buildDnseRequestWindows,
   dnseWindowSpanDays,
@@ -54,4 +55,20 @@ test("Daily transient retry floor is small enough to recover a VGI-like 23-day t
   const historySource = readFileSync("modules/market/providers/dnse/history.ts", "utf8")
   assert.match(historySource, /DAILY_MIN_RETRY_WINDOW_DAYS\s*=\s*7/)
   assert.doesNotMatch(historySource, /DAILY_MIN_RETRY_WINDOW_DAYS\s*=\s*45/)
+})
+
+test("DNSE board budget guard leaves popup orderbook subscription untouched", () => {
+  const symbol = "VCB"
+  const orderbook = JSON.stringify({
+    action: "subscribe",
+    channels: [
+      { name: "tick.G1.json", symbols: [symbol] },
+      { name: "top_price.G1.json", symbols: [symbol] },
+      { name: "tick_extra.G1.json", symbols: [symbol] },
+      { name: "ohlc.1.json", symbols: [symbol] },
+      { name: "foreign.G1.json", symbols: [symbol] },
+    ],
+  })
+
+  assert.equal(rewriteDnseBoardSubscriptionMessage(orderbook), orderbook)
 })
