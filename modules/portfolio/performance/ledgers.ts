@@ -1,4 +1,5 @@
 import type { EquityPoint } from "../risk-engine/types.ts"
+import { performanceEquityVnd } from "./performance-equity.ts"
 import type {
   AccountLedgerPeriod,
   ClosedTradeOutcome,
@@ -146,12 +147,6 @@ function orderedEquityPoints(points: readonly EquityPoint[]): EquityPoint[] {
   })
 }
 
-function completeEquity(point: EquityPoint): point is EquityPoint & { equityVnd: number } {
-  return point.status === "complete"
-    && point.equityVnd != null
-    && Number.isFinite(point.equityVnd)
-}
-
 function accountPeriodsForKind(
   points: readonly EquityPoint[],
   kind: PeriodKind,
@@ -179,28 +174,29 @@ function accountPeriodsForKind(
 
       let anchorIndex = -1
       for (let index = firstIndex - 1; index >= 0; index -= 1) {
-        if (completeEquity(ordered[index]!)) {
+        if (performanceEquityVnd(ordered[index]!) != null) {
           anchorIndex = index
           break
         }
       }
 
       const allHistoryThroughEndComplete = anchorIndex >= 0
-        && ordered.slice(0, end.index + 1).every(completeEquity)
+        && ordered.slice(0, end.index + 1).every((point) => performanceEquityVnd(point) != null)
       const anchor = anchorIndex >= 0 ? ordered[anchorIndex]! : null
       const endPoint = end.point
+      const anchorEquityVnd = anchor == null ? null : performanceEquityVnd(anchor)
+      const endEquityVnd = performanceEquityVnd(endPoint)
 
       if (
         !allHistoryThroughEndComplete
-        || anchor == null
-        || !completeEquity(anchor)
-        || !completeEquity(endPoint)
-        || !(anchor.equityVnd > 0)
+        || anchorEquityVnd == null
+        || endEquityVnd == null
+        || !(anchorEquityVnd > 0)
       ) {
         return {
           key,
-          startEquityVnd: anchor != null && completeEquity(anchor) ? anchor.equityVnd : null,
-          endEquityVnd: completeEquity(endPoint) ? endPoint.equityVnd : null,
+          startEquityVnd: anchorEquityVnd,
+          endEquityVnd,
           returnPercent: null,
           worstDrawdownPercent: null,
           completeness: "insufficient" as const,
@@ -211,8 +207,7 @@ function accountPeriodsForKind(
       let worstDrawdownPercent = 0
       const periodIndexes = new Set(rows.map((row) => row.index))
       for (let index = 0; index <= end.index; index += 1) {
-        const point = ordered[index]!
-        const equityVnd = point.equityVnd!
+        const equityVnd = performanceEquityVnd(ordered[index]!)!
         runningPeak = Math.max(runningPeak, equityVnd)
         if (periodIndexes.has(index) && runningPeak > 0) {
           worstDrawdownPercent = Math.max(
@@ -224,9 +219,9 @@ function accountPeriodsForKind(
 
       return {
         key,
-        startEquityVnd: anchor.equityVnd,
-        endEquityVnd: endPoint.equityVnd,
-        returnPercent: ((endPoint.equityVnd - anchor.equityVnd) / anchor.equityVnd) * 100,
+        startEquityVnd: anchorEquityVnd,
+        endEquityVnd,
+        returnPercent: ((endEquityVnd - anchorEquityVnd) / anchorEquityVnd) * 100,
         worstDrawdownPercent,
         completeness: "complete" as const,
       }
