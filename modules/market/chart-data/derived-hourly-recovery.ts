@@ -90,6 +90,9 @@ export async function runChartDerivedHourlyRecovery(
         .eq("id", manifest.id)
       if (manifestRefreshError) throw new Error(`Chart derived recovery manifest refresh failed: ${manifestRefreshError.message}`)
 
+      // QEO-103's former upsertDerivedHourlyBars -> readDerivedHourlyByManifest
+      // sequence is now encapsulated by this QEO-147 generation publication,
+      // which performs exact readback before publishing readiness.
       const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
         ticker: manifest.ticker,
         bars: hourlyBars,
