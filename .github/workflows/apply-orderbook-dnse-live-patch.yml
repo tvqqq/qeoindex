@@ -1,0 +1,32 @@
+name: Apply orderbook DNSE-live patch
+
+on:
+  push:
+    branches:
+      - fix/orderbook-dnse-live-behavior
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ contains(github.event.head_commit.message, 'stage orderbook dnse live patch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/orderbook-dnse-live-behavior
+          fetch-depth: 0
+      - name: Apply patch and remove temporary runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .github/patches/orderbook-dnse-live.patch
+          git apply .github/patches/orderbook-dnse-live.patch
+          rm .github/patches/orderbook-dnse-live.patch
+          rm .github/workflows/apply-orderbook-dnse-live-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: gate orderbook realtime behavior to DNSE live"
+          git push origin HEAD:fix/orderbook-dnse-live-behavior
