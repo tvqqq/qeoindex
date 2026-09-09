@@ -1,3 +1,5 @@
+export type TradeSource = "DNSE_LIVE" | "DNSE_HISTORY" | "SUPABASE_SNAPSHOT"
+
 export interface ClusteredTrade {
   id: string
   time: string
@@ -5,6 +7,8 @@ export interface ClusteredTrade {
   volume: number
   side: "BUY" | "SELL" | "UNKNOWN"
   count: number
+  // Optional only for legacy/source-agnostic callers; orderbook realtime trades always carry provenance.
+  source?: TradeSource
 }
 
 export function parseTradeSeconds(timeStr: string | number): number {
@@ -34,12 +38,20 @@ export function parseTradeSeconds(timeStr: string | number): number {
 }
 
 /**
- * Gộp các giao dịch có cùng chiều (side) diễn ra cùng giây hoặc cách nhau <= 1s thành 1 lệnh.
+ * Gộp các giao dịch có cùng nguồn, cùng chiều (side) diễn ra cùng giây hoặc cách nhau <= 1s thành 1 lệnh.
+ * Không bao giờ gộp snapshot/history với DNSE live vì aggregate đó có thể tạo whale signal giả.
  * Khối lượng được gộp đầy đủ, giá khớp lấy mức giá quyết định (giá cao nhất với lệnh Mua, giá thấp nhất với lệnh Bán).
  */
-export function clusterTrades<T extends { id: string; time: string; price: number; volume: number; side: "BUY" | "SELL" | "UNKNOWN" }>(
-  trades: T[]
-): ClusteredTrade[] {
+export function clusterTrades<
+  T extends {
+    id: string
+    time: string
+    price: number
+    volume: number
+    side: "BUY" | "SELL" | "UNKNOWN"
+    source?: TradeSource
+  },
+>(trades: T[]): ClusteredTrade[] {
   if (!trades.length) return []
   const result: ClusteredTrade[] = []
   let currentCluster: {
@@ -47,6 +59,7 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
     time: string
     price: number
     side: "BUY" | "SELL" | "UNKNOWN"
+    source?: TradeSource
     totalVolume: number
     earliestSec: number
     count: number
@@ -61,6 +74,7 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
         time: t.time,
         price: t.price,
         side: t.side,
+        source: t.source,
         totalVolume: t.volume,
         earliestSec: sec,
         count: 1,
@@ -69,10 +83,11 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
     }
 
     const isSameSide = t.side === currentCluster.side
+    const isSameSource = t.source === currentCluster.source
     const secDiff = Math.abs(currentCluster.earliestSec - sec)
     const isWithin1Sec = secDiff <= 1
 
-    if (isSameSide && isWithin1Sec) {
+    if (isSameSide && isSameSource && isWithin1Sec) {
       currentCluster.totalVolume += t.volume
       currentCluster.earliestSec = Math.min(currentCluster.earliestSec, sec)
       currentCluster.count += 1
@@ -92,6 +107,7 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
         volume: currentCluster.totalVolume,
         side: currentCluster.side,
         count: currentCluster.count,
+        source: currentCluster.source,
       })
 
       currentCluster = {
@@ -99,6 +115,7 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
         time: t.time,
         price: t.price,
         side: t.side,
+        source: t.source,
         totalVolume: t.volume,
         earliestSec: sec,
         count: 1,
@@ -114,6 +131,7 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
       volume: currentCluster.totalVolume,
       side: currentCluster.side,
       count: currentCluster.count,
+      source: currentCluster.source,
     })
   }
 

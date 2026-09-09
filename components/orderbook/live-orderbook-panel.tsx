@@ -38,7 +38,8 @@ import { StockLogo } from "@/components/stock-logo"
 
 export type DepthLevel = { price: number; volume: number }
 export type TradeSide = "BUY" | "SELL" | "UNKNOWN"
-export type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }
+export type TradeSource = "DNSE_LIVE" | "DNSE_HISTORY" | "SUPABASE_SNAPSHOT"
+export type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide; source: TradeSource }
 export type StockQuote = {
   symbol: string
   price: number
@@ -85,6 +86,7 @@ type CompanyInfo = {
 
 type SessionHistoryResponse = {
   ok: boolean
+  provider?: string
   message?: string
   sessionStart?: number
   prices?: Array<{ time: number; open?: number; close: number }>
@@ -691,7 +693,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   }, [symbol, initialMeta])
 
   // Parse raw trade objects to StreamTrade model
-  const parseRawTrades = (rawTrades?: any[]): StreamTrade[] => {
+  const parseRawTrades = (rawTrades: any[] | undefined, source: TradeSource): StreamTrade[] => {
     return (rawTrades ?? [])
       .map((trade: any, index: number) => {
         const rawPrice = number(trade.price)
@@ -703,6 +705,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           price,
           volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
           side: explicitSide(trade.side),
+          source,
         }
       })
       .filter((trade) => trade.price > 0 && trade.volume > 0)
@@ -719,7 +722,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
           if (directPrices.length > 0) setPriceHistory(directPrices)
           if (direct.trades?.length) {
-            const parsedTrades = parseRawTrades(direct.trades)
+            const parsedTrades = parseRawTrades(direct.trades, "SUPABASE_SNAPSHOT")
             if (parsedTrades.length > 0) {
               setTrades((current) => mergeTrades(parsedTrades, current))
             }
@@ -863,7 +866,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           })
         }
 
-        const historicalTrades: StreamTrade[] = isAto ? [] : parseRawTrades(payload.trades)
+        const historySource: TradeSource = payload.provider === "DNSE" ? "DNSE_HISTORY" : "SUPABASE_SNAPSHOT"
+        const historicalTrades: StreamTrade[] = isAto ? [] : parseRawTrades(payload.trades, historySource)
 
         let mergedTradesList = historicalTrades
         if (historicalTrades.length > 0) {
@@ -924,6 +928,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
                   price,
                   volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
                   side: explicitSide(trade.side),
+                  source: "SUPABASE_SNAPSHOT" as const,
                 }
               }).filter((t) => t.price > 0 && t.volume > 0)
               setTrades(parsedTrades)
@@ -961,6 +966,9 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   useEffect(() => {
     const unsubscribe = subscribeToOrderbookRealtime(symbol, (snapshot) => {
       if (!snapshot) return
+      // DNSE WebSocket is the source of truth for all live UI behavior.
+      // Supabase/VPS updates are recovery-only and must not overwrite a healthy live stream.
+      if (state === "LIVE") return
       if (getMarketUiPhase() === "ATO") return
       const snapshotPrices = (snapshot.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
       if (snapshotPrices.length > 0) setPriceHistory(snapshotPrices)
@@ -975,6 +983,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             price,
             volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
             side: explicitSide(trade.side),
+            source: "SUPABASE_SNAPSHOT" as const,
           }
         }).filter((t) => t.price > 0 && t.volume > 0)
         setTrades((curr) => mergeTrades(curr, incomingTrades))
@@ -1007,7 +1016,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     return () => {
       unsubscribe()
     }
-  }, [symbol])
+  }, [symbol, state])
 
   // Realtime Put-Through Polling & Alerting (every 5 seconds)
   useEffect(() => {
@@ -1245,6 +1254,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
               price,
               volume,
               side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),
+              source: "DNSE_LIVE",
             }
             setTrades((current) => mergeTrades([trade], current))
             return
@@ -2490,6 +2500,10 @@ export function LiveOrderBookPanel({
   const clusteredTrades = useMemo(() => {
     return clusterTrades(stream.trades)
   }, [stream.trades])
+  const realtimeWhaleTrades = useMemo(
+    () => clusteredTrades.filter((t) => t.source === "DNSE_LIVE"),
+    [clusteredTrades],
+  )
 
   const bestBidPrice = stream.bids[0]?.price
   const bestAskPrice = stream.asks[0]?.price
@@ -2499,42 +2513,38 @@ export function LiveOrderBookPanel({
   const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price, spread), [quote?.price, spread])
   const whaleLabel = useMemo(() => getWhaleLabel(quote?.price, spread), [quote?.price, spread])
 
-  // Reliable Realtime Whale Lottie, Sound & Glow Trigger
+  // Reliable Realtime Whale Lottie, Sound & Glow Trigger.
+  // Only DNSE WebSocket executions can create realtime behavior; history/snapshots are display/backfill only.
   const seenWhaleIdsRef = useRef<Set<string>>(new Set())
-  const isInitialTradesLoadedRef = useRef(false)
+  const didInitializeWhaleBaselineRef = useRef(false)
 
   useEffect(() => {
-    if (!clusteredTrades.length) return
+    seenWhaleIdsRef.current.clear()
+    didInitializeWhaleBaselineRef.current = false
+  }, [symbol])
 
-    // On initial data arrival, record historical whale trade IDs to avoid firing on page open
-    if (!isInitialTradesLoadedRef.current) {
-      if (stream.historyState === "READY" || stream.historyState === "PARTIAL" || clusteredTrades.length > 0) {
-        for (const t of clusteredTrades) {
-          if (!isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold) {
-            seenWhaleIdsRef.current.add(t.id)
-          }
-        }
-        isInitialTradesLoadedRef.current = true
+  useEffect(() => {
+    // Baseline cached DNSE-live executions when reopening a popup so stale events do not replay.
+    if (!didInitializeWhaleBaselineRef.current) {
+      for (const t of realtimeWhaleTrades) {
+        seenWhaleIdsRef.current.add(t.id)
       }
+      didInitializeWhaleBaselineRef.current = true
       return
     }
 
-    // On subsequent realtime updates, check for any newly arrived whale trades
-    for (const t of clusteredTrades) {
+    for (const t of realtimeWhaleTrades) {
       if (isAtoTradeTime(t.time) || isAtcTradeTime(t.time)) continue
+      if (t.volume < whaleThreshold || seenWhaleIdsRef.current.has(t.id)) continue
 
-      if (t.volume >= whaleThreshold) {
-        if (!seenWhaleIdsRef.current.has(t.id)) {
-          seenWhaleIdsRef.current.add(t.id)
-          const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
-          confetti.fire(side, t.volume, t.price)
-          playWhaleSound(side)
-          setIsWhaleGlow(true)
-          setTimeout(() => setIsWhaleGlow(false), 2800)
-        }
-      }
+      seenWhaleIdsRef.current.add(t.id)
+      const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
+      confetti.fire(side, t.volume, t.price)
+      playWhaleSound(side)
+      setIsWhaleGlow(true)
+      setTimeout(() => setIsWhaleGlow(false), 2800)
     }
-  }, [clusteredTrades, whaleThreshold, stream.historyState, confetti])
+  }, [realtimeWhaleTrades, whaleThreshold, confetti])
 
   // Tape filtering
   const visibleTrades = useMemo(() => {
