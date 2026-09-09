@@ -66,7 +66,7 @@ test("detail shell provides a previous-page action with catalog fallback", () =>
   assert.match(shell, /useRouter\(\)/)
   assert.match(shell, /window\.history\.length\s*>\s*1/)
   assert.match(shell, /router\.back\(\)/)
-  assert.match(shell, /router\.push\(["']\/insights\/reports["']\)/)
+  assert.match(shell, /router\.push\(["']\/reports["']\)/)
   assert.match(shell, />\s*Quay lại\s*</)
 })
 
