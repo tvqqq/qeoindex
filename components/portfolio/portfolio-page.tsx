@@ -9,6 +9,7 @@ import { PortfolioCommandActions } from "@/components/portfolio/revamp/portfolio
 import { PortfolioCommandHeader } from "@/components/portfolio/revamp/portfolio-command-header"
 import { PortfolioPositionGrid } from "@/components/portfolio/revamp/portfolio-position-grid"
 import { PortfolioSectionShell } from "@/components/portfolio/revamp/portfolio-section-shell"
+import { PortfolioTabMotion } from "@/components/portfolio/revamp/portfolio-motion"
 import { WatchlistPanel, type WatchlistMeta, type WatchlistItem } from "@/components/portfolio/watchlist-panel"
 import { TopNav } from "@/components/top-nav"
 import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/modules/portfolio/market-prices"
@@ -441,103 +442,105 @@ export function PortfolioPage() {
           </div>
         )}
 
-        {activeTab === "portfolio" && (
-          <div className="space-y-6">
-            <PortfolioBattleHud
-              positions={positions}
-              currentPrices={currentPrices}
-              loading={loadingPortfolio || loadingTx}
-            />
+        <PortfolioTabMotion motionKey={activeTab}>
+          {activeTab === "portfolio" && (
+            <div className="space-y-6">
+              <PortfolioBattleHud
+                positions={positions}
+                currentPrices={currentPrices}
+                loading={loadingPortfolio || loadingTx}
+              />
 
-            {activePortfolioId && (
-              <PortfolioRiskDashboard key={activePortfolioId} portfolioId={activePortfolioId} />
-            )}
+              {activePortfolioId && (
+                <PortfolioRiskDashboard key={activePortfolioId} portfolioId={activePortfolioId} />
+              )}
 
-            <PortfolioPositionGrid
-              positions={positions}
-              currentPrices={currentPrices}
-              loading={loadingTx}
-              onAddTransaction={handleOpenAddTx}
-            />
+              <PortfolioPositionGrid
+                positions={positions}
+                currentPrices={currentPrices}
+                loading={loadingTx}
+                onAddTransaction={handleOpenAddTx}
+              />
 
-            {positions.length > 0 && (
-              <PortfolioAllocationChart positions={positions} currentPrices={currentPrices} />
-            )}
+              {positions.length > 0 && (
+                <PortfolioAllocationChart positions={positions} currentPrices={currentPrices} />
+              )}
 
-            <details className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] shadow-sm">
-              <summary className="cursor-pointer px-6 py-4 font-ticker text-sm font-extrabold uppercase tracking-wide text-white">
-                Chi tiết đội hình
-              </summary>
-              <div className="border-t border-[var(--color-border)] px-6 py-4">
-                <PortfolioPositionsTable
-                  positions={positions}
-                  currentPrices={currentPrices}
-                  loading={loadingTx}
-                  onAddTransaction={handleOpenAddTx}
-                />
-              </div>
-            </details>
-          </div>
-        )}
-
-        {activeTab === "journal" && (
-          <PortfolioSectionShell
-            title="Battle Log · Nhật ký giao dịch"
-            description="Dòng thời gian các giao dịch đã ghi nhận. Thẻ hiển thị dữ kiện giao dịch và provenance hiện có, không suy diễn trạng thái Trade từ raw fills."
-            action={(
-              <span className="font-ticker text-xs font-bold text-[var(--color-muted-2)]">
-                {transactions.length} giao dịch ghi nhận
-              </span>
-            )}
-          >
-            <PortfolioTransactionHistory
-              transactions={transactions}
-              onDelete={handleTxDelete}
-              onEdit={() => {}}
-              loading={loadingTx}
-            />
-          </PortfolioSectionShell>
-        )}
-
-        {activeTab === "allocation" && (
-          <div className="space-y-6">
-            <PortfolioCapitalAllocation
-              key={activePortfolioId ?? ""}
-              portfolios={portfolios}
-              activePortfolioId={activePortfolioId ?? ""}
-              positions={positions}
-              currentPrices={currentPrices}
-              totalRealizedPnlKvnd={totalRealizedPnl}
-            />
-            {activePortfolioId && (
               <details className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] shadow-sm">
                 <summary className="cursor-pointer px-6 py-4 font-ticker text-sm font-extrabold uppercase tracking-wide text-white">
-                  Kế hoạch quản trị vốn nâng cao
+                  Chi tiết đội hình
                 </summary>
-                <div className="border-t border-[var(--color-border)] p-4 sm:p-6">
-                  <PortfolioRiskPlan key={activePortfolioId} portfolioId={activePortfolioId} />
+                <div className="border-t border-[var(--color-border)] px-6 py-4">
+                  <PortfolioPositionsTable
+                    positions={positions}
+                    currentPrices={currentPrices}
+                    loading={loadingTx}
+                    onAddTransaction={handleOpenAddTx}
+                  />
                 </div>
               </details>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        {activeTab === "benchmark" && activePortfolioId && (
-          <PortfolioBenchmarkChart portfolioId={activePortfolioId} />
-        )}
+          {activeTab === "journal" && (
+            <PortfolioSectionShell
+              title="Battle Log · Nhật ký giao dịch"
+              description="Dòng thời gian các giao dịch đã ghi nhận. Thẻ hiển thị dữ kiện giao dịch và provenance hiện có, không suy diễn trạng thái Trade từ raw fills."
+              action={(
+                <span className="font-ticker text-xs font-bold text-[var(--color-muted-2)]">
+                  {transactions.length} giao dịch ghi nhận
+                </span>
+              )}
+            >
+              <PortfolioTransactionHistory
+                transactions={transactions}
+                onDelete={handleTxDelete}
+                onEdit={() => {}}
+                loading={loadingTx}
+              />
+            </PortfolioSectionShell>
+          )}
 
-        {activeTab === "watchlist" && (
-          <PortfolioSectionShell
-            title="Scouting Board · Trinh sát"
-            description="Danh sách theo dõi theo dữ kiện: quote phiên, cảnh báo, ghi chú và tags đã lưu."
-          >
-            <WatchlistPanel
-              initialWatchlists={watchlists}
-              initialActiveId={activeWatchlistId ?? (watchlists[0]?.id || "")}
-              initialItems={watchlistItems}
-            />
-          </PortfolioSectionShell>
-        )}
+          {activeTab === "allocation" && (
+            <div className="space-y-6">
+              <PortfolioCapitalAllocation
+                key={activePortfolioId ?? ""}
+                portfolios={portfolios}
+                activePortfolioId={activePortfolioId ?? ""}
+                positions={positions}
+                currentPrices={currentPrices}
+                totalRealizedPnlKvnd={totalRealizedPnl}
+              />
+              {activePortfolioId && (
+                <details className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] shadow-sm">
+                  <summary className="cursor-pointer px-6 py-4 font-ticker text-sm font-extrabold uppercase tracking-wide text-white">
+                    Kế hoạch quản trị vốn nâng cao
+                  </summary>
+                  <div className="border-t border-[var(--color-border)] p-4 sm:p-6">
+                    <PortfolioRiskPlan key={activePortfolioId} portfolioId={activePortfolioId} />
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          {activeTab === "benchmark" && activePortfolioId && (
+            <PortfolioBenchmarkChart portfolioId={activePortfolioId} />
+          )}
+
+          {activeTab === "watchlist" && (
+            <PortfolioSectionShell
+              title="Scouting Board · Trinh sát"
+              description="Danh sách theo dõi theo dữ kiện: quote phiên, cảnh báo, ghi chú và tags đã lưu."
+            >
+              <WatchlistPanel
+                initialWatchlists={watchlists}
+                initialActiveId={activeWatchlistId ?? (watchlists[0]?.id || "")}
+                initialItems={watchlistItems}
+              />
+            </PortfolioSectionShell>
+          )}
+        </PortfolioTabMotion>
       </div>
 
       <AddTransactionDialog
