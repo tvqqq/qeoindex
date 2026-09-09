@@ -763,6 +763,8 @@ export type Database = {
           archive_format: string
           base_resolution: string
           byte_count: number | null
+          canonical_content_digest: string | null
+          canonical_content_version: number | null
           created_at: string
           format_version: number
           id: string
@@ -780,6 +782,8 @@ export type Database = {
           archive_format: string
           base_resolution: string
           byte_count?: number | null
+          canonical_content_digest?: string | null
+          canonical_content_version?: number | null
           created_at?: string
           format_version?: number
           id?: string
@@ -797,6 +801,8 @@ export type Database = {
           archive_format?: string
           base_resolution?: string
           byte_count?: number | null
+          canonical_content_digest?: string | null
+          canonical_content_version?: number | null
           created_at?: string
           format_version?: number
           id?: string
@@ -887,6 +893,8 @@ export type Database = {
           bar_time: string
           base_resolution: string
           close: number
+          content_digest: string
+          content_version: number
           fetched_at: string
           high: number
           low: number
@@ -899,6 +907,8 @@ export type Database = {
           bar_time: string
           base_resolution: string
           close: number
+          content_digest?: string
+          content_version?: number
           fetched_at?: string
           high: number
           low: number
@@ -911,6 +921,8 @@ export type Database = {
           bar_time?: string
           base_resolution?: string
           close?: number
+          content_digest?: string
+          content_version?: number
           fetched_at?: string
           high?: number
           low?: number
@@ -4960,6 +4972,9 @@ export type Database = {
       }
       qeo_prune_verified_chart_intraday_partition: {
         Args: {
+          p_expected_content_digest: string
+          p_expected_content_version: number
+          p_expected_newer_sessions: string[]
           p_expected_row_count: number
           p_expected_sha256: string
           p_manifest_id: string
@@ -5203,11 +5218,10 @@ export type CompositeTypes<
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+      : never
 
 export const Constants = {
   public: {
     Enums: {},
   },
 } as const
-

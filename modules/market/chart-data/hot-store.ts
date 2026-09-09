@@ -1,5 +1,6 @@
 import "server-only"
 
+import { createHash } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CanonicalOhlcvBar } from "./contract"
 import {
@@ -76,6 +77,18 @@ export interface HotArchivePartition {
   toExclusive: number
 }
 
+export interface HotIntradaySnapshot {
+  bar: CanonicalOhlcvBar
+  contentDigest: string
+  contentVersion: number
+}
+
+export interface HotArchivePruneResult {
+  status: "pruned" | "deferred"
+  reason?: "content_mismatch" | "retention_mismatch"
+  deletedRows: number
+}
+
 export interface HotSessionPartitionDropResult {
   status: "absent" | "blocked" | "dropped"
   tradingDate: string
@@ -111,6 +124,44 @@ export async function readHotIntradayRange(supabase: SupabaseClient, ticker: str
   return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
 }
 
+function storedRowToSnapshot(row: Record<string, unknown>): HotIntradaySnapshot | null {
+  const bar = storedRowToBar(row)
+  const contentDigest = String(row.content_digest ?? "")
+  const contentVersion = Number(row.content_version)
+  if (!bar || !/^[a-f0-9]{64}$/.test(contentDigest) || !Number.isSafeInteger(contentVersion) || contentVersion <= 0) return null
+  return { bar, contentDigest, contentVersion }
+}
+
+export function canonicalHotContentDigest(rows: HotIntradaySnapshot[]) {
+  if (!rows.length) throw new Error("Cannot build a canonical HOT content digest from an empty snapshot")
+  const sorted = [...rows].sort((left, right) => left.bar.time - right.bar.time)
+  if (sorted.some((row, index) => index > 0 && row.bar.time === sorted[index - 1].bar.time)) throw new Error("Canonical HOT snapshot contains duplicate timestamps")
+  return createHash("sha256").update(sorted.map((row) => row.contentDigest).join(""), "utf8").digest("hex")
+}
+
+export function canonicalHotContentVersion(rows: HotIntradaySnapshot[]) {
+  if (!rows.length) throw new Error("Cannot build a canonical HOT content version from an empty snapshot")
+  return Math.max(...rows.map((row) => row.contentVersion))
+}
+
+export async function readHotIntradaySnapshot(
+  supabase: SupabaseClient,
+  ticker: string,
+  from: number,
+  to: number,
+): Promise<HotIntradaySnapshot[]> {
+  const { data, error } = await supabase.from("chart_ohlcv_intraday")
+    .select("bar_time,open,high,low,close,volume,content_digest,content_version")
+    .eq("ticker", ticker).eq("base_resolution", "1m")
+    .gte("bar_time", new Date(from * 1000).toISOString()).lte("bar_time", new Date(to * 1000).toISOString())
+    .order("bar_time", { ascending: true })
+  if (error) throw new Error(`Chart hot-store snapshot read failed: ${error.message}`)
+  const rows = (data || []) as Array<Record<string, unknown>>
+  const snapshots = rows.map(storedRowToSnapshot)
+  if (snapshots.some((snapshot) => snapshot == null)) throw new Error("Chart hot-store snapshot contains unknown content identity")
+  return snapshots.filter((snapshot): snapshot is HotIntradaySnapshot => Boolean(snapshot))
+}
+
 /**
  * Discover bounded candidates with the global session cutoff. The returned
  * partitions still require proveHotArchivePartitionEligibility before any
@@ -138,18 +189,32 @@ export async function listExpiredHotPartitions(supabase: SupabaseClient, input: 
 
 export async function pruneVerifiedHotIntradayPartition(
   supabase: SupabaseClient,
-  input: { manifestId: string; sha256: string; rowCount: number },
-): Promise<number> {
+  input: {
+    manifestId: string
+    sha256: string
+    rowCount: number
+    canonicalContentDigest: string
+    canonicalContentVersion: number
+    newerTradingDates: string[]
+  },
+): Promise<HotArchivePruneResult> {
   const { data, error } = await supabase.rpc("qeo_prune_verified_chart_intraday_partition", {
     p_manifest_id: input.manifestId,
     p_expected_sha256: input.sha256,
     p_expected_row_count: input.rowCount,
+    p_expected_content_digest: input.canonicalContentDigest,
+    p_expected_content_version: input.canonicalContentVersion,
+    p_expected_newer_sessions: input.newerTradingDates,
   })
   if (error) throw new Error(`Chart hot archive prune RPC failed: ${error.message}`)
   const raw = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  const status = raw.status
   const deletedRows = finite(raw.deletedRows)
-  if (deletedRows == null || deletedRows !== input.rowCount) throw new Error(`Chart hot archive prune RPC returned invalid deletedRows=${String(raw.deletedRows)}`)
-  return deletedRows
+  if (status === "deferred" && (raw.reason === "content_mismatch" || raw.reason === "retention_mismatch") && deletedRows === 0) {
+    return { status, reason: raw.reason, deletedRows }
+  }
+  if (status !== "pruned" || deletedRows == null || deletedRows !== input.rowCount) throw new Error(`Chart hot archive prune RPC returned invalid status=${String(status)} deletedRows=${String(raw.deletedRows)}`)
+  return { status, deletedRows }
 }
 
 export async function dropEmptyHotIntradaySessionPartition(

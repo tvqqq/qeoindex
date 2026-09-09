@@ -48,8 +48,8 @@ strictly newer than the candidate boundary. A ticker with only four newer
 sessions therefore remains HOT even when another ticker has enough history;
 the candidate is eligible only when it is sixth-or-older for that ticker.
 Malformed timestamps, query failures, a bounded proof-page cap, and fewer than
-five newer sessions all defer the candidate. Deferred partitions are recorded
-in archive metrics and never reach archive, cache, or prune. A candidate with
+five newer sessions all defer the candidate. Deferred retention candidates are
+recorded in archive metrics and never reach archive, cache, or prune. A candidate with
 fewer than five newer sessions is a normal protected partition; read failures,
 malformed evidence, and proof-cap exhaustion keep the lifecycle partial.
 
@@ -66,6 +66,7 @@ Cold chart history is stored in the private Supabase Storage bucket `chart-ohlcv
 - archive objects use immutable checksum-addressed `.ndjson.gz` paths;
 - `chart_ohlcv_cold_manifests` records ticker, base resolution, exact covered range, row count, SHA-256, format version and byte count;
 - an archive object is downloaded and verified against SHA-256 + row count before its manifest is accepted for pruning;
+- QEO-149 separately records a database-stamped canonical content digest and monotonic content version for each HOT row; the manifest stores the aggregate proof, including exact OHLCV timestamps and correction-relevant provenance identity;
 - an already-existing matching object/manifest is verified and reused idempotently;
 - object paths and bucket details remain server-only.
 
@@ -85,10 +86,19 @@ hot raw 1m snapshot
   -> cold readback + SHA256 + row-count verify
   -> deterministic 1h cache persist
   -> hot snapshot re-read / equality check
-  -> service-role manifest-verified atomic prune RPC
+  -> service-role manifest/content/retention-verified atomic prune RPC
 ```
 
-The prune RPC refuses deletion when the manifest, checksum, row count, or derived-cache evidence does not match. Any exception rolls back the delete transaction. Daily/Wyckoff history is never touched by this RPC.
+The prune RPC takes a deterministic ticker + Vietnam-session advisory lock shared
+by every HOT insert, update, and delete trigger. It then revalidates the
+manifest, derived-cache evidence, five newer ticker sessions, and exact HOT
+content/version inside the transaction. Equal row counts with changed OHLCV,
+timestamps, inserts, or provenance therefore return a reason-coded deferral
+with zero deletes. Missing or malformed proof fails closed; a writer arriving
+after the lock waits and its write survives after prune commits. Object-byte
+SHA-256 and canonical content digest are distinct values. Any exception rolls
+back the delete transaction, and Daily/Wyckoff history is never touched by this
+RPC.
 
 ### Legacy cold-to-derived recovery
 
