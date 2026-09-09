@@ -1,6 +1,8 @@
 import "server-only"
 
 import type { ServerAuthContext } from "@/modules/auth/server"
+import { loadStructuredSectorMetadata } from "../concentration/sector-metadata.ts"
+import type { PortfolioConcentrationReadModel, SectorMetadataSnapshot } from "../concentration/types.ts"
 import { getPortfolioRiskContext } from "../risk-engine/server.ts"
 import { getRiskPlanOverview } from "../risk-plan/server.ts"
 import type { OpenTradeRiskBreakdown, RiskState } from "./types.ts"
@@ -10,6 +12,7 @@ export type RiskSizingServerContext = {
   effectiveDefaultTradeRiskPercent: number
   defaultTradeRiskPercent: number
   riskSource: "money_management_plan" | "onboarding_default"
+  moneyManagementPlanId: string | null
   riskState: RiskState
   riskStateReasons: string[]
   accountEquityVnd: number | null
@@ -19,6 +22,8 @@ export type RiskSizingServerContext = {
   knownActiveRiskVnd: number
   unknownRiskTradeCount: number
   openTradeRisks: OpenTradeRiskBreakdown[]
+  concentration: PortfolioConcentrationReadModel
+  sectorMetadata: SectorMetadataSnapshot
   winRatioPercent: number | null
   payoffRatio: number | null
   evidenceCompleteness: "complete" | "partial" | "insufficient"
@@ -58,12 +63,18 @@ export async function getRiskSizingContext(
   const win = overview.evidence.winRatio
   const payoff = overview.evidence.payoffRatio
   const state = risk.riskState
+  const sectorTickers = [...new Set([
+    ...risk.concentration.snapshot.openTickers,
+    ...risk.activeRisk.rows.map((row) => row.ticker),
+  ])].sort()
+  const sectorMetadata = await loadStructuredSectorMetadata(sectorTickers)
 
   return {
     configuredDefaultTradeRiskPercent: state.configuredDefaultTradeRiskPercent,
     effectiveDefaultTradeRiskPercent: state.effectiveDefaultTradeRiskPercent,
     defaultTradeRiskPercent: state.effectiveDefaultTradeRiskPercent,
     riskSource: plan ? "money_management_plan" : "onboarding_default",
+    moneyManagementPlanId: plan?.id ?? null,
     riskState: mapRiskState(state.state),
     riskStateReasons: (state.state === "UNKNOWN" ? state.insufficientRules : state.triggers).map((item) => item.reason),
     accountEquityVnd: risk.account.equityVnd,
@@ -81,6 +92,8 @@ export async function getRiskSizingContext(
       activeRiskVnd: row.activeRiskVnd,
       riskStatus: row.riskStatus,
     })),
+    concentration: risk.concentration,
+    sectorMetadata,
     winRatioPercent: finiteOrNull(win.value),
     payoffRatio: finiteOrNull(payoff.value),
     evidenceCompleteness: combinedEvidenceCompleteness(win.completeness, payoff.completeness),
