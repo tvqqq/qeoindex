@@ -93,3 +93,15 @@ test("risk-plan HTTP routes stay thin and delegate to the authenticated server d
     assert.doesNotMatch(source, /\.from\("portfolio_(?:risk_profile_attempts|discipline_profile_attempts|money_management_plans)"\)/)
   }
 })
+
+test("risk-plan server preserves QEO-159 diversification fields in versioned JSON without defaults", () => {
+  const source = loadText(serverPath, "QEO-138 risk-plan server.ts")
+
+  assert.match(source, /diversificationRules\.maxTickerConcentrationPercent/)
+  assert.match(source, /maxTickerConcentrationPercent:\s*finiteNumber\(/)
+  assert.match(source, /diversificationRules\.maxConcurrentOpenPositions/)
+  assert.match(source, /maxConcurrentOpenPositions:\s*finiteNumber\(/)
+  assert.match(source, /diversification_rules:\s*plan\.diversificationRules/)
+  assert.doesNotMatch(source, /maxTickerConcentrationPercent:\s*\d/)
+  assert.doesNotMatch(source, /maxConcurrentOpenPositions:\s*\d/)
+})
