@@ -1,0 +1,33 @@
+name: QEO-165 Portfolio Command Center
+
+on:
+  pull_request:
+    paths:
+      - "components/portfolio/**"
+      - "tests/portfolio/qeo165-*.test.ts"
+      - "tests/test-contracts.json"
+      - ".github/workflows/qeo165-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo165-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  presentation-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-165 presentation contracts
+        run: node --test tests/portfolio/qeo165-command-center-ui.test.ts tests/portfolio/qeo165-boundaries.test.ts
