@@ -99,5 +99,7 @@ export type PortfolioRiskReadModel = {
   evidence: {
     rawDailyCoverage: "complete" | "partial" | "insufficient"
     currentPriceMissingTickers: string[]
+    fundingHistoryStatus: FundingHistoryStatus
+    externalCashFlowCount: number
   }
 }
