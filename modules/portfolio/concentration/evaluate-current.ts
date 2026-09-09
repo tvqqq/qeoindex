@@ -312,6 +312,7 @@ export function evaluateCurrentConcentration(input: CurrentConcentrationInput): 
       openPositionCount,
       accountEquityVnd,
     },
+    rules: input.rules,
     tickerMarketValue,
     tickerActiveRisk,
     sectorActiveRisk,
