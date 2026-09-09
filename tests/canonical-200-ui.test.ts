@@ -93,6 +93,7 @@ test("QEO-162 homepage refreshes VNINDEX, replaces the CTA with a canonical stoc
 
 test("QEO-163 pulse uses the current Vietnam date and an open stock finder reserves workspace clearance", () => {
   const hero = source("components/home/home-hero.tsx")
+  const heroCss = source("components/home/home-hero.module.css")
   const stockSearch = source("components/home/home-stock-search.tsx")
 
   assert.match(hero, /formatCurrentVietnamDate/, "Pulse label should derive from the current Asia\/Ho_Chi_Minh date")
@@ -101,8 +102,10 @@ test("QEO-163 pulse uses the current Vietnam date and an open stock finder reser
 
   assert.match(stockSearch, /data-home-stock-search/, "stock finder root should expose open-state styling scope")
   assert.match(stockSearch, /data-open=\{isOpen \? "true" : "false"\}/, "stock finder should expose combobox open state to CSS")
-  assert.match(stockSearch, /pb-\[360px\]/, "open dropdown should reserve enough vertical clearance before workspace cards")
-  assert.match(stockSearch, /transition-\[padding-bottom\]/, "clearance should animate only the bounded padding property")
-  assert.match(stockSearch, /motion-reduce:transition-none/, "clearance motion should respect reduced-motion")
-  assert.doesNotMatch(`${hero}\n${stockSearch}`, /transition-all|backdrop-blur|backdrop-filter/)
+  assert.match(hero, /styles\.heroShell/, "hero should own the dropdown-clearance layout instead of shifting the three-zone grid")
+  assert.match(heroCss, /:has\(\[data-home-stock-search\]\[data-open="true"\]\)/, "hero should react to the open stock finder without lifting state into JavaScript")
+  assert.match(heroCss, /padding-bottom:\s*360px/, "open dropdown should reserve enough vertical clearance before workspace cards")
+  assert.match(heroCss, /transition:\s*padding-bottom/, "clearance should animate only the bounded padding property")
+  assert.match(heroCss, /prefers-reduced-motion/, "clearance motion should respect reduced-motion")
+  assert.doesNotMatch(`${hero}\n${heroCss}\n${stockSearch}`, /transition-all|backdrop-blur|backdrop-filter/)
 })
