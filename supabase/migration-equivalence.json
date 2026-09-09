@@ -384,7 +384,7 @@
       "productionVersion": "20260906155227",
       "state": "MAPPED",
       "evidence": "qeo124-production-ledger-schema-rls-rpc-and-rollback-smoke",
-      "rationale": "QEO-124 versioned adjustment-factor storage and service-role persistence RPC were promoted only after synced-main preprod zero-to-latest replay, deterministic contracts, TypeScript and VSDC discovery passed. Production readback verified both private RLS-enabled tables, service-role-only persistence, SECURITY DEFINER fixed search_path, append-only evidence, and rollback-only replay/correction/non-RAW atomicity with zero residual rows. Production timestamp differs from repository replay ordering."
+      "rationale": "QEO-124 versioned adjustment-factor storage and service-role persistence RPC were promoted only after synced-main preprod zero-to-latest replay, deterministic contracts, TypeScript and VSDC discovery passed. Production readback verified both private RLS-enabled tables, service-role-only SELECT/EXECUTE boundaries and SECURITY DEFINER persistence; rollback-only smoke proved exact replay idempotency, blocked-run isolation, active-run immutability and zero residual fixture rows. Production timestamp differs from repository replay ordering."
     },
     {
       "logicalName": "qeo129_adjusted_daily_shadow",
