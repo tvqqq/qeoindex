@@ -67,6 +67,8 @@ jobs:
         run: bash scripts/db/rehearse-qeo149-concurrency.sh
       - name: Rehearse QEO-147 complete-cache readiness
         run: bash scripts/db/rehearse-qeo147-readiness.sh
+      - name: Rehearse QEO-148 closed-range coordination
+        run: bash scripts/db/rehearse-qeo148-closed-range.sh
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
