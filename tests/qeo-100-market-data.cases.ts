@@ -25,8 +25,13 @@ import {
   proveHotArchivePartitionEligibility,
   proveHotArchivePartitionsEligibility,
 } from "../modules/market/chart-data/hot-retention.ts"
+import { aggregateChartTimeframe, overlayHourlyHotOnDerived } from "../modules/market/chart-data/timeframes.ts"
 
 const DAY = 86400
+
+function epoch(iso: string) {
+  return Math.floor(new Date(iso).getTime() / 1000)
+}
 
 function vietnamMidnight(dateKey: string) {
   return Math.floor(new Date(`${dateKey}T00:00:00+07:00`).getTime() / 1000)
@@ -195,42 +200,73 @@ test("QEO-90 archive guard runs before archive and verified prune", () => {
   assert.match(lifecycle, /proveHotArchivePartitionsEligibility/)
 })
 
-test("QEO-108 hourly read path splits physical HOT/COLD at the five-session boundary", () => {
+test("QEO-146 hourly reads compose protected older HOT without dropping partial-hour COLD", () => {
   const service = source("modules/market/chart-data/timeframe-service.ts")
   assert.match(service, /readDerivedHourlyRange/)
   assert.match(service, /derivedHourlyColdCoverageComplete/)
   assert.match(service, /readIntersectingRange/)
   assert.match(service, /VERIFIED_COLD_1M_RECOVERY/)
+  assert.match(service, /readHotIntradayRange/)
+  assert.match(service, /hotLoader/)
+  assert.match(service, /DERIVED_1H_CACHE\+HOT_1M_OVERLAY/)
+  assert.match(service, /hourlyOverlapRange/)
+  assert.match(service, /overlayHourlyHotOnDerived/)
   assert.match(service, /chartHotSessionRetentionCutoff/)
-  assert.match(service, /const oldTo = Math\.min\(request\.to, hotCutoff - 1\)/)
   assert.match(service, /const recentFrom = Math\.max\(sourceRange\.from, hotCutoff\)/)
   assert.match(service, /aggregateChartTimeframe\(mergeBars\(recentResults\), "1h"\)/)
   assert.match(service, /request\.resolution === "1h" \? mergedHourly : aggregateChartTimeframe\(mergedHourly, request\.resolution\)/)
+
+  const cold = [
+    { time: epoch("2026-08-24T02:00:00Z"), open: 100, high: 101, low: 99, close: 100, volume: 10 },
+    { time: epoch("2026-08-24T02:01:00Z"), open: 101, high: 102, low: 100, close: 101, volume: 11 },
+    { time: epoch("2026-08-24T02:02:00Z"), open: 102, high: 103, low: 101, close: 102, volume: 12 },
+    { time: epoch("2026-08-24T03:00:00Z"), open: 110, high: 111, low: 109, close: 110, volume: 20 },
+    { time: epoch("2026-08-24T03:01:00Z"), open: 111, high: 112, low: 110, close: 111, volume: 21 },
+    { time: epoch("2026-08-24T03:02:00Z"), open: 112, high: 113, low: 111, close: 112, volume: 22 },
+  ]
+  const hot = [
+    { ...cold[1], open: 201, high: 202, low: 200, close: 201, volume: 99 },
+  ]
+  const derived = [
+    { time: epoch("2026-08-24T02:00:00Z"), open: 100, high: 103, low: 99, close: 102, volume: 33 },
+    { time: epoch("2026-08-24T03:00:00Z"), open: 110, high: 113, low: 109, close: 112, volume: 63 },
+  ]
+  const overlay = overlayHourlyHotOnDerived({ derived, cold, hot })
+  assert.equal(overlay.unresolvedHotOverlap, false)
+  assert.equal(overlay.bars.length, derived.length)
+  assert.equal(overlay.bars[0].close, 102)
+  assert.equal(overlay.bars[0].volume, 121)
+  assert.ok(overlay.integrityIssues.length > 0, "the HOT/COLD disagreement remains integrity evidence")
+  for (const resolution of ["1h", "2h", "4h"] as const) {
+    const bars = aggregateChartTimeframe(overlay.bars, resolution)
+    assert.ok(bars.length > 0, `${resolution} should retain the protected Aug 24 source`)
+    assert.deepEqual(bars, [...bars].sort((a, b) => a.time - b.time))
+  }
 })
 
-test("QEO-103 legacy derived recovery re-verifies cold raw before cache persistence", () => {
+test("QEO-147 legacy derived recovery re-verifies RAW before complete-generation publication", () => {
   const recovery = source("modules/market/chart-data/derived-hourly-recovery.ts")
   assert.match(recovery, /listVerifiedColdManifests/)
+  assert.match(recovery, /validateDerivedHourlyManifestReadiness/)
   assert.match(recovery, /readVerifiedColdManifest/)
   assert.match(recovery, /aggregateChartTimeframe\(verified\.bars, "1h"\)/)
-  assert.match(recovery, /upsertDerivedHourlyBars/)
-  assert.match(recovery, /readDerivedHourlyByManifest/)
-  assert.ok(recovery.indexOf("readVerifiedColdManifest") < recovery.lastIndexOf("upsertDerivedHourlyBars"))
-  assert.ok(recovery.lastIndexOf("upsertDerivedHourlyBars") < recovery.lastIndexOf("readDerivedHourlyByManifest"))
+  assert.match(recovery, /persistVerifiedDerivedHourlyGeneration/)
+  assert.ok(recovery.indexOf("readVerifiedColdManifest") < recovery.lastIndexOf("persistVerifiedDerivedHourlyGeneration"))
 })
 
-test("QEO-103 archive is cache-before-prune and prune authority is manifest verified", () => {
+test("QEO-147 archive publishes complete derived proof before correction-safe prune", () => {
   const lifecycle = source("modules/market/chart-data/archive-lifecycle.ts")
   const hotStore = source("modules/market/chart-data/hot-store.ts")
-  const migration = source("supabase/migrations/20260905115319_qeo103_chart_storage_lifecycle.sql")
-  assert.match(lifecycle, /upsertDerivedHourlyBars/)
+  const qeo103 = source("supabase/migrations/20260905115319_qeo103_chart_storage_lifecycle.sql")
+  const qeo147 = source("supabase/pending-migrations/20260909143000_qeo147_derived_hourly_readiness.sql")
+  assert.match(lifecycle, /persistVerifiedDerivedHourlyGeneration/)
   assert.match(lifecycle, /pruneVerifiedHotIntradayPartition/)
-  assert.ok(lifecycle.indexOf("upsertDerivedHourlyBars") < lifecycle.lastIndexOf("pruneVerifiedHotIntradayPartition"))
+  assert.ok(lifecycle.indexOf("persistVerifiedDerivedHourlyGeneration") < lifecycle.lastIndexOf("pruneVerifiedHotIntradayPartition"))
   assert.match(hotStore, /qeo_prune_verified_chart_intraday_partition/)
-  assert.match(migration, /chart_ohlcv_derived_hourly/)
-  assert.match(migration, /derived hourly cache missing for manifest/)
-  assert.match(migration, /hot row-count mismatch before prune/)
-  assert.doesNotMatch(migration, /CASCADE/i)
+  assert.match(qeo103, /chart_ohlcv_derived_hourly/)
+  assert.match(qeo147, /qeo_validate_chart_derived_hourly_manifests/)
+  assert.match(qeo103, /hot row-count mismatch before prune/)
+  assert.doesNotMatch(qeo103, /CASCADE/i)
 })
 
 test("QEO-106 Daily cold schema remains legacy-compatible until zero-consumer cleanup", () => {
