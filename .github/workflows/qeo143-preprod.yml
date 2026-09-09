@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  legacy-migration-contract:
+  postgres-migration:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -46,10 +46,24 @@ jobs:
         run: pnpm db:replay:verify
       - name: QEO-143 Postgres migration integration
         run: bash scripts/db/verify-qeo143-legacy-migration.sh
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  domain-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: QEO-143 migrated Trade completeness
         run: node --test tests/portfolio/qeo143-read-model-completeness.test.ts
       - name: QEO-143 Scorecard eligibility boundary
         run: node --test tests/portfolio/qeo143-performance-eligibility.test.ts
-      - name: Stop local Supabase
-        if: always()
-        run: supabase stop --no-backup
