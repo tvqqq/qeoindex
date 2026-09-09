@@ -1,0 +1,42 @@
+name: QEO-143 Legacy Migration
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "modules/portfolio/**"
+      - "app/api/portfolio/**"
+      - "components/portfolio/**"
+      - "tests/portfolio/qeo143-*.test.ts"
+      - "tests/portfolio/qeo143-*.sql"
+      - "scripts/db/verify-qeo143-legacy-migration.sh"
+      - ".github/workflows/qeo143-preprod.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qeo143-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  legacy-migration-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-143 schema RED/GREEN contract
+        run: node --test tests/portfolio/qeo143-legacy-migration-schema.test.ts
+      - name: Existing Portfolio AVCO regression
+        run: node --test tests/portfolio-pnl.test.ts
