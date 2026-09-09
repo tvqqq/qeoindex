@@ -23,6 +23,7 @@ function metricReason(value: number | null, completeness: "complete" | "insuffic
 export function EquityDrawdownPanel({ equity }: { equity: PerformanceReadModel["equity"] }) {
   const latest = equity.points.at(-1) ?? null
   const recentEpisodes = equity.episodes.slice(-4).reverse()
+  const legacyFunding = equity.points.some((point) => point.fundingHistoryStatus === "legacy_unrecorded")
 
   return (
     <section className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-5 shadow-sm sm:p-6">
@@ -42,10 +43,18 @@ export function EquityDrawdownPanel({ equity }: { equity: PerformanceReadModel["
         </div>
       </div>
 
+      <div className="mb-4 rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.05] px-4 py-3 text-xs leading-relaxed text-cyan-100/70">
+        <strong className="text-cyan-100">Flow-adjusted simple return.</strong> Dòng vốn ngoài thay đổi Account Equity nhưng không tính vào Trading P/L; tỷ suất hiệu suất loại bỏ trực tiếp phần nạp/rút vốn và <strong>không phải TWR/MWR</strong>.
+      </div>
+
       {equity.completeness !== "complete" && (
         <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3 text-xs text-amber-200/80">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Không đủ dữ liệu giá RAW liên tục để kết luận đầy đủ về Account Equity/Drawdown. Các metric thiếu được giữ ở trạng thái N/A.</span>
+          {legacyFunding ? (
+            <span><strong>Legacy · lịch sử vốn chưa đầy đủ.</strong> Hệ thống không suy diễn nạp/rút vốn lịch sử; các tỷ suất phụ thuộc lịch sử funding được giữ N/A.</span>
+          ) : (
+            <span>Không đủ dữ liệu giá RAW liên tục để kết luận đầy đủ về Account Equity/Drawdown. Các metric thiếu được giữ ở trạng thái N/A.</span>
+          )}
         </div>
       )}
 
@@ -57,10 +66,10 @@ export function EquityDrawdownPanel({ equity }: { equity: PerformanceReadModel["
           title={performanceTermTitle("accountEquity")}
         />
         <EquityMetric
-          label="Hiệu suất tài khoản"
+          label="Hiệu suất tài khoản (flow-adjusted)"
           value={formatPercent(equity.accountTotalReturnPercent)}
           detail={metricReason(equity.accountTotalReturnPercent, equity.completeness)}
-          title={performanceTermTitle("accountEquity")}
+          title="Flow-adjusted simple return; external funding is excluded from performance."
         />
         <EquityMetric
           label="Max Drawdown"
@@ -82,7 +91,7 @@ export function EquityDrawdownPanel({ equity }: { equity: PerformanceReadModel["
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
               <Activity className="h-4 w-4 text-cyan-400" /> Điểm Equity gần nhất
             </div>
-            <span className="text-[10px] text-slate-600">toàn danh mục</span>
+            <span className="text-[10px] text-slate-600">Account Equity thực tế</span>
           </div>
           <div className="space-y-2">
             {equity.points.slice(-6).reverse().map((point) => (
