@@ -1,0 +1,33 @@
+name: QEO-158 External Cash Flows
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "modules/portfolio/**"
+      - "modules/shared/supabase/database.types.ts"
+      - "app/api/portfolio/**"
+      - "components/portfolio/**"
+      - "tests/portfolio/qeo158-*.test.ts"
+      - ".github/workflows/qeo158-preprod.yml"
+
+concurrency:
+  group: qeo158-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  schema-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-158 cash-flow schema contract
+        run: node --test tests/portfolio/qeo158-cash-flow-schema.test.ts
