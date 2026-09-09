@@ -20,7 +20,7 @@ import {
 const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
 const sparklineSource = readFileSync(new URL("../components/sparkline.tsx", import.meta.url), "utf8")
-const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8")
+const pageSource = readFileSync(new URL("../app/board/page.tsx", import.meta.url), "utf8")
 const perfCssSource = readFileSync(new URL("../app/market-board-performance.module.css", import.meta.url), "utf8")
 const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
 const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/route.ts", import.meta.url), "utf8")

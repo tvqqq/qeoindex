@@ -31,7 +31,7 @@ const INSIGHTS_ITEMS = [
   },
   {
     label: "Báo cáo Research",
-    href: "/insights/reports",
+    href: "/reports",
     icon: FileText,
     iconBg: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]",
     activeRow: "border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent",
@@ -76,6 +76,12 @@ function getInsightsActiveStyle(pathname: string) {
       icon: "text-violet-300",
     }
   }
+  if (pathname.startsWith("/reports")) {
+    return {
+      pill: "border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-emerald-500/25 text-emerald-300 shadow-[0_0_16px_rgba(16,185,129,0.28),0_0_10px_rgba(20,184,166,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
+      icon: "text-emerald-300",
+    }
+  }
   if (pathname.startsWith("/research")) {
     return {
       pill: "border-amber-400/50 bg-gradient-to-r from-amber-500/25 via-orange-500/20 to-amber-500/25 text-amber-300 shadow-[0_0_16px_rgba(245,158,11,0.28),0_0_10px_rgba(251,146,60,0.32),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
@@ -98,7 +104,7 @@ export function TopNav() {
   const menuRef = useRef<HTMLDivElement>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const isBoardActive = pathname === "/"
+  const isBoardActive = pathname.startsWith("/board")
   const isPortfolioActive = pathname.startsWith("/portfolio")
   const isAdminActive = pathname.startsWith("/admin")
   const insightsActiveStyle = getInsightsActiveStyle(pathname)
@@ -156,7 +162,7 @@ export function TopNav() {
 
         <nav className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/[0.1] bg-[#080c10]/94 p-1 shadow-[0_0_24px_-4px_rgba(176,124,255,0.16),0_0_24px_-4px_rgba(34,201,138,0.16),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
           <Link
-            href="/"
+            href="/board"
             prefetch={false}
             className={[
               "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",

@@ -63,7 +63,7 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
       router.back()
       return
     }
-    router.push("/insights/reports")
+    router.push("/reports")
   }
 
   useEffect(() => {
