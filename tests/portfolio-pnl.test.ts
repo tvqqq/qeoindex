@@ -211,12 +211,16 @@ test('QEO-44 transaction rendering is request-scoped to the active portfolio and
 
 test('QEO-44 refresh and add-transaction flows preserve immediate loading semantics outside Effects', () => {
   const page = readFileSync(resolve('components/portfolio/portfolio-page.tsx'), 'utf8')
+  const actions = readFileSync(resolve('components/portfolio/revamp/portfolio-command-actions.tsx'), 'utf8')
 
   assert.match(page, /const \[refreshingTxFor, setRefreshingTxFor\] = useState<string \| null>\(null\)/)
   assert.match(page, /const loadingTx\s*=\s*Boolean\([\s\S]*refreshingTxFor\s*===\s*activePortfolioId/)
   assert.match(page, /const handleRefreshTransactions = useCallback\([\s\S]*setRefreshingTxFor\(activePortfolioId\)[\s\S]*loadTransactions\(activePortfolioId\)/)
   assert.match(page, /const handleTxSuccess = useCallback\([\s\S]*setRefreshingTxFor\(activePortfolioId\)[\s\S]*loadTransactions\(activePortfolioId\)/)
-  assert.match(page, /onClick=\{handleRefreshTransactions\}/)
+  assert.match(page, /onRefresh=\{handleRefreshTransactions\}/)
+  assert.match(page, /onAddTransaction=\{\(\) => handleOpenAddTx\(\)\}/)
+  assert.match(actions, /onClick=\{onRefresh\}/)
+  assert.match(actions, /onClick=\{onAddTransaction\}/)
 })
 
 test('QEO-44 Effect-triggered loaders are state-free and derived transactions are memo-stable', () => {

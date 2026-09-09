@@ -70,8 +70,8 @@ export function PortfolioPerformanceDashboard({ portfolioId }: { portfolioId: st
       <div className="rounded-3xl border border-[#2b2e40] bg-gradient-to-r from-[#0d1017] via-[#121425] to-[#0d1017] p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-purple-400">Canonical Performance</div>
-            <h2 className="font-ticker text-xl font-black text-white sm:text-2xl">Hiệu suất danh mục & chất lượng giao dịch</h2>
+            <div className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-purple-400">Campaign Results · Canonical Performance</div>
+            <h2 className="font-ticker text-xl font-black text-white sm:text-2xl">Kết quả chiến dịch · Hiệu suất danh mục &amp; chất lượng giao dịch</h2>
             <p className="mt-2 text-xs leading-relaxed text-slate-500">
               Bộ lọc Trade chỉ thay đổi Scorecard, Trading Ledger và Segmentation. Account Equity, Drawdown và benchmark luôn là số liệu <strong className="text-slate-300">toàn danh mục</strong>.
             </p>

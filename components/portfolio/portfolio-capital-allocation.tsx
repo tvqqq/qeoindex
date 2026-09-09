@@ -4,6 +4,7 @@ import { memo, useMemo, useState } from "react"
 import { Layers3, Scale } from "lucide-react"
 
 import type { PortfolioMeta } from "@/components/portfolio/portfolio-selector"
+import { WarRoomStageNav, type WarRoomStage } from "@/components/portfolio/revamp/war-room-stage-nav"
 import { CombinedPortfolioSimulation } from "@/components/portfolio/risk-sizing/combined-portfolio-simulation"
 import { PortfolioAllocationAdvisor } from "@/components/portfolio/risk-sizing/portfolio-allocation-advisor"
 import { PortfolioCurrentState } from "@/components/portfolio/risk-sizing/portfolio-current-state"
@@ -39,6 +40,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
   const riskSizing = useRiskSizingContext(activePortfolioId)
   const [manualAccountEquityVnd, setManualAccountEquityVnd] = useState<number | null>(null)
   const [plannedTrades, setPlannedTrades] = useState<PlannedTrade[]>([])
+  const [stage, setStage] = useState<WarRoomStage>("capacity")
 
   const portfolioAccountEquityContext = useMemo<AccountEquityContext>(() => {
     const canonical = riskSizing.context
@@ -111,96 +113,109 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
     <div data-planner-workspace className="space-y-5 font-ticker">
       <section className="relative overflow-hidden rounded-[30px] border border-purple-500/20 bg-gradient-to-br from-[#17142a] via-[#10131d] to-[#0a0d13] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.34)] ring-1 ring-white/[0.04] sm:p-6">
         <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-purple-500/10 blur-3xl" />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-purple-200">
-                <Layers3 className="h-3.5 w-3.5" /> Lập kế hoạch phân bổ vốn
-              </span>
-              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-300">
-                {activePortfolio.name}
-              </span>
-              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-400">
-                {positions.length} khoản đang nắm giữ
-              </span>
+        <div className="relative space-y-5">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-purple-200">
+                  <Layers3 className="h-3.5 w-3.5" /> War Room · Lập kế hoạch phân bổ vốn
+                </span>
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-300">
+                  {activePortfolio.name}
+                </span>
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-400">
+                  {positions.length} khoản đang nắm giữ
+                </span>
+              </div>
+              <h2 className="text-2xl font-black tracking-[-0.025em] text-white sm:text-3xl">Phân bổ vốn &amp; khối lượng giao dịch</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                Đi từng bước từ sức chứa hiện tại đến lệnh dự kiến và mô phỏng sau lệnh. Dữ liệu rủi ro và phép tính vẫn dùng cùng một canonical planning context.
+              </p>
             </div>
-            <h2 className="text-2xl font-black tracking-[-0.025em] text-white sm:text-3xl">Phân bổ vốn &amp; khối lượng giao dịch</h2>
-            <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-slate-400 sm:text-xs">
-              Một không gian chung để xem sức chứa danh mục, tính khối lượng theo mức dừng lỗ và mô phỏng kế hoạch cộng dồn. Dữ liệu rủi ro được dùng chung; mức lỗ dự kiến không bảo đảm mức lỗ thực tế khi khớp lệnh.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">1 · Sức chứa</span>
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">2 · Danh mục hiện tại</span>
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">3 · Khối lượng giao dịch</span>
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-1.5">4 · Mô phỏng</span>
+
+            <div className="grid w-full gap-2 sm:grid-cols-3 xl:w-auto xl:min-w-[520px]">
+              <HeaderMetric label="Vốn tài khoản" value={formatShortVnd(effectiveAccountEquityContext.valueVnd)} />
+              <HeaderMetric label="Tiền mặt ước tính" value={formatShortVnd(allocationSnapshot.estimatedAvailableCashVnd)} emphasis />
+              <HeaderMetric label="Lệnh dự kiến" value={`${plannedTrades.length} lệnh`} />
             </div>
           </div>
 
-          <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:min-w-[360px]">
-            <HeaderMetric label="Vốn tài khoản" value={formatShortVnd(effectiveAccountEquityContext.valueVnd)} />
-            <HeaderMetric label="Tiền mặt ước tính" value={formatShortVnd(allocationSnapshot.estimatedAvailableCashVnd)} emphasis />
-          </div>
+          <WarRoomStageNav stage={stage} onStageChange={setStage} />
         </div>
       </section>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <PortfolioAllocationAdvisor
-          allocationSnapshot={allocationSnapshot}
-          portfolioAccountEquityContext={portfolioAccountEquityContext}
-          effectiveAccountEquityContext={effectiveAccountEquityContext}
-          manualAccountEquityVnd={manualAccountEquityVnd}
-          onManualAccountEquityChange={setManualAccountEquityVnd}
-          riskContext={riskSizing.context}
-          loadingRiskContext={riskSizing.loading}
-          riskContextError={riskSizing.error}
-          unknownRiskItemCount={riskCoverage.unknownRiskItemCount}
-        />
-
-        <PortfolioCurrentState
-          positions={positions}
-          currentPrices={currentPrices}
-          allocationSnapshot={allocationSnapshot}
-          riskCoverage={riskCoverage}
-          riskContext={riskSizing.context}
-          loadingRiskContext={riskSizing.loading}
-          riskContextError={riskSizing.error}
-        />
-
-        <section className="min-w-0 overflow-hidden rounded-[28px] border border-amber-500/15 bg-gradient-to-b from-[#111018] to-[#0a0d13] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.035] sm:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
-            <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400/70">Tính khối lượng vị thế</p>
-              <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-200 sm:text-base">
-                <Scale className="h-4 w-4" /> 3. Tư vấn khối lượng giao dịch
-              </h3>
-            </div>
-            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">Theo từng giao dịch</span>
+        {stage === "capacity" && (
+          <div className="lg:col-span-2">
+            <PortfolioAllocationAdvisor
+              allocationSnapshot={allocationSnapshot}
+              portfolioAccountEquityContext={portfolioAccountEquityContext}
+              effectiveAccountEquityContext={effectiveAccountEquityContext}
+              manualAccountEquityVnd={manualAccountEquityVnd}
+              onManualAccountEquityChange={setManualAccountEquityVnd}
+              riskContext={riskSizing.context}
+              loadingRiskContext={riskSizing.loading}
+              riskContextError={riskSizing.error}
+              unknownRiskItemCount={riskCoverage.unknownRiskItemCount}
+            />
           </div>
-          <TradeSizeAdvisor
-            portfolioId={activePortfolioId}
-            accountEquityContext={effectiveAccountEquityContext}
-            riskContext={riskSizing.context}
-            loadingRiskContext={riskSizing.loading}
-            riskContextError={riskSizing.error}
-            plannedTrades={plannedTrades}
-            onUpsertPlannedTrade={(trade) => setPlannedTrades((rows) => upsertPlannedTrade(rows, trade))}
-            onRemovePlannedTrade={(ticker) => setPlannedTrades((rows) => removePlannedTrade(rows, ticker))}
-          />
-        </section>
+        )}
 
-        <CombinedPortfolioSimulation
-          accountEquityVnd={effectiveAccountEquityContext.valueVnd}
-          estimatedAvailableCashVnd={allocationSnapshot.estimatedAvailableCashVnd}
-          stockMarketValueVnd={allocationSnapshot.stockMarketValueVnd}
-          knownActiveRiskVnd={riskSizing.context?.knownActiveRiskVnd ?? null}
-          currentRemainingRiskBudgetVnd={currentRemainingRiskBudgetVnd}
-          plannedTrades={plannedTrades}
-          simulation={combinedSimulation}
-          loadingRiskContext={riskSizing.loading}
-          riskContextAvailable={riskSizing.context != null}
-          riskContextError={riskSizing.error}
-          onClearPlannedTrades={() => setPlannedTrades([])}
-        />
+        {stage === "current" && (
+          <div className="lg:col-span-2">
+            <PortfolioCurrentState
+              positions={positions}
+              currentPrices={currentPrices}
+              allocationSnapshot={allocationSnapshot}
+              riskCoverage={riskCoverage}
+              riskContext={riskSizing.context}
+              loadingRiskContext={riskSizing.loading}
+              riskContextError={riskSizing.error}
+            />
+          </div>
+        )}
+
+        {stage === "sizing" && (
+          <section className="min-w-0 overflow-hidden rounded-[28px] border border-amber-500/15 bg-gradient-to-b from-[#111018] to-[#0a0d13] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.035] sm:p-5 lg:col-span-2">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-400/70">Tính khối lượng vị thế</p>
+                <h3 className="mt-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-200 sm:text-base">
+                  <Scale className="h-4 w-4" /> 3. Tư vấn khối lượng giao dịch
+                </h3>
+              </div>
+              <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">Theo từng giao dịch</span>
+            </div>
+            <TradeSizeAdvisor
+              portfolioId={activePortfolioId}
+              accountEquityContext={effectiveAccountEquityContext}
+              riskContext={riskSizing.context}
+              loadingRiskContext={riskSizing.loading}
+              riskContextError={riskSizing.error}
+              plannedTrades={plannedTrades}
+              onUpsertPlannedTrade={(trade) => setPlannedTrades((rows) => upsertPlannedTrade(rows, trade))}
+              onRemovePlannedTrade={(ticker) => setPlannedTrades((rows) => removePlannedTrade(rows, ticker))}
+            />
+          </section>
+        )}
+
+        {stage === "simulation" && (
+          <div className="lg:col-span-2">
+            <CombinedPortfolioSimulation
+              accountEquityVnd={effectiveAccountEquityContext.valueVnd}
+              estimatedAvailableCashVnd={allocationSnapshot.estimatedAvailableCashVnd}
+              stockMarketValueVnd={allocationSnapshot.stockMarketValueVnd}
+              knownActiveRiskVnd={riskSizing.context?.knownActiveRiskVnd ?? null}
+              currentRemainingRiskBudgetVnd={currentRemainingRiskBudgetVnd}
+              plannedTrades={plannedTrades}
+              simulation={combinedSimulation}
+              loadingRiskContext={riskSizing.loading}
+              riskContextAvailable={riskSizing.context != null}
+              riskContextError={riskSizing.error}
+              onClearPlannedTrades={() => setPlannedTrades([])}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -212,7 +227,7 @@ function HeaderMetric({ label, value, emphasis = false }: { label: string; value
       ? "rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3"
       : "rounded-2xl border border-white/[0.08] bg-black/25 px-4 py-3"}
     >
-      <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span>
+      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span>
       <span className={emphasis ? "mt-1 block text-lg font-black text-emerald-300" : "mt-1 block text-lg font-black text-white"}>{value}</span>
     </div>
   )
