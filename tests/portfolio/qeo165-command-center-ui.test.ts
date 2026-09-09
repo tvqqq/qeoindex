@@ -31,3 +31,17 @@ test("QEO-165 composes the command header, battle HUD and canonical risk strip",
   assert.match(strip, /concentration\.summary\.overallStatus/)
   assert.doesNotMatch(strip, /fetch\s*\(/)
 })
+
+test("QEO-165 restores the pre-revamp Vietnamese portfolio header hierarchy", () => {
+  const header = source("components/portfolio/revamp/portfolio-command-header.tsx")
+
+  assert.match(header, /Nhật ký đầu tư/)
+  assert.match(header, /Quản trị rủi ro/)
+  assert.doesNotMatch(header, /Portfolio Command Center/)
+  assert.match(header, /bg-gradient-to-r from-\[#0d1017\] via-\[#131724\] to-\[#0d1017\]/)
+  assert.match(header, /border-\[#2b2e40\]/)
+  assert.match(header, /font-ticker text-2xl font-extrabold tracking-tight text-white sm:text-3xl/)
+  assert.match(header, /italic bg-gradient-to-r from-purple-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent/)
+  assert.match(header, /\{selector\}/)
+  assert.match(header, /\{actions\}/)
+})
