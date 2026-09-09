@@ -26,7 +26,7 @@ type CashFlowResponse = {
 
 export type AddExternalCashFlowInput = {
   flow_type: ExternalCashFlowRow["flow_type"]
-  signed_amount_vnd: number
+  amount_vnd: number
   effective_at: string
   note?: string | null
 }
