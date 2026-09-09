@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Gauge, ShieldCheck } from "lucide-react"
 
+import { PortfolioConcentrationPanel } from "@/components/portfolio/concentration/portfolio-concentration-panel"
 import type { PortfolioRiskReadModel, RiskRuleEvidence } from "@/modules/portfolio/risk-engine/types"
 import { RiskTermTooltip } from "./risk-term-tooltip"
 import { usePortfolioRiskContext } from "./use-portfolio-risk-context"
@@ -92,6 +93,8 @@ export function PortfolioRiskDashboard({ portfolioId }: { portfolioId: string })
           )}
         </div>
       </div>
+
+      <PortfolioConcentrationPanel concentration={risk.concentration} />
 
       <div className="border-t border-white/[0.07] px-5 py-4">
         <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Rủi ro theo giao dịch đang mở</h3>
