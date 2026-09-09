@@ -1,0 +1,36 @@
+name: QEO-144 Portfolio Risk Acceptance
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "playwright.config.ts"
+      - "tests/browser/**"
+      - "tests/portfolio/qeo144-*.test.ts"
+      - "scripts/portfolio/qeo144-*"
+      - ".github/workflows/qeo144-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo144-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-harness-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-144 acceptance contracts
+        run: pnpm test:qeo144
