@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 const qeo108Migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
-const qeo149Migration = readFileSync(new URL("../supabase/pending-migrations/20260909100000_qeo149_correction_safe_prune.sql", import.meta.url), "utf8")
+const qeo149Migration = readFileSync(new URL("../supabase/migrations/20260909100000_qeo149_correction_safe_prune.sql", import.meta.url), "utf8")
 const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
 const coldStore = readFileSync(new URL("../modules/market/chart-data/cold-store.ts", import.meta.url), "utf8")
 const archiveLifecycle = readFileSync(new URL("../modules/market/chart-data/archive-lifecycle.ts", import.meta.url), "utf8")
@@ -38,7 +38,7 @@ test("QEO-149 stamps only inserted/updated rows and routes mutations through the
   assert.match(qeo149Migration, /return jsonb_build_object\([\s\S]*?'status', 'deferred'/i)
 })
 
-test("QEO-149 hot-store prefers the locked writer but preserves the quarantined-schema fallback", () => {
+test("QEO-149 hot-store prefers the locked writer but preserves the mixed-version fallback", () => {
   assert.match(hotStore, /supabase\.rpc\("qeo_upsert_chart_intraday_bars"/i)
   assert.match(hotStore, /p_rows: chunk/i)
   assert.match(hotStore, /result\.status !== "upserted"/i)
@@ -48,7 +48,7 @@ test("QEO-149 hot-store prefers the locked writer but preserves the quarantined-
   assert.match(hotStore, /upsertHotIntradayBarsLegacy/i)
 })
 
-test("QEO-149 quarantined rollout keeps legacy COLD reads working and disables unsafe prune", () => {
+test("QEO-149 mixed-version rollout keeps legacy COLD reads working and disables unsafe prune", () => {
   assert.match(coldStore, /LEGACY_MANIFEST_SELECT/)
   assert.match(coldStore, /QEO149_MANIFEST_SELECT/)
   assert.match(coldStore, /missingCanonicalContentManifestColumns/i)
