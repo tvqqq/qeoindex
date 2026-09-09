@@ -3,7 +3,7 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
 import type { CanonicalOhlcvBar } from "./contract"
-import { upsertDerivedHourlyBars } from "./derived-hourly-store"
+import { persistVerifiedDerivedHourlyGeneration } from "./derived-hourly-store"
 import { chartHotSessionRetentionCutoff } from "./history-policy"
 import {
   readQeo107TerminalAttemptRanges,
@@ -319,7 +319,7 @@ export async function bootstrapChartIntradayChunk(
       const archived = await coldStorage.archiveVerifiedPartition({ ticker, bars: partition.bars })
       const hourlyBars = aggregateChartTimeframe(partition.bars, "1h")
       if (!hourlyBars.length) throw new Error(`QEO-107 ${ticker} ${partition.tradingDate} produced no deterministic 1h bars`)
-      const cached = await upsertDerivedHourlyBars(supabase, {
+      const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
         ticker,
         bars: hourlyBars,
         sourceManifestId: archived.manifestId,
@@ -327,6 +327,9 @@ export async function bootstrapChartIntradayChunk(
         sourceRangeStart: partition.bars[0].time,
         sourceRangeEnd: partition.bars.at(-1)!.time,
         sourceRawRowCount: archived.rowCount,
+        sourceFormatVersion: 1,
+        sourceCanonicalContentDigest: null,
+        sourceCanonicalContentVersion: null,
         generatedAt: referenceAt.toISOString(),
       })
       archivedPartitions += 1
