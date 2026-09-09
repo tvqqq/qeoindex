@@ -73,9 +73,9 @@ test("missing RAW Daily close makes drawdown insufficient", () => {
 
 test("new current peak recovers drawdown to zero", () => {
   const result = deriveCurrentDrawdown([
-    { key: "baseline", kind: "baseline", equityVnd: 100, status: "complete", missingTickers: [] },
-    { key: "d1", kind: "daily", equityVnd: 80, status: "complete", missingTickers: [] },
-    { key: "current", kind: "current", equityVnd: 120, status: "complete", missingTickers: [] },
+    { key: "baseline", kind: "baseline", equityVnd: 100, externalFlowVnd: 0, status: "complete", missingTickers: [] },
+    { key: "d1", kind: "daily", equityVnd: 80, externalFlowVnd: 0, status: "complete", missingTickers: [] },
+    { key: "current", kind: "current", equityVnd: 120, externalFlowVnd: 0, status: "complete", missingTickers: [] },
   ])
   assert.deepEqual(
     { peak: result.peakEquityVnd, drawdown: result.drawdownVnd, percent: result.drawdownPercent },
