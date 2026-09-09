@@ -34,6 +34,21 @@ test("QEO-174 keeps the strategy-card hero but removes PRICE ARENA", () => {
   assert.doesNotMatch(header, /rarity|legendary|power score/i)
 })
 
+test("QEO-174 renders CARD STATS as a compact flat strip", () => {
+  const header = source("components/stock-detail/stock-company-header.tsx")
+  const stat = source("components/stock-detail/revamp/stock-card-stat.tsx")
+
+  assert.match(header, /grid grid-cols-3/)
+  assert.match(header, /xl:grid-cols-6/)
+  assert.doesNotMatch(header, /Fundamental \+ market snapshot/)
+  assert.doesNotMatch(header, /VND \/ cp|phiên hiện tại/)
+
+  assert.match(stat, /border-l/)
+  assert.match(stat, /py-1\.5/)
+  assert.doesNotMatch(stat, /rounded-2xl|bg-black\/20|group\/stat/)
+  assert.doesNotMatch(stat, /detail\??:|detail,/)
+})
+
 test("QEO-174 expands the compact mini chart while preserving maximize behavior", () => {
   const chartShell = source("components/stock-detail/chart/stock-chart-terminal-shell.module.css")
   const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
