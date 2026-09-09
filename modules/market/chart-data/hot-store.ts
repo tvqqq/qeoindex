@@ -14,6 +14,8 @@ export { proveHotArchivePartitionEligibility, proveHotArchivePartitionsEligibili
 export type { HotArchiveRetentionProof }
 
 const UPSERT_CHUNK_SIZE = 500
+export const CHART_HOT_READ_PAGE_SIZE = 500
+const CHART_HOT_READ_MAX_PAGES = 64
 const ARCHIVE_DISCOVERY_ROWS_PER_PARTITION = 300
 const ARCHIVE_DISCOVERY_MAX_ROWS = 10_000
 
@@ -116,12 +118,20 @@ function partitionFor(ticker: string, epochSeconds: number): HotArchivePartition
 }
 
 export async function readHotIntradayRange(supabase: SupabaseClient, ticker: string, from: number, to: number): Promise<CanonicalOhlcvBar[]> {
-  const { data, error } = await supabase.from("chart_ohlcv_intraday").select("bar_time,open,high,low,close,volume")
-    .eq("ticker", ticker).eq("base_resolution", "1m")
-    .gte("bar_time", new Date(from * 1000).toISOString()).lte("bar_time", new Date(to * 1000).toISOString())
-    .order("bar_time", { ascending: true })
-  if (error) throw new Error(`Chart hot-store read failed: ${error.message}`)
-  return (data || []).map((row) => storedRowToBar(row as Record<string, unknown>)).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
+  if (to < from) return []
+  const bars: CanonicalOhlcvBar[] = []
+  for (let page = 0, offset = 0; page < CHART_HOT_READ_MAX_PAGES; page += 1, offset += CHART_HOT_READ_PAGE_SIZE) {
+    const { data, error } = await supabase.from("chart_ohlcv_intraday").select("bar_time,open,high,low,close,volume")
+      .eq("ticker", ticker).eq("base_resolution", "1m")
+      .gte("bar_time", new Date(from * 1000).toISOString()).lte("bar_time", new Date(to * 1000).toISOString())
+      .order("bar_time", { ascending: true })
+      .range(offset, offset + CHART_HOT_READ_PAGE_SIZE - 1)
+    if (error) throw new Error(`Chart hot-store read failed: ${error.message}`)
+    const rows = (data || []) as Array<Record<string, unknown>>
+    bars.push(...rows.map(storedRowToBar).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar)))
+    if (rows.length < CHART_HOT_READ_PAGE_SIZE) return bars
+  }
+  throw new Error(`Chart hot-store read exceeded bounded pagination: ${CHART_HOT_READ_MAX_PAGES} pages`)
 }
 
 function storedRowToSnapshot(row: Record<string, unknown>): HotIntradaySnapshot | null {
