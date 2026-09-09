@@ -21,7 +21,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [chartNavigationTimeframe, setChartNavigationTimeframe] = useState<ChartTimeframeNavigationRequest | null>(null)
 
-  // In-memory cache for loaded tickers to make back-and-forth switching instantaneous
   const cacheRef = useRef<Record<string, StockDetailData>>({
     [initialData.ticker.toUpperCase()]: initialData,
   })
@@ -52,27 +51,22 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
         setChartNavigationTimeframe(null)
       }
 
-      // Abort any ongoing request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
 
-      // Update URL & document title without full page reload
       window.history.pushState(null, "", `/insights/${sym.toLowerCase()}`)
       document.title = `${sym} — Chi tiết Cổ phiếu — QeoIndex`
       setActiveTicker(sym)
 
-      // Scroll center column to top on new ticker selection
       centerColumnRef.current?.scrollTo({ top: 0, behavior: "smooth" })
 
-      // 1. Instant switch if data is already in client cache
       if (cacheRef.current[sym]) {
         setCurrentData(cacheRef.current[sym])
         setIsTransitioning(false)
         return
       }
 
-      // 2. Fetch from API with SmoothUI loading transition
       setIsTransitioning(true)
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -103,7 +97,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
     [activeTicker],
   )
 
-  // Sync state if user clicks browser Back / Forward buttons
   useEffect(() => {
     const handlePopState = () => {
       const parts = window.location.pathname.split("/").filter(Boolean)
@@ -156,13 +149,13 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   }, [activeTicker, currentData.watchlist, handleSelectTicker, isChartMaximized])
 
   return (
-    <div className="min-h-screen w-full bg-[#05070a] text-slate-200 lg:h-screen lg:overflow-hidden flex flex-col">
-      {/* Top Navigation Bar */}
+    <div
+      data-qeo174-workstation
+      className="min-h-screen w-full bg-[radial-gradient(circle_at_50%_-18%,rgba(99,102,241,0.14),transparent_34%),radial-gradient(circle_at_8%_42%,rgba(34,211,238,0.055),transparent_26%),linear-gradient(180deg,#05070a_0%,#03050a_100%)] text-slate-200 lg:h-screen lg:overflow-hidden flex flex-col"
+    >
       <TopNav />
 
-      {/* Main Full-Width Workstation Container */}
       <main className="w-full flex-1 px-2 py-2 sm:px-3 lg:px-4 2xl:px-5 lg:overflow-hidden min-h-0">
-        {/* 3 Columns Master Layout (or 2 columns when Chart is Maximized) */}
         <div
           className={cn(
             "grid grid-cols-1 gap-2.5 h-full lg:overflow-hidden items-stretch",
@@ -171,11 +164,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               : "lg:grid-cols-[288px_minmax(0,1fr)_250px] xl:grid-cols-[318px_minmax(0,1fr)_260px] 2xl:grid-cols-[340px_minmax(0,1fr)_280px]",
           )}
         >
-          {/* ========================================================= */}
-          {/* COLUMN 1: BÊN TRÁI (~25% WIDTH) - CỐ ĐỊNH                 */}
-          {/* AI Council tổng quan & Quick chatbox với AI               */}
-          {/* Ẩn khi phóng to chart                                      */}
-          {/* ========================================================= */}
           {!isChartMaximized && (
             <aside
               className={cn(
@@ -187,10 +175,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
             </aside>
           )}
 
-          {/* ========================================================= */}
-          {/* COLUMN 2: GIỮA - SCROLL ĐƯỢC KHI BÌNH THƯỜNG / H-FULL KHI MAXIMIZED */}
-          {/* Thông tin công ty, Chart & Tabs                           */}
-          {/* ========================================================= */}
           <section
             ref={centerColumnRef}
             className={cn(
@@ -201,7 +185,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
             )}
           >
-            {/* SmoothUI Floating Loading Indicator (absolute positioned to avoid top gap) */}
             <div
               className={cn(
                 "pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-50 transition-all duration-300",
@@ -213,10 +196,8 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               </div>
             </div>
 
-            {/* Thông tin công ty & Giá realtime (Chỉ hiện khi ở chế độ xem chuẩn) */}
             {!isChartMaximized && <StockCompanyHeader data={currentData} />}
 
-            {/* TradingView Lightweight Candlestick Chart */}
             <StockTradingViewChartData
               ticker={currentData.ticker}
               seedDailyBars={currentData.bars}
@@ -228,15 +209,9 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               onTimeframeChange={handleChartTimeframeChange}
             />
 
-            {/* 6 Tabs Panel: Tổng quan, DN, TA, AI Council (Chỉ hiện khi ở chế độ xem chuẩn) */}
             {!isChartMaximized && <StockTabsPanel data={currentData} />}
           </section>
 
-          {/* ========================================================= */}
-          {/* COLUMN 3: BÊN PHẢI (~15% WIDTH) - CỐ ĐỊNH                 */}
-          {/* Watchlist cổ phiếu (Cố định, search & filter nội bộ)     */}
-          {/* Luôn hiển thị và có thể chuyển đổi cp trực tiếp           */}
-          {/* ========================================================= */}
           <aside className="w-full lg:h-full lg:overflow-hidden">
             <StockWatchlistSidebar
               currentTicker={activeTicker}

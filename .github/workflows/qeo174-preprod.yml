@@ -1,0 +1,35 @@
+name: QEO-174 Stock Strategy Card
+
+on:
+  pull_request:
+    paths:
+      - "components/stock-detail/**"
+      - "tests/stock-detail/qeo174-strategy-card-ui.test.ts"
+      - "docs/superpowers/specs/2026-09-09-qeo-174-stock-strategy-card-design.md"
+      - "docs/superpowers/plans/2026-09-09-qeo-174-stock-strategy-card.md"
+      - ".github/workflows/qeo174-preprod.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  qeo174-ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-174 RED/GREEN UI contract
+        run: node --test tests/stock-detail/qeo174-strategy-card-ui.test.ts
+      - name: Existing stock identity regression
+        run: node --test tests/stock-identity-header.test.ts
+      - name: Typecheck
+        run: pnpm typecheck
