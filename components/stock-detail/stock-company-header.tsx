@@ -160,19 +160,25 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
             </div>
           </div>
 
-          <div className="mt-5 border-t border-white/[0.06] pt-4">
-            <div className="mb-2.5 flex items-center justify-between gap-3">
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">CARD STATS</span>
-              <span className="text-[9px] text-slate-600">Fundamental + market snapshot</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-              <StockCardStat label="P/E" value={pe != null && Number.isFinite(pe) ? `${pe.toFixed(1)}x` : "—"} />
-              <StockCardStat label="P/B" value={pb != null && Number.isFinite(pb) ? `${pb.toFixed(2)}x` : "—"} />
-              <StockCardStat label="ROE" value={roe != null && Number.isFinite(roe) ? `${roe.toFixed(1)}%` : "—"} />
-              <StockCardStat label="EPS" value={eps != null && Number.isFinite(eps) ? eps.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) : "—"} detail="VND / cp" />
-              <StockCardStat label="Khối lượng" value={formatCompactNumber(volume)} detail="phiên hiện tại" />
-              <StockCardStat label="Vốn hóa" value={marketCapLabel} />
+          <div className="mt-4 border-t border-white/[0.06] pt-2.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="hidden shrink-0 text-[8px] font-black uppercase tracking-[0.2em] text-slate-500 xl:block">CARD STATS</span>
+              <div className="grid grid-cols-3 min-w-0 flex-1 gap-y-1 xl:grid-cols-6">
+                <StockCardStat
+                  label="P/E"
+                  value={pe != null && Number.isFinite(pe) ? `${pe.toFixed(1)}x` : "—"}
+                  className="border-l-0 pl-0 xl:border-l xl:pl-3"
+                />
+                <StockCardStat label="P/B" value={pb != null && Number.isFinite(pb) ? `${pb.toFixed(2)}x` : "—"} />
+                <StockCardStat label="ROE" value={roe != null && Number.isFinite(roe) ? `${roe.toFixed(1)}%` : "—"} />
+                <StockCardStat
+                  label="EPS"
+                  value={eps != null && Number.isFinite(eps) ? eps.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) : "—"}
+                  className="border-l-0 pl-0 xl:border-l xl:pl-3"
+                />
+                <StockCardStat label="Khối lượng" value={formatCompactNumber(volume)} />
+                <StockCardStat label="Vốn hóa" value={marketCapLabel} />
+              </div>
             </div>
           </div>
         </div>
