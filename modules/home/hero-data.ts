@@ -240,20 +240,21 @@ export function deriveHomeMarketHeadline(market: HomeHeroMarket): string {
   const risk = (market.riskLabel ?? "").toLowerCase()
   const sentiment = (market.sentimentLabel ?? "").toLowerCase()
   const breadthPositive = market.advances != null && market.declines != null && market.advances > market.declines
+  const constructiveSentiment = /positive|bull|tích cực|constructive|khả quan|tham lam/.test(sentiment)
 
   if (/high|cao|elevated|risk[- ]?off|nguy cơ/.test(risk)) {
-    return "Rủi ro đang cao,\nưu tiên bảo toàn vốn"
+    return "Rủi ro đang cao\nưu tiên bảo toàn vốn"
   }
-  if (breadthPositive && /positive|bull|tích cực|constructive|khả quan/.test(sentiment) && !/high|cao/.test(risk)) {
-    return "Thị trường tích cực,\nđộ rộng đang mở rộng"
+  if (breadthPositive && constructiveSentiment) {
+    return "Thị trường tích cực\nđộ rộng đang mở rộng"
   }
-  if (/positive|bull|tích cực|constructive|khả quan/.test(sentiment)) {
-    return "Dòng tiền cải thiện,\nưu tiên cổ phiếu dẫn dắt"
+  if (constructiveSentiment) {
+    return "Dòng tiền cải thiện\nưu tiên cổ phiếu dẫn dắt"
   }
-  if (/moderate|trung bình|caution|thận trọng/.test(risk)) {
-    return "Thị trường thận trọng,\nchờ xác nhận rõ hơn"
+  if (/moderate|trung bình|trung tính|caution|thận trọng/.test(risk) || /sợ hãi|fear/.test(sentiment)) {
+    return "Thị trường thận trọng\nchờ xác nhận rõ hơn"
   }
-  return "Theo dõi thị trường,\nquản trị danh mục"
+  return "Theo dõi thị trường\nquản trị danh mục"
 }
 
 export async function getHomeHeroData(context: ServerAuthContext): Promise<HomeHeroData> {
