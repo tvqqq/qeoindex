@@ -303,7 +303,7 @@ export function AddTransactionDialog({
       return
     }
     const parsedRate = parseFloat(dividendRate)
-    if (dividendAction !== "dividend_stock" && (Number.isNaN(parsedRate) || parsedRate < 0)) {
+    if (Number.isNaN(parsedRate) || parsedRate < 0) {
       setErrorMsg("Giá trị cổ tức không hợp lệ.")
       return
     }
