@@ -67,6 +67,11 @@ export function rewriteDnseBoardSubscriptionMessage(data: unknown): unknown {
     const names = new Set(rows.map((row) => row.name))
     if (!LEGACY_BOARD_STOCK_CHANNELS.every((name) => names.has(name))) return data
 
+    // The transport guard exists only for the canonical Market Board socket.
+    // Orderbook popups intentionally subscribe to the same four core feeds plus
+    // tick_extra, but they do not subscribe to market_index.* channels.
+    if (!rows.some((row) => row.name.startsWith("market_index."))) return data
+
     const tick = rows.find((row) => row.name === "tick.G1.json")
     if (!tick || !Array.isArray(tick.symbols)) return data
 
