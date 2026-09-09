@@ -66,6 +66,11 @@ test("QEO-162 homepage refreshes VNINDEX, replaces the CTA with a canonical stoc
   assert.match(hero, /Bạn muốn hỏi cổ phiếu nào\?/, "center hero should become a stock question entry point")
   assert.match(hero, /<HomeStockSearch/, "hero should mount the canonical stock finder")
   assert.doesNotMatch(hero, /Xem phân tích thị trường|Lối tắt homepage/, "old CTA and quick-link row should be removed from the visible hero")
+  assert.doesNotMatch(
+    hero,
+    /aria-labelledby="home-market-pulse-title"[\s\S]{0,220}overflow-hidden/,
+    "hero must not vertically clip the absolutely positioned stock dropdown",
+  )
 
   assert.match(stockSearch, /^"use client"/, "keyboard combobox behavior should stay inside a focused client component")
   assert.match(stockSearch, /role="combobox"/)
