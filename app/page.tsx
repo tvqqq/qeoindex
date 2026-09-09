@@ -29,6 +29,10 @@ type HomeMenuItem = {
   miniIcons: readonly [LucideIcon, LucideIcon, LucideIcon]
   borderClassName: string
   glowClassName: string
+  miniIconAccentClassName: string
+  mainIconGradientClassName: string
+  mainIconBorderClassName: string
+  mainIconShadowClassName: string
 }
 
 const HOME_MENU_ITEMS: HomeMenuItem[] = [
@@ -40,6 +44,10 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     miniIcons: [BarChart3, LineChart, Activity],
     borderClassName: "hover:border-emerald-400/35",
     glowClassName: "from-emerald-400/12 via-cyan-400/5 to-transparent",
+    miniIconAccentClassName: "text-[#b7f64d]",
+    mainIconGradientClassName: "from-[#e3f7a6] via-[#b7e54d] to-[#7bc20c]",
+    mainIconBorderClassName: "border-[#9fd32f]/35",
+    mainIconShadowClassName: "group-hover/card:shadow-[0_26px_48px_-22px_rgba(132,204,22,0.65)]",
   },
   {
     href: "/portfolio",
@@ -49,6 +57,10 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     miniIcons: [TrendingUp, CandlestickChart, BarChart3],
     borderClassName: "hover:border-violet-400/35",
     glowClassName: "from-violet-400/12 via-fuchsia-400/5 to-transparent",
+    miniIconAccentClassName: "text-[#c084fc]",
+    mainIconGradientClassName: "from-[#f3e8ff] via-[#c084fc] to-[#8b5cf6]",
+    mainIconBorderClassName: "border-[#c084fc]/35",
+    mainIconShadowClassName: "group-hover/card:shadow-[0_26px_48px_-22px_rgba(168,85,247,0.62)]",
   },
   {
     href: "/insights",
@@ -58,6 +70,10 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     miniIcons: [CandlestickChart, Radar, TrendingUp],
     borderClassName: "hover:border-cyan-400/35",
     glowClassName: "from-cyan-400/12 via-emerald-400/5 to-transparent",
+    miniIconAccentClassName: "text-[#67e8f9]",
+    mainIconGradientClassName: "from-[#cffafe] via-[#67e8f9] to-[#06b6d4]",
+    mainIconBorderClassName: "border-[#67e8f9]/35",
+    mainIconShadowClassName: "group-hover/card:shadow-[0_26px_48px_-22px_rgba(6,182,212,0.62)]",
   },
   {
     href: "/reports",
@@ -67,11 +83,15 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     miniIcons: [BookOpenText, SearchCheck, BarChart3],
     borderClassName: "hover:border-amber-400/35",
     glowClassName: "from-amber-400/12 via-emerald-400/5 to-transparent",
+    miniIconAccentClassName: "text-[#fbbf24]",
+    mainIconGradientClassName: "from-[#fef3c7] via-[#fbbf24] to-[#f59e0b]",
+    mainIconBorderClassName: "border-[#fbbf24]/35",
+    mainIconShadowClassName: "group-hover/card:shadow-[0_26px_48px_-22px_rgba(245,158,11,0.62)]",
   },
 ]
 
 const MINI_ICON_CLASS =
-  "flex h-10 w-10 scale-[0.78] items-center justify-center rounded-xl border border-[#363b44] bg-[#1b1e24] text-[#b7f64d] opacity-0 shadow-[0_16px_30px_-16px_rgba(0,0,0,0.95)] transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-100 group-hover/card:opacity-100 motion-reduce:transform-none motion-reduce:transition-none"
+  "flex h-10 w-10 scale-[0.78] items-center justify-center rounded-xl border border-[#363b44] bg-[#1b1e24] opacity-0 shadow-[0_16px_30px_-16px_rgba(0,0,0,0.95)] transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-100 group-hover/card:opacity-100 motion-reduce:transform-none motion-reduce:transition-none"
 
 function MenuCard({ item }: { item: HomeMenuItem }) {
   const Icon = item.icon
@@ -95,7 +115,7 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
             className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
             aria-hidden="true"
           >
-            <div className={`${MINI_ICON_CLASS} group-hover/card:-translate-x-[3.625rem] group-hover/card:-translate-y-[1.5rem] group-hover/card:-rotate-[12deg]`}>
+            <div className={`${MINI_ICON_CLASS} ${item.miniIconAccentClassName} group-hover/card:-translate-x-[3.625rem] group-hover/card:-translate-y-[1.5rem] group-hover/card:-rotate-[12deg]`}>
               <MiniOne className="h-5 w-5" strokeWidth={2.2} />
             </div>
           </div>
@@ -105,7 +125,7 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
             className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
             aria-hidden="true"
           >
-            <div className={`${MINI_ICON_CLASS} group-hover/card:-translate-y-[3.75rem]`}>
+            <div className={`${MINI_ICON_CLASS} ${item.miniIconAccentClassName} group-hover/card:-translate-y-[3.75rem]`}>
               <MiniTwo className="h-5 w-5" strokeWidth={2.2} />
             </div>
           </div>
@@ -115,13 +135,18 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
             className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
             aria-hidden="true"
           >
-            <div className={`${MINI_ICON_CLASS} group-hover/card:translate-x-[3.625rem] group-hover/card:-translate-y-[1.5rem] group-hover/card:rotate-[12deg]`}>
+            <div className={`${MINI_ICON_CLASS} ${item.miniIconAccentClassName} group-hover/card:translate-x-[3.625rem] group-hover/card:-translate-y-[1.5rem] group-hover/card:rotate-[12deg]`}>
               <MiniThree className="h-5 w-5" strokeWidth={2.2} />
             </div>
           </div>
 
           <div
-            className="relative z-10 flex h-[86px] w-[86px] items-center justify-center rounded-[24px] border border-[#9fd32f]/35 bg-gradient-to-br from-[#e3f7a6] via-[#b7e54d] to-[#7bc20c] text-[#111317] shadow-[0_20px_38px_-22px_rgba(0,0,0,0.95)] transition-[transform,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-[1.12] group-hover/card:shadow-[0_26px_48px_-22px_rgba(132,204,22,0.65)] motion-reduce:transform-none motion-reduce:transition-none"
+            className={[
+              "relative z-10 flex h-[86px] w-[86px] items-center justify-center rounded-[24px] border bg-gradient-to-br text-[#111317] shadow-[0_20px_38px_-22px_rgba(0,0,0,0.95)] transition-[transform,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-[1.12] motion-reduce:transform-none motion-reduce:transition-none",
+              item.mainIconBorderClassName,
+              item.mainIconGradientClassName,
+              item.mainIconShadowClassName,
+            ].join(" ")}
           >
             <Icon className="h-10 w-10" strokeWidth={2} />
           </div>
