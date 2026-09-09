@@ -6,6 +6,7 @@ import {
   ingestClosedIntradayRange,
   readChartIntradayMaintenanceReport,
   recordQeo150CapacityStop,
+  recordQeo150OutcomeEvidence,
   type Qeo150FreshnessRow,
 } from "./maintenance"
 import {
@@ -34,6 +35,7 @@ export interface Qeo150MaintenanceContext {
   universeSourceAsOfDate: string
   selectedCount: number
   expectedSession: string
+  slaDeadline: string
   stocks: Qeo150MaintenanceStock[]
   initialCapacity: ChartStorageCapacity
   initialRows: Qeo150FreshnessRow[]
@@ -58,6 +60,12 @@ export interface Qeo150MaintenanceCapacityGate {
   reason: string | null
 }
 
+export interface Qeo150MaintenanceExecutionGate {
+  checkedAt: string
+  slaDeadline: string
+  deadlineExceeded: boolean
+}
+
 export interface Qeo150MaintenanceSummary {
   dispatchId: string
   startedAt: string
@@ -80,6 +88,7 @@ export interface Qeo150MaintenanceSummary {
     unknown: number
     retryableFailure: number
     capacityStop: number
+    slaTimeout: number
   }
   capacity: {
     initialLevel: ChartStorageCapacity["level"]
@@ -135,6 +144,8 @@ export async function startChartIntradayMaintenanceStep(
     throw new Error(`QEO-150 requires canonical ${CANONICAL_QEO150_UNIVERSE_SIZE} universe, found ${universe.selectedCount}`)
   }
   const expectedSession = expectedCompletedVietnamSession(startedAt)
+  const sessionRange = qeo150SessionRange(expectedSession)
+  const slaDeadline = new Date(sessionRange.to * 1000 + QEO150_RECONCILIATION_SLA_MINUTES * 60_000).toISOString()
   const stocks = universe.stocks.map((stock) => ({ ticker: stock.ticker, rank: stock.rank, exchange: stock.exchange }))
   const tickers = stocks.map((stock) => stock.ticker)
   const [initialRows, initialCapacity] = await Promise.all([
@@ -150,9 +161,25 @@ export async function startChartIntradayMaintenanceStep(
     universeSourceAsOfDate: universe.sourceAsOfDate,
     selectedCount: stocks.length,
     expectedSession,
+    slaDeadline,
     stocks,
     initialCapacity,
     initialRows,
+  }
+}
+
+export async function checkChartIntradayMaintenanceExecutionGateStep(input: {
+  slaDeadline: string
+}): Promise<Qeo150MaintenanceExecutionGate> {
+  "use step"
+
+  const slaDeadline = new Date(input.slaDeadline)
+  if (!Number.isFinite(slaDeadline.getTime())) throw new Error("QEO-150 execution gate requires a valid slaDeadline")
+  const checkedAt = new Date()
+  return {
+    checkedAt: checkedAt.toISOString(),
+    slaDeadline: slaDeadline.toISOString(),
+    deadlineExceeded: checkedAt.getTime() >= slaDeadline.getTime(),
   }
 }
 
@@ -188,9 +215,33 @@ export async function runChartIntradayMaintenanceTickerStep(input: {
     dispatchId: input.dispatchId,
   }))[0]
   if (!before) throw new Error(`QEO-150 missing pre-ingestion freshness row for ${input.ticker}`)
-  if (before.current) return resultFromRow(before, "already_fresh", { attempts: input.attempt })
-  if (before.evidenceCategory === "no_trade") return resultFromRow(before, "no_trade", { attempts: input.attempt })
-  if (before.evidenceCategory === "suspension") return resultFromRow(before, "suspension", { attempts: input.attempt })
+  if (before.current) {
+    await recordQeo150OutcomeEvidence(supabase, {
+      ticker: before.ticker,
+      expectedSession: input.expectedSession,
+      dispatchId: input.dispatchId,
+      outcome: "already_fresh",
+    })
+    return resultFromRow(before, "already_fresh", { attempts: input.attempt })
+  }
+  if (before.evidenceCategory === "no_trade") {
+    await recordQeo150OutcomeEvidence(supabase, {
+      ticker: before.ticker,
+      expectedSession: input.expectedSession,
+      dispatchId: input.dispatchId,
+      outcome: "no_trade",
+    })
+    return resultFromRow(before, "no_trade", { attempts: input.attempt })
+  }
+  if (before.evidenceCategory === "suspension") {
+    await recordQeo150OutcomeEvidence(supabase, {
+      ticker: before.ticker,
+      expectedSession: input.expectedSession,
+      dispatchId: input.dispatchId,
+      outcome: "suspension",
+    })
+    return resultFromRow(before, "suspension", { attempts: input.attempt })
+  }
 
   const ingested = await ingestClosedIntradayRange(supabase, {
     ticker: input.ticker,
@@ -213,6 +264,15 @@ export async function runChartIntradayMaintenanceTickerStep(input: {
   if ((ingested.outcome === "ingested" || ingested.outcome === "reused") && !after.current) {
     outcome = after.evidenceCategory === "provider_gap" ? "provider_gap" : "unknown"
     error = error ?? `QEO-150 ${input.ticker} persisted/reused provider evidence but actual HOT session is ${after.actualSession ?? "missing"}, expected ${input.expectedSession}`
+    await recordQeo150OutcomeEvidence(supabase, {
+      ticker: after.ticker,
+      expectedSession: input.expectedSession,
+      dispatchId: input.dispatchId,
+      outcome,
+      error,
+      provider: ingested.provider,
+      rowCount: ingested.rowCount,
+    })
   }
   return resultFromRow(after, outcome, {
     attempts: input.attempt,
@@ -250,6 +310,37 @@ export async function recordChartIntradayMaintenanceCapacityStopStep(input: {
   return rows.map((row) => resultFromRow(row, "capacity_stop", { attempts: 0, error: input.reason }))
 }
 
+export async function recordChartIntradayMaintenanceFailureStopStep(input: {
+  tickers: string[]
+  expectedSession: string
+  dispatchId: string
+  referenceAt: string
+  reason: string
+}): Promise<Qeo150MaintenanceTickerResult[]> {
+  "use step"
+
+  const referenceAt = new Date(input.referenceAt)
+  if (!Number.isFinite(referenceAt.getTime())) throw new Error("QEO-150 failure stop requires a valid referenceAt timestamp")
+  const supabase = requireSupabase()
+  await Promise.all(input.tickers.map((ticker) => recordQeo150OutcomeEvidence(supabase, {
+    ticker,
+    expectedSession: input.expectedSession,
+    dispatchId: input.dispatchId,
+    outcome: "sla_timeout",
+    error: input.reason,
+    failureCodes: ["QEO-150:SLA_TIMEOUT"],
+  })))
+  const overrides = new Map(input.tickers.map((ticker) => [ticker, "sla_timeout" as const]))
+  const rows = await readChartIntradayMaintenanceReport(supabase, {
+    tickers: input.tickers,
+    referenceAt,
+    expectedSession: input.expectedSession,
+    outcomeOverrides: overrides,
+    dispatchId: input.dispatchId,
+  })
+  return rows.map((row) => resultFromRow(row, "sla_timeout", { attempts: 0, error: input.reason }))
+}
+
 export async function finishChartIntradayMaintenanceStep(input: {
   context: Qeo150MaintenanceContext
   results: Qeo150MaintenanceTickerResult[]
@@ -273,8 +364,7 @@ export async function finishChartIntradayMaintenanceStep(input: {
     getCanonicalUniverseVersion(),
   ])
   const finishedAt = new Date()
-  const sessionRange = qeo150SessionRange(input.context.expectedSession)
-  const slaDeadline = new Date(sessionRange.to * 1000 + QEO150_RECONCILIATION_SLA_MINUTES * 60_000)
+  const slaDeadline = new Date(input.context.slaDeadline)
   const accountedTickers = rows.filter((row) => resultByTicker.has(row.ticker)).length
   const structurallyComplete = rows.length === input.context.selectedCount && accountedTickers === input.context.selectedCount
   const slaMet = structurallyComplete && finishedAt.getTime() <= slaDeadline.getTime()
@@ -302,6 +392,7 @@ export async function finishChartIntradayMaintenanceStep(input: {
       unknown: rows.filter((row) => row.evidenceCategory === "unknown").length,
       retryableFailure: input.results.filter((result) => result.outcome === "retryable_failure").length,
       capacityStop: input.results.filter((result) => result.outcome === "capacity_stop").length,
+      slaTimeout: input.results.filter((result) => result.outcome === "sla_timeout").length,
     },
     capacity: {
       initialLevel: input.context.initialCapacity.level,
