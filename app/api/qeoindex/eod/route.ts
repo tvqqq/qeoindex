@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
@@ -7,9 +8,11 @@ import { runChartIntradayArchiveLifecycle } from "@/modules/market/chart-data/ar
 import { QEO107_HOT_RETENTION_SESSIONS, qeo107BootstrapTarget, readChartIntradayCoverageReport } from "@/modules/market/chart-data/bootstrap"
 import { QEO107_STAGED_MAX_TICKERS } from "@/modules/market/chart-data/bootstrap-workflow-steps"
 import { runChartDerivedHourlyRecovery } from "@/modules/market/chart-data/derived-hourly-recovery"
+import { readChartIntradayMaintenanceReport } from "@/modules/market/chart-data/maintenance"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { chartIntradayBootstrapWorkflow } from "@/workflows/chart-intraday-bootstrap"
+import { chartIntradayMaintenanceWorkflow } from "@/workflows/chart-intraday-maintenance"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"
@@ -118,6 +121,46 @@ async function chartCoverage(request: NextRequest) {
   }
 }
 
+async function chartMaintenanceCoverage(request: NextRequest) {
+  if (request.method !== "GET") {
+    return NextResponse.json({ ok: false, error: "Chart maintenance coverage requires GET." }, { status: 405, headers: { Allow: "GET" } })
+  }
+  const supabase = getSupabaseServerClient()
+  if (!supabase) return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
+  try {
+    const referenceAt = new Date()
+    const universe = await getCanonicalUniverse()
+    const rows = await readChartIntradayMaintenanceReport(supabase, {
+      tickers: universe.stocks.map((stock) => stock.ticker),
+      referenceAt,
+    })
+    return NextResponse.json({
+      ok: rows.length === universe.selectedCount,
+      mode: "chart-maintenance-coverage",
+      universe: {
+        runId: universe.runId,
+        sourceAsOfDate: universe.sourceAsOfDate,
+        selectedCount: universe.selectedCount,
+      },
+      expectedSession: rows[0]?.expectedSession ?? null,
+      summary: {
+        tickerCount: rows.length,
+        verifiedCurrent: rows.filter((row) => row.current).length,
+        noTrade: rows.filter((row) => row.evidenceCategory === "no_trade").length,
+        suspension: rows.filter((row) => row.evidenceCategory === "suspension").length,
+        providerGap: rows.filter((row) => row.evidenceCategory === "provider_gap").length,
+        failure: rows.filter((row) => row.evidenceCategory === "failure").length,
+        unknown: rows.filter((row) => row.evidenceCategory === "unknown").length,
+      },
+      rows,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await notifyOpsError({ source: "qeo150-chart-maintenance-coverage", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+    return NextResponse.json({ ok: false, mode: "chart-maintenance-coverage", error: message }, { status: 500 })
+  }
+}
+
 async function trigger(request: NextRequest) {
   if (!(await isQeoIndexSchedulerAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
@@ -125,6 +168,30 @@ async function trigger(request: NextRequest) {
 
   const mode = request.nextUrl.searchParams.get("mode")?.trim() || ""
   if (mode === "chart-coverage") return chartCoverage(request)
+  if (mode === "chart-maintenance-coverage") return chartMaintenanceCoverage(request)
+
+  if (mode === "chart-maintenance") {
+    if (request.method !== "POST") {
+      return NextResponse.json({ ok: false, error: "Chart maintenance requires POST." }, { status: 405, headers: { Allow: "POST" } })
+    }
+    try {
+      const startedAt = new Date().toISOString()
+      const dispatchId = `qeo150-${randomUUID()}`
+      const run = await start(chartIntradayMaintenanceWorkflow, [startedAt, dispatchId])
+      return NextResponse.json({
+        ok: true,
+        mode,
+        scope: "canonical_200",
+        dispatchId,
+        workflowRunId: run.runId,
+        startedAt,
+      }, { status: 202 })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await notifyOpsError({ source: "qeo150-chart-maintenance", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
+      return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
+    }
+  }
 
   if (mode === "chart-bootstrap") {
     if (request.method !== "POST") {
