@@ -179,6 +179,12 @@ export function validateMoneyManagementPlan(input: MoneyManagementPlanInput): Mo
   if (input.diversificationRules.concentrationWarningPercent != null) {
     assertPercent(input.diversificationRules.concentrationWarningPercent, "Concentration warning")
   }
+  if (input.diversificationRules.maxTickerConcentrationPercent != null) {
+    assertPercent(input.diversificationRules.maxTickerConcentrationPercent, "Maximum ticker concentration")
+  }
+  if (input.diversificationRules.maxConcurrentOpenPositions != null) {
+    assertPositiveInteger(input.diversificationRules.maxConcurrentOpenPositions, "Maximum concurrent open positions")
+  }
 
   validateRiskCapitalPolicy(input.riskCapitalPolicy)
 
