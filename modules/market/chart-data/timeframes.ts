@@ -215,6 +215,23 @@ export function overlayHourlyHotOnDerived(input: {
   }
 }
 
+export function hourlyCoverageIsComplete(input: {
+  barsPresent: boolean
+  oldRequested: boolean
+  oldCoverageProven: boolean
+  recentCoverageComplete: boolean
+  hasGaps: boolean
+  hasIntegrityIssues: boolean
+  hasErrors: boolean
+}) {
+  return input.barsPresent
+    && (!input.oldRequested || input.oldCoverageProven)
+    && input.recentCoverageComplete
+    && !input.hasGaps
+    && !input.hasIntegrityIssues
+    && !input.hasErrors
+}
+
 export function sourceRangeForResolution(
   resolution: ChartResolution,
   from: number,
