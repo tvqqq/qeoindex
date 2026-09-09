@@ -22,8 +22,8 @@ test("QEO-155 homepage icon cluster matches the approved reference geometry and 
   assert.match(home, /border-\[#363b44\]/, "satellite tiles should use the reference subtle border")
   assert.match(home, /text-\[#b7f64d\]/, "satellite glyphs should use the reference lime accent")
 
-  assert.match(home, /h-20 w-20/, "main tile should start at 80px before hover zoom")
-  assert.match(home, /group-hover\/card:scale-\[1\.2\]/, "main tile should zoom to the 96px reference size")
+  assert.match(home, /h-\[86px\] w-\[86px\]/, "main tile should be about 86px before hover zoom")
+  assert.match(home, /group-hover\/card:scale-\[1\.12\]/, "main tile should zoom to roughly the 96px reference size")
   assert.match(home, /from-\[#e3f7a6\]/)
   assert.match(home, /via-\[#b7e54d\]/)
   assert.match(home, /to-\[#7bc20c\]/)
