@@ -1,4 +1,5 @@
 import type { EquityPoint } from "../risk-engine/types.ts"
+import { performanceEquityVnd } from "./performance-equity.ts"
 import type { DrawdownAnalytics, DrawdownEpisode } from "./types.ts"
 
 function average(values: readonly number[]): number {
@@ -8,14 +9,8 @@ function average(values: readonly number[]): number {
 export function deriveDrawdownAnalytics(
   points: readonly EquityPoint[],
 ): DrawdownAnalytics {
-  if (
-    points.length === 0
-    || points.some((point) => (
-      point.status !== "complete"
-      || point.equityVnd == null
-      || !Number.isFinite(point.equityVnd)
-    ))
-  ) {
+  const performanceValues = points.map(performanceEquityVnd)
+  if (points.length === 0 || performanceValues.some((value) => value == null)) {
     return {
       maxDrawdownPercent: null,
       averageDrawdownPercent: null,
@@ -25,12 +20,13 @@ export function deriveDrawdownAnalytics(
   }
 
   let peakKey = points[0]!.key
-  let peakEquityVnd = points[0]!.equityVnd!
+  let peakEquityVnd = performanceValues[0]!
   let active: DrawdownEpisode | null = null
   const episodes: DrawdownEpisode[] = []
 
-  for (const point of points.slice(1)) {
-    const equityVnd = point.equityVnd!
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index]!
+    const equityVnd = performanceValues[index]!
 
     if (active == null) {
       if (equityVnd >= peakEquityVnd) {
