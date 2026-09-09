@@ -17,6 +17,7 @@ import type {
   TradeSizeStatus,
 } from "@/modules/portfolio/risk-sizing/types"
 import { cn } from "@/modules/shared/ui/cn"
+import { persistPlannedTradeRecord } from "./planned-trade-persistence"
 import { RiskMetricTooltip } from "./risk-metric-tooltip"
 import type { RiskSizingClientContext } from "./use-risk-sizing-context"
 
@@ -189,59 +190,14 @@ export function TradeSizeAdvisor({
     setPersistenceError(null)
     setPersistenceSuccess(null)
     try {
-      const response = await fetch(`/api/portfolio/${portfolioId}/trades`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ticker: next.ticker,
-          mode: selectedMode,
-          status: "planned",
-          trade_type: null,
-          timeframe: null,
-          system_tags: [],
-          setup_tags: [],
-          money_management_plan_id: riskContext?.moneyManagementPlanId ?? null,
-          planned_entry: next.plannedEntryKvnd,
-          initial_stop_loss_exit: next.initialStopKvnd,
-          initial_account_equity: riskContext.accountEquityVnd,
-          initial_risk_percent: next.riskPercent,
-          initial_risk_amount: next.riskAmountVnd,
-          initial_risk_amount_per_share: next.riskPerShareVnd,
-          planned_trade_size: next.tradeSizeShares,
-          planned_position_value: next.positionValueVnd,
-          estimated_commission: next.estimatedCommissionVnd,
-          slippage_allowance: next.slippageAllowanceVnd,
-          pre_trade_plan: "QEO-159 deterministic concentration/diversification review",
-          thesis_summary: null,
-        }),
+      await persistPlannedTradeRecord({
+        portfolioId,
+        trade: next,
+        mode: selectedMode,
+        riskContext,
+        requiresConcentrationOverride,
+        overrideReason: overrideReason.trim() || null,
       })
-      const payload = await response.json().catch(() => null) as { trade?: { id?: string }; error?: string } | null
-      if (!response.ok || !payload?.trade?.id) {
-        throw new Error(payload?.error || "Không thể lưu Trade dự kiến.")
-      }
-
-      if (requiresConcentrationOverride) {
-        const journalResponse = await fetch(`/api/portfolio/${portfolioId}/trades/${payload.trade.id}/journal`, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phase: "before",
-            note: "Concentration/diversification override",
-            emotion_tags: [],
-            behavior_tags: ["concentration_override"],
-            adherence_status: "deviated",
-            override_reason: overrideReason.trim(),
-            occurred_at: new Date().toISOString(),
-          }),
-        })
-        const journalPayload = await journalResponse.json().catch(() => null) as { error?: string } | null
-        if (!journalResponse.ok) {
-          throw new Error(`Không thể lưu bằng chứng override: ${journalPayload?.error || "journal request failed"}`)
-        }
-      }
-
       setPersistenceSuccess(`Đã lưu Trade dự kiến ${next.ticker}${requiresConcentrationOverride ? " cùng lý do override" : ""}.`)
       if (editingTicker && editingTicker !== normalizedTicker) onRemovePlannedTrade(editingTicker)
       onUpsertPlannedTrade(next)
@@ -464,7 +420,7 @@ export function TradeSizeAdvisor({
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
           <div>
             <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Các giao dịch dự kiến</h4>
-            <p className="mt-1 text-[10px] text-slate-500">Simulation trong phiên lập kế hoạch. Chỉ nút “Lưu Trade dự kiến” ở trên mới ghi vào QEO-137.</p>
+            <p className="mt-1 text-[10px] text-slate-500">Simulation trong phiên lập kế hoạch không được lưu. Chỉ nút “Lưu Trade dự kiến” ở trên mới ghi vào QEO-137.</p>
           </div>
           <Badge>{plannedTrades.length} mã</Badge>
         </div>
