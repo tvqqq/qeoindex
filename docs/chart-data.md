@@ -1,6 +1,6 @@
 # Canonical chart data
 
-Last reviewed: 2026-09-08.
+Last reviewed: 2026-09-09.
 
 This document owns the active user-facing chart-data persistence/read contract. It is intentionally separate from the Wyckoff EOD contract documented in `HANDOVER.md` and `wyckoff-chart-unified-data.md`.
 
@@ -59,6 +59,12 @@ follow-up if bootstrap coverage needs the same stronger proof.
 
 The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`. The native session cutover (`20260906024500_qeo108_chart_intraday_session_partitions`) and correction-safe writer/prune (`20260909100000_qeo149_correction_safe_prune`) remain explicitly QUARANTINED pending isolated replay and the two-session rehearsal; pending files are not production evidence.
 
+### QEO-149 mixed-version rollout
+
+While the correction-safe migration is still quarantined, application code must remain compatible with the currently deployed schema without weakening prune safety. HOT writes first call `qeo_upsert_chart_intraday_bars`; **only** an explicit missing-RPC response may fall back to the legacy partition-ensure + direct upsert path. Other writer-RPC failures remain fatal. Verified COLD manifest reads first request QEO-149 content-identity columns and retry the legacy projection only when those columns are explicitly absent.
+
+Archive/prune has no legacy unsafe fallback. If HOT `content_digest` / `content_version` columns are absent, the candidate is deferred as `content_identity_unavailable`, no archive/cache/prune authority is reached, and HOT rows remain intact. After the QEO-149 migration is activated, service-role direct HOT mutation is revoked and the locked writer/prune protocol becomes mandatory. Rollback therefore means disabling/defering prune, not reverting to the old count-only prune authority.
+
 ## Cold raw 1m archive
 
 Cold chart history is stored in the private Supabase Storage bucket `chart-ohlcv`.
@@ -95,8 +101,8 @@ by partition ensure/drop, the service-role-only `qeo_upsert_chart_intraday_bars`
 writer, and prune. The writer validates a bounded (maximum 500-row) JSON batch,
 derives distinct Vietnam dates, locks them in ascending order, ensures every
 partition while those locks remain held, and performs one set-based upsert.
-Application code therefore does not run a separate ensure transaction followed
-by a direct HOT upsert.
+Once QEO-149 is active, application code therefore does not run a separate
+ensure transaction followed by a direct HOT upsert.
 
 The prune RPC locks the candidate date plus all supplied newer proof dates in
 ascending order before taking the manifest row lock. It then revalidates the
@@ -111,9 +117,10 @@ RPC.
 
 The HOT trigger stamps content identity only on INSERT/UPDATE; it takes no
 advisory lock. Service-role direct INSERT/UPDATE/DELETE/TRUNCATE on the parent
-and every physical child is revoked. Provenance batches are SELECT/INSERT only
-for service-role because their `ON DELETE SET NULL` foreign key could otherwise
-rewrite correction-relevant HOT rows outside the lifecycle lock.
+and every physical child is revoked after schema cutover. Provenance batches are
+SELECT/INSERT only for service-role because their `ON DELETE SET NULL` foreign
+key could otherwise rewrite correction-relevant HOT rows outside the lifecycle
+lock.
 
 ### Legacy cold-to-derived recovery
 
@@ -142,9 +149,9 @@ Until every verified cold manifest intersecting an hourly request has derived ev
 | `1h`, `2h`, `4h` | 366 days | derived `1h` for old history + recent hot raw `1m -> 1h`; then `1h -> 2h/4h` when needed |
 | `1D`, `3D`, `1W`, `1M`, `1Q`, `1Y` | full available | canonical raw `1D` + deterministic Daily-derived aggregation |
 
-The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the hot boundary normally comes from `chart_ohlcv_derived_hourly`; only the recent hot segment loads canonical raw `1m`. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
+The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the global five-session discovery boundary normally comes from `chart_ohlcv_derived_hourly`, while the recent segment loads canonical raw `1m`. The hourly read also performs a bounded HOT lookup over the older requested segment: protected per-ticker HOT minutes are included even when they precede that global boundary. If they overlap a derived hour, verified COLD raw minutes for the requested range are merged at minute granularity with `hot > cold`, and only those affected hours are re-aggregated; unaffected complete derived hours are reused. A partial HOT hour never replaces its non-overlapping COLD minutes. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
 
-At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment rather than returning a partially populated cache. No synthetic candles are fabricated.
+At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment; retained HOT is merged into that raw fallback before aggregation. If an older HOT overlap cannot be resolved against verified raw storage, the service preserves the known derived bar where available and reports `PARTIAL`/`STORAGE_UNAVAILABLE` rather than claiming complete coverage. No synthetic candles are fabricated.
 
 ## Interactive renderer boundary
 
