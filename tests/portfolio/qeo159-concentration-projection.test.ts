@@ -5,9 +5,18 @@ import { projectTradeConcentration } from "../../modules/portfolio/concentration
 import type { PortfolioConcentrationReadModel } from "../../modules/portfolio/concentration/types.ts"
 import type { DiversificationRules } from "../../modules/portfolio/risk-plan/types.ts"
 
+const rules: DiversificationRules = {
+  enabled: true,
+  concentrationWarningPercent: 25,
+  maxTickerConcentrationPercent: 30,
+  maxSectorRiskPercent: 5,
+  maxConcurrentOpenPositions: 3,
+}
+
 function current(overrides: Partial<PortfolioConcentrationReadModel> = {}): PortfolioConcentrationReadModel {
   return {
     summary: { overallStatus: "WITHIN_PLAN", openPositionCount: 2, accountEquityVnd: 100_000_000 },
+    rules,
     tickerMarketValue: [],
     tickerActiveRisk: [],
     sectorActiveRisk: [],
@@ -43,14 +52,6 @@ function current(overrides: Partial<PortfolioConcentrationReadModel> = {}): Port
     },
     ...overrides,
   }
-}
-
-const rules: DiversificationRules = {
-  enabled: true,
-  concentrationWarningPercent: 25,
-  maxTickerConcentrationPercent: 30,
-  maxSectorRiskPercent: 5,
-  maxConcurrentOpenPositions: 3,
 }
 
 test("planned new trade can create deterministic ticker and sector breaches without altering trade sizing inputs", () => {
