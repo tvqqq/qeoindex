@@ -1,0 +1,11 @@
+{
+  "migrations": [
+    {
+      "logicalName": "qeo150_chart_intraday_maintenance",
+      "repositoryVersion": "20260909173000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-150 exact-head preproduction scheduler gate"
+    }
+  ]
+}
