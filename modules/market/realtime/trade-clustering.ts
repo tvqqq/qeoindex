@@ -7,6 +7,7 @@ export interface ClusteredTrade {
   volume: number
   side: "BUY" | "SELL" | "UNKNOWN"
   count: number
+  // Optional only for legacy/source-agnostic callers; orderbook realtime trades always carry provenance.
   source?: TradeSource
 }
 
