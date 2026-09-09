@@ -10,6 +10,7 @@ import {
   chartHotSessionRetentionCutoff,
 } from "./history-policy"
 import {
+  ChartHotContentIdentityUnavailableError,
   dropEmptyHotIntradaySessionPartition,
   canonicalHotContentDigest,
   canonicalHotContentVersion,
@@ -125,7 +126,23 @@ export async function runChartIntradayArchiveLifecycle(
         continue
       }
 
-      const beforeArchive = await readPartition(supabase, partition, cutoff)
+      let beforeArchive: HotIntradaySnapshot[]
+      try {
+        beforeArchive = await readPartition(supabase, partition, cutoff)
+      } catch (cause) {
+        if (cause instanceof ChartHotContentIdentityUnavailableError) {
+          deferred.push({
+            ticker: partition.ticker,
+            tradingDate: partition.tradingDate,
+            reason: "content_identity_unavailable",
+            newerTradingDates: retentionProof.newerTradingDates,
+            rowsScanned: retentionProof.rowsScanned,
+            pagesRead: retentionProof.pagesRead,
+          })
+          continue
+        }
+        throw cause
+      }
       if (!beforeArchive.length) continue
       const beforeArchiveBars = beforeArchive.map((snapshot) => snapshot.bar)
       const archived = await cold.archiveVerifiedPartition({
