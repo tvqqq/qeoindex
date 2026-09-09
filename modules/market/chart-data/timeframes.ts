@@ -3,6 +3,7 @@ import type {
   CanonicalOhlcvBar,
   ChartResolution,
 } from "./contract"
+import { normalizeCanonicalBars } from "./normalize.ts"
 
 const VN_OFFSET_SECONDS = 7 * 60 * 60
 const DAY_SECONDS = 86400
@@ -169,6 +170,49 @@ export function aggregateChartTimeframe(
     return aggregateByBucket(bars, (time) => intradayBucket(time, resolution), false)
   }
   return aggregateByBucket(bars, (time) => calendarBucket(time, resolution), true)
+}
+
+function hourlyBucketStart(time: number) {
+  return aggregateChartTimeframe([{ time, open: 1, high: 1, low: 1, close: 1, volume: 0 }], "1h")[0]?.time ?? null
+}
+
+export function hourlyOverlapRange(bars: CanonicalOhlcvBar[]) {
+  const buckets = bars.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null)
+  if (!buckets.length) return null
+  return { from: Math.min(...buckets), to: Math.max(...buckets) + 3599 }
+}
+
+/**
+ * Overlay retained HOT minutes on complete derived hours without treating a
+ * partial HOT hour as a replacement for its non-overlapping raw minutes.
+ */
+export function overlayHourlyHotOnDerived(input: {
+  derived: CanonicalOhlcvBar[]
+  cold: CanonicalOhlcvBar[]
+  hot: CanonicalOhlcvBar[]
+}) {
+  const affectedBuckets = new Set(input.hot.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null))
+  const affectedCold = input.cold.filter((bar) => {
+    const bucket = hourlyBucketStart(bar.time)
+    return bucket != null && affectedBuckets.has(bucket)
+  })
+  const coldBuckets = new Set(affectedCold.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null))
+  const affectedHot = input.hot.filter((bar) => {
+    const bucket = hourlyBucketStart(bar.time)
+    return bucket != null && coldBuckets.has(bucket)
+  })
+  const normalized = normalizeCanonicalBars([
+    ...affectedCold.map((bar) => ({ source: "cold" as const, bar })),
+    ...affectedHot.map((bar) => ({ source: "hot" as const, bar })),
+  ])
+  const rebuilt = aggregateChartTimeframe(normalized.bars, "1h")
+  const rebuiltBuckets = new Set(rebuilt.map((bar) => bar.time))
+  const fallback = input.derived.filter((bar) => !coldBuckets.has(bar.time) || !rebuiltBuckets.has(bar.time))
+  return {
+    bars: [...fallback, ...rebuilt].sort((a, b) => a.time - b.time),
+    integrityIssues: normalized.integrityIssues,
+    unresolvedHotOverlap: affectedBuckets.size !== coldBuckets.size || coldBuckets.size !== rebuiltBuckets.size,
+  }
 }
 
 export function sourceRangeForResolution(
