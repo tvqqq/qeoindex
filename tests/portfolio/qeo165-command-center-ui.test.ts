@@ -15,3 +15,19 @@ test("QEO-165 establishes shared command-center presentation primitives", () => 
   assert.match(status, /MISSING_STOP/)
   assert.doesNotMatch(status, /rarity|conviction|attack|defense|mạnh|yếu/i)
 })
+
+test("QEO-165 composes the command header, battle HUD and canonical risk strip", () => {
+  const page = source("components/portfolio/portfolio-page.tsx")
+  const hud = source("components/portfolio/revamp/portfolio-battle-hud.tsx")
+  const riskCore = source("components/portfolio/risk-engine/portfolio-risk-dashboard-core.tsx")
+  const strip = source("components/portfolio/revamp/portfolio-risk-state-strip.tsx")
+
+  assert.match(page, /PortfolioCommandHeader/)
+  assert.match(page, /PortfolioBattleHud/)
+  assert.match(hud, /Tổng tài sản \(NAV\)/)
+  assert.match(hud, /text-(?:3xl|4xl)/)
+  assert.match(riskCore, /PortfolioRiskStateStrip/)
+  assert.match(riskCore, /Mở bảng rủi ro chi tiết/)
+  assert.match(strip, /concentration\.summary\.overallStatus/)
+  assert.doesNotMatch(strip, /fetch\s*\(/)
+})
