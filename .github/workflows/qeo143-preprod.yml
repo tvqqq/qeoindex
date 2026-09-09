@@ -36,8 +36,12 @@ jobs:
         with:
           version: 2.116.0
       - run: pnpm install --frozen-lockfile
-      - name: QEO-143 schema RED/GREEN contract
+      - name: QEO-143 schema contract
         run: node --test tests/portfolio/qeo143-legacy-migration-schema.test.ts
+      - name: QEO-143 migrated Trade completeness
+        run: node --test tests/portfolio/qeo143-read-model-completeness.test.ts
+      - name: QEO-143 Scorecard eligibility boundary
+        run: node --test tests/portfolio/qeo143-performance-eligibility.test.ts
       - name: Existing Portfolio AVCO regression
         run: node --test tests/portfolio-pnl.test.ts
       - name: Start local Supabase
