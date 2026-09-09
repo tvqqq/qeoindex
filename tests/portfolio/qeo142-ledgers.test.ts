@@ -37,6 +37,7 @@ function equity(
     key,
     kind,
     equityVnd,
+    externalFlowVnd: 0,
     status,
     missingTickers: status === "incomplete" ? ["FPT"] : [],
   }

@@ -1,4 +1,4 @@
-import type { EquityPoint } from "../risk-engine/types.ts"
+import type { EquityPoint, FundingHistoryStatus } from "../risk-engine/types.ts"
 
 export type PerformancePopulation = "live" | "paper" | "combined"
 
@@ -200,6 +200,7 @@ export type PerformanceReadModel = {
   equity: {
     points: EquityPoint[]
     accountTotalReturnPercent: number | null
+    returnMethod: "flow_adjusted_simple"
     maxDrawdownPercent: number | null
     averageDrawdownPercent: number | null
     episodes: DrawdownEpisode[]
@@ -217,5 +218,7 @@ export type PerformanceReadModel = {
     legacyUngroupedTransactionCount: number
     tradeGroupingCompleteness: "complete" | "partial" | "insufficient"
     equityCompleteness: "complete" | "insufficient"
+    fundingHistoryStatus: FundingHistoryStatus
+    externalCashFlowCount: number
   }
 }

@@ -20,7 +20,13 @@ import {
   evaluateRollingTradeLoss,
   type GuardrailTradeOutcome,
 } from "./trade-outcomes.ts"
-import type { PortfolioRiskReadModel, RiskRuleEvidence } from "./types.ts"
+import type {
+  EquityPoint,
+  ExternalCashFlow,
+  FundingHistoryStatus,
+  PortfolioRiskReadModel,
+  RiskRuleEvidence,
+} from "./types.ts"
 
 function dbFailure(operation: string, error: unknown): never {
   const detail = String((error as { message?: unknown } | null)?.message ?? "unknown database error")
@@ -112,14 +118,22 @@ function groupDailyClosedTradePnl(outcomes: GuardrailTradeOutcome[]) {
     .map(([date, netPnlVnd]) => ({ date, netPnlVnd }))
 }
 
+function performanceEquityVnd(point: EquityPoint): number | null {
+  if (point.status !== "complete") return null
+  if (point.fundingHistoryStatus === "legacy_unrecorded") return null
+  const value = point.flowAdjustedEquityVnd ?? point.equityVnd
+  return value != null && Number.isFinite(value) ? value : null
+}
+
 function periodStartEquity(
-  points: Array<{ key: string; kind: string; equityVnd: number | null; status: string }>,
+  points: EquityPoint[],
   start: string,
 ): number | null {
   let candidate: number | null = null
   for (const point of points) {
-    if (point.status !== "complete" || point.equityVnd == null) continue
-    if (point.kind === "baseline" || point.key < start) candidate = point.equityVnd
+    const performanceEquity = performanceEquityVnd(point)
+    if (performanceEquity == null) continue
+    if (point.kind === "baseline" || point.key < start) candidate = performanceEquity
   }
   return candidate
 }
@@ -167,10 +181,17 @@ export async function getPortfolioRiskContext(
   now: Date = new Date(),
 ): Promise<PortfolioRiskReadModel> {
   const overview = await getRiskPlanOverview(context, portfolioId)
-  const [portfolioResult, transactionsResult, tradesResult, stopsResult, stopExitLinksResult] = await Promise.all([
+  const [
+    portfolioResult,
+    transactionsResult,
+    cashFlowsResult,
+    tradesResult,
+    stopsResult,
+    stopExitLinksResult,
+  ] = await Promise.all([
     context.supabase
       .from("portfolios")
-      .select("id,user_id,initial_capital")
+      .select("id,user_id,initial_capital,funding_history_status")
       .eq("id", portfolioId)
       .eq("user_id", context.user.id)
       .maybeSingle(),
@@ -180,6 +201,14 @@ export async function getPortfolioRiskContext(
       .eq("portfolio_id", portfolioId)
       .eq("user_id", context.user.id)
       .order("transaction_date", { ascending: true })
+      .order("id", { ascending: true }),
+    context.supabase
+      .from("portfolio_external_cash_flows")
+      .select("id,flow_type,signed_amount_vnd,effective_at,provenance")
+      .eq("portfolio_id", portfolioId)
+      .eq("user_id", context.user.id)
+      .lte("effective_at", now.toISOString())
+      .order("effective_at", { ascending: true })
       .order("id", { ascending: true }),
     context.supabase
       .from("portfolio_trades")
@@ -201,11 +230,24 @@ export async function getPortfolioRiskContext(
   if (portfolioResult.error) dbFailure("load-portfolio", portfolioResult.error)
   if (!portfolioResult.data) throw new RiskPlanDomainError("NOT_FOUND", "Portfolio was not found.")
   if (transactionsResult.error) dbFailure("load-transactions", transactionsResult.error)
+  if (cashFlowsResult.error) dbFailure("load-external-cash-flows", cashFlowsResult.error)
   if (tradesResult.error) dbFailure("load-trades", tradesResult.error)
   if (stopsResult.error) dbFailure("load-stop-events", stopsResult.error)
   if (stopExitLinksResult.error) dbFailure("load-stop-exit-links", stopExitLinksResult.error)
 
   const initialCapitalVnd = finiteOrNull(portfolioResult.data.initial_capital) ?? 0
+  const fundingHistoryStatus: FundingHistoryStatus = portfolioResult.data.funding_history_status === "known"
+    ? "known"
+    : "legacy_unrecorded"
+  const externalCashFlows = (cashFlowsResult.data ?? []).map((row) => ({
+    id: row.id,
+    flowType: row.flow_type as ExternalCashFlow["flowType"],
+    signedAmountVnd: Number(row.signed_amount_vnd),
+    effectiveAt: row.effective_at,
+    effectiveDate: vietnamDateKey(new Date(row.effective_at)),
+    provenance: row.provenance as ExternalCashFlow["provenance"],
+  })) satisfies ExternalCashFlow[]
+
   const transactions = (transactionsResult.data ?? []).map((row) => ({
     ...row,
     action: row.action as TransactionAction,
@@ -218,7 +260,13 @@ export async function getPortfolioRiskContext(
   const summary = computePortfolioPositions(transactions)
   const openTickers = summary.positions.map((position) => position.ticker).sort()
   const currentPricesKvnd = await loadCurrentPriceMap(openTickers, now)
-  const account = buildCurrentAccountEquity({ initialCapitalVnd, transactions, currentPricesKvnd })
+  const account = buildCurrentAccountEquity({
+    initialCapitalVnd,
+    transactions,
+    currentPricesKvnd,
+    externalCashFlows,
+    fundingHistoryStatus,
+  })
 
   const openTrades = tradeRows.filter(
     (trade) => trade.status === "open" || trade.status === "partially_closed",
@@ -275,6 +323,8 @@ export async function getPortfolioRiskContext(
     sessions,
     rawDailyCloseKvnd,
     current: { key: `${currentDate}:current`, pricesKvnd: currentPricesKvnd },
+    externalCashFlows,
+    fundingHistoryStatus,
   })
   const drawdown = equityCurve.currentDrawdown
   const dailyPoints = equityCurve.points.filter((point) => point.kind === "daily")
@@ -290,19 +340,23 @@ export async function getPortfolioRiskContext(
   const configuredDefaultTradeRiskPercent = finiteOrNull(plan?.default_trade_risk_percent) ?? 2
   const maxActiveRiskPercent = finiteOrNull(plan?.max_active_risk_percent)
   const reductionFactor = finiteOrNull(plan?.risk_reduction_factor)
-  const activeRiskPercent = account.equityVnd != null && account.equityVnd > 0
-    ? (active.knownActiveRiskVnd / account.equityVnd) * 100
-    : null
-  const maxActiveRiskVnd = account.equityVnd != null
+  const hasKnownCurrentEquity = fundingHistoryStatus === "known"
+    && account.equityVnd != null
     && account.equityVnd > 0
+  const activeRiskPercent = hasKnownCurrentEquity
+    ? (active.knownActiveRiskVnd / account.equityVnd!) * 100
+    : null
+  const maxActiveRiskVnd = hasKnownCurrentEquity
     && maxActiveRiskPercent != null
     && maxActiveRiskPercent >= 0
-    ? Math.round(account.equityVnd * maxActiveRiskPercent / 100)
+    ? Math.round(account.equityVnd! * maxActiveRiskPercent / 100)
     : null
   const remainingRiskBudgetVnd = maxActiveRiskVnd == null
     ? null
     : maxActiveRiskVnd - active.knownActiveRiskVnd
-  const activeCoverage = active.unknownRiskItemCount === 0 ? "complete" : "partial"
+  const activeCoverage = fundingHistoryStatus === "known" && active.unknownRiskItemCount === 0
+    ? "complete"
+    : "partial"
 
   const outcomes = deriveGuardrailTradeOutcomes({
     trades: tradeRows,
@@ -325,7 +379,17 @@ export async function getPortfolioRiskContext(
   }
 
   if (maxActiveRiskPercent != null) {
-    if (account.equityVnd == null || !(account.equityVnd > 0)) {
+    if (fundingHistoryStatus !== "known") {
+      rules.push(rule(
+        "max_active_risk",
+        "reduce",
+        maxActiveRiskPercent,
+        null,
+        "insufficient",
+        "Funding history is not recorded, so the Account Equity denominator for Active Risk % is not reliable.",
+        "active_risk",
+      ))
+    } else if (account.equityVnd == null || !(account.equityVnd > 0)) {
       rules.push(rule("max_active_risk", "reduce", maxActiveRiskPercent, null, "insufficient", "Account Equity is unavailable for the Active Risk cap.", "active_risk"))
     } else if (maxActiveRiskVnd != null && active.knownActiveRiskVnd > maxActiveRiskVnd) {
       rules.push(rule("max_active_risk", "reduce", maxActiveRiskPercent, activeRiskPercent, "triggered", "Known Active Risk exceeds the configured Max Active Risk cap.", "active_risk"))
@@ -449,6 +513,8 @@ export async function getPortfolioRiskContext(
     evidence: {
       rawDailyCoverage,
       currentPriceMissingTickers: account.missingPriceTickers,
+      fundingHistoryStatus,
+      externalCashFlowCount: externalCashFlows.length,
     },
   }
 }

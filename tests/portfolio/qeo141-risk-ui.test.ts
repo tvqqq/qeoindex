@@ -9,8 +9,14 @@ function read(relative: string) {
   return fs.readFileSync(full, "utf8")
 }
 
+function dashboardSource() {
+  const publicDashboard = read("components/portfolio/risk-engine/portfolio-risk-dashboard.tsx")
+  const coreDashboard = read("components/portfolio/risk-engine/portfolio-risk-dashboard-core.tsx")
+  return { publicDashboard, coreDashboard, composed: `${publicDashboard}\n${coreDashboard}` }
+}
+
 test("Tài sản risk dashboard uses Vietnamese-primary canonical risk terminology", () => {
-  const dashboard = read("components/portfolio/risk-engine/portfolio-risk-dashboard.tsx")
+  const { composed: dashboard } = dashboardSource()
   const tooltip = read("components/portfolio/risk-engine/risk-term-tooltip.tsx")
 
   for (const label of [
@@ -43,7 +49,7 @@ test("Tài sản risk dashboard uses Vietnamese-primary canonical risk terminolo
 })
 
 test("risk dashboard renders canonical API facts without deriving risk rules client-side", () => {
-  const dashboard = read("components/portfolio/risk-engine/portfolio-risk-dashboard.tsx")
+  const { publicDashboard, composed: dashboard } = dashboardSource()
   const hook = read("components/portfolio/risk-engine/use-portfolio-risk-context.ts")
   const page = read("components/portfolio/portfolio-page.tsx")
 
@@ -52,6 +58,8 @@ test("risk dashboard renders canonical API facts without deriving risk rules cli
   assert.match(dashboard, /riskState\.triggers/)
   assert.match(dashboard, /riskState\.insufficientRules/)
   assert.doesNotMatch(dashboard, /derivePortfolioRiskState|computeOpenTradeActiveRisk|buildEquityCurve/)
+  assert.match(publicDashboard, /CorePortfolioRiskDashboard/)
+  assert.match(publicDashboard, /ExternalCashFlowPanel/)
   assert.match(page, /PortfolioRiskDashboard/)
   assert.match(page, /activeTab === "portfolio"/)
 })

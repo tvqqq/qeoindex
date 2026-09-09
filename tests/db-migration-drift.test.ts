@@ -14,6 +14,20 @@ const reviewedLedgerPath = (() => {
   return `${ledgerDirectory}/${latest}`
 })()
 
+function readReviewedMigrationManifest() {
+  const canonical = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+  const preproduction = existsSync("supabase/migration-preproduction.json")
+    ? JSON.parse(readFileSync("supabase/migration-preproduction.json", "utf8"))
+    : { migrations: [] }
+  return {
+    ...canonical,
+    migrations: [
+      ...(canonical.migrations ?? []),
+      ...(preproduction.migrations ?? []),
+    ],
+  }
+}
+
 test("parseMigrationFilename extracts version and logical name", () => {
   assert.deepEqual(
     parseMigrationFilename("20260902011529_clean_rebuild_market_snapshot_trigger.sql"),
@@ -35,6 +49,22 @@ test("unexplained repo-only migration fails closed", () => {
   const result = reconcileMigrations({ activeFiles: ["20260902090000_repo_only.sql"], pendingFiles: [], productionLedger: [], manifest: { migrations: [] } })
   assert.equal(result.ok, false)
   assert.match(result.errors.join("\n"), /repo-only/i)
+})
+
+test("reviewed repo-ahead migration can remain active before production promotion", () => {
+  const result = reconcileMigrations({
+    activeFiles: ["20260909061101_qeo158_external_cash_flows.sql"],
+    pendingFiles: [],
+    productionLedger: [],
+    manifest: { migrations: [{
+      logicalName: "qeo158_external_cash_flows",
+      repositoryVersion: "20260909061101",
+      productionVersion: null,
+      state: "REPO_AHEAD",
+      evidence: "qeo158-exact-head-preprod-gate",
+    }] },
+  })
+  assert.equal(result.ok, true, result.errors.join("\n"))
 })
 
 test("unexplained production-only migration fails closed", () => {
@@ -69,7 +99,7 @@ test("duplicate manifest logical names fail", () => {
 })
 
 test("current repository migration set reconciles against reviewed production ledger", () => {
-  const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+  const manifest = readReviewedMigrationManifest()
   const ledger = JSON.parse(readFileSync(reviewedLedgerPath, "utf8"))
   const activeFiles = readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql"))
   const pendingFiles = existsSync("supabase/pending-migrations")

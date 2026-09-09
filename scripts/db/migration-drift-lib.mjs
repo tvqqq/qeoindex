@@ -74,6 +74,17 @@ export function reconcileMigrations({ activeFiles, pendingFiles, productionLedge
       continue
     }
 
+    if (state === "REPO_AHEAD") {
+      if (!source) errors.push(`${logicalName}: repo-ahead migration requires an active source migration`)
+      if (queued) errors.push(`${logicalName}: repo-ahead migration must not remain pending`)
+      if (prod) errors.push(`${logicalName}: repo-ahead migration is already present in production`)
+      if (productionVersion !== null) errors.push(`${logicalName}: repo-ahead productionVersion must be null`)
+      if (source && source.version !== repositoryVersion) {
+        errors.push(`${logicalName}: repo-ahead source version changed from ${repositoryVersion} to ${source.version}`)
+      }
+      continue
+    }
+
     if (state === "PRODUCTION_AHEAD") {
       if (source) errors.push(`${logicalName}: production-ahead migration must not have an active source migration`)
       if (queued) errors.push(`${logicalName}: production-ahead migration must not remain pending`)

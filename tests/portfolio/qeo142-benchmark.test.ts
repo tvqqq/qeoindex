@@ -10,7 +10,14 @@ function equity(
   status: "complete" | "incomplete" = "complete",
   kind: EquityPoint["kind"] = "daily",
 ): EquityPoint {
-  return { key, kind, equityVnd, status, missingTickers: status === "complete" ? [] : ["FPT"] }
+  return {
+    key,
+    kind,
+    equityVnd,
+    externalFlowVnd: 0,
+    status,
+    missingTickers: status === "complete" ? [] : ["FPT"],
+  }
 }
 
 test("benchmark starts at first common complete daily date with independent baselines", () => {

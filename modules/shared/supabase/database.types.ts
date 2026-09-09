@@ -3222,6 +3222,50 @@ export type Database = {
           },
         ]
       }
+      portfolio_external_cash_flows: {
+        Row: {
+          created_at: string
+          effective_at: string
+          flow_type: string
+          id: string
+          note: string | null
+          portfolio_id: string
+          provenance: string
+          signed_amount_vnd: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_at: string
+          flow_type: string
+          id?: string
+          note?: string | null
+          portfolio_id: string
+          provenance?: string
+          signed_amount_vnd: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_at?: string
+          flow_type?: string
+          id?: string
+          note?: string | null
+          portfolio_id?: string
+          provenance?: string
+          signed_amount_vnd?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_external_cash_flows_portfolio_id_user_id_fkey"
+            columns: ["portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       portfolio_money_management_plans: {
         Row: {
           advanced_risk_override_acknowledged: boolean
@@ -3812,6 +3856,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          funding_history_status: string
           id: string
           initial_capital: number
           is_default: boolean
@@ -3823,6 +3868,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          funding_history_status?: string
           id?: string
           initial_capital?: number
           is_default?: boolean
@@ -3834,6 +3880,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          funding_history_status?: string
           id?: string
           initial_capital?: number
           is_default?: boolean

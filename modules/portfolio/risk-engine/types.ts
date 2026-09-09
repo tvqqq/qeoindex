@@ -1,3 +1,17 @@
+export type FundingHistoryStatus = "known" | "legacy_unrecorded"
+
+export type ExternalCashFlowType = "deposit" | "withdrawal" | "capital_adjustment"
+export type ExternalCashFlowProvenance = "manual" | "imported" | "portfolio_settings_adjustment"
+
+export type ExternalCashFlow = {
+  id: string
+  flowType: ExternalCashFlowType
+  signedAmountVnd: number
+  effectiveAt: string
+  effectiveDate: string
+  provenance: ExternalCashFlowProvenance
+}
+
 export type OpenTradeActiveRiskRow = {
   tradeId: string
   ticker: string
@@ -23,6 +37,9 @@ export type PortfolioActiveRiskResult = {
 
 export type AccountEquitySnapshot = {
   equityVnd: number | null
+  flowAdjustedEquityVnd: number | null
+  cumulativeExternalFlowVnd: number
+  fundingHistoryStatus: FundingHistoryStatus
   estimatedCashVnd: number
   marketValueVnd: number | null
   realizedPnlVnd: number
@@ -36,6 +53,10 @@ export type EquityPoint = {
   key: string
   kind: "baseline" | "daily" | "current"
   equityVnd: number | null
+  flowAdjustedEquityVnd?: number | null
+  externalFlowVnd: number
+  cumulativeExternalFlowVnd?: number
+  fundingHistoryStatus?: FundingHistoryStatus
   status: "complete" | "incomplete"
   missingTickers: string[]
 }
@@ -79,5 +100,7 @@ export type PortfolioRiskReadModel = {
   evidence: {
     rawDailyCoverage: "complete" | "partial" | "insufficient"
     currentPriceMissingTickers: string[]
+    fundingHistoryStatus: FundingHistoryStatus
+    externalCashFlowCount: number
   }
 }

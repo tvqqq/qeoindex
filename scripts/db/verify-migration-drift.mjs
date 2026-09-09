@@ -5,7 +5,17 @@ const activeFiles = readdirSync("supabase/migrations").filter((name) => name.end
 const pendingFiles = existsSync("supabase/pending-migrations")
   ? readdirSync("supabase/pending-migrations").filter((name) => name.endsWith(".sql"))
   : []
-const manifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+const canonicalManifest = JSON.parse(readFileSync("supabase/migration-equivalence.json", "utf8"))
+const preproductionManifest = existsSync("supabase/migration-preproduction.json")
+  ? JSON.parse(readFileSync("supabase/migration-preproduction.json", "utf8"))
+  : { migrations: [] }
+const manifest = {
+  ...canonicalManifest,
+  migrations: [
+    ...(canonicalManifest.migrations ?? []),
+    ...(preproductionManifest.migrations ?? []),
+  ],
+}
 const ledgerDirectory = "docs/db/evidence"
 const reviewedLedgers = readdirSync(ledgerDirectory)
   .filter((name) => /^production-migration-ledger-\d{4}-\d{2}-\d{2}\.json$/.test(name))

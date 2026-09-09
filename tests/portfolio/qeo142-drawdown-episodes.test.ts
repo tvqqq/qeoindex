@@ -5,7 +5,7 @@ import { deriveDrawdownAnalytics } from "../../modules/portfolio/performance/dra
 import type { EquityPoint } from "../../modules/portfolio/risk-engine/types.ts"
 
 function point(key: string, equityVnd: number, kind: EquityPoint["kind"] = "daily"): EquityPoint {
-  return { key, kind, equityVnd, status: "complete", missingTickers: [] }
+  return { key, kind, equityVnd, externalFlowVnd: 0, status: "complete", missingTickers: [] }
 }
 
 test("drawdown episodes keep a fixed peak until recovery", () => {
@@ -61,7 +61,7 @@ test("unrecovered current episode participates in max and average drawdown", () 
 test("one incomplete point fails closed for the analyzed range", () => {
   const result = deriveDrawdownAnalytics([
     point("baseline", 100, "baseline"),
-    { key: "2026-09-01", kind: "daily", equityVnd: null, status: "incomplete", missingTickers: ["FPT"] },
+    { key: "2026-09-01", kind: "daily", equityVnd: null, externalFlowVnd: 0, status: "incomplete", missingTickers: ["FPT"] },
     point("2026-09-02", 110),
   ])
 

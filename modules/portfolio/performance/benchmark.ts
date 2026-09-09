@@ -1,4 +1,5 @@
 import type { EquityPoint } from "../risk-engine/types.ts"
+import { performanceEquityVnd } from "./performance-equity.ts"
 import type {
   BenchmarkComparison,
   BenchmarkIndexPoint,
@@ -23,9 +24,10 @@ function normalizePercent(value: number): number {
 function validDailyEquity(points: readonly EquityPoint[]): Map<string, number> {
   const result = new Map<string, number>()
   for (const point of points) {
-    if (point.kind !== "daily" || point.status !== "complete") continue
-    if (point.equityVnd == null || !Number.isFinite(point.equityVnd) || point.equityVnd <= 0) continue
-    result.set(point.key.slice(0, 10), point.equityVnd)
+    if (point.kind !== "daily") continue
+    const equityVnd = performanceEquityVnd(point)
+    if (equityVnd == null || equityVnd <= 0) continue
+    result.set(point.key.slice(0, 10), equityVnd)
   }
   return result
 }
@@ -46,6 +48,10 @@ export function buildBenchmarkComparison({
   equityPoints: readonly EquityPoint[]
   vnindexPoints: readonly BenchmarkIndexPoint[]
 }): BenchmarkComparison {
+  if (equityPoints.some((point) => point.fundingHistoryStatus === "legacy_unrecorded")) {
+    return unavailable("External funding history is incomplete for this legacy portfolio.")
+  }
+
   const equityByDate = validDailyEquity(equityPoints)
   const indexByDate = validIndex(vnindexPoints)
   const commonDates = [...equityByDate.keys()]
