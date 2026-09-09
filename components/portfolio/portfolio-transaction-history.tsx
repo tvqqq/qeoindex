@@ -1,11 +1,10 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useMemo, useState } from "react"
 import Link from "next/link"
 import { Check, Trash2, X } from "lucide-react"
 
-import { RawTransaction, TransactionAction } from "@/modules/portfolio/pnl"
-import { cn } from "@/modules/shared/ui/cn"
+import { BattleLogCard } from "@/components/portfolio/revamp/battle-log-card"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -15,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import type { RawTransaction, TransactionAction } from "@/modules/portfolio/pnl"
+import { cn } from "@/modules/shared/ui/cn"
 
 interface PortfolioTransactionHistoryProps {
   transactions: RawTransaction[]
@@ -26,35 +27,15 @@ interface PortfolioTransactionHistoryProps {
 function ActionBadge({ action }: { action: TransactionAction }) {
   switch (action) {
     case "buy":
-      return (
-        <span className="inline-flex items-center rounded-md bg-[var(--color-up-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-up)] border border-[var(--color-up)]/30">
-          Mua
-        </span>
-      )
+      return <span className="inline-flex items-center rounded-md border border-[var(--color-up)]/30 bg-[var(--color-up-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-up)]">Mua</span>
     case "sell":
-      return (
-        <span className="inline-flex items-center rounded-md bg-[var(--color-down-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-down)] border border-[var(--color-down)]/30">
-          Bán
-        </span>
-      )
+      return <span className="inline-flex items-center rounded-md border border-[var(--color-down)]/30 bg-[var(--color-down-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-down)]">Bán</span>
     case "dividend_cash":
-      return (
-        <span className="inline-flex items-center rounded-md bg-[var(--color-ref-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-ref)] border border-[var(--color-ref)]/30">
-          Cổ tức tiền
-        </span>
-      )
+      return <span className="inline-flex items-center rounded-md border border-[var(--color-ref)]/30 bg-[var(--color-ref-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-ref)]">Cổ tức tiền</span>
     case "dividend_stock":
-      return (
-        <span className="inline-flex items-center rounded-md bg-[var(--color-floor-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-floor)] border border-[var(--color-floor)]/30">
-          Cổ tức CP
-        </span>
-      )
+      return <span className="inline-flex items-center rounded-md border border-[var(--color-floor)]/30 bg-[var(--color-floor-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-floor)]">Cổ tức CP</span>
     case "rights":
-      return (
-        <span className="inline-flex items-center rounded-md bg-[var(--color-ceiling-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-ceiling)] border border-[var(--color-ceiling)]/30">
-          Quyền mua
-        </span>
-      )
+      return <span className="inline-flex items-center rounded-md border border-[var(--color-ceiling)]/30 bg-[var(--color-ceiling-dim)] px-2 py-0.5 font-ticker text-[11px] font-bold text-[var(--color-ceiling)]">Quyền mua</span>
   }
 }
 
@@ -79,10 +60,9 @@ export function PortfolioTransactionHistory({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Unique tickers list for quick filtering
   const tickers = useMemo(() => {
     const set = new Set<string>()
-    for (const t of transactions) set.add(t.ticker)
+    for (const transaction of transactions) set.add(transaction.ticker)
     return Array.from(set).sort()
   }, [transactions])
 
@@ -97,8 +77,7 @@ export function PortfolioTransactionHistory({
   const filteredTransactions = useMemo(() => {
     const list = selectedTicker === "all"
       ? transactions
-      : transactions.filter((t) => t.ticker === selectedTicker)
-    // Sort descending by date
+      : transactions.filter((transaction) => transaction.ticker === selectedTicker)
     return [...list].sort((a, b) => {
       if (a.transaction_date > b.transaction_date) return -1
       if (a.transaction_date < b.transaction_date) return 1
@@ -129,17 +108,14 @@ export function PortfolioTransactionHistory({
 
   return (
     <div className="space-y-4 font-ticker">
-      {/* Ticker filter pills */}
       {tickers.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)] mr-1">
-            Lọc mã:
-          </span>
+          <span className="mr-1 text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Lọc mã:</span>
           <button
             type="button"
             onClick={() => setSelectedTicker("all")}
             className={cn(
-              "font-ticker rounded-full border px-3 py-1 text-xs font-bold uppercase transition-colors cursor-pointer",
+              "min-h-10 cursor-pointer rounded-full border px-3 py-1 text-xs font-bold uppercase transition-colors",
               selectedTicker === "all"
                 ? "border-purple-500/50 bg-purple-500/20 text-purple-300"
                 : "border-[var(--color-border)] text-[var(--color-muted-2)] hover:border-white/20 hover:text-white",
@@ -147,21 +123,21 @@ export function PortfolioTransactionHistory({
           >
             Tất cả ({transactions.length})
           </button>
-          {tickers.map((t) => {
-            const count = transactions.filter((tx) => tx.ticker === t).length
+          {tickers.map((ticker) => {
+            const count = transactions.filter((transaction) => transaction.ticker === ticker).length
             return (
               <button
-                key={t}
+                key={ticker}
                 type="button"
-                onClick={() => setSelectedTicker(t)}
+                onClick={() => setSelectedTicker(ticker)}
                 className={cn(
-                  "font-ticker rounded-full border px-3 py-1 text-xs font-bold uppercase transition-colors cursor-pointer",
-                  selectedTicker === t
+                  "min-h-10 cursor-pointer rounded-full border px-3 py-1 text-xs font-bold uppercase transition-colors",
+                  selectedTicker === ticker
                     ? "border-purple-500/50 bg-purple-500/20 text-purple-300"
                     : "border-[var(--color-border)] text-[var(--color-muted-2)] hover:border-white/20 hover:text-white",
                 )}
               >
-                {t} ({count})
+                {ticker} ({count})
               </button>
             )
           })}
@@ -174,166 +150,130 @@ export function PortfolioTransactionHistory({
         </p>
       )}
 
-      {/* Transactions table */}
-      <div className="overflow-x-auto rounded-2xl border border-[#252837] bg-[#0d0f17]">
-        <Table>
-          <TableHeader>
-            <TableRow className="h-9 border-b border-[var(--color-border)] hover:bg-transparent">
-              <TableHead className="py-0 pl-3 pr-2 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Ngày GD
-              </TableHead>
-              <TableHead className="py-0 px-2 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Mã
-              </TableHead>
-              <TableHead className="py-0 px-2 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Loại
-              </TableHead>
-              <TableHead className="py-0 px-2 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Khối lượng
-              </TableHead>
-              <TableHead className="py-0 px-2 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Giá (k₫)
-              </TableHead>
-              <TableHead className="py-0 px-2 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Phí (k₫)
-              </TableHead>
-              <TableHead className="py-0 px-2 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">
-                Ghi chú & Thẻ Tags
-              </TableHead>
-              <TableHead className="py-0 pl-2 pr-3 text-right" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredTransactions.map((tx) => {
-              const isConfirming = deleteConfirmId === tx.id
-              const isDeleting = deletingId === tx.id
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filteredTransactions.map((transaction) => (
+          <BattleLogCard
+            key={transaction.id}
+            transaction={transaction}
+            isConfirming={deleteConfirmId === transaction.id}
+            isDeleting={deletingId === transaction.id}
+            onRequestDelete={setDeleteConfirmId}
+            onCancelDelete={() => setDeleteConfirmId(null)}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
 
-              return (
-                <TableRow
-                  key={tx.id}
-                  className="h-11 border-b border-[var(--color-border)] last:border-b-0 hover:bg-white/[0.04] transition-colors"
-                >
-                  {/* Ngày */}
-                  <TableCell className="py-0 pl-3 pr-2">
-                    <span className="font-ticker text-xs sm:text-sm font-semibold text-[var(--color-muted-2)] tabular-nums">
-                      {tx.transaction_date}
-                    </span>
-                  </TableCell>
+      <details className="rounded-2xl border border-[#252837] bg-[#0d0f17]">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold text-slate-200">
+          Chi tiết giao dịch dạng bảng
+        </summary>
+        <div className="overflow-x-auto border-t border-[var(--color-border)]">
+          <Table>
+            <TableHeader>
+              <TableRow className="h-9 border-b border-[var(--color-border)] hover:bg-transparent">
+                <TableHead className="py-0 pl-3 pr-2 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Ngày GD</TableHead>
+                <TableHead className="px-2 py-0 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Mã</TableHead>
+                <TableHead className="px-2 py-0 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Loại</TableHead>
+                <TableHead className="px-2 py-0 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Khối lượng</TableHead>
+                <TableHead className="px-2 py-0 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Giá (k₫)</TableHead>
+                <TableHead className="px-2 py-0 text-right font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Phí (k₫)</TableHead>
+                <TableHead className="px-2 py-0 text-left font-ticker text-xs font-bold uppercase tracking-wider text-[var(--color-muted-2)]">Ghi chú &amp; Thẻ Tags</TableHead>
+                <TableHead className="py-0 pl-2 pr-3 text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTransactions.map((transaction) => {
+                const isConfirming = deleteConfirmId === transaction.id
+                const isDeleting = deletingId === transaction.id
 
-                  {/* Mã */}
-                  <TableCell className="py-0 px-2">
-                    <Link
-                      href={`/insights/wyckoff?ticker=${tx.ticker}`}
-                      prefetch={false}
-                      className="font-ticker text-sm font-black uppercase tracking-wider text-purple-300 hover:text-purple-200 transition-colors"
-                    >
-                      {tx.ticker}
-                    </Link>
-                  </TableCell>
-
-                  {/* Loại */}
-                  <TableCell className="py-0 px-2">
-                    <div className="flex flex-col items-start gap-1">
-                      <ActionBadge action={tx.action} />
-                      <LegacyMigrationBadge transaction={tx} />
-                    </div>
-                  </TableCell>
-
-                  {/* Khối lượng */}
-                  <TableCell className="py-0 px-2 text-right">
-                    <span className="font-ticker text-xs sm:text-sm font-bold text-white tabular-nums">
-                      {tx.quantity.toLocaleString("vi-VN")}
-                    </span>
-                  </TableCell>
-
-                  {/* Giá */}
-                  <TableCell className="py-0 px-2 text-right">
-                    <span className="font-ticker text-xs sm:text-sm font-bold text-white tabular-nums">
-                      {tx.action === "dividend_stock" ? "–" : tx.price.toFixed(1)}
-                    </span>
-                  </TableCell>
-
-                  {/* Phí */}
-                  <TableCell className="py-0 px-2 text-right">
-                    <span className="font-ticker text-xs font-medium text-[var(--color-muted-2)] tabular-nums">
-                      {tx.fee > 0 ? tx.fee.toFixed(1) : "0"}
-                    </span>
-                  </TableCell>
-
-                  {/* Ghi chú & Tags */}
-                  <TableCell className="py-0 px-2">
-                    <div className="flex flex-col gap-1 max-w-[280px]">
-                      {tx.note && (
-                        <span className="font-ticker text-xs text-slate-300 truncate italic">
-                          &ldquo;{tx.note}&rdquo;
-                        </span>
-                      )}
-                      <div className="flex flex-wrap gap-1">
-                        {tx.setup_tags &&
-                          tx.setup_tags.map((st) => (
-                            <span
-                              key={st}
-                              className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-300 border border-purple-500/30"
-                            >
-                              {st}
-                            </span>
-                          ))}
-                        {tx.mistake_tags &&
-                          tx.mistake_tags.map((mt) => (
-                            <span
-                              key={mt}
-                              className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300 border border-rose-500/30"
-                            >
-                              {mt}
-                            </span>
-                          ))}
+                return (
+                  <TableRow key={transaction.id} className="h-11 border-b border-[var(--color-border)] last:border-b-0 hover:bg-white/[0.04]">
+                    <TableCell className="py-0 pl-3 pr-2">
+                      <span className="text-xs font-semibold tabular-nums text-[var(--color-muted-2)] sm:text-sm">{transaction.transaction_date}</span>
+                    </TableCell>
+                    <TableCell className="px-2 py-0">
+                      <Link
+                        href={`/insights/wyckoff?ticker=${transaction.ticker}`}
+                        prefetch={false}
+                        className="text-sm font-black uppercase tracking-wider text-purple-300 hover:text-purple-200"
+                      >
+                        {transaction.ticker}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="px-2 py-0">
+                      <div className="flex flex-col items-start gap-1">
+                        <ActionBadge action={transaction.action} />
+                        <LegacyMigrationBadge transaction={transaction} />
                       </div>
-                    </div>
-                  </TableCell>
-
-                  {/* Actions (Delete with inline confirm) */}
-                  <TableCell className="py-0 pl-2 pr-3 text-right">
-                    {isConfirming ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="icon-xs"
-                          variant="destructive"
-                          aria-label="Xác nhận xóa"
-                          disabled={isDeleting}
-                          onClick={() => handleDelete(tx.id)}
-                          className="h-6 w-6"
-                        >
-                          <Check className="size-3" />
-                        </Button>
+                    </TableCell>
+                    <TableCell className="px-2 py-0 text-right">
+                      <span className="text-xs font-bold tabular-nums text-white sm:text-sm">{transaction.quantity.toLocaleString("vi-VN")}</span>
+                    </TableCell>
+                    <TableCell className="px-2 py-0 text-right">
+                      <span className="text-xs font-bold tabular-nums text-white sm:text-sm">
+                        {transaction.action === "dividend_stock" ? "–" : transaction.price.toFixed(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="px-2 py-0 text-right">
+                      <span className="text-xs font-medium tabular-nums text-[var(--color-muted-2)]">{transaction.fee > 0 ? transaction.fee.toFixed(1) : "0"}</span>
+                    </TableCell>
+                    <TableCell className="px-2 py-0">
+                      <div className="flex max-w-[280px] flex-col gap-1">
+                        {transaction.note && <span className="truncate text-xs italic text-slate-300">“{transaction.note}”</span>}
+                        <div className="flex flex-wrap gap-1">
+                          {(transaction.setup_tags ?? []).map((tag) => (
+                            <span key={tag} className="rounded border border-purple-500/30 bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-300">{tag}</span>
+                          ))}
+                          {(transaction.mistake_tags ?? []).map((tag) => (
+                            <span key={tag} className="rounded border border-rose-500/30 bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-0 pl-2 pr-3 text-right">
+                      {isConfirming ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="icon-xs"
+                            variant="destructive"
+                            aria-label="Xác nhận xóa"
+                            disabled={isDeleting}
+                            onClick={() => void handleDelete(transaction.id)}
+                            className="h-6 w-6"
+                          >
+                            <Check className="size-3" />
+                          </Button>
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            aria-label="Hủy xóa"
+                            disabled={isDeleting}
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="h-6 w-6 text-[var(--color-muted-2)] hover:text-foreground"
+                          >
+                            <X className="size-3" />
+                          </Button>
+                        </div>
+                      ) : (
                         <Button
                           size="icon-xs"
                           variant="ghost"
-                          aria-label="Hủy xóa"
-                          disabled={isDeleting}
-                          onClick={() => setDeleteConfirmId(null)}
-                          className="h-6 w-6 text-[var(--color-muted-2)] hover:text-foreground"
+                          aria-label="Xóa giao dịch"
+                          onClick={() => setDeleteConfirmId(transaction.id)}
+                          className="h-7 w-7 rounded-full text-[var(--color-muted-2)] hover:bg-[var(--color-down)]/10 hover:text-[var(--color-down)]"
                         >
-                          <X className="size-3" />
+                          <Trash2 className="size-3.5" />
                         </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label="Xóa giao dịch"
-                        onClick={() => setDeleteConfirmId(tx.id)}
-                        className="h-7 w-7 rounded-full text-[var(--color-muted-2)] hover:text-[var(--color-down)] hover:bg-[var(--color-down)]/10"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </details>
     </div>
   )
 }
