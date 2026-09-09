@@ -48,7 +48,51 @@ export async function PATCH(
 
   if (body?.initial_capital !== undefined) {
     const cap = Number(body.initial_capital)
-    if (Number.isFinite(cap) && cap >= 0) {
+    if (!Number.isFinite(cap) || cap < 0) return err("Vốn ban đầu không hợp lệ.", 400)
+
+    const { data: currentPortfolio, error: portfolioError } = await auth.context.supabase
+      .from("portfolios")
+      .select("id,initial_capital")
+      .eq("id", portfolioId)
+      .eq("user_id", auth.context.user.id)
+      .maybeSingle()
+
+    if (portfolioError) {
+      console.error("[Portfolio] Opening capital lookup failed", portfolioError)
+      return err("Failed to validate opening capital.")
+    }
+    if (!currentPortfolio) return err("Danh mục không tồn tại.", 404)
+
+    const currentCap = Number(currentPortfolio.initial_capital ?? 0)
+    if (currentCap !== cap) {
+      const [transactionsActivity, cashFlowActivity] = await Promise.all([
+        auth.context.supabase
+          .from("portfolio_transactions")
+          .select("*", { count: "exact", head: true })
+          .eq("portfolio_id", portfolioId)
+          .eq("user_id", auth.context.user.id),
+        auth.context.supabase
+          .from("portfolio_external_cash_flows")
+          .select("*", { count: "exact", head: true })
+          .eq("portfolio_id", portfolioId)
+          .eq("user_id", auth.context.user.id),
+      ])
+
+      if (transactionsActivity.error || cashFlowActivity.error) {
+        console.error(
+          "[Portfolio] Opening capital activity check failed",
+          transactionsActivity.error ?? cashFlowActivity.error,
+        )
+        return err("Failed to validate portfolio activity.")
+      }
+
+      if ((transactionsActivity.count ?? 0) > 0 || (cashFlowActivity.count ?? 0) > 0) {
+        return err(
+          "Không thể sửa Vốn ban đầu sau khi danh mục đã có hoạt động. Hãy ghi nhận thay đổi qua Dòng vốn ngoài.",
+          409,
+        )
+      }
+
       updates.initial_capital = cap
     }
   }
@@ -62,7 +106,7 @@ export async function PATCH(
     .update(updates)
     .eq("id", portfolioId)
     .eq("user_id", auth.context.user.id)
-    .select("id,user_id,name,description,initial_capital,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,description,initial_capital,funding_history_status,is_default,sort_order,created_at,updated_at")
     .single()
 
   if (error || !data) {
