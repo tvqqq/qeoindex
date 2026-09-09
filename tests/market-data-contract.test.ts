@@ -259,11 +259,16 @@ test("QEO-108 native intraday cutover is session-partitioned, verified, rollback
   assert.doesNotMatch(migration, /cascade/i)
 })
 
-test("QEO-149 hot writes use the locked native-session bulk writer", () => {
+test("QEO-149 hot writes prefer the locked writer and isolate the quarantined-schema fallback", () => {
   const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
-  assert.match(hotStore, /qeo_upsert_chart_intraday_bars/)
-  assert.doesNotMatch(hotStore, /qeo_ensure_chart_intraday_session_partition/)
-  assert.doesNotMatch(hotStore, /\.from\("chart_ohlcv_intraday"\)\.upsert/)
+  const upsert = hotStore.match(/export async function upsertHotIntradayBars[\s\S]*$/)?.[0] ?? ""
+  const fallback = hotStore.match(/async function upsertHotIntradayBarsLegacy[\s\S]*?\n}\n\nexport async function upsertHotIntradayBars/)?.[0] ?? ""
+
+  assert.match(upsert, /supabase\.rpc\("qeo_upsert_chart_intraday_bars"/)
+  assert.match(upsert, /if \(offset === 0 && missingQeo149WriterRpc\(error\)\)/)
+  assert.match(upsert, /upsertHotIntradayBarsLegacy/)
+  assert.match(fallback, /qeo_ensure_chart_intraday_session_partition/)
+  assert.match(fallback, /\.from\("chart_ohlcv_intraday"\)\.upsert/)
 })
 
 test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB quota", () => {
