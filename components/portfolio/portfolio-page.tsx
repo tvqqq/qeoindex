@@ -8,6 +8,7 @@ import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-t
 import { PortfolioBattleHud } from "@/components/portfolio/revamp/portfolio-battle-hud"
 import { PortfolioCommandActions } from "@/components/portfolio/revamp/portfolio-command-actions"
 import { PortfolioCommandHeader } from "@/components/portfolio/revamp/portfolio-command-header"
+import { PortfolioPositionGrid } from "@/components/portfolio/revamp/portfolio-position-grid"
 import { WatchlistPanel, type WatchlistMeta, type WatchlistItem } from "@/components/portfolio/watchlist-panel"
 import { TopNav } from "@/components/top-nav"
 import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/modules/portfolio/market-prices"
@@ -452,16 +453,22 @@ export function PortfolioPage() {
               <PortfolioRiskDashboard key={activePortfolioId} portfolioId={activePortfolioId} />
             )}
 
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
-              <div className="min-w-0 rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
-                  <h2 className="font-ticker text-sm font-extrabold uppercase tracking-wide text-white sm:text-base">
-                    Vị thế đang mở
-                  </h2>
-                  <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-0.5 font-ticker text-xs font-bold text-purple-300">
-                    {positions.length} mã
-                  </span>
-                </div>
+            <PortfolioPositionGrid
+              positions={positions}
+              currentPrices={currentPrices}
+              loading={loadingTx}
+              onAddTransaction={handleOpenAddTx}
+            />
+
+            {positions.length > 0 && (
+              <PortfolioAllocationChart positions={positions} currentPrices={currentPrices} />
+            )}
+
+            <details className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] shadow-sm">
+              <summary className="cursor-pointer px-6 py-4 font-ticker text-sm font-extrabold uppercase tracking-wide text-white">
+                Chi tiết đội hình
+              </summary>
+              <div className="border-t border-[var(--color-border)] px-6 py-4">
                 <PortfolioPositionsTable
                   positions={positions}
                   currentPrices={currentPrices}
@@ -469,13 +476,7 @@ export function PortfolioPage() {
                   onAddTransaction={handleOpenAddTx}
                 />
               </div>
-
-              <div className="space-y-6">
-                {positions.length > 0 && (
-                  <PortfolioAllocationChart positions={positions} currentPrices={currentPrices} />
-                )}
-              </div>
-            </div>
+            </details>
           </div>
         )}
 
