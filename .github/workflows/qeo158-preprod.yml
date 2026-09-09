@@ -71,6 +71,22 @@ jobs:
       - name: QEO-158 server funding context
         run: node --test tests/portfolio/qeo158-server-context.test.ts
 
+  api-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-158 external funding API contract
+        run: node --test tests/portfolio/qeo158-cash-flow-api.test.ts
+
   postgres-migration:
     runs-on: ubuntu-latest
     timeout-minutes: 35
