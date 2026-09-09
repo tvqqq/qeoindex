@@ -54,6 +54,7 @@ export type EquityPoint = {
   kind: "baseline" | "daily" | "current"
   equityVnd: number | null
   flowAdjustedEquityVnd?: number | null
+  externalFlowVnd: number
   cumulativeExternalFlowVnd?: number
   fundingHistoryStatus?: FundingHistoryStatus
   status: "complete" | "incomplete"
