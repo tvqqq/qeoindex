@@ -175,3 +175,41 @@ test("custom scale-out percentages must be positive and total exactly 100 within
     },
   }), /100/)
 })
+
+test("diversification plan validates optional ticker concentration and concurrent-position hard limits", async () => {
+  const { validateMoneyManagementPlan } = await loadValidation()
+
+  assert.doesNotThrow(() => validateMoneyManagementPlan({
+    ...basePlan,
+    diversificationRules: {
+      enabled: true,
+      concentrationWarningPercent: 20,
+      maxTickerConcentrationPercent: 30,
+      maxSectorRiskPercent: 6,
+      maxConcurrentOpenPositions: 8,
+    },
+  } as never))
+
+  for (const maxTickerConcentrationPercent of [0, 101, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => validateMoneyManagementPlan({
+      ...basePlan,
+      diversificationRules: { enabled: true, maxTickerConcentrationPercent },
+    } as never), /ticker concentration/i)
+  }
+
+  for (const maxConcurrentOpenPositions of [0, -1, 1.5]) {
+    assert.throws(() => validateMoneyManagementPlan({
+      ...basePlan,
+      diversificationRules: { enabled: true, maxConcurrentOpenPositions },
+    } as never), /concurrent open positions/i)
+  }
+
+  assert.doesNotThrow(() => validateMoneyManagementPlan({
+    ...basePlan,
+    diversificationRules: { enabled: false },
+  }))
+  assert.doesNotThrow(() => validateMoneyManagementPlan({
+    ...basePlan,
+    diversificationRules: { enabled: true, concentrationWarningPercent: 20, maxSectorRiskPercent: 6 },
+  }))
+})
