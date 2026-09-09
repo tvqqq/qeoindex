@@ -255,3 +255,21 @@ test("QEO-148 durable coverage and fencing are server-side and fail closed", () 
   assert.match(service, /liveTailRange/)
   assert.match(bootstrap, /runClosedRangeIngestion/)
 })
+
+test("QEO-148 DB drift runs an isolated closed-range rehearsal with production guardrails", () => {
+  const workflow = source(".github/workflows/db-drift.yml")
+  const rehearsalUrl = new URL("../scripts/db/rehearse-qeo148-closed-range.sh", import.meta.url)
+  assert.equal(existsSync(rehearsalUrl), true, "QEO-148 isolated DB rehearsal must exist")
+  const rehearsal = existsSync(rehearsalUrl) ? readFileSync(rehearsalUrl, "utf8") : ""
+
+  assert.match(workflow, /rehearse-qeo148-closed-range\.sh/)
+  assert.match(rehearsal, /PRODUCTION_PROJECT_REF/)
+  assert.match(rehearsal, /production project ref is forbidden/i)
+  assert.match(rehearsal, /qeo_claim_chart_intraday_range/)
+  assert.match(rehearsal, /'busy'/)
+  assert.match(rehearsal, /lease_expires_at/)
+  assert.match(rehearsal, /'stale'/)
+  assert.match(rehearsal, /partial/i)
+  assert.match(rehearsal, /1201/)
+  assert.match(rehearsal, /qeo_chart_intraday_success_coverage/)
+})
