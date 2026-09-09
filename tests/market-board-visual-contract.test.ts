@@ -7,6 +7,10 @@ import {
   buildDnseBoardSubscriptionPlan,
 } from "../modules/market/board/dnse-subscriptions.ts"
 import {
+  rewriteDnseBoardSubscriptionMessage,
+  synthesizeDnseOhlcFromTickMessage,
+} from "../modules/market/providers/dnse/market-stream.ts"
+import {
   defaultStockFilterCriteria,
   filterBoardTickers,
   isValidDailyFilterCache,
@@ -25,6 +29,7 @@ const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/rou
 const boardTransitionSource = readFileSync(new URL("../components/smoothui/market-board-transition/index.tsx", import.meta.url), "utf8")
 const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
 const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", import.meta.url), "utf8")
+const marketStreamSource = readFileSync(new URL("../modules/market/providers/dnse/market-stream.ts", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -299,12 +304,36 @@ test("DNSE normalUser board subscription stays within the 200-channel budget for
 
   assert.equal(plan.realtimeSymbols.length, 200)
   assert.deepEqual(plan.overflowSymbols, [])
+  assert.equal(plan.channels.length, 1)
+  assert.equal(plan.channels[0]?.name, "tick.G1.json")
   assert.ok(plan.subscriptionCount <= DNSE_NORMAL_USER_CHANNEL_LIMIT, `subscriptionCount=${plan.subscriptionCount}`)
 })
 
-test("market board uses the budgeted DNSE plan and derives mini-chart updates from realtime ticks", () => {
-  assert.match(boardSource, /buildDnseBoardSubscriptionPlan\(symbolList\)/)
-  assert.match(boardSource, /channels: subscriptionPlan\.channels/)
-  assert.match(boardSource, /type === "t"[\s\S]*pushFiveMinuteClose\(ticker, price, timestamp\)/)
-  assert.doesNotMatch(boardSource, /INDEX_CHANNELS/)
+test("DNSE board transport rewrites legacy multi-feed subscription and preserves tick-driven mini charts", () => {
+  const symbols = Array.from({ length: 200 }, (_, index) => `S${String(index + 1).padStart(3, "0")}`)
+  const legacy = JSON.stringify({
+    action: "subscribe",
+    channels: [
+      { name: "tick.G1.json", symbols },
+      { name: "top_price.G1.json", symbols },
+      { name: "ohlc.1.json", symbols: [...symbols, "VN30F1M"] },
+      { name: "foreign.G1.json", symbols },
+      { name: "market_index.VNINDEX.json" },
+      { name: "market_index.VN30.json" },
+      { name: "market_index.HNX.json" },
+      { name: "market_index.UPCOM.json" },
+    ],
+  })
+  const rewritten = rewriteDnseBoardSubscriptionMessage(legacy)
+  assert.equal(typeof rewritten, "string")
+  const parsed = JSON.parse(String(rewritten)) as { channels: Array<{ name: string; symbols?: string[] }> }
+  assert.deepEqual(parsed.channels, [{ name: "tick.G1.json", symbols }])
+
+  const synthetic = synthesizeDnseOhlcFromTickMessage(JSON.stringify({ T: "t", symbol: "VCB", matchPrice: 61_500, time: 1_788_921_000 }))
+  assert.ok(synthetic)
+  assert.deepEqual(JSON.parse(synthetic!), { T: "b", symbol: "VCB", matchPrice: 61_500, time: 1_788_921_000, close: 61_500 })
+
+  assert.match(boardSource, /publishDnseMarketFrame/)
+  assert.match(marketStreamSource, /installDnseBoardSubscriptionBudgetGuard\(\)/)
+  assert.match(marketStreamSource, /preserveBoardMiniCharts\(this\)/)
 })
