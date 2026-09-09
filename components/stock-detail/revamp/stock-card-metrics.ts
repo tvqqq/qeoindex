@@ -1,10 +1,3 @@
-export function rangePosition(value: number, floor: number, ceiling: number) {
-  if (![value, floor, ceiling].every(Number.isFinite)) return 50
-  const span = ceiling - floor
-  if (span <= 0) return 50
-  return Math.min(100, Math.max(0, ((value - floor) / span) * 100))
-}
-
 export function formatCompactNumber(value: number | null | undefined, digits = 1) {
   if (value == null || !Number.isFinite(value)) return "—"
 
