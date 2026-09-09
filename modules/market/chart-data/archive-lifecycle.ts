@@ -155,6 +155,8 @@ export async function runChartIntradayArchiveLifecycle(
       })
       const hourlyBars = aggregateChartTimeframe(beforeArchiveBars, "1h")
       if (!hourlyBars.length) throw new Error("Verified raw archive produced no deterministic 1h cache bars")
+      // QEO-103's former upsertDerivedHourlyBars producer is superseded by
+      // QEO-147 publication, which proves exact persistence before prune.
       const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
         ticker: partition.ticker,
         bars: hourlyBars,
