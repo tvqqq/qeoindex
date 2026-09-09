@@ -25,8 +25,17 @@ import {
   proveHotArchivePartitionEligibility,
   proveHotArchivePartitionsEligibility,
 } from "../modules/market/chart-data/hot-retention.ts"
+import {
+  aggregateChartTimeframe,
+  hourlyCoverageIsComplete,
+  overlayHourlyHotOnDerived,
+} from "../modules/market/chart-data/timeframes.ts"
 
 const DAY = 86400
+
+function epoch(iso: string) {
+  return Math.floor(new Date(iso).getTime() / 1000)
+}
 
 function vietnamMidnight(dateKey: string) {
   return Math.floor(new Date(`${dateKey}T00:00:00+07:00`).getTime() / 1000)
@@ -195,17 +204,73 @@ test("QEO-90 archive guard runs before archive and verified prune", () => {
   assert.match(lifecycle, /proveHotArchivePartitionsEligibility/)
 })
 
-test("QEO-108 hourly read path splits physical HOT/COLD at the five-session boundary", () => {
+test("QEO-146 hourly reads compose protected older HOT without dropping partial-hour COLD", () => {
   const service = source("modules/market/chart-data/timeframe-service.ts")
   assert.match(service, /readDerivedHourlyRange/)
   assert.match(service, /derivedHourlyColdCoverageComplete/)
   assert.match(service, /readIntersectingRange/)
   assert.match(service, /VERIFIED_COLD_1M_RECOVERY/)
+  assert.match(service, /readHotIntradayRange/)
+  assert.match(service, /hotLoader/)
+  assert.match(service, /DERIVED_1H_CACHE\+HOT_1M_OVERLAY/)
+  assert.match(service, /hourlyOverlapRange/)
+  assert.match(service, /overlayHourlyHotOnDerived/)
   assert.match(service, /chartHotSessionRetentionCutoff/)
-  assert.match(service, /const oldTo = Math\.min\(request\.to, hotCutoff - 1\)/)
   assert.match(service, /const recentFrom = Math\.max\(sourceRange\.from, hotCutoff\)/)
   assert.match(service, /aggregateChartTimeframe\(mergeBars\(recentResults\), "1h"\)/)
   assert.match(service, /request\.resolution === "1h" \? mergedHourly : aggregateChartTimeframe\(mergedHourly, request\.resolution\)/)
+
+  const cold = [
+    { time: epoch("2026-08-24T02:00:00Z"), open: 100, high: 101, low: 99, close: 100, volume: 10 },
+    { time: epoch("2026-08-24T02:01:00Z"), open: 101, high: 102, low: 100, close: 101, volume: 11 },
+    { time: epoch("2026-08-24T02:02:00Z"), open: 102, high: 103, low: 101, close: 102, volume: 12 },
+    { time: epoch("2026-08-24T03:00:00Z"), open: 110, high: 111, low: 109, close: 110, volume: 20 },
+    { time: epoch("2026-08-24T03:01:00Z"), open: 111, high: 112, low: 110, close: 111, volume: 21 },
+    { time: epoch("2026-08-24T03:02:00Z"), open: 112, high: 113, low: 111, close: 112, volume: 22 },
+  ]
+  const hot = [
+    { ...cold[1], open: 201, high: 202, low: 200, close: 201, volume: 99 },
+  ]
+  const derived = [
+    { time: epoch("2026-08-24T02:00:00Z"), open: 100, high: 103, low: 99, close: 102, volume: 33 },
+    { time: epoch("2026-08-24T03:00:00Z"), open: 110, high: 113, low: 109, close: 112, volume: 63 },
+  ]
+  const overlay = overlayHourlyHotOnDerived({ derived, cold, hot })
+  assert.equal(overlay.unresolvedHotOverlap, false)
+  assert.equal(overlay.bars.length, derived.length)
+  assert.equal(overlay.bars[0].close, 102)
+  assert.equal(overlay.bars[0].volume, 121)
+  assert.ok(overlay.integrityIssues.length > 0, "the HOT/COLD disagreement remains integrity evidence")
+  for (const resolution of ["1h", "2h", "4h"] as const) {
+    const bars = aggregateChartTimeframe(overlay.bars, resolution)
+    assert.ok(bars.length > 0, `${resolution} should retain the protected Aug 24 source`)
+    assert.deepEqual(bars, [...bars].sort((a, b) => a.time - b.time))
+  }
+})
+
+test("QEO-146 unknown old-source coverage can never report COMPLETE", () => {
+  assert.equal(hourlyCoverageIsComplete({
+    barsPresent: true,
+    oldRequested: true,
+    oldCoverageProven: false,
+    recentCoverageComplete: true,
+    hasGaps: false,
+    hasIntegrityIssues: false,
+    hasErrors: false,
+  }), false)
+  assert.equal(hourlyCoverageIsComplete({
+    barsPresent: true,
+    oldRequested: true,
+    oldCoverageProven: true,
+    recentCoverageComplete: true,
+    hasGaps: false,
+    hasIntegrityIssues: false,
+    hasErrors: false,
+  }), true)
+
+  const service = source("modules/market/chart-data/timeframe-service.ts")
+  assert.match(service, /oldCoverageProven/)
+  assert.match(service, /hourlyCoverageIsComplete/)
 })
 
 test("QEO-103 legacy derived recovery re-verifies cold raw before cache persistence", () => {
