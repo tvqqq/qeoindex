@@ -513,7 +513,14 @@ export function PortfolioPage() {
               totalRealizedPnlKvnd={totalRealizedPnl}
             />
             {activePortfolioId && (
-              <PortfolioRiskPlan key={activePortfolioId} portfolioId={activePortfolioId} />
+              <details className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] shadow-sm">
+                <summary className="cursor-pointer px-6 py-4 font-ticker text-sm font-extrabold uppercase tracking-wide text-white">
+                  Kế hoạch quản trị vốn nâng cao
+                </summary>
+                <div className="border-t border-[var(--color-border)] p-4 sm:p-6">
+                  <PortfolioRiskPlan key={activePortfolioId} portfolioId={activePortfolioId} />
+                </div>
+              </details>
             )}
           </div>
         )}
