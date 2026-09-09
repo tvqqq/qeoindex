@@ -312,7 +312,7 @@
       "productionVersion": null,
       "state": "QUARANTINED",
       "evidence": "qeo108-production-readonly-schema-index-capacity-audit-pending-nonproduction-rehearsal",
-      "rationale": "Native session/date partition cutover remains quarantined until a non-production rehearsal proves exact row/range/checksum parity, service-role RPC rebinds, deterministic empty-partition reclamation, rollback-shadow behavior, and latency/correctness acceptance. Production DDL has not been applied."
+      "rationale": "Native session/date partition cutover remains quarantined until a non-production rehearsal proves exact row/range/checksum parity, the shared qeo108-chart-session:<date> lifecycle lock and service-role RPC rebinds, deterministic empty-partition reclamation, rollback-shadow behavior, and latency/correctness acceptance. Production DDL has not been applied."
     },
     {
       "logicalName": "qeo149_correction_safe_prune",
@@ -320,7 +320,7 @@
       "productionVersion": null,
       "state": "QUARANTINED",
       "evidence": "qeo149-unreleased-correction-safe-prune-pending-isolated-db-replay",
-      "rationale": "The additive writer/prune protocol remains pending until isolated migration replay, two-session concurrency evidence, generated-type parity, and release-authorized production rollout are complete. No production DDL has been applied."
+      "rationale": "The date-scoped lifecycle-lock writer/prune protocol remains pending until isolated migration replay, the bounded two-session concurrency rehearsal (including child/provenance mutation denial), generated-type parity, and release-authorized production rollout are complete. No production DDL has been applied; this entry remains QUARANTINED."
     },
     {
       "logicalName": "qeo108_chart_capacity_and_index_cleanup",

@@ -63,6 +63,8 @@ jobs:
         run: pnpm typecheck
       - name: Rehearse QEO-108 quarantined chart cutover
         run: bash scripts/db/rehearse-qeo108-chart-storage.sh
+      - name: Rehearse QEO-149 two-session chart concurrency
+        run: bash scripts/db/rehearse-qeo149-concurrency.sh
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup

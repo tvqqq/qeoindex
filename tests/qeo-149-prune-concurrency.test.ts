@@ -2,109 +2,61 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-type HotRow = {
-  key: string
-  contentDigest: string
-  contentVersion: number
-}
+const qeo108Migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
+const qeo149Migration = readFileSync(new URL("../supabase/pending-migrations/20260909100000_qeo149_correction_safe_prune.sql", import.meta.url), "utf8")
+const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
+const harness = readFileSync(new URL("../scripts/db/rehearse-qeo149-concurrency.sh", import.meta.url), "utf8")
+const workflow = readFileSync(new URL("../.github/workflows/db-drift.yml", import.meta.url), "utf8")
 
-type ArchiveProof = {
-  contentDigest: string
-  contentVersion: number
-  rowCount: number
-}
-
-function aggregate(rows: HotRow[]): ArchiveProof {
-  return {
-    contentDigest: rows.map((row) => row.contentDigest).join("")
-      .padEnd(64, "0")
-      .slice(0, 64),
-    contentVersion: Math.max(...rows.map((row) => row.contentVersion)),
-    rowCount: rows.length,
-  }
-}
-
-function pruneLocked(rows: HotRow[], proof: ArchiveProof) {
-  if (!proof.contentDigest || !proof.contentVersion || !proof.rowCount) {
-    return { status: "deferred" as const, reason: "missing_proof" as const, deletedRows: 0 }
-  }
-  const current = aggregate(rows)
-  if (current.rowCount !== proof.rowCount || current.contentDigest !== proof.contentDigest || current.contentVersion !== proof.contentVersion) {
-    return { status: "deferred" as const, reason: "content_mismatch" as const, deletedRows: 0 }
-  }
-  rows.splice(0, rows.length)
-  return { status: "pruned" as const, deletedRows: proof.rowCount }
-}
-
-function upsert(rows: HotRow[], row: HotRow) {
-  const index = rows.findIndex((current) => current.key === row.key)
-  if (index === -1) rows.push(row)
-  else rows[index] = row
-}
-
-test("QEO-149 isolated model defers a committed correction before locked validation", () => {
-  const rows = [{ key: "09:15", contentDigest: "a".repeat(64), contentVersion: 10 }]
-  const archived = aggregate(rows)
-
-  upsert(rows, { key: "09:15", contentDigest: "b".repeat(64), contentVersion: 11 })
-  const result = pruneLocked(rows, archived)
-
-  assert.deepEqual(result, { status: "deferred", reason: "content_mismatch", deletedRows: 0 })
-  assert.equal(rows[0].contentDigest, "b".repeat(64))
+test("QEO-149 uses the QEO-108 date lifecycle namespace", () => {
+  assert.match(qeo108Migration, /create or replace function public\.qeo_chart_intraday_session_lock_key\(p_trading_date date\)/i)
+  assert.match(qeo108Migration, /qeo108-chart-session:' \|\| p_trading_date::text/i)
+  assert.match(qeo108Migration, /qeo_ensure_chart_intraday_session_partition_locked/i)
+  assert.match(qeo108Migration, /perform pg_advisory_xact_lock\(public\.qeo_chart_intraday_session_lock_key\(p_trading_date\)\)/i)
+  assert.match(qeo108Migration, /qeo_drop_empty_chart_intraday_session_partition[\s\S]*?perform pg_advisory_xact_lock[\s\S]*?v_name :=/i)
+  assert.doesNotMatch(qeo149Migration, /qeo149-chart-ticker-session/i)
 })
 
-test("QEO-149 equal counts cannot authorize timestamp or provenance substitutions", () => {
-  for (const key of ["09:16", "09:15:provenance"]) {
-    const rows = [{ key, contentDigest: "a".repeat(64), contentVersion: 20 }]
-    const archived = aggregate(rows)
-    upsert(rows, { key, contentDigest: "c".repeat(64), contentVersion: 21 })
-
-    const result = pruneLocked(rows, archived)
-    assert.equal(result.status, "deferred")
-    assert.equal(result.deletedRows, 0)
-    assert.equal(rows.length, 1)
-  }
+test("QEO-149 stamps only inserted/updated rows and routes mutations through the RPC", () => {
+  assert.match(qeo149Migration, /create sequence if not exists public\.chart_ohlcv_intraday_content_version_seq/i)
+  assert.match(qeo149Migration, /create trigger qeo149_chart_intraday_content_identity\s+before insert or update on public\.chart_ohlcv_intraday/i)
+  assert.doesNotMatch(qeo149Migration, /before insert or update or delete on public\.chart_ohlcv_intraday/i)
+  assert.match(qeo149Migration, /create or replace function public\.qeo_upsert_chart_intraday_bars\(\s*p_ticker text,\s*p_rows jsonb/i)
+  assert.match(qeo149Migration, /jsonb_array_length\(p_rows\)[\s\S]*?> 500/i)
+  assert.match(qeo149Migration, /qeo_upsert_chart_intraday_bars[\s\S]*?on conflict \(ticker, base_resolution, bar_time\) do update/i)
+  assert.match(qeo149Migration, /for v_date in[\s\S]*?order by 1[\s\S]*?pg_advisory_xact_lock/i)
+  assert.match(qeo149Migration, /revoke all privileges on table public\.chart_ohlcv_intraday from service_role/i)
+  assert.match(qeo149Migration, /grant select on table public\.chart_ohlcv_intraday to service_role/i)
+  assert.match(qeo149Migration, /revoke all privileges on table public\.chart_ohlcv_provenance_batches from service_role/i)
+  assert.match(qeo149Migration, /grant select, insert on table public\.chart_ohlcv_provenance_batches to service_role/i)
+  assert.match(qeo149Migration, /drop function if exists public\.qeo_prune_verified_chart_intraday_partition\(uuid, text, integer\)/i)
+  assert.match(qeo149Migration, /create or replace function public\.qeo_prune_verified_chart_intraday_partition\(\s*p_manifest_id uuid,[\s\S]*?p_expected_newer_sessions text\[\]/i)
+  assert.match(qeo149Migration, /v_lock_dates[\s\S]*?order by value[\s\S]*?for update/i)
+  assert.match(qeo149Migration, /string_agg\(h\.content_digest, '' order by h\.bar_time\)/i)
+  assert.match(qeo149Migration, /return jsonb_build_object\([\s\S]*?'status', 'deferred'/i)
 })
 
-test("QEO-149 a writer queued behind the prune lock survives after commit", () => {
-  const rows = [{ key: "09:17", contentDigest: "a".repeat(64), contentVersion: 30 }]
-  const archived = aggregate(rows)
-  let lockHeld = true
-  let queuedWriter: HotRow | null = { key: "09:17", contentDigest: "d".repeat(64), contentVersion: 31 }
-
-  const prune = pruneLocked(rows, archived)
-  assert.equal(prune.status, "pruned")
-  assert.equal(rows.length, 0)
-
-  lockHeld = false
-  if (!lockHeld && queuedWriter) {
-    upsert(rows, queuedWriter)
-    queuedWriter = null
-  }
-  assert.deepEqual(rows, [{ key: "09:17", contentDigest: "d".repeat(64), contentVersion: 31 }])
+test("QEO-149 hot-store uses bounded writer RPC results", () => {
+  assert.match(hotStore, /supabase\.rpc\("qeo_upsert_chart_intraday_bars"/i)
+  assert.match(hotStore, /p_rows: chunk/i)
+  assert.match(hotStore, /result\.status !== "upserted"/i)
+  assert.match(hotStore, /writer row accounting mismatch/i)
+  assert.doesNotMatch(hotStore, /qeo_ensure_chart_intraday_session_partition/i)
+  assert.doesNotMatch(hotStore, /\.from\("chart_ohlcv_intraday"\)\.upsert/i)
 })
 
-test("QEO-149 unknown archive proof fails closed without deleting HOT rows", () => {
-  const rows = [{ key: "09:18", contentDigest: "e".repeat(64), contentVersion: 40 }]
-  const result = pruneLocked(rows, { contentDigest: "", contentVersion: 0, rowCount: 0 })
-
-  assert.deepEqual(result, { status: "deferred", reason: "missing_proof", deletedRows: 0 })
-  assert.equal(rows.length, 1)
-})
-
-test("QEO-149 migration enforces shared locks, exact proof, fail-closed legacy calls, and safe deferral", () => {
-  const migration = readFileSync(new URL("../supabase/pending-migrations/20260909100000_qeo149_correction_safe_prune.sql", import.meta.url), "utf8")
-  assert.match(migration, /create sequence if not exists public\.chart_ohlcv_intraday_content_version_seq/i)
-  assert.match(migration, /create trigger qeo149_chart_intraday_content_identity/i)
-  assert.match(migration, /before insert or update or delete on public\.chart_ohlcv_intraday/i)
-  assert.match(migration, /revoke trigger on table public\.chart_ohlcv_intraday from service_role/i)
-  assert.match(migration, /qeo149-chart-ticker-session/i)
-  assert.match(migration, /p_expected_content_digest/i)
-  assert.match(migration, /p_expected_content_version/i)
-  assert.match(migration, /p_expected_newer_sessions/i)
-  assert.match(migration, /string_agg\(h\.content_digest, '' order by h\.bar_time\)/i)
-  assert.match(migration, /return jsonb_build_object\([\s\S]*'status', 'deferred'/i)
-  assert.match(migration, /drop function if exists public\.qeo_prune_verified_chart_intraday_partition\(uuid, text, integer\)/i)
-  assert.match(migration, /qeo149_chart_intraday_content_identity[\s\S]*?before insert or update or delete/i)
-  assert.doesNotMatch(migration, /delete from public\.chart_ohlcv_intraday[\s\S]*?v_hot_rows <> p_expected_row_count[\s\S]*?delete from/i)
+test("QEO-149 real two-session rehearsal is wired after QEO-108", () => {
+  assert.match(harness, /independent|background|session/i)
+  assert.match(harness, /qeo_upsert_chart_intraday_bars/i)
+  assert.match(harness, /qeo_prune_verified_chart_intraday_partition/i)
+  assert.match(harness, /qeo149/i)
+  assert.match(harness, /PGAPPNAME/)
+  assert.match(harness, /wait_for_advisory_holder/)
+  assert.match(harness, /wait_for_advisory_wait/)
+  assert.match(harness, /pg_locks/)
+  assert.match(harness, /QEO-108 native partition contract/)
+  assert.match(harness, /malformed retention proof changed HOT row count/)
+  assert.match(harness, /direct service_role child UPDATE unexpectedly succeeded/)
+  assert.equal((harness.match(/for v_child in/g) ?? []).length, 1)
+  assert.match(workflow, /rehearse-qeo108-chart-storage\.sh[\s\S]*?rehearse-qeo149-concurrency\.sh/i)
 })

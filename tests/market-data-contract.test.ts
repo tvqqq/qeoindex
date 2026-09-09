@@ -259,11 +259,11 @@ test("QEO-108 native intraday cutover is session-partitioned, verified, rollback
   assert.doesNotMatch(migration, /cascade/i)
 })
 
-test("QEO-108 hot writes provision a native session partition before upsert", () => {
+test("QEO-149 hot writes use the locked native-session bulk writer", () => {
   const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
-  const ensure = hotStore.indexOf("qeo_ensure_chart_intraday_session_partition")
-  const upsert = hotStore.indexOf('.from("chart_ohlcv_intraday").upsert')
-  assert.ok(ensure >= 0 && upsert > ensure)
+  assert.match(hotStore, /qeo_upsert_chart_intraday_bars/)
+  assert.doesNotMatch(hotStore, /qeo_ensure_chart_intraday_session_partition/)
+  assert.doesNotMatch(hotStore, /\.from\("chart_ohlcv_intraday"\)\.upsert/)
 })
 
 test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB quota", () => {

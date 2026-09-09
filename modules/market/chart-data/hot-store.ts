@@ -58,18 +58,6 @@ function vietnamDateKey(epochSeconds: number) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(epochSeconds * 1000))
 }
 
-function missingPartitionRpc(error: { code?: string | null; message?: string | null }) {
-  return error.code === "PGRST202" || /qeo_ensure_chart_intraday_session_partition/i.test(error.message ?? "") && /not find|not found/i.test(error.message ?? "")
-}
-
-async function ensureHotIntradaySessionPartitions(supabase: SupabaseClient, bars: CanonicalOhlcvBar[]) {
-  const tradingDates = [...new Set(bars.map((bar) => vietnamDateKey(bar.time)))]
-  for (const tradingDate of tradingDates) {
-    const { error } = await supabase.rpc("qeo_ensure_chart_intraday_session_partition", { p_trading_date: tradingDate })
-    if (error && !missingPartitionRpc(error)) throw new Error(`Chart session partition provisioning failed: ${error.message}`)
-  }
-}
-
 export interface HotArchivePartition {
   ticker: string
   tradingDate: string
@@ -319,7 +307,6 @@ export async function upsertHotIntradayBars(
 ) {
   if (!input.bars.length) return { batchId: null as string | null, rowCount: 0 }
   const sorted = [...input.bars].sort((a, b) => a.time - b.time)
-  await ensureHotIntradaySessionPartitions(supabase, sorted)
   const fetchedAt = input.fetchedAt ?? new Date().toISOString()
   const provenance = input.provenanceBatchId
     ? { batchId: input.provenanceBatchId, rowCount: sorted.length }
@@ -339,9 +326,22 @@ export async function upsertHotIntradayBars(
     open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume,
     provenance_batch_id: provenance.batchId, fetched_at: fetchedAt,
   }))
+  let writtenRows = 0
   for (let offset = 0; offset < rows.length; offset += UPSERT_CHUNK_SIZE) {
-    const { error } = await supabase.from("chart_ohlcv_intraday").upsert(rows.slice(offset, offset + UPSERT_CHUNK_SIZE), { onConflict: "ticker,base_resolution,bar_time" })
-    if (error) throw new Error(`Chart hot-store upsert failed: ${error.message}`)
+    const chunk = rows.slice(offset, offset + UPSERT_CHUNK_SIZE)
+    const { data, error } = await supabase.rpc("qeo_upsert_chart_intraday_bars", {
+      p_ticker: input.ticker,
+      p_rows: chunk,
+    })
+    if (error) throw new Error(`Chart hot-store writer RPC failed: ${error.message}`)
+    const result = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+    const resultTicker = String(result.ticker ?? "").trim().toUpperCase()
+    const resultRows = finite(result.rowCount)
+    if (result.status !== "upserted" || resultTicker !== input.ticker.trim().toUpperCase() || resultRows == null || resultRows !== chunk.length) {
+      throw new Error(`Chart hot-store writer RPC returned invalid result status=${String(result.status)} rowCount=${String(result.rowCount)}`)
+    }
+    writtenRows += resultRows
   }
-  return { batchId: provenance.batchId, rowCount: rows.length }
+  if (writtenRows !== rows.length) throw new Error(`Chart hot-store writer row accounting mismatch: expected ${rows.length}, wrote ${writtenRows}`)
+  return { batchId: provenance.batchId, rowCount: writtenRows }
 }
