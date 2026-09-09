@@ -45,3 +45,48 @@ test("Qeo Composite defaults to all canonical stocks and exposes sortable market
   assert.match(dashboard, /Vốn h[oó]a/i)
   assert.match(dashboard, /const filteredRatings = useMemo\([\s\S]*return data\.ratings/)
 })
+
+test("QEO-162 homepage refreshes VNINDEX, replaces the CTA with a canonical stock finder, and simplifies the workspace divider", () => {
+  const home = source("app/page.tsx")
+  const hero = source("components/home/home-hero.tsx")
+  const heroData = source("modules/home/hero-data.ts")
+  const freshMarket = source("modules/home/fresh-market-snapshot.ts")
+  const stockSearch = source("components/home/home-stock-search.tsx")
+  const divider = source("components/home/workspace-divider.tsx")
+
+  assert.match(home, /getCanonicalUniverse/, "homepage should load the canonical Top Stocks universe for the selector")
+  assert.match(home, /<HomeHero[\s\S]*stocks=\{universe\.stocks\}/, "homepage should pass canonical stock identities into the hero")
+
+  assert.match(heroData, /getFreshHomepageIndexSnapshot/, "hero read model should attempt a refresh-time index snapshot")
+  assert.match(freshMarket, /fetchTradingViewIndexes/, "fresh homepage snapshot should reuse the bounded existing index provider path")
+  assert.match(freshMarket, /VNINDEX/, "fresh homepage snapshot should explicitly select VNINDEX")
+  assert.match(heroData, /freshIndex[\s\S]*persistedMarket/, "fresh provider data should overlay persisted Market Insight while retaining fallback context")
+  assert.match(hero, /Cập nhật/, "market object should expose the refresh snapshot timestamp")
+
+  assert.match(hero, /Bạn muốn hỏi cổ phiếu nào\?/, "center hero should become a stock question entry point")
+  assert.match(hero, /<HomeStockSearch/, "hero should mount the canonical stock finder")
+  assert.doesNotMatch(hero, /Xem phân tích thị trường|Lối tắt homepage/, "old CTA and quick-link row should be removed from the visible hero")
+  assert.doesNotMatch(
+    hero,
+    /aria-labelledby="home-market-pulse-title"[\s\S]{0,220}overflow-hidden/,
+    "hero must not vertically clip the absolutely positioned stock dropdown",
+  )
+
+  assert.match(stockSearch, /^"use client"/, "keyboard combobox behavior should stay inside a focused client component")
+  assert.match(stockSearch, /role="combobox"/)
+  assert.match(stockSearch, /aria-autocomplete="list"/)
+  assert.match(stockSearch, /StockLogo/)
+  assert.match(stockSearch, /companyName/)
+  assert.match(stockSearch, /ArrowDown/)
+  assert.match(stockSearch, /ArrowUp/)
+  assert.match(stockSearch, /Enter/)
+  assert.match(stockSearch, /router\.push\(`\/insights\/\$\{ticker\}`\)/, "Enter and submit should navigate to the selected insights ticker")
+  assert.doesNotMatch(stockSearch, /transition-all|backdrop-blur|backdrop-filter/)
+
+  assert.match(home, /<WorkspaceDivider/)
+  assert.doesNotMatch(home, /QeoIndex Workspace|Chọn workspace để đi sâu|Từ snapshot tổng quan/, "old workspace marketing copy should be removed")
+  assert.match(divider, /Chọn Workspace để xem chi tiết/)
+  assert.match(divider, /<svg/)
+  assert.match(divider, /<path/)
+  assert.doesNotMatch(`${home}\n${hero}\n${stockSearch}\n${divider}`, /transition-all|backdrop-blur|backdrop-filter/)
+})

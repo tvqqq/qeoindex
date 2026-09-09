@@ -2,6 +2,10 @@ import "server-only"
 
 import type { ServerAuthContext } from "@/modules/auth/server"
 import {
+  getFreshHomepageIndexSnapshot,
+  type FreshHomepageIndexSnapshot,
+} from "@/modules/home/fresh-market-snapshot"
+import {
   computePortfolioPositions,
   type RawTransaction,
   type TransactionAction,
@@ -17,6 +21,7 @@ export type HomeHeroMarket = {
   leadingSectorRs: number | null
   sentimentLabel: string | null
   riskLabel: string | null
+  snapshotUpdatedAt: string | null
 }
 
 export type HomeHeroPortfolio = {
@@ -47,6 +52,7 @@ const EMPTY_MARKET: HomeHeroMarket = {
   leadingSectorRs: null,
   sentimentLabel: null,
   riskLabel: null,
+  snapshotUpdatedAt: null,
 }
 
 const EMPTY_PORTFOLIO: HomeHeroPortfolio = {
@@ -173,6 +179,22 @@ async function loadMarketSummary(context: ServerAuthContext): Promise<HomeHeroMa
     leadingSectorRs: finiteNumber(sector?.rs_score),
     sentimentLabel: optionalText(daily.sentiment_label),
     riskLabel: optionalText(daily.risk_label),
+    snapshotUpdatedAt: null,
+  }
+}
+
+function overlayFreshMarket(
+  freshIndex: FreshHomepageIndexSnapshot | null,
+  persistedMarket: HomeHeroMarket,
+): HomeHeroMarket {
+  if (!freshIndex) return persistedMarket
+  return {
+    ...persistedMarket,
+    vnindexValue: freshIndex.value,
+    changePct: freshIndex.changePct,
+    advances: freshIndex.advances ?? persistedMarket.advances,
+    declines: freshIndex.declines ?? persistedMarket.declines,
+    snapshotUpdatedAt: freshIndex.updatedAt,
   }
 }
 
@@ -258,10 +280,12 @@ export function deriveHomeMarketHeadline(market: HomeHeroMarket): string {
 }
 
 export async function getHomeHeroData(context: ServerAuthContext): Promise<HomeHeroData> {
-  const [market, portfolio] = await Promise.all([
+  const [persistedMarket, portfolio, freshIndex] = await Promise.all([
     loadMarketSummary(context).catch(() => EMPTY_MARKET),
     loadPortfolioSummary(context).catch(() => EMPTY_PORTFOLIO),
+    getFreshHomepageIndexSnapshot().catch(() => null),
   ])
+  const market = overlayFreshMarket(freshIndex, persistedMarket)
 
   return {
     market,

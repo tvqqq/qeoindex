@@ -1,7 +1,5 @@
 import Link from "next/link"
 import {
-  ArrowDown,
-  ArrowRight,
   BarChart3,
   Briefcase,
   PieChart,
@@ -10,6 +8,10 @@ import {
   WalletCards,
 } from "lucide-react"
 
+import {
+  HomeStockSearch,
+  type HomeStockSearchStock,
+} from "@/components/home/home-stock-search"
 import type { HomeHeroData } from "@/modules/home/hero-data"
 
 import styles from "./home-hero.module.css"
@@ -51,17 +53,32 @@ function formatSessionDate(value: string | null) {
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
+function formatSnapshotTime(value: string | null) {
+  if (!value) return null
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return null
+  return new Intl.DateTimeFormat("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(date)
+}
+
 function MarketObject({ data }: { data: HomeHeroData["market"] }) {
   const positive = data.changePct != null && data.changePct >= 0
   const ChangeIcon = positive ? TrendingUp : TrendingDown
   const breadthAvailable = data.advances != null && data.declines != null
+  const freshTime = formatSnapshotTime(data.snapshotUpdatedAt)
 
   return (
     <div className={`order-2 flex min-w-0 items-center justify-center lg:order-1 ${styles.marketEnter}`}>
       <div className="w-full max-w-[390px] lg:max-w-none">
         <div className="mb-4 pl-3 lg:pl-8">
           <div className="text-sm font-black tracking-tight text-white sm:text-base">VNINDEX</div>
-          <div className="mt-1 text-xs text-slate-500">Market snapshot · {formatSessionDate(data.sessionDate)}</div>
+          <div className="mt-1 text-xs text-slate-500">
+            {freshTime ? `Cập nhật ${freshTime} · khi tải trang` : `Market snapshot · ${formatSessionDate(data.sessionDate)}`}
+          </div>
         </div>
 
         <Link
@@ -106,7 +123,9 @@ function MarketObject({ data }: { data: HomeHeroData["market"] }) {
             <div className={positive ? "text-base font-black text-emerald-300" : "text-base font-black text-rose-300"}>
               {formatPercent(data.changePct, true)}
             </div>
-            <div className="mt-0.5 text-[9px] font-black uppercase tracking-[0.13em] text-slate-500">Phiên gần nhất</div>
+            <div className="mt-0.5 text-[9px] font-black uppercase tracking-[0.13em] text-slate-500">
+              {freshTime ? "Lúc refresh" : "Phiên gần nhất"}
+            </div>
           </div>
 
           <div className={`${styles.badgeEnter} absolute -bottom-5 -left-10 max-w-[190px] rounded-2xl border border-white/10 bg-[#202328] px-4 py-3 shadow-[0_18px_38px_-16px_rgba(0,0,0,0.9)] transition-transform duration-500 group-hover/market:-translate-x-1 motion-reduce:transform-none motion-reduce:transition-none`}>
@@ -119,7 +138,7 @@ function MarketObject({ data }: { data: HomeHeroData["market"] }) {
   )
 }
 
-function CenterNarrative({ data }: { data: HomeHeroData }) {
+function CenterNarrative({ data, stocks }: { data: HomeHeroData; stocks: readonly HomeStockSearchStock[] }) {
   return (
     <div className={`order-1 flex min-w-0 flex-col items-center justify-center px-1 text-center lg:order-2 ${styles.centerEnter}`}>
       <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
@@ -127,11 +146,9 @@ function CenterNarrative({ data }: { data: HomeHeroData }) {
         QEO Market Pulse · {formatSessionDate(data.market.sessionDate)}
       </div>
 
-      <h1 className="mt-6 max-w-[720px] text-[clamp(2.7rem,5.5vw,5.25rem)] font-black leading-[0.94] tracking-[-0.065em] text-white">
-        {data.headline.split("\n").map((line, index) => (
-          <span key={line} className="block">
-            {line}{index === 0 ? "," : ""}
-          </span>
+      <h1 id="home-market-pulse-title" className="mt-6 max-w-[720px] text-[clamp(2.7rem,5.5vw,5.25rem)] font-black leading-[0.94] tracking-[-0.065em] text-white">
+        {data.headline.split("\n").map((line) => (
+          <span key={line} className="block">{line}</span>
         ))}
       </h1>
 
@@ -139,27 +156,17 @@ function CenterNarrative({ data }: { data: HomeHeroData }) {
         Market structure <span className="mx-1.5 text-[#d5ff63]">×</span> Portfolio discipline
       </div>
 
-      <div className="mt-7 text-3xl font-black tracking-[-0.04em] text-[#d5ff63] sm:text-4xl" aria-hidden="true">×</div>
-      <ArrowDown className="mt-4 h-7 w-7 text-slate-700" strokeWidth={1.4} aria-hidden="true" />
-
-      <div className="mt-5 rounded-full bg-[#25282d] p-2 shadow-[0_20px_45px_-24px_rgba(213,255,99,0.42)]">
-        <Link
-          href="/insights"
-          prefetch={false}
-          className="group/cta flex min-w-[250px] items-center justify-center gap-3 rounded-full bg-[#d5ff63] px-7 py-4 text-sm font-black text-[#111317] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[transform,box-shadow] duration-300 hover:scale-[1.015] hover:shadow-[0_12px_32px_-18px_rgba(213,255,99,0.9)] motion-reduce:transform-none motion-reduce:transition-none sm:min-w-[310px]"
-        >
-          Xem phân tích thị trường
-          <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover/cta:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none" />
-        </Link>
+      <div className="mt-9 w-full">
+        <h2 className="text-xl font-black tracking-[-0.03em] text-white sm:text-2xl">Bạn muốn hỏi cổ phiếu nào?</h2>
+        <HomeStockSearch stocks={stocks} />
       </div>
 
-      <nav aria-label="Lối tắt homepage" className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold text-slate-500">
-        <Link href="/board" prefetch={false} className="transition-colors duration-200 hover:text-white">Bảng điện</Link>
-        <span className="h-1 w-1 rounded-full bg-slate-700" aria-hidden="true" />
-        <Link href="/portfolio" prefetch={false} className="transition-colors duration-200 hover:text-white">Danh mục</Link>
-        <span className="h-1 w-1 rounded-full bg-slate-700" aria-hidden="true" />
-        <Link href="/reports" prefetch={false} className="transition-colors duration-200 hover:text-white">Research</Link>
-      </nav>
+      <noscript>
+        <nav aria-label="Lối tắt khi JavaScript bị tắt" className="hidden">
+          <a href="/board">Bảng điện</a>
+          <a href="/reports">Research</a>
+        </nav>
+      </noscript>
     </div>
   )
 }
@@ -246,18 +253,16 @@ function PortfolioObject({ data }: { data: HomeHeroData["portfolio"] }) {
   )
 }
 
-export function HomeHero({ data }: { data: HomeHeroData }) {
+export function HomeHero({ data, stocks }: { data: HomeHeroData; stocks: readonly HomeStockSearchStock[] }) {
   return (
     <section
       aria-labelledby="home-market-pulse-title"
-      className="relative overflow-hidden border-b border-white/[0.055] py-10 sm:py-14 lg:min-h-[620px] lg:py-16"
+      className="relative border-b border-white/[0.055] py-10 sm:py-14 lg:min-h-[620px] lg:py-16"
     >
       <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-[42%] h-px w-[76%] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       <div className="relative grid items-center gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)_minmax(0,1fr)] lg:gap-5 xl:gap-8">
         <MarketObject data={data.market} />
-        <div id="home-market-pulse-title" className="contents">
-          <CenterNarrative data={data} />
-        </div>
+        <CenterNarrative data={data} stocks={stocks} />
         <PortfolioObject data={data.portfolio} />
       </div>
     </section>
