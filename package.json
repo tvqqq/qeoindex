@@ -45,6 +45,8 @@
     "test:notion": "node --test tests/notion-adapter.test.ts tests/ai-council-research-context.test.ts",
     "test:wyckoff-ui": "node --test tests/wyckoff-ui-performance.test.ts tests/wyckoff-infographic-ui.test.ts",
     "test:council": "node --test tests/root-admin-settings.test.ts tests/ai-council-prompt-evidence.test.ts tests/ai-council-llm-reliability.test.ts tests/ai-council-investor-report.test.ts tests/ai-council-investor-ui.test.ts tests/ai-council-persistence.test.ts tests/ai-council-research-context.test.ts tests/ai-council-workflow-boundary.test.ts tests/wyckoff-eod-refresh.test.ts",
+    "test:qeo144": "node --test tests/portfolio/qeo144-*.test.ts",
+    "test:qeo144:browser": "playwright test tests/browser/qeo144-portfolio.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
