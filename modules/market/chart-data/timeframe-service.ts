@@ -23,6 +23,7 @@ import { getCanonicalChartOhlcv, type ChartDataServiceDeps } from "./service"
 import {
   aggregateChartTimeframe,
   canonicalSourceResolution,
+  hourlyCoverageIsComplete,
   hourlyOverlapRange,
   overlayHourlyHotOnDerived,
   sourceRangeForResolution,
@@ -99,6 +100,7 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const oldIntegrityIssues: ChartDataIntegrityIssue[] = []
   let oldHourly: CanonicalOhlcvBar[] = []
   let oldProvider: string | null = null
+  let oldCoverageProven = !oldRequested
   if (oldRequested) {
     let oldHot: CanonicalOhlcvBar[] = []
     try {
@@ -110,6 +112,7 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
     try {
       const coverageComplete = await derivedCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo })
       if (coverageComplete) {
+        oldCoverageProven = true
         const derived = await loadDerived({ ticker: request.ticker, from: oldFrom, to: oldTo })
         if (!oldHot.length) {
           oldHourly = derived
@@ -130,10 +133,15 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
           const overlay = overlayHourlyHotOnDerived({ derived, cold: cold.bars, hot: oldHot })
           oldIntegrityIssues.push(...overlay.integrityIssues)
           oldHourly = overlay.bars
+          oldCoverageProven = !overlay.unresolvedHotOverlap
           if (overlay.unresolvedHotOverlap) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
           if (oldHourly.length) oldProvider = "DERIVED_1H_CACHE+HOT_1M_OVERLAY"
         }
       } else {
+        // Existing RAW/HOT bars remain useful response evidence, but without a
+        // positive old-range coverage proof they must not promote the request
+        // to COMPLETE. QEO-147 owns the stronger manifest readiness proof.
+        oldCoverageProven = false
         const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
         const cold = await coldStorage.readIntersectingRange({ ticker: request.ticker, from: oldFrom, to: oldTo })
         const normalized = normalizeCanonicalBars([
@@ -146,6 +154,7 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
       }
       if (!oldHourly.length) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
     } catch {
+      oldCoverageProven = false
       oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
       // A retained HOT-only range is still useful evidence. It remains
       // PARTIAL because the failed/unknown older source is preserved above.
@@ -173,10 +182,15 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const integrityIssues = uniqueIntegrity(recentResults)
   integrityIssues.push(...oldIntegrityIssues.filter((issue) => !integrityIssues.some((existing) => JSON.stringify(existing) === JSON.stringify(issue))))
   const errors = mergeErrors(uniqueErrors(recentResults), oldErrors)
-  const complete = bars.length > 0
-    && (!oldRequested || oldHourly.length > 0)
-    && recentResults.every((result) => result.coverage.complete)
-    && gaps.length === 0 && integrityIssues.length === 0 && errors.length === 0
+  const complete = hourlyCoverageIsComplete({
+    barsPresent: bars.length > 0,
+    oldRequested,
+    oldCoverageProven,
+    recentCoverageComplete: recentResults.every((result) => result.coverage.complete),
+    hasGaps: gaps.length > 0,
+    hasIntegrityIssues: integrityIssues.length > 0,
+    hasErrors: errors.length > 0,
+  })
 
   const sourceMetadata = [...recentResults].reverse().find((result) => result.metadata)?.metadata
   const oldPersistedThrough = oldHourly.at(-1)?.time ?? null
