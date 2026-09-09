@@ -12,12 +12,14 @@ function point(
   flowAdjustedEquityVnd: number,
   fundingHistoryStatus: "known" | "legacy_unrecorded" = "known",
 ): EquityPoint {
+  const cumulativeExternalFlowVnd = equityVnd - flowAdjustedEquityVnd
   return {
     key,
     kind: key === "baseline" ? "baseline" : "daily",
     equityVnd,
     flowAdjustedEquityVnd,
-    cumulativeExternalFlowVnd: equityVnd - flowAdjustedEquityVnd,
+    externalFlowVnd: key === "2026-09-02" ? cumulativeExternalFlowVnd : 0,
+    cumulativeExternalFlowVnd,
     fundingHistoryStatus,
     status: "complete",
     missingTickers: [],
