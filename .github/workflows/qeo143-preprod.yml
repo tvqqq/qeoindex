@@ -7,6 +7,7 @@ on:
       - "modules/portfolio/**"
       - "app/api/portfolio/**"
       - "components/portfolio/**"
+      - "tests/portfolio/qeo137-legacy-transactions-context.test.ts"
       - "tests/portfolio/qeo143-*.test.ts"
       - "tests/portfolio/qeo143-*.sql"
       - "scripts/db/verify-qeo143-legacy-migration.sh"
@@ -67,3 +68,7 @@ jobs:
         run: node --test tests/portfolio/qeo143-read-model-completeness.test.ts
       - name: QEO-143 Scorecard eligibility boundary
         run: node --test tests/portfolio/qeo143-performance-eligibility.test.ts
+      - name: QEO-143 legacy server context
+        run: node --test tests/portfolio/qeo137-legacy-transactions-context.test.ts
+      - name: QEO-143 legacy journal UI
+        run: node --test tests/portfolio/qeo143-legacy-ui.test.ts
