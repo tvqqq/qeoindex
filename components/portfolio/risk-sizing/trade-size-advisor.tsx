@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Calculator, Pencil, Trash2 } from "lucide-react"
 
+import { ProjectedConcentrationPanel } from "@/components/portfolio/concentration/projected-concentration-panel"
 import { Input } from "@/components/ui/input"
+import { projectTradeConcentration } from "@/modules/portfolio/concentration/project-trade"
 import {
   calculateTradeSize,
   DEFAULT_REGULAR_LOT_SHARES,
@@ -15,13 +17,16 @@ import type {
   TradeSizeStatus,
 } from "@/modules/portfolio/risk-sizing/types"
 import { cn } from "@/modules/shared/ui/cn"
+import { persistPlannedTradeRecord } from "./planned-trade-persistence"
 import { RiskMetricTooltip } from "./risk-metric-tooltip"
 import type { RiskSizingClientContext } from "./use-risk-sizing-context"
 
 type RiskProvenance = "Money Management Plan" | "Onboarding default" | "Manual override" | "Planned Trade"
 type RiskTerm = Parameters<typeof RiskMetricTooltip>[0]["term"]
+type TradeModeSelection = "" | "live" | "paper"
 
 export function TradeSizeAdvisor({
+  portfolioId,
   accountEquityContext,
   riskContext,
   loadingRiskContext,
@@ -30,6 +35,7 @@ export function TradeSizeAdvisor({
   onUpsertPlannedTrade,
   onRemovePlannedTrade,
 }: {
+  portfolioId: string
   accountEquityContext: AccountEquityContext
   riskContext: RiskSizingClientContext | null
   loadingRiskContext: boolean
@@ -47,6 +53,11 @@ export function TradeSizeAdvisor({
   const [slippageInput, setSlippageInput] = useState("0")
   const [advancedAcknowledged, setAdvancedAcknowledged] = useState(false)
   const [editingTicker, setEditingTicker] = useState<string | null>(null)
+  const [selectedMode, setSelectedMode] = useState<TradeModeSelection>("")
+  const [overrideReason, setOverrideReason] = useState("")
+  const [persistingPlan, setPersistingPlan] = useState(false)
+  const [persistenceError, setPersistenceError] = useState<string | null>(null)
+  const [persistenceSuccess, setPersistenceSuccess] = useState<string | null>(null)
   const riskTouchedRef = useRef(false)
 
   useEffect(() => {
@@ -96,6 +107,29 @@ export function TradeSizeAdvisor({
 
   const riskContextUnavailable = !loadingRiskContext && riskContext == null
   const ready = result.status === "ready" && normalizedTicker.length > 0
+  const projectedConcentration = useMemo(() => {
+    if (
+      !riskContext
+      || !ready
+      || plannedEntryKvnd == null
+      || result.totalRiskConsumptionVnd == null
+      || result.tradeSizeShares <= 0
+    ) return null
+    return projectTradeConcentration({
+      current: riskContext.concentration,
+      accountEquityVnd: riskContext.accountEquityVnd,
+      rules: riskContext.concentration.rules,
+      trade: {
+        ticker: normalizedTicker,
+        plannedQty: result.tradeSizeShares,
+        plannedEntryKvnd,
+        plannedRiskVnd: result.totalRiskConsumptionVnd,
+        sector: riskContext?.sectorMetadata.byTicker[normalizedTicker] ?? null,
+      },
+    })
+  }, [normalizedTicker, plannedEntryKvnd, ready, result.totalRiskConsumptionVnd, result.tradeSizeShares, riskContext])
+  const requiresConcentrationOverride = projectedConcentration?.overallStatus === "WARNING"
+    || projectedConcentration?.overallStatus === "BREACH"
 
   const resetDraft = () => {
     setTickerInput("")
@@ -105,9 +139,13 @@ export function TradeSizeAdvisor({
     setSlippageInput("0")
     setAdvancedAcknowledged(false)
     setEditingTicker(null)
+    setSelectedMode("")
+    setOverrideReason("")
+    setPersistenceError(null)
+    setPersistenceSuccess(null)
   }
 
-  const addPlannedTrade = () => {
+  const buildPlannedTrade = (): PlannedTrade | null => {
     if (
       !ready
       || plannedEntryKvnd == null
@@ -116,9 +154,8 @@ export function TradeSizeAdvisor({
       || result.riskPerShareVnd == null
       || result.positionValueVnd == null
       || result.totalRiskConsumptionVnd == null
-    ) return
-
-    const next: PlannedTrade = {
+    ) return null
+    return {
       id: normalizedTicker,
       ticker: normalizedTicker,
       plannedEntryKvnd,
@@ -132,12 +169,43 @@ export function TradeSizeAdvisor({
       positionValueVnd: result.positionValueVnd,
       riskAddedVnd: result.totalRiskConsumptionVnd,
     }
+  }
 
+  const addPlannedTrade = () => {
+    const next = buildPlannedTrade()
+    if (!next) return
     if (editingTicker && editingTicker !== normalizedTicker) {
       onRemovePlannedTrade(editingTicker)
     }
     onUpsertPlannedTrade(next)
     resetDraft()
+  }
+
+  const persistPlannedTrade = async () => {
+    const next = buildPlannedTrade()
+    if (!next || !portfolioId || !selectedMode || !riskContext) return
+    if (requiresConcentrationOverride && !overrideReason.trim()) return
+
+    setPersistingPlan(true)
+    setPersistenceError(null)
+    setPersistenceSuccess(null)
+    try {
+      await persistPlannedTradeRecord({
+        portfolioId,
+        trade: next,
+        mode: selectedMode,
+        riskContext,
+        requiresConcentrationOverride,
+        overrideReason: overrideReason.trim() || null,
+      })
+      setPersistenceSuccess(`Đã lưu Trade dự kiến ${next.ticker}${requiresConcentrationOverride ? " cùng lý do override" : ""}.`)
+      if (editingTicker && editingTicker !== normalizedTicker) onRemovePlannedTrade(editingTicker)
+      onUpsertPlannedTrade(next)
+    } catch (cause) {
+      setPersistenceError(cause instanceof Error ? cause.message : "Không thể lưu Trade dự kiến.")
+    } finally {
+      setPersistingPlan(false)
+    }
   }
 
   const editPlannedTrade = (trade: PlannedTrade) => {
@@ -151,12 +219,20 @@ export function TradeSizeAdvisor({
     setCommissionInput(String(trade.estimatedCommissionVnd))
     setSlippageInput(String(trade.slippageAllowanceVnd))
     setAdvancedAcknowledged(trade.riskPercent > 2)
+    setPersistenceError(null)
+    setPersistenceSuccess(null)
   }
 
   const removePlannedTrade = (ticker: string) => {
     onRemovePlannedTrade(ticker)
     if (editingTicker === ticker) resetDraft()
   }
+
+  const canPersistPlan = ready
+    && Boolean(portfolioId)
+    && Boolean(selectedMode)
+    && riskContext != null
+    && (!requiresConcentrationOverride || Boolean(overrideReason.trim()))
 
   return (
     <div data-planner-advisor="trade-size" className="space-y-4 font-ticker">
@@ -268,6 +344,8 @@ export function TradeSizeAdvisor({
           </div>
         )}
 
+        {projectedConcentration ? <ProjectedConcentrationPanel projection={projectedConcentration} /> : null}
+
         {result.status === "ready" && normalizedTicker.length === 0 ? (
           <p className="mt-3 text-[11px] font-bold text-amber-200">Nhập mã cổ phiếu trước khi thêm giao dịch dự kiến.</p>
         ) : null}
@@ -285,13 +363,64 @@ export function TradeSizeAdvisor({
         >
           Thêm giao dịch dự kiến
         </button>
+
+        {ready ? (
+          <div className="mt-4 space-y-3 rounded-xl border border-white/[0.07] bg-black/25 p-3">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Lưu kế hoạch vào nhật ký Trade</p>
+              <p className="mt-1 text-[10px] text-slate-500">Chọn rõ Live/Paper. WARNING/BREACH không bị chặn, nhưng cần lý do override để audit.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(["live", "paper"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSelectedMode(mode)}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-[10px] font-black uppercase",
+                    selectedMode === mode ? "border-purple-400/35 bg-purple-400/10 text-purple-200" : "border-white/[0.08] text-slate-400",
+                  )}
+                >
+                  {mode === "live" ? "Live" : "Paper"}
+                </button>
+              ))}
+            </div>
+            {requiresConcentrationOverride ? (
+              <label className="block space-y-1.5">
+                <span className="text-[9px] font-black uppercase tracking-wide text-amber-200">Lý do override concentration/diversification</span>
+                <textarea
+                  value={overrideReason}
+                  onChange={(event) => setOverrideReason(event.target.value)}
+                  rows={3}
+                  placeholder="Giải thích vì sao vẫn chấp nhận giao dịch dù có cảnh báo/vượt giới hạn…"
+                  className="w-full resize-y rounded-lg border border-amber-500/20 bg-black/30 px-3 py-2 text-xs text-white outline-none placeholder:text-slate-600 focus:border-amber-400/40"
+                />
+              </label>
+            ) : null}
+            {persistenceError ? <p className="text-[10px] font-bold text-rose-300">{persistenceError}</p> : null}
+            {persistenceSuccess ? <p className="text-[10px] font-bold text-emerald-300">{persistenceSuccess}</p> : null}
+            <button
+              type="button"
+              onClick={() => void persistPlannedTrade()}
+              disabled={!canPersistPlan || persistingPlan}
+              className={cn(
+                "w-full rounded-lg border px-3 py-2.5 text-[10px] font-black uppercase tracking-wide",
+                canPersistPlan && !persistingPlan
+                  ? "border-purple-400/30 bg-purple-400/10 text-purple-100 hover:bg-purple-400/15"
+                  : "cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-600",
+              )}
+            >
+              {persistingPlan ? "Đang lưu…" : "Lưu Trade dự kiến"}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <section className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
           <div>
             <h4 className="text-xs font-extrabold uppercase tracking-wide text-white">Các giao dịch dự kiến</h4>
-            <p className="mt-1 text-[10px] text-slate-500">Chỉ dùng trong phiên lập kế hoạch · trạng thái tạm trên trình duyệt · không được lưu.</p>
+            <p className="mt-1 text-[10px] text-slate-500">Simulation trong phiên lập kế hoạch không được lưu. Chỉ nút “Lưu Trade dự kiến” ở trên mới ghi vào QEO-137.</p>
           </div>
           <Badge>{plannedTrades.length} mã</Badge>
         </div>

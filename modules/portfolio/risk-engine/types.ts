@@ -1,3 +1,5 @@
+import type { PortfolioConcentrationReadModel } from "../concentration/types.ts"
+
 export type FundingHistoryStatus = "known" | "legacy_unrecorded"
 
 export type ExternalCashFlowType = "deposit" | "withdrawal" | "capital_adjustment"
@@ -95,6 +97,7 @@ export type PortfolioRiskReadModel = {
     remainingRiskBudgetVnd: number | null
     coverage: "complete" | "partial"
   }
+  concentration: PortfolioConcentrationReadModel
   drawdown: DrawdownSnapshot
   riskState: PortfolioRiskStateResult
   evidence: {

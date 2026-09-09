@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
+import type { PortfolioConcentrationReadModel, SectorMetadataSnapshot } from "@/modules/portfolio/concentration/types"
 import type { OpenTradeRiskBreakdown, RiskState } from "@/modules/portfolio/risk-sizing/types"
 
 export type RiskSizingClientContext = {
@@ -9,6 +10,7 @@ export type RiskSizingClientContext = {
   effectiveDefaultTradeRiskPercent: number
   defaultTradeRiskPercent: number
   riskSource: "money_management_plan" | "onboarding_default"
+  moneyManagementPlanId: string | null
   riskState: RiskState
   riskStateReasons: string[]
   accountEquityVnd: number | null
@@ -18,6 +20,8 @@ export type RiskSizingClientContext = {
   knownActiveRiskVnd: number
   unknownRiskTradeCount: number
   openTradeRisks: OpenTradeRiskBreakdown[]
+  concentration: PortfolioConcentrationReadModel
+  sectorMetadata: SectorMetadataSnapshot
   winRatioPercent: number | null
   payoffRatio: number | null
   evidenceCompleteness: "complete" | "partial" | "insufficient"

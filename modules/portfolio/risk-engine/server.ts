@@ -6,9 +6,11 @@ import {
   getIntraday5mSnapshot,
   vietnamDateKey,
 } from "@/modules/market/realtime/intraday-5m-service"
+import { evaluateCurrentConcentration } from "../concentration/evaluate-current.ts"
+import { loadStructuredSectorMetadata } from "../concentration/sector-metadata.ts"
 import { computePortfolioPositions, type RawTransaction, type TransactionAction } from "../pnl.ts"
 import { getRiskPlanOverview } from "../risk-plan/server.ts"
-import type { HolidayPeriodRules, HolidayRules } from "../risk-plan/types.ts"
+import type { DiversificationRules, HolidayPeriodRules, HolidayRules } from "../risk-plan/types.ts"
 import { RiskPlanDomainError } from "../risk-plan/validation.ts"
 import { computeOpenTradeActiveRisk, type OpenTradeRiskInput, type StopRiskInput } from "./active-risk.ts"
 import { buildCurrentAccountEquity, buildEquityCurve } from "./equity-curve.ts"
@@ -52,6 +54,22 @@ function asRecord(value: unknown): Record<string, unknown> {
 function positiveIntegerOrNull(value: unknown): number | null {
   const number = Number(value)
   return Number.isInteger(number) && number > 0 ? number : null
+}
+
+function normalizeDiversificationRules(value: unknown): DiversificationRules | null {
+  const source = asRecord(value)
+  if (typeof source.enabled !== "boolean") return null
+  const result: DiversificationRules = { enabled: source.enabled }
+  for (const key of [
+    "concentrationWarningPercent",
+    "maxTickerConcentrationPercent",
+    "maxSectorRiskPercent",
+    "maxConcurrentOpenPositions",
+  ] as const) {
+    const number = finiteOrNull(source[key])
+    if (number != null) result[key] = number
+  }
+  return result
 }
 
 function normalizeHolidayPeriod(value: unknown): HolidayPeriodRules | undefined {
@@ -277,6 +295,12 @@ export async function getPortfolioRiskContext(
     stopEvents: stopRows as StopRiskInput[],
   })
 
+  const concentrationTickers = [...new Set([
+    ...openTickers,
+    ...active.rows.map((row) => row.ticker),
+  ])].sort()
+  const sectorMetadata = await loadStructuredSectorMetadata(concentrationTickers)
+
   const allTickers = [...new Set(transactions.map((transaction) => transaction.ticker))].sort()
   const firstTransactionDate = transactions[0]?.transaction_date ?? null
   const currentDate = vietnamDateKey(now)
@@ -337,6 +361,29 @@ export async function getPortfolioRiskContext(
         : "partial"
 
   const plan = overview.currentMoneyManagementPlan
+  const concentration = evaluateCurrentConcentration({
+    accountEquityVnd: account.equityVnd,
+    positions: summary.positions.map((position) => ({
+      ticker: position.ticker,
+      openQty: position.openQty,
+      currentPriceKvnd: currentPricesKvnd[position.ticker] ?? null,
+    })),
+    activeRiskRows: active.rows.map((row) => ({
+      tradeId: row.tradeId,
+      ticker: row.ticker,
+      activeRiskVnd: row.activeRiskVnd,
+      riskStatus: row.riskStatus,
+    })),
+    sectors: concentrationTickers.map((ticker) => ({
+      ticker,
+      sector: sectorMetadata.byTicker[ticker] ?? null,
+      source: sectorMetadata.source,
+      sourceAsOfDate: sectorMetadata.sourceAsOfDate,
+    })),
+    rules: normalizeDiversificationRules(plan?.diversification_rules),
+    planVersion: plan?.version == null ? null : Number(plan.version),
+  })
+
   const configuredDefaultTradeRiskPercent = finiteOrNull(plan?.default_trade_risk_percent) ?? 2
   const maxActiveRiskPercent = finiteOrNull(plan?.max_active_risk_percent)
   const reductionFactor = finiteOrNull(plan?.risk_reduction_factor)
@@ -508,6 +555,7 @@ export async function getPortfolioRiskContext(
       remainingRiskBudgetVnd,
       coverage: activeCoverage,
     },
+    concentration,
     drawdown,
     riskState,
     evidence: {

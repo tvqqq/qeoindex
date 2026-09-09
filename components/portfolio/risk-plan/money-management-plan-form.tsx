@@ -127,8 +127,10 @@ export function MoneyManagementPlanForm({
   const [customScaleOut, setCustomScaleOut] = useState("")
 
   const [diversificationEnabled, setDiversificationEnabled] = useState(false)
+  const [maxTickerConcentration, setMaxTickerConcentration] = useState("")
   const [maxSectorRisk, setMaxSectorRisk] = useState("")
   const [concentrationWarning, setConcentrationWarning] = useState("")
+  const [maxConcurrentOpenPositions, setMaxConcurrentOpenPositions] = useState("")
 
   const [riskCapitalMode, setRiskCapitalMode] = useState<"disabled" | "risk_capital_amount" | "net_worth_percent">("disabled")
   const [riskCapitalValue, setRiskCapitalValue] = useState("")
@@ -227,8 +229,10 @@ export function MoneyManagementPlanForm({
       },
       diversificationRules: {
         enabled: diversificationEnabled,
+        ...(diversificationEnabled && numeric(maxTickerConcentration) != null ? { maxTickerConcentrationPercent: numeric(maxTickerConcentration) } : {}),
         ...(diversificationEnabled && numeric(maxSectorRisk) != null ? { maxSectorRiskPercent: numeric(maxSectorRisk) } : {}),
         ...(diversificationEnabled && numeric(concentrationWarning) != null ? { concentrationWarningPercent: numeric(concentrationWarning) } : {}),
+        ...(diversificationEnabled && numeric(maxConcurrentOpenPositions) != null ? { maxConcurrentOpenPositions: numeric(maxConcurrentOpenPositions) } : {}),
       },
       riskCapitalPolicy,
       notes: notes.trim() || null,
@@ -466,12 +470,20 @@ export function MoneyManagementPlanForm({
             {diversificationEnabled && (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <RiskTermTooltip label="Max Sector Risk" help="Giới hạn rủi ro tối đa cho một ngành do bạn cấu hình; đây là trường của sản phẩm, không phải công thức phổ quát trong sách." />
+                  <RiskTermTooltip label="Max Ticker Concentration" help="Giới hạn cứng tùy chọn cho tỷ trọng giá trị thị trường của một mã trên Account Equity hiện tại. Chỉ có hiệu lực khi bạn nhập; QeoIndex không áp một ngưỡng phổ quát." />
+                  <NumberField ariaLabel={riskPlanLabelVi("Max Ticker Concentration")} value={maxTickerConcentration} onChange={setMaxTickerConcentration} placeholder="Tỷ trọng mỗi mã tối đa %" min={0.01} max={100} />
+                </div>
+                <div className="space-y-1.5">
+                  <RiskTermTooltip label="Max Sector Risk" help="Giới hạn cứng tùy chọn cho Active Risk của một ngành trên Account Equity hiện tại. Đây là cấu hình của bạn, không phải công thức phổ quát." />
                   <NumberField ariaLabel={riskPlanLabelVi("Max Sector Risk")} value={maxSectorRisk} onChange={setMaxSectorRisk} placeholder="Rủi ro ngành tối đa %" min={0.01} max={100} />
                 </div>
                 <div className="space-y-1.5">
-                  <RiskTermTooltip label="Concentration Warning" help="Ngưỡng phần trăm tập trung dùng để cảnh báo ở các tính năng sau; QEO-138 chỉ lưu cấu hình." />
-                  <NumberField ariaLabel={riskPlanLabelVi("Concentration Warning")} value={concentrationWarning} onChange={setConcentrationWarning} placeholder="Mức tập trung %" min={0.01} max={100} />
+                  <RiskTermTooltip label="Concentration Warning" help="Ngưỡng tỷ trọng giá trị thị trường dùng cho cảnh báo tư vấn theo mã. Đây chỉ là cảnh báo; nó không tự trở thành một giới hạn vi phạm cứng." />
+                  <NumberField ariaLabel={riskPlanLabelVi("Concentration Warning")} value={concentrationWarning} onChange={setConcentrationWarning} placeholder="Mức cảnh báo tập trung %" min={0.01} max={100} />
+                </div>
+                <div className="space-y-1.5">
+                  <RiskTermTooltip label="Max Concurrent Open Positions" help="Giới hạn cứng tùy chọn cho số mã có vị thế mở đồng thời. Không có giá trị mặc định ẩn; nhiều Trade cùng một mã vẫn được hiểu là một vị thế theo quy tắc này." />
+                  <NumberField ariaLabel={riskPlanLabelVi("Max Concurrent Open Positions")} value={maxConcurrentOpenPositions} onChange={setMaxConcurrentOpenPositions} placeholder="Số vị thế tối đa" step="1" min={1} />
                 </div>
               </div>
             )}

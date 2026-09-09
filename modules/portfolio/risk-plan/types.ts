@@ -77,6 +77,8 @@ export type DiversificationRules = {
   enabled: boolean
   maxSectorRiskPercent?: number
   concentrationWarningPercent?: number
+  maxTickerConcentrationPercent?: number
+  maxConcurrentOpenPositions?: number
 }
 
 export type RiskCapitalPolicy =

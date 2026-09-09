@@ -177,6 +177,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
             <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">Theo từng giao dịch</span>
           </div>
           <TradeSizeAdvisor
+            portfolioId={activePortfolioId}
             accountEquityContext={effectiveAccountEquityContext}
             riskContext={riskSizing.context}
             loadingRiskContext={riskSizing.loading}
