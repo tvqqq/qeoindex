@@ -14,9 +14,13 @@ function finitePositive(value: number | null | undefined): value is number {
   return value != null && Number.isFinite(value) && value > 0
 }
 
+function normalizePercent(value: number): number {
+  return Number(value.toFixed(12))
+}
+
 function percentOfEquity(amountVnd: number | null, accountEquityVnd: number | null): number | null {
   if (amountVnd == null || !finitePositive(accountEquityVnd)) return null
-  return (amountVnd / accountEquityVnd) * 100
+  return normalizePercent((amountVnd / accountEquityVnd) * 100)
 }
 
 function ruleEnabled(input: CurrentConcentrationInput): boolean {
