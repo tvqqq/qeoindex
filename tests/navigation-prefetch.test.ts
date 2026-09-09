@@ -181,3 +181,32 @@ test("research routes have an immediate loading boundary", () => {
   assert.match(loading, /aria-busy="true"/)
   assert.match(loading, /animate-pulse/)
 })
+
+test("QEO-152 makes the authenticated root a four-destination homepage and moves legacy surfaces to canonical routes", () => {
+  const home = source("app/page.tsx")
+  const board = source("app/board/page.tsx")
+  const reports = source("app/reports/page.tsx")
+  const legacyReports = source("app/insights/reports/page.tsx")
+  const nav = source("components/top-nav.tsx")
+  const adminHeader = source("components/admin/admin-header.tsx")
+
+  assert.match(home, /getServerAuthContext/)
+  assert.match(home, /LandingLogin/)
+  for (const href of ["/board", "/portfolio", "/insights", "/reports"]) {
+    assert.ok(home.includes(`href: "${href}"`) || home.includes(`href="${href}"`), `homepage should expose ${href}`)
+  }
+  assert.match(home, /grid[^\n]*md:grid-cols-2/)
+  assert.doesNotMatch(home, /transition-all|backdrop-blur|backdrop-filter|filter:/)
+
+  assert.match(board, /MarketBoardFilterShell/)
+  assert.match(board, /getCanonicalUniverse/)
+
+  assert.match(reports, /alternates:\s*\{ canonical: "\/reports" \}/)
+  assert.match(reports, /action="\/reports"/)
+  assert.match(legacyReports, /redirect\("\/reports"\)/)
+
+  assert.match(nav, /label: "Báo cáo Research",\s*href: "\/reports"/)
+  assert.match(nav, /const isBoardActive = pathname\.startsWith\("\/board"\)/)
+  assert.match(nav, /href="\/board"/)
+  assert.match(adminHeader, /href="\/board"/)
+})
