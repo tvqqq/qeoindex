@@ -5,6 +5,7 @@ import {
   buildCurrentAccountEquity,
   buildEquityCurve,
 } from "../../modules/portfolio/risk-engine/equity-curve.ts"
+import { externalFlowsOnOrBefore } from "../../modules/portfolio/risk-engine/external-cash-flows.ts"
 
 const deposit20m = [{
   id: "flow-deposit",
@@ -93,6 +94,43 @@ test("external flows apply only on and after their effective Vietnam date", () =
   assert.equal(curve.points[1]?.cumulativeExternalFlowVnd, 0)
   assert.equal(curve.points[2]?.equityVnd, 120_000_000)
   assert.equal(curve.points[2]?.cumulativeExternalFlowVnd, 20_000_000)
+})
+
+test("equity points expose point-local external flow separately from cumulative flow", () => {
+  const curve = buildEquityCurve({
+    initialCapitalVnd: 100_000_000,
+    transactions: [],
+    sessions: ["2026-09-01", "2026-09-02", "2026-09-03"],
+    rawDailyCloseKvnd: {
+      "2026-09-01": {},
+      "2026-09-02": {},
+      "2026-09-03": {},
+    },
+    externalCashFlows: deposit20m,
+    fundingHistoryStatus: "known",
+  })
+
+  assert.equal(curve.points[1]?.externalFlowVnd, 0)
+  assert.equal(curve.points[2]?.externalFlowVnd, 20_000_000)
+  assert.equal(curve.points[2]?.cumulativeExternalFlowVnd, 20_000_000)
+  assert.equal(curve.points[3]?.externalFlowVnd, 0)
+  assert.equal(curve.points[3]?.cumulativeExternalFlowVnd, 20_000_000)
+})
+
+test("exact snapshot cutoff excludes a later external flow on the same Vietnam date", () => {
+  const laterSameDay = {
+    ...deposit20m[0]!,
+    id: "flow-later",
+    signedAmountVnd: 5_000_000,
+    effectiveAt: "2026-09-02T08:00:00.000Z",
+  }
+
+  const included = externalFlowsOnOrBefore(
+    [deposit20m[0]!, laterSameDay],
+    "2026-09-02T07:45:00.000Z",
+  )
+
+  assert.deepEqual(included.map((flow) => flow.id), ["flow-deposit"])
 })
 
 test("legacy-unrecorded funding makes performance drawdown insufficient", () => {
