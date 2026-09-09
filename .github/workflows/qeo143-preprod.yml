@@ -22,7 +22,7 @@ concurrency:
 jobs:
   legacy-migration-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -40,3 +40,12 @@ jobs:
         run: node --test tests/portfolio/qeo143-legacy-migration-schema.test.ts
       - name: Existing Portfolio AVCO regression
         run: node --test tests/portfolio-pnl.test.ts
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero
+        run: pnpm db:replay:verify
+      - name: QEO-143 Postgres migration integration
+        run: bash scripts/db/verify-qeo143-legacy-migration.sh
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
