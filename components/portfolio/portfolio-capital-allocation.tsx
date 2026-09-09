@@ -118,7 +118,7 @@ export const PortfolioCapitalAllocation = memo(function PortfolioCapitalAllocati
             <div className="max-w-3xl">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-purple-200">
-                  <Layers3 className="h-3.5 w-3.5" /> War Room · Phân bổ vốn
+                  <Layers3 className="h-3.5 w-3.5" /> War Room · Lập kế hoạch phân bổ vốn
                 </span>
                 <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[10px] font-bold text-slate-300">
                   {activePortfolio.name}
