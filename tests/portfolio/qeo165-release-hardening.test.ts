@@ -29,7 +29,7 @@ test("QEO-165 command-center surfaces retain responsive and accessible interacti
   assert.match(actions, /flex flex-wrap/)
   assert.match(warRoomNav, /overflow-x-auto/)
   assert.match(guidance, /w-\[calc\(100vw-1rem\)\]/)
-  assert.match(guidance, /max-w-5xl/)
+  assert.match(guidance, /sm:max-w-6xl/)
 })
 
 test("QEO-165 preprod workflow is the exact-head release gate without a database replay step", () => {
