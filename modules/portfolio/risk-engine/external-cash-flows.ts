@@ -1,11 +1,26 @@
 import type { ExternalCashFlow } from "./types.ts"
 
+function isExactInstantCutoff(cutoff: string): boolean {
+  return cutoff.includes("T")
+}
+
 export function externalFlowsOnOrBefore(
   flows: readonly ExternalCashFlow[],
-  effectiveDate: string,
+  cutoff: string,
 ): ExternalCashFlow[] {
+  const exactInstant = isExactInstantCutoff(cutoff)
+  const cutoffMs = exactInstant ? Date.parse(cutoff) : null
+
+  if (exactInstant && !Number.isFinite(cutoffMs)) return []
+
   return flows
-    .filter((flow) => flow.effectiveDate <= effectiveDate)
+    .filter((flow) => {
+      if (exactInstant) {
+        const effectiveMs = Date.parse(flow.effectiveAt)
+        return Number.isFinite(effectiveMs) && effectiveMs <= cutoffMs!
+      }
+      return flow.effectiveDate <= cutoff
+    })
     .sort((a, b) => {
       const timeDiff = new Date(a.effectiveAt).getTime() - new Date(b.effectiveAt).getTime()
       return timeDiff !== 0 ? timeDiff : a.id.localeCompare(b.id)
