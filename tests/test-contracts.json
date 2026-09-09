@@ -1153,6 +1153,26 @@
       "suites": [
         "fast"
       ]
+    },
+    {
+      "path": "tests/portfolio/qeo165-command-center-ui.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-165 keeps the Portfolio Command Center presentation primitives explicit, factual, and source-faithful.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/portfolio/qeo165-boundaries.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-165 revamp components remain presentation-only and never create their own data-source boundary.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
     }
   ]
 }
