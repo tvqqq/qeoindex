@@ -37,6 +37,22 @@ test("unexplained repo-only migration fails closed", () => {
   assert.match(result.errors.join("\n"), /repo-only/i)
 })
 
+test("reviewed repo-ahead migration can remain active before production promotion", () => {
+  const result = reconcileMigrations({
+    activeFiles: ["20260909061101_qeo158_external_cash_flows.sql"],
+    pendingFiles: [],
+    productionLedger: [],
+    manifest: { migrations: [{
+      logicalName: "qeo158_external_cash_flows",
+      repositoryVersion: "20260909061101",
+      productionVersion: null,
+      state: "REPO_AHEAD",
+      evidence: "qeo158-exact-head-preprod-gate",
+    }] },
+  })
+  assert.equal(result.ok, true, result.errors.join("\n"))
+})
+
 test("unexplained production-only migration fails closed", () => {
   const result = reconcileMigrations({ activeFiles: [], pendingFiles: [], productionLedger: [{ version: "20260902090000", name: "prod_only" }], manifest: { migrations: [] } })
   assert.equal(result.ok, false)
