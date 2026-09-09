@@ -3,7 +3,7 @@ set -euo pipefail
 
 PRODUCTION_PROJECT_REF="glwhhrmejlonhyorvtzm"
 DB_CONTAINER="${QEO_Q149_DB_CONTAINER:-supabase_db_qeoindex}"
-MIGRATION="supabase/pending-migrations/20260909100000_qeo149_correction_safe_prune.sql"
+MIGRATION="supabase/migrations/20260909100000_qeo149_correction_safe_prune.sql"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/qeo149-rehearsal.XXXXXX")"
 RUN_TAG="qeo149_$$"
 
@@ -21,7 +21,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-[[ -f "$MIGRATION" ]] || fail "pending QEO-149 migration is missing"
+[[ -f "$MIGRATION" ]] || fail "promoted QEO-149 migration is missing"
 [[ "${SUPABASE_PROJECT_REF:-}" != "$PRODUCTION_PROJECT_REF" ]] || fail "production project ref is forbidden"
 command -v docker >/dev/null 2>&1 || fail "docker is required"
 docker inspect "$DB_CONTAINER" >/dev/null 2>&1 || fail "local Supabase DB container $DB_CONTAINER is not running"
@@ -142,7 +142,7 @@ end;
 $function$;
 SQL
 
-phase "apply pending migration in the isolated local database"
+phase "apply promoted migration in the isolated local database"
 psql_local -f - < "$MIGRATION"
 
 phase "seed correction, retention, and manifest fixtures through the writer"
