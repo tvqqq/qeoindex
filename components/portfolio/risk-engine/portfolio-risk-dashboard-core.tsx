@@ -1,8 +1,9 @@
 "use client"
 
-import { AlertTriangle, Gauge, ShieldCheck } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 
 import { PortfolioConcentrationPanel } from "@/components/portfolio/concentration/portfolio-concentration-panel"
+import { PortfolioRiskStateStrip } from "@/components/portfolio/revamp/portfolio-risk-state-strip"
 import type { PortfolioRiskReadModel, RiskRuleEvidence } from "@/modules/portfolio/risk-engine/types"
 import { RiskTermTooltip } from "./risk-term-tooltip"
 import { usePortfolioRiskContext } from "./use-portfolio-risk-context"
@@ -32,96 +33,94 @@ export function PortfolioRiskDashboard({ portfolioId }: { portfolioId: string })
 
   return (
     <section data-portfolio-risk-dashboard className="overflow-hidden rounded-3xl border border-purple-500/15 bg-[#0c1017] shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-white/[0.07] bg-gradient-to-r from-purple-500/[0.07] via-transparent to-indigo-500/[0.05] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-purple-300" />
-            <h2 className="font-ticker text-sm font-extrabold uppercase tracking-wide text-white sm:text-base">Rủi ro danh mục hiện tại</h2>
-          </div>
-          <p className="mt-1 font-ticker text-[11px] leading-relaxed text-slate-400">
-            Một nguồn dữ liệu chuẩn cho vốn chủ tài khoản, mức sụt giảm, dừng lỗ hiện tại và rủi ro của các giao dịch đang mở.
-          </p>
-        </div>
-        <RiskStateBadge risk={risk} />
-      </div>
+      <PortfolioRiskStateStrip risk={risk} />
 
       {incomplete && (
-        <div className="mx-5 mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] px-4 py-3 font-ticker text-xs text-amber-200">
+        <div className="mx-5 mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] px-4 py-3 font-ticker text-sm leading-6 text-amber-200 sm:mx-6">
           <span className="font-bold">Dữ liệu chưa đầy đủ.</span> Phần rủi ro đã biết vẫn được hiển thị, nhưng không được hiểu là toàn bộ mức rủi ro an toàn của danh mục.
           {risk.activeRisk.unknownRiskItemCount > 0 && <span> Có {risk.activeRisk.unknownRiskItemCount} giao dịch ở trạng thái <strong>Rủi ro chưa xác định</strong> (Risk Unknown).</span>}
         </div>
       )}
 
-      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric term="accountEquity" value={formatVnd(risk.account.equityVnd)} note={risk.account.completeness === "complete" ? "Dữ liệu đầy đủ" : `Thiếu giá: ${risk.account.missingPriceTickers.join(", ") || "không xác định"}`} />
-        <Metric term="drawdown" value={formatPercent(risk.drawdown.drawdownPercent)} note={risk.drawdown.drawdownVnd == null ? "Chưa đủ dữ liệu" : formatVnd(risk.drawdown.drawdownVnd)} />
-        <Metric term="activeRisk" value={formatVnd(risk.activeRisk.knownActiveRiskVnd)} note={risk.activeRisk.coverage === "complete" ? "Độ phủ dữ liệu đầy đủ" : `${risk.activeRisk.unknownRiskItemCount} mục chưa xác định`} />
-        <Metric term="activeRiskPercent" value={formatPercent(risk.activeRisk.activeRiskPercent)} note={risk.activeRisk.coverage === "complete" ? "Trên toàn danh mục" : "Chỉ phần rủi ro đã biết"} />
-        <Metric term="maxActiveRisk" value={formatVnd(risk.activeRisk.maxActiveRiskVnd)} note="Theo Kế hoạch quản trị vốn" />
-        <Metric term="remainingRiskBudget" value={formatVnd(risk.activeRisk.remainingRiskBudgetVnd)} note={risk.activeRisk.remainingRiskBudgetVnd != null && risk.activeRisk.remainingRiskBudgetVnd < 0 ? "Phần đã biết đang vượt giới hạn" : "Không suy diễn khi thiếu giới hạn hoặc vốn chủ"} />
-        <Metric term="initialRisk" value={formatVnd(risk.activeRisk.totalInitialOpenRiskVnd)} note={risk.activeRisk.initialRiskUnknownCount > 0 ? `${risk.activeRisk.initialRiskUnknownCount} giao dịch thiếu snapshot` : "Tổng snapshot giao dịch đang mở"} />
-        <Metric term="riskState" value={riskStateLabel(risk.riskState.state)} note={`Mức rủi ro mặc định hiệu lực: ${risk.riskState.effectiveDefaultTradeRiskPercent.toFixed(2)}%`} />
-      </div>
+      <details className="group border-t border-white/[0.07]" open={false}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-bold text-violet-200 marker:content-none sm:px-6">
+          <span>Mở bảng rủi ro chi tiết</span>
+          <span aria-hidden="true" className="text-lg text-slate-500 transition-transform group-open:rotate-45">+</span>
+        </summary>
 
-      <div className="grid gap-5 border-t border-white/[0.07] p-5 xl:grid-cols-[0.8fr_1.2fr]">
-        <div>
-          <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Tài khoản</h3>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-ticker">
-            <MiniFact label="Tiền mặt ước tính" value={formatVnd(risk.account.estimatedCashVnd)} />
-            <MiniFact label="Giá trị thị trường" value={formatVnd(risk.account.marketValueVnd)} />
-            <MiniFact label="Lãi/lỗ đã thực hiện" value={formatVnd(risk.account.realizedPnlVnd)} />
-            <MiniFact label="Lãi/lỗ chưa thực hiện" value={formatVnd(risk.account.unrealizedPnlVnd)} />
+        <div className="border-t border-white/[0.07]">
+          <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
+            <Metric term="accountEquity" value={formatVnd(risk.account.equityVnd)} note={risk.account.completeness === "complete" ? "Dữ liệu đầy đủ" : `Thiếu giá: ${risk.account.missingPriceTickers.join(", ") || "không xác định"}`} />
+            <Metric term="drawdown" value={formatPercent(risk.drawdown.drawdownPercent)} note={risk.drawdown.drawdownVnd == null ? "Chưa đủ dữ liệu" : formatVnd(risk.drawdown.drawdownVnd)} />
+            <Metric term="activeRisk" value={formatVnd(risk.activeRisk.knownActiveRiskVnd)} note={risk.activeRisk.coverage === "complete" ? "Độ phủ dữ liệu đầy đủ" : `${risk.activeRisk.unknownRiskItemCount} mục chưa xác định`} />
+            <Metric term="activeRiskPercent" value={formatPercent(risk.activeRisk.activeRiskPercent)} note={risk.activeRisk.coverage === "complete" ? "Trên toàn danh mục" : "Chỉ phần rủi ro đã biết"} />
+            <Metric term="maxActiveRisk" value={formatVnd(risk.activeRisk.maxActiveRiskVnd)} note="Theo Kế hoạch quản trị vốn" />
+            <Metric term="remainingRiskBudget" value={formatVnd(risk.activeRisk.remainingRiskBudgetVnd)} note={risk.activeRisk.remainingRiskBudgetVnd != null && risk.activeRisk.remainingRiskBudgetVnd < 0 ? "Phần đã biết đang vượt giới hạn" : "Không suy diễn khi thiếu giới hạn hoặc vốn chủ"} />
+            <Metric term="initialRisk" value={formatVnd(risk.activeRisk.totalInitialOpenRiskVnd)} note={risk.activeRisk.initialRiskUnknownCount > 0 ? `${risk.activeRisk.initialRiskUnknownCount} giao dịch thiếu snapshot` : "Tổng snapshot giao dịch đang mở"} />
+            <Metric term="riskState" value={riskStateLabel(risk.riskState.state)} note={`Mức rủi ro mặc định hiệu lực: ${risk.riskState.effectiveDefaultTradeRiskPercent.toFixed(2)}%`} />
           </div>
-        </div>
 
-        <div>
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Bằng chứng trạng thái</h3>
-            <span className="font-ticker text-[10px] font-bold text-slate-500">{evidenceCount} mục</span>
-          </div>
-          {evidenceCount === 0 ? (
-            <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 font-ticker text-xs text-slate-400">Không có quy tắc đang kích hoạt hoặc thiếu dữ liệu.</p>
-          ) : (
-            <div className="mt-3 space-y-3">
-              {risk.riskState.triggers.length > 0 && (
-                <EvidenceGroup title="Đang kích hoạt" facts={risk.riskState.triggers} />
-              )}
-              {risk.riskState.insufficientRules.length > 0 && (
-                <EvidenceGroup title="Thiếu bằng chứng" facts={risk.riskState.insufficientRules} />
+          <div className="grid gap-5 border-t border-white/[0.07] p-5 sm:p-6 xl:grid-cols-[0.8fr_1.2fr]">
+            <div>
+              <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Tài khoản</h3>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-ticker">
+                <MiniFact label="Tiền mặt ước tính" value={formatVnd(risk.account.estimatedCashVnd)} />
+                <MiniFact label="Giá trị thị trường" value={formatVnd(risk.account.marketValueVnd)} />
+                <MiniFact label="Lãi/lỗ đã thực hiện" value={formatVnd(risk.account.realizedPnlVnd)} />
+                <MiniFact label="Lãi/lỗ chưa thực hiện" value={formatVnd(risk.account.unrealizedPnlVnd)} />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Bằng chứng trạng thái</h3>
+                <span className="font-ticker text-[10px] font-bold text-slate-500">{evidenceCount} mục</span>
+              </div>
+              {evidenceCount === 0 ? (
+                <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 font-ticker text-xs text-slate-400">Không có quy tắc đang kích hoạt hoặc thiếu dữ liệu.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {risk.riskState.triggers.length > 0 && (
+                    <EvidenceGroup title="Đang kích hoạt" facts={risk.riskState.triggers} />
+                  )}
+                  {risk.riskState.insufficientRules.length > 0 && (
+                    <EvidenceGroup title="Thiếu bằng chứng" facts={risk.riskState.insufficientRules} />
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
-
-      <PortfolioConcentrationPanel concentration={risk.concentration} />
-
-      <div className="border-t border-white/[0.07] px-5 py-4">
-        <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Rủi ro theo giao dịch đang mở</h3>
-        {risk.activeRisk.rows.length === 0 ? (
-          <p className="mt-2 font-ticker text-xs text-slate-500">Chưa có giao dịch chuẩn hóa đang mở.</p>
-        ) : (
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {risk.activeRisk.rows.map((row) => (
-              <div key={row.tradeId} className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 font-ticker">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-black text-white">{row.ticker}</span>
-                  <span className={row.riskStatus === "known" ? "text-xs font-bold text-emerald-300" : "text-xs font-bold text-amber-300"}>
-                    {row.riskStatus === "known" ? formatVnd(row.activeRiskVnd) : "Rủi ro chưa xác định"}
-                  </span>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                  <span>Khối lượng: {row.openQty == null ? "—" : row.openQty.toLocaleString("vi-VN")}</span>
-                  <span>AVCO: {row.avgCostKvnd == null ? "—" : `${row.avgCostKvnd.toLocaleString("vi-VN")} k₫`}</span>
-                  <span><RiskTermTooltip term="initialRisk" />: {formatVnd(row.initialRiskAmountVnd)}</span>
-                  <span><RiskTermTooltip term="currentStop" />: {row.currentStopKvnd == null ? "—" : `${row.currentStopKvnd.toLocaleString("vi-VN")} k₫`}</span>
-                  <span className="col-span-2">Dừng lỗ cập nhật: {formatDateTime(row.latestStopEffectiveAt)}</span>
-                </div>
-              </div>
-            ))}
           </div>
-        )}
-      </div>
+
+          <PortfolioConcentrationPanel concentration={risk.concentration} />
+
+          <div className="border-t border-white/[0.07] px-5 py-4 sm:px-6">
+            <h3 className="font-ticker text-xs font-black uppercase tracking-[0.14em] text-slate-400">Rủi ro theo giao dịch đang mở</h3>
+            {risk.activeRisk.rows.length === 0 ? (
+              <p className="mt-2 font-ticker text-xs text-slate-500">Chưa có giao dịch chuẩn hóa đang mở.</p>
+            ) : (
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {risk.activeRisk.rows.map((row) => (
+                  <div key={row.tradeId} className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 font-ticker">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-black text-white">{row.ticker}</span>
+                      <span className={row.riskStatus === "known" ? "text-xs font-bold text-emerald-300" : "text-xs font-bold text-amber-300"}>
+                        {row.riskStatus === "known" ? formatVnd(row.activeRiskVnd) : "Rủi ro chưa xác định"}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                      <span>Khối lượng: {row.openQty == null ? "—" : row.openQty.toLocaleString("vi-VN")}</span>
+                      <span>AVCO: {row.avgCostKvnd == null ? "—" : `${row.avgCostKvnd.toLocaleString("vi-VN")} k₫`}</span>
+                      <span><RiskTermTooltip term="initialRisk" />: {formatVnd(row.initialRiskAmountVnd)}</span>
+                      <span><RiskTermTooltip term="currentStop" />: {row.currentStopKvnd == null ? "—" : `${row.currentStopKvnd.toLocaleString("vi-VN")} k₫`}</span>
+                      <span className="col-span-2">Dừng lỗ cập nhật: {formatDateTime(row.latestStopEffectiveAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </details>
     </section>
   )
 }
@@ -133,22 +132,6 @@ function Metric({ term, value, note }: { term: Parameters<typeof RiskTermTooltip
       <p className="mt-2 font-ticker text-xl font-black tracking-tight text-white">{value}</p>
       <p className="mt-1 font-ticker text-[10px] leading-relaxed text-slate-500">{note}</p>
     </div>
-  )
-}
-
-function RiskStateBadge({ risk }: { risk: PortfolioRiskReadModel }) {
-  const state = risk.riskState.state
-  const className = state === "PAUSE_AND_REVIEW"
-    ? "border-red-500/30 bg-red-500/10 text-red-200"
-    : state === "REDUCE_RISK"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : state === "UNKNOWN"
-        ? "border-slate-500/30 bg-slate-500/10 text-slate-300"
-        : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-  return (
-    <span className={`inline-flex items-center gap-2 self-start rounded-full border px-3 py-1.5 font-ticker text-[10px] font-black uppercase tracking-wide ${className}`}>
-      <ShieldCheck className="h-3.5 w-3.5" /> {riskStateLabel(state)}
-    </span>
   )
 }
 
