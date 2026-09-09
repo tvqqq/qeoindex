@@ -76,6 +76,13 @@ test("QEO-150 keeps no-trade, suspension, provider gap, failure and unknown dist
     dailyEvidence: { volume: 0, provider: "VCI", providerDetail: "Trading suspended by exchange", sourceUrl: null },
     lastAttemptOutcome: "none",
   }).evidenceCategory, "suspension")
+
+  assert.equal(classifyQeo150Freshness({
+    expectedSession: "2026-09-08",
+    actualSession: "2026-09-05",
+    dailyEvidence: null,
+    lastAttemptOutcome: "sla_timeout" as never,
+  }).evidenceCategory, "failure")
 })
 
 test("QEO-150 session range is time-bounded but never assumes a fixed minute-bar count", () => {
@@ -102,6 +109,23 @@ test("QEO-150 workflow reuses QEO-148 ingestion, isolates retries, checks capaci
   assert.match(workflow, /Promise\.all/)
   assert.doesNotMatch(workflow, /chartIntradayBootstrapWorkflow|bootstrapChartIntradayChunk/)
   assert.match(service, /runClosedRangeIngestion/)
+})
+
+test("QEO-150 terminalizes remaining work at the SLA deadline and durably records dispatch-to-outcome identity", () => {
+  const maintenance = source("modules/market/chart-data/maintenance.ts")
+  const steps = source("modules/market/chart-data/maintenance-workflow-steps.ts")
+  const workflow = source("workflows/chart-intraday-maintenance.ts")
+
+  assert.match(maintenance, /recordQeo150OutcomeEvidence/)
+  assert.match(maintenance, /dispatchId/)
+  assert.match(steps, /slaDeadline/)
+  assert.match(steps, /deadlineExceeded/)
+  assert.match(steps, /checkChartIntradayMaintenanceExecutionGateStep/)
+  assert.match(steps, /recordChartIntradayMaintenanceFailureStopStep/)
+  assert.match(workflow, /checkChartIntradayMaintenanceExecutionGateStep/)
+  assert.match(workflow, /recordChartIntradayMaintenanceFailureStopStep/)
+  assert.match(workflow, /sla_timeout/)
+  assert.doesNotMatch(workflow, /Date\.now\(|new Date\(/)
 })
 
 test("QEO-150 exposes authenticated maintenance/report modes and a bounded post-close scheduler", () => {
