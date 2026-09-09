@@ -49,6 +49,11 @@ new_uuid() {
   psql_scalar "select gen_random_uuid()"
 }
 
+lease_state() {
+  local range_id="$1"
+  psql_scalar "select coalesce(lease_owner::text,'null') || ':' || lease_fence::text || ':' || (lease_expires_at > clock_timestamp())::text from public.chart_ohlcv_backfill_ranges where id='$range_id'::uuid"
+}
+
 phase "preflight QEO-149 safe-writer dependency"
 psql_local -f - <<'SQL'
 do $function$
@@ -116,14 +121,14 @@ CONTENT_A="$(printf 'a%.0s' {1..64})"
 
 STATUS_A="$(service_scalar_app "qeo148-client-a" "select public.qeo_claim_chart_intraday_range('Q148A','PRIMARY_PROVIDER','2026-08-10T02:00:00Z','2026-08-10T03:00:00Z','$OWNER_A'::uuid,false,60)->>'status';")"
 [[ "$STATUS_A" == "claimed" ]] || fail "client A expected claimed, got $STATUS_A"
-
 STATUS_B="$(service_scalar_app "qeo148-client-b" "select public.qeo_claim_chart_intraday_range('Q148A','PRIMARY_PROVIDER','2026-08-10T02:30:00Z','2026-08-10T03:30:00Z','$OWNER_B'::uuid,false,60)->>'status';")"
 [[ "$STATUS_B" == "busy" ]] || fail "client B expected 'busy', got $STATUS_B"
 
 RANGE_A="$(psql_scalar "select id from public.chart_ohlcv_backfill_ranges where ticker='Q148A' and lease_owner='$OWNER_A'::uuid")"
 FENCE_A="$(psql_scalar "select lease_fence from public.chart_ohlcv_backfill_ranges where id='$RANGE_A'::uuid")"
+[[ "$(lease_state "$RANGE_A")" == "$OWNER_A:$FENCE_A:true" ]] || fail "client A lease state changed before persistence"
 
-psql_local -v owner_a="$OWNER_A" -v range_a="$RANGE_A" -v fence_a="$FENCE_A" -v batch_a="$BATCH_A" -v content_a="$CONTENT_A" -f - <<'SQL'
+psql_local -v batch_a="$BATCH_A" -f - <<'SQL'
 set role service_role;
 insert into public.chart_ohlcv_provenance_batches
   (id, provider, ticker, base_resolution, range_start, range_end, row_count, fetched_at, detail)
@@ -131,20 +136,18 @@ values
   (:'batch_a'::uuid, 'QEO-148-REHEARSAL', 'Q148A', '1m',
    '2026-08-10T02:00:00Z', '2026-08-10T02:59:00Z', 2, now(),
    jsonb_build_object('workflow','QEO-148-REHEARSAL','case','contention-success'));
-
 select public.qeo_upsert_chart_intraday_bars('Q148A', jsonb_build_array(
   jsonb_build_object('bar_time','2026-08-10T02:00:00Z','open',10,'high',11,'low',9,'close',10.5,'volume',100,
                      'provenance_batch_id',:'batch_a'::uuid,'fetched_at',now()),
   jsonb_build_object('bar_time','2026-08-10T02:59:00Z','open',10.5,'high',11.5,'low',10,'close',11,'volume',120,
                      'provenance_batch_id',:'batch_a'::uuid,'fetched_at',now())
 ));
-
-select case when public.qeo_complete_chart_intraday_range(
-  :'range_a'::uuid, :'owner_a'::uuid, :'fence_a'::bigint,
-  'QEO-148-REHEARSAL', 2, :'batch_a'::uuid, :'content_a'
-)->>'status' = 'completed' then 1 else 1/0 end;
 reset role;
 SQL
+
+LEASE_A="$(lease_state "$RANGE_A")"
+COMPLETE_A="$(service_scalar_app "qeo148-client-a" "select public.qeo_complete_chart_intraday_range('$RANGE_A'::uuid,'$OWNER_A'::uuid,$FENCE_A,'QEO-148-REHEARSAL',2,'$BATCH_A'::uuid,'$CONTENT_A')->>'status';")"
+[[ "$COMPLETE_A" == "completed" ]] || fail "client A completion expected completed, got $COMPLETE_A with lease=$LEASE_A"
 
 OWNER_REPLAY="$(new_uuid)"
 STATUS_REPLAY="$(service_scalar_app "qeo148-client-replay" "select public.qeo_claim_chart_intraday_range('Q148A','PRIMARY_PROVIDER','2026-08-10T02:00:00Z','2026-08-10T03:00:00Z','$OWNER_REPLAY'::uuid,false,60)->>'status';")"
@@ -175,7 +178,6 @@ SQL
 
 PARTIAL_COVERAGE="$(service_scalar_app "qeo148-partial-reader" "select count(*) from public.qeo_chart_intraday_success_coverage('Q148P','PRIMARY_PROVIDER','2026-08-10T04:00:00Z','2026-08-10T05:00:00Z');")"
 [[ "$PARTIAL_COVERAGE" == "0" ]] || fail "partial HOT/provenance falsely published success coverage"
-
 ABANDON_P1="$(service_scalar_app "qeo148-partial-owner" "select public.qeo_abandon_chart_intraday_range('$RANGE_P'::uuid,'$OWNER_P1'::uuid,$FENCE_P1,'partial persistence')->>'status';")"
 [[ "$ABANDON_P1" == "abandoned" ]] || fail "partial owner could not abandon failed lease"
 
@@ -186,7 +188,7 @@ STATUS_P2="$(service_scalar_app "qeo148-partial-recovery" "select public.qeo_cla
 [[ "$STATUS_P2" == "claimed" ]] || fail "partial failure did not recover to a new claim"
 FENCE_P2="$(psql_scalar "select lease_fence from public.chart_ohlcv_backfill_ranges where id='$RANGE_P'::uuid")"
 
-psql_local -v batch_p2="$BATCH_P2" -v range_p="$RANGE_P" -v owner_p2="$OWNER_P2" -v fence_p2="$FENCE_P2" -v content_p2="$CONTENT_P2" -f - <<'SQL'
+psql_local -v batch_p2="$BATCH_P2" -f - <<'SQL'
 set role service_role;
 insert into public.chart_ohlcv_provenance_batches
   (id, provider, ticker, base_resolution, range_start, range_end, row_count, fetched_at, detail)
@@ -200,13 +202,11 @@ select public.qeo_upsert_chart_intraday_bars('Q148P', jsonb_build_array(
   jsonb_build_object('bar_time','2026-08-10T04:59:00Z','open',20.5,'high',21.5,'low',20,'close',21,'volume',220,
                      'provenance_batch_id',:'batch_p2'::uuid,'fetched_at',now())
 ));
-select case when public.qeo_complete_chart_intraday_range(
-  :'range_p'::uuid, :'owner_p2'::uuid, :'fence_p2'::bigint,
-  'QEO-148-REHEARSAL', 2, :'batch_p2'::uuid, :'content_p2'
-)->>'status' = 'completed' then 1 else 1/0 end;
 reset role;
 SQL
 
+COMPLETE_P2="$(service_scalar_app "qeo148-partial-recovery" "select public.qeo_complete_chart_intraday_range('$RANGE_P'::uuid,'$OWNER_P2'::uuid,$FENCE_P2,'QEO-148-REHEARSAL',2,'$BATCH_P2'::uuid,'$CONTENT_P2')->>'status';")"
+[[ "$COMPLETE_P2" == "completed" ]] || fail "partial recovery completion failed: $COMPLETE_P2 lease=$(lease_state "$RANGE_P")"
 RECOVERED_COVERAGE="$(service_scalar_app "qeo148-partial-reader" "select count(*) from public.qeo_chart_intraday_success_coverage('Q148P','PRIMARY_PROVIDER','2026-08-10T04:00:00Z','2026-08-10T05:00:00Z');")"
 [[ "$RECOVERED_COVERAGE" == "1" ]] || fail "recovered durable persistence did not publish coverage"
 PARTIAL_PROVENANCE_COUNT="$(psql_scalar "select count(*) from public.chart_ohlcv_provenance_batches where ticker='Q148P'")"
@@ -229,10 +229,10 @@ STATUS_S2="$(service_scalar_app "qeo148-recovery-owner" "select public.qeo_claim
 FENCE_S2="$(psql_scalar "select lease_fence from public.chart_ohlcv_backfill_ranges where id='$RANGE_S'::uuid")"
 (( FENCE_S2 > FENCE_S1 )) || fail "lease fencing did not advance after expiry recovery"
 
-STALE_STATUS="$(service_scalar_app "qeo148-stale-owner" "select public.qeo_complete_chart_intraday_range('$RANGE_S'::uuid,'$OWNER_S1'::uuid,$FENCE_S1,'QEO-148-REHEARSAL',1,'$(new_uuid)'::uuid,'$(printf 'd%.0s' {1..64})')->>'status';")"
+STALE_STATUS="$(service_scalar_app "qeo148-stale-owner" "select public.qeo_complete_chart_intraday_range('$RANGE_S'::uuid,'$OWNER_S1'::uuid,$FENCE_S1,'QEO-148-REHEARSAL',1,'$BATCH_A'::uuid,'$(printf 'd%.0s' {1..64})')->>'status';")"
 [[ "$STALE_STATUS" == "stale" ]] || fail "expired owner expected 'stale', got $STALE_STATUS"
 
-psql_local -v batch_s2="$BATCH_S2" -v range_s="$RANGE_S" -v owner_s2="$OWNER_S2" -v fence_s2="$FENCE_S2" -v content_s2="$CONTENT_S2" -f - <<'SQL'
+psql_local -v batch_s2="$BATCH_S2" -f - <<'SQL'
 set role service_role;
 insert into public.chart_ohlcv_provenance_batches
   (id, provider, ticker, base_resolution, range_start, range_end, row_count, fetched_at, detail)
@@ -244,12 +244,11 @@ select public.qeo_upsert_chart_intraday_bars('Q148S', jsonb_build_array(
   jsonb_build_object('bar_time','2026-08-10T06:00:00Z','open',30,'high',31,'low',29,'close',30.5,'volume',300,
                      'provenance_batch_id',:'batch_s2'::uuid,'fetched_at',now())
 ));
-select case when public.qeo_complete_chart_intraday_range(
-  :'range_s'::uuid, :'owner_s2'::uuid, :'fence_s2'::bigint,
-  'QEO-148-REHEARSAL', 1, :'batch_s2'::uuid, :'content_s2'
-)->>'status' = 'completed' then 1 else 1/0 end;
 reset role;
 SQL
+
+COMPLETE_S2="$(service_scalar_app "qeo148-recovery-owner" "select public.qeo_complete_chart_intraday_range('$RANGE_S'::uuid,'$OWNER_S2'::uuid,$FENCE_S2,'QEO-148-REHEARSAL',1,'$BATCH_S2'::uuid,'$CONTENT_S2')->>'status';")"
+[[ "$COMPLETE_S2" == "completed" ]] || fail "expired lease recovery completion failed: $COMPLETE_S2 lease=$(lease_state "$RANGE_S")"
 
 phase "prove explicit correction revalidation preserves old provenance and writes a revision"
 OWNER_R="$(new_uuid)"
@@ -261,7 +260,7 @@ REVALIDATE_JSON="$(service_scalar_app "qeo148-correction-owner" "select public.q
 [[ "$REVALIDATE_JSON" == *"$BATCH_A"* ]] || fail "correction claim did not return previous provenance identity"
 FENCE_R="$(psql_scalar "select lease_fence from public.chart_ohlcv_backfill_ranges where id='$RANGE_A'::uuid")"
 
-psql_local -v batch_r="$BATCH_R" -v range_a="$RANGE_A" -v owner_r="$OWNER_R" -v fence_r="$FENCE_R" -v content_r="$CONTENT_R" -f - <<'SQL'
+psql_local -v batch_r="$BATCH_R" -f - <<'SQL'
 set role service_role;
 insert into public.chart_ohlcv_provenance_batches
   (id, provider, ticker, base_resolution, range_start, range_end, row_count, fetched_at, detail)
@@ -275,13 +274,11 @@ select public.qeo_upsert_chart_intraday_bars('Q148A', jsonb_build_array(
   jsonb_build_object('bar_time','2026-08-10T02:59:00Z','open',10.7,'high',11.7,'low',10,'close',11.2,'volume',125,
                      'provenance_batch_id',:'batch_r'::uuid,'fetched_at',now())
 ));
-select case when public.qeo_complete_chart_intraday_range(
-  :'range_a'::uuid, :'owner_r'::uuid, :'fence_r'::bigint,
-  'QEO-148-REHEARSAL', 2, :'batch_r'::uuid, :'content_r'
-)->>'status' = 'completed' then 1 else 1/0 end;
 reset role;
 SQL
 
+COMPLETE_R="$(service_scalar_app "qeo148-correction-owner" "select public.qeo_complete_chart_intraday_range('$RANGE_A'::uuid,'$OWNER_R'::uuid,$FENCE_R,'QEO-148-REHEARSAL',2,'$BATCH_R'::uuid,'$CONTENT_R')->>'status';")"
+[[ "$COMPLETE_R" == "completed" ]] || fail "correction completion failed: $COMPLETE_R lease=$(lease_state "$RANGE_A")"
 CORRECTION_IDENTITY="$(psql_scalar "select success_content_id || ':' || success_provenance_batch_id::text from public.chart_ohlcv_backfill_ranges where id='$RANGE_A'::uuid")"
 [[ "$CORRECTION_IDENTITY" == "$CONTENT_R:$BATCH_R" ]] || fail "correction did not replace durable success identity"
 OLD_PROVENANCE_EXISTS="$(psql_scalar "select count(*) from public.chart_ohlcv_provenance_batches where id='$BATCH_A'::uuid")"
@@ -354,9 +351,10 @@ CAP_ROWS="$(psql_scalar "select count(*) from public.chart_ohlcv_backfill_ranges
 CAP_HOT_ROWS="$(psql_scalar "select count(*) from public.chart_ohlcv_intraday where ticker='Q148CAP' and base_resolution='1m'")"
 [[ "$CAP_HOT_ROWS" == "1202" ]] || fail "over-cap fixture did not durably persist all 1202 HOT rows first"
 
-CAP_SUMMARY="$(service_scalar_app "qeo148-cap-reader" "select count(*)::text || ':' || min(range_start)::text || ':' || max(range_end)::text from public.qeo_chart_intraday_success_coverage('Q148CAP','PRIMARY_PROVIDER','$CAP_START','$CAP_START'::timestamptz + interval '1201 minutes');")"
-CAP_COUNT="${CAP_SUMMARY%%:*}"
-[[ "$CAP_COUNT" == "1" ]] || fail "server-side over-cap coverage did not merge 1201 rows into one complete interval: $CAP_SUMMARY"
+CAP_SUMMARY="$(service_scalar_app "qeo148-cap-reader" "select count(*)::text || ':' || extract(epoch from min(range_start))::bigint::text || ':' || extract(epoch from max(range_end))::bigint::text from public.qeo_chart_intraday_success_coverage('Q148CAP','PRIMARY_PROVIDER','$CAP_START','$CAP_START'::timestamptz + interval '1201 minutes');")"
+CAP_EXPECTED_START="$(psql_scalar "select extract(epoch from '$CAP_START'::timestamptz)::bigint")"
+CAP_EXPECTED_END="$(psql_scalar "select extract(epoch from '$CAP_START'::timestamptz + interval '1201 minutes')::bigint")"
+[[ "$CAP_SUMMARY" == "1:$CAP_EXPECTED_START:$CAP_EXPECTED_END" ]] || fail "server-side over-cap coverage was incomplete: expected 1:$CAP_EXPECTED_START:$CAP_EXPECTED_END got $CAP_SUMMARY"
 
 phase "cleanup isolated QEO-148 fixtures"
 psql_local -f - <<'SQL'
