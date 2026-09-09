@@ -1,6 +1,6 @@
 # Canonical chart data
 
-Last reviewed: 2026-09-08.
+Last reviewed: 2026-09-09.
 
 This document owns the active user-facing chart-data persistence/read contract. It is intentionally separate from the Wyckoff EOD contract documented in `HANDOVER.md` and `wyckoff-chart-unified-data.md`.
 
@@ -117,9 +117,9 @@ Until every verified cold manifest intersecting an hourly request has derived ev
 | `1h`, `2h`, `4h` | 366 days | derived `1h` for old history + recent hot raw `1m -> 1h`; then `1h -> 2h/4h` when needed |
 | `1D`, `3D`, `1W`, `1M`, `1Q`, `1Y` | full available | canonical raw `1D` + deterministic Daily-derived aggregation |
 
-The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the hot boundary normally comes from `chart_ohlcv_derived_hourly`; only the recent hot segment loads canonical raw `1m`. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
+The server clamps ranges to these horizons. For `1h/2h/4h`, history older than the global five-session discovery boundary normally comes from `chart_ohlcv_derived_hourly`, while the recent segment loads canonical raw `1m`. The hourly read also performs a bounded HOT lookup over the older requested segment: protected per-ticker HOT minutes are included even when they precede that global boundary. If they overlap a derived hour, verified COLD raw minutes for the requested range are merged at minute granularity with `hot > cold`, and only those affected hours are re-aggregated; unaffected complete derived hours are reused. A partial HOT hour never replaces its non-overlapping COLD minutes. The normal steady-state hourly path therefore does not download one year of cold raw objects and does not refill old raw minute bars into Postgres.
 
-At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment rather than returning a partially populated cache. No synthetic candles are fabricated.
+At the hot/derived boundary, recent hot-derived `1h` wins deterministic timestamp dedupe. During legacy recovery, incomplete derived-manifest coverage selects verified cold raw fallback for the affected old segment; retained HOT is merged into that raw fallback before aggregation. If an older HOT overlap cannot be resolved against verified raw storage, the service preserves the known derived bar where available and reports `PARTIAL`/`STORAGE_UNAVAILABLE` rather than claiming complete coverage. No synthetic candles are fabricated.
 
 ## Interactive renderer boundary
 
