@@ -36,6 +36,23 @@ const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   maxDurationMinutes: 90,
 }
 
+const QEO150_CHART_MAINTENANCE_JOB: AdminJobDefinition = {
+  key: "qeoindex.chart_intraday_maintenance",
+  provider: "supabase_pg_cron_workflow",
+  label: "Chart Intraday Freshness Maintenance",
+  description: "QEO-150 bounded canonical-200 completed-session reconciliation through the shared QEO-148 closed-range ingestion contract.",
+  group: "market",
+  scheduleUtc: "50 7 * * 1-5",
+  scheduleIct: "14:50 T2-T6",
+  scheduleKind: "workflow",
+  schedulerName: "qeoindex-chart-intraday-maintenance-1450-ict",
+  scheduleDays: "weekdays",
+  evidenceSource: "none",
+  manualPolicy: "disabled",
+  freshnessMinutes: 26 * 60,
+  maxDurationMinutes: 30,
+}
+
 const RESEARCH_REPORTS_DAILY_JOB: AdminJobDefinition = {
   key: "research_reports.daily",
   provider: "supabase_pg_cron",
@@ -187,18 +204,18 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
 }
 
 /**
- * Canonical operational catalog after QEO-64 EOD v4 cutover.
+ * Canonical operational catalog after QEO-150 chart freshness scheduling.
  *
- * Exactly one post-market orchestration schedule exists: qeoindex.eod_pipeline.
+ * EOD v4 remains the sole EOD orchestration owner. QEO-150 is a separate,
+ * narrowly scoped chart-data maintenance workflow at 14:50 ICT; it does not
+ * run market-close collection, EOD publishing, Wyckoff, or AI phases.
  * KFSP Rating and TTAI remain manual recovery/backfill tools. The standalone
  * Market EOD action is retained only as disabled historical/maintenance
- * evidence because final market-close collection must preserve EOD frozen
- * lineage. Historical scheduler aliases remain readable via job-schedule.ts.
- * QEO-85 adds a separate 07:05 daily Research Reports scheduler plus a manual
- * confirmed backfill lane; neither overlaps EOD market-session ownership.
+ * evidence. Historical scheduler aliases remain readable via job-schedule.ts.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
+  withSchedulePolicy(QEO150_CHART_MAINTENANCE_JOB),
   withSchedulePolicy(RESEARCH_REPORTS_DAILY_JOB),
   withSchedulePolicy(RESEARCH_REPORTS_BACKFILL_JOB),
   ...ADMIN_JOB_CATALOG
