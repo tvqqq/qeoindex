@@ -9,7 +9,7 @@ This document owns the active user-facing chart-data persistence/read contract. 
 QeoIndex has two canonical raw OHLCV persistence concerns:
 
 | Concern | Raw resolution | Active store | Purpose |
-| --- | ---: | --- |
+| --- | ---: | --- | --- |
 | EOD / Wyckoff | `1D` | `market_ohlcv_history` | Completed Daily evidence for EOD, Wyckoff and deterministic Weekly derivation. |
 | Interactive chart | `1m` | `chart_ohlcv_intraday` + private Storage bucket `chart-ohlcv` | Exact intraday chart history with verified hot/cold lifecycle. |
 
