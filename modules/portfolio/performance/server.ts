@@ -9,6 +9,7 @@ import {
 } from "@/modules/market/realtime/intraday-5m-service"
 import { computePortfolioPositions, type RawTransaction, type TransactionAction } from "../pnl.ts"
 import { buildEquityCurve } from "../risk-engine/equity-curve.ts"
+import type { ExternalCashFlow, FundingHistoryStatus } from "../risk-engine/types.ts"
 import { RiskPlanDomainError } from "../risk-plan/validation.ts"
 import { buildBenchmarkComparison } from "./benchmark.ts"
 import { deriveClosedTradeOutcomes } from "./closed-trades.ts"
@@ -92,6 +93,7 @@ export async function getPortfolioPerformanceContext(
   const [
     portfolioResult,
     transactionsResult,
+    cashFlowsResult,
     tradesResult,
     journalResult,
     stopsResult,
@@ -99,7 +101,7 @@ export async function getPortfolioPerformanceContext(
   ] = await Promise.all([
     context.supabase
       .from("portfolios")
-      .select("id,user_id,initial_capital")
+      .select("id,user_id,initial_capital,funding_history_status")
       .eq("id", portfolioId)
       .eq("user_id", context.user.id)
       .maybeSingle(),
@@ -109,6 +111,14 @@ export async function getPortfolioPerformanceContext(
       .eq("portfolio_id", portfolioId)
       .eq("user_id", context.user.id)
       .order("transaction_date", { ascending: true })
+      .order("id", { ascending: true }),
+    context.supabase
+      .from("portfolio_external_cash_flows")
+      .select("id,flow_type,signed_amount_vnd,effective_at,provenance")
+      .eq("portfolio_id", portfolioId)
+      .eq("user_id", context.user.id)
+      .lte("effective_at", now.toISOString())
+      .order("effective_at", { ascending: true })
       .order("id", { ascending: true }),
     context.supabase
       .from("portfolio_trades")
@@ -135,12 +145,25 @@ export async function getPortfolioPerformanceContext(
   if (portfolioResult.error) dbFailure("load-portfolio", portfolioResult.error)
   if (!portfolioResult.data) throw new RiskPlanDomainError("NOT_FOUND", "Portfolio was not found.")
   if (transactionsResult.error) dbFailure("load-transactions", transactionsResult.error)
+  if (cashFlowsResult.error) dbFailure("load-external-cash-flows", cashFlowsResult.error)
   if (tradesResult.error) dbFailure("load-trades", tradesResult.error)
   if (journalResult.error) dbFailure("load-journal", journalResult.error)
   if (stopsResult.error) dbFailure("load-stop-events", stopsResult.error)
   if (stopExitLinksResult.error) dbFailure("load-stop-exit-links", stopExitLinksResult.error)
 
   const initialCapitalVnd = finiteOrNull(portfolioResult.data.initial_capital) ?? 0
+  const fundingHistoryStatus: FundingHistoryStatus = portfolioResult.data.funding_history_status === "known"
+    ? "known"
+    : "legacy_unrecorded"
+  const externalCashFlows = (cashFlowsResult.data ?? []).map((row) => ({
+    id: row.id,
+    flowType: row.flow_type as ExternalCashFlow["flowType"],
+    signedAmountVnd: Number(row.signed_amount_vnd),
+    effectiveAt: row.effective_at,
+    effectiveDate: vietnamDateKey(new Date(row.effective_at)),
+    provenance: row.provenance as ExternalCashFlow["provenance"],
+  })) satisfies ExternalCashFlow[]
+
   const transactions = (transactionsResult.data ?? []).map((row) => ({
     ...row,
     action: row.action as TransactionAction,
@@ -155,7 +178,7 @@ export async function getPortfolioPerformanceContext(
 
   const trades = (tradesResult.data ?? []).map((row) => ({
     ...row,
-    mode: row.mode as "live" | "paper",
+    mode: row.mode as "live" | "paper" | "unknown",
     system_tags: row.system_tags ?? [],
     setup_tags: row.setup_tags ?? [],
     initial_risk_amount: finiteOrNull(row.initial_risk_amount),
@@ -219,6 +242,8 @@ export async function getPortfolioPerformanceContext(
     sessions: Object.keys(rawDailyCloseKvnd).sort(),
     rawDailyCloseKvnd,
     current: { key: `${currentDate}:current`, pricesKvnd: currentPricesKvnd },
+    externalCashFlows,
+    fundingHistoryStatus,
   })
 
   const normalized = deriveClosedTradeOutcomes({
@@ -243,10 +268,11 @@ export async function getPortfolioPerformanceContext(
   const accountLedgers = buildAccountLedgers(equityCurve.points)
   const drawdown = deriveDrawdownAnalytics(equityCurve.points)
   const lastEquity = equityCurve.points.at(-1)
-  const accountTotalReturnPercent = initialCapitalVnd > 0
+  const accountTotalReturnPercent = fundingHistoryStatus === "known"
+    && initialCapitalVnd > 0
     && lastEquity?.status === "complete"
-    && lastEquity.equityVnd != null
-    ? normalizePercent(((lastEquity.equityVnd - initialCapitalVnd) / initialCapitalVnd) * 100)
+    && lastEquity.flowAdjustedEquityVnd != null
+    ? normalizePercent(((lastEquity.flowAdjustedEquityVnd - initialCapitalVnd) / initialCapitalVnd) * 100)
     : null
 
   const benchmark = await loadBenchmark(equityCurve.points, now)
@@ -263,6 +289,7 @@ export async function getPortfolioPerformanceContext(
     equity: {
       points: equityCurve.points,
       accountTotalReturnPercent,
+      returnMethod: "flow_adjusted_simple",
       maxDrawdownPercent: drawdown.maxDrawdownPercent,
       averageDrawdownPercent: drawdown.averageDrawdownPercent,
       episodes: drawdown.episodes,
@@ -276,6 +303,8 @@ export async function getPortfolioPerformanceContext(
       legacyUngroupedTransactionCount: normalized.legacyUngroupedTransactionCount,
       tradeGroupingCompleteness: normalized.completeness,
       equityCompleteness: drawdown.completeness,
+      fundingHistoryStatus,
+      externalCashFlowCount: externalCashFlows.length,
     },
   }
 }
