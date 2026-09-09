@@ -10,6 +10,7 @@ const DAILY_FIXED: Record<string, number> = {
 
 export function schedulePolicyForJobKey(key: string): SchedulePolicy | null {
   if (key === "qeoindex.eod_pipeline") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "weekdays", minuteOfDay: 915, completionDeadlineMinuteOfDay: 1435, graceMinutes: 30 }
+  if (key === "qeoindex.chart_intraday_maintenance") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "weekdays", minuteOfDay: 890, graceMinutes: 30 }
   if (key === "signals.daily") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "weekdays", minuteOfDay: 420, completionDeadlineMinuteOfDay: 840, graceMinutes: 30 }
   if (key === "research_reports.daily") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "daily", minuteOfDay: DAILY_FIXED[key], graceMinutes: 30 }
   if (key === "kfsp.rating_daily" || key === "kfsp.ttai_history") return { kind: "fixed_time", timezone: ICT_TIMEZONE, cadence: "daily", minuteOfDay: DAILY_FIXED[key], graceMinutes: 30 }

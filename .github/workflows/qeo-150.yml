@@ -1,0 +1,62 @@
+name: QEO-150
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "modules/market/chart-data/maintenance*.ts"
+      - "modules/market/chart-data/service.ts"
+      - "modules/market/chart-data/storage-capacity.ts"
+      - "modules/market/calendar.ts"
+      - "modules/admin/effective-job-catalog.ts"
+      - "modules/admin/job-schedule.ts"
+      - "modules/admin/schedule-policy.ts"
+      - "modules/admin/scheduler-reconciliation.ts"
+      - "workflows/chart-intraday-maintenance.ts"
+      - "app/api/qeoindex/eod/route.ts"
+      - "supabase/migrations/*qeo150*"
+      - "supabase/migration-preproduction.json"
+      - "tests/qeo-150-intraday-maintenance.cases.ts"
+      - "tests/cron-schedule-catalog.test.ts"
+      - "tests/cron-timeline-ui.test.ts"
+      - "tests/eod-rollout-contract.test.ts"
+      - "tests/scheduler-reconciliation.test.ts"
+      - ".github/workflows/qeo-150.yml"
+  push:
+    branches: [main]
+    paths:
+      - "modules/market/chart-data/maintenance*.ts"
+      - "modules/market/chart-data/service.ts"
+      - "modules/market/chart-data/storage-capacity.ts"
+      - "modules/market/calendar.ts"
+      - "modules/admin/effective-job-catalog.ts"
+      - "modules/admin/job-schedule.ts"
+      - "modules/admin/schedule-policy.ts"
+      - "modules/admin/scheduler-reconciliation.ts"
+      - "workflows/chart-intraday-maintenance.ts"
+      - "app/api/qeoindex/eod/route.ts"
+      - "supabase/migrations/*qeo150*"
+      - "supabase/migration-preproduction.json"
+      - "tests/qeo-150-intraday-maintenance.cases.ts"
+      - "tests/cron-schedule-catalog.test.ts"
+      - "tests/cron-timeline-ui.test.ts"
+      - "tests/eod-rollout-contract.test.ts"
+      - "tests/scheduler-reconciliation.test.ts"
+      - ".github/workflows/qeo-150.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeo-150-intraday-maintenance.cases.ts

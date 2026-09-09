@@ -35,7 +35,7 @@ function migrationSource() {
   return readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
 }
 
-test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85 remains independent", () => {
+test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85 and QEO-150 remain independent", () => {
   for (const [jobKey] of RETIRED_ACTIVE_SCHEDULERS) {
     const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
     assert.ok(job, `${jobKey} must remain visible as operational/historical catalog evidence`)
@@ -65,8 +65,14 @@ test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85 r
   assert.equal(research.schedulePolicy?.kind, "fixed_time")
   assert.equal(research.schedulerName, "research-reports-daily-0705-ict")
 
+  const chartMaintenance = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "qeoindex.chart_intraday_maintenance")
+  assert.ok(chartMaintenance)
+  assert.equal(chartMaintenance.schedulePolicy?.kind, "fixed_time")
+  assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
+  assert.equal(chartMaintenance.scheduleUtc, "50 7 * * 1-5")
+
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 10)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 4)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 5)
 })
 
 test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", () => {
@@ -141,14 +147,16 @@ test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forw
 
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-1am-ict"), "kfsp.ttai_history")
   assert.equal(getJobKeyForPgCron("sync-universe-eod-1450"), "market.sync_eod")
+  assert.equal(getPgCronNameForJobKey("qeoindex.chart_intraday_maintenance"), "qeoindex-chart-intraday-maintenance-1450-ict")
   assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
 })
 
-test("scheduler reconciliation keeps one EOD owner plus independent Research Reports and intraday AM/PM", () => {
+test("scheduler reconciliation keeps one EOD owner plus independent QEO-150, Research Reports and intraday AM/PM", () => {
   assert.deepEqual(
     EXPECTED_SUPABASE_SCHEDULERS.map((mapping) => mapping.schedulerName),
     [
       "qeoindex-eod-pipeline-1515-ict",
+      "qeoindex-chart-intraday-maintenance-1450-ict",
       "research-reports-daily-0705-ict",
       "sync-universe-5m",
       "sync-universe-5m-afternoon",
@@ -165,14 +173,14 @@ test("scheduler reconciliation keeps one EOD owner plus independent Research Rep
     lastFinishedAt: null,
   }))
   const reconciled = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(reconciled.aggregate.expected, 5, "four Supabase schedules + one Vercel config-only schedule")
-  assert.equal(reconciled.aggregate.liveVerified, 4)
+  assert.equal(reconciled.aggregate.expected, 6, "five Supabase schedules + one Vercel config-only schedule")
+  assert.equal(reconciled.aggregate.liveVerified, 5)
   assert.equal(reconciled.aggregate.missing, 0)
   assert.equal(reconciled.aggregate.inventoryClean, true)
   assert.equal(reconciled.aggregate.expectedMappingsVerified, true)
   assert.deepEqual(
     reconciled.logical.map((mapping) => mapping.jobKey),
-    ["qeoindex.eod_pipeline", "research_reports.daily", "market.sync_5m", "signals.daily"],
+    ["qeoindex.eod_pipeline", "qeoindex.chart_intraday_maintenance", "research_reports.daily", "market.sync_5m", "signals.daily"],
   )
 })
 

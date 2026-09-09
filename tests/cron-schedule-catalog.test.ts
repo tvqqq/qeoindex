@@ -36,7 +36,7 @@ test("catalog matches vercel.json cron schedules exactly", () => {
   assert.equal(signalsDef.scheduleDays, "weekdays")
 })
 
-test("source catalog retains historical pg_cron definitions while effective catalog reflects QEO-64/QEO-85 cutovers", () => {
+test("source catalog retains historical pg_cron definitions while effective catalog reflects QEO-64/QEO-85/QEO-150 cutovers", () => {
   const syncOrderbookMigration = readTextFile("supabase/migrations/20260901152000_fix_orderbook_trading_session_windows.sql")
   assert.match(syncOrderbookMigration, /'sync-universe-5m'/)
   assert.match(syncOrderbookMigration, /'\*\/5 2-4 \* \* 1-5'/)
@@ -98,6 +98,18 @@ test("source catalog retains historical pg_cron definitions while effective cata
   assert.equal(eodDef.scheduleIct, "15:15 T2-T6")
   assert.equal(eodDef.scheduleKind, "workflow")
 
+  const chartMaintenanceMigration = readTextFile("supabase/migrations/20260909173000_qeo150_chart_intraday_maintenance.sql")
+  assert.match(chartMaintenanceMigration, /'qeoindex-chart-intraday-maintenance-1450-ict'/)
+  assert.match(chartMaintenanceMigration, /'50 7 \* \* 1-5'/)
+  assert.match(chartMaintenanceMigration, /mode=chart-maintenance/)
+  const chartMaintenance = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "qeoindex.chart_intraday_maintenance")
+  assert.ok(chartMaintenance)
+  assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
+  assert.equal(chartMaintenance.scheduleUtc, "50 7 * * 1-5")
+  assert.equal(chartMaintenance.scheduleIct, "14:50 T2-T6")
+  assert.equal(chartMaintenance.scheduleKind, "workflow")
+  assert.equal(chartMaintenance.maxDurationMinutes, 30)
+
   const researchMigration = readTextFile("supabase/migrations/20260904193000_qeo80_research_reports.sql")
   assert.match(researchMigration, /'research-reports-daily-0705-ict'/)
   assert.match(researchMigration, /'5 0 \* \* \*'/)
@@ -109,9 +121,10 @@ test("source catalog retains historical pg_cron definitions while effective cata
   assert.equal(research.schedulePolicy?.kind, "fixed_time")
 })
 
-test("pg_cron dictionary remains readable while active forward ownership includes Research Reports", () => {
+test("pg_cron dictionary remains readable while active forward ownership includes QEO-150 and Research Reports", () => {
   assert.deepEqual(PG_CRON_NAME_TO_JOB_KEY, {
     "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
+    "qeoindex-chart-intraday-maintenance-1450-ict": "qeoindex.chart_intraday_maintenance",
     "research-reports-daily-0705-ict": "research_reports.daily",
     "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
     "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
@@ -123,6 +136,7 @@ test("pg_cron dictionary remains readable while active forward ownership include
     "sync-universe-eod-1450": "market.sync_eod",
   })
 
+  assert.equal(getJobKeyForPgCron("qeoindex-chart-intraday-maintenance-1450-ict"), "qeoindex.chart_intraday_maintenance")
   assert.equal(getJobKeyForPgCron("research-reports-daily-0705-ict"), "research_reports.daily")
   assert.equal(getJobKeyForPgCron("sync-universe-5m"), "market.sync_5m")
   assert.equal(getJobKeyForPgCron("sync-universe-5m-afternoon"), "market.sync_5m")
@@ -130,6 +144,7 @@ test("pg_cron dictionary remains readable while active forward ownership include
   assert.equal(getJobKeyForPgCron("kfsp-rating-daily-7am-ict"), "kfsp.rating_daily")
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-0710-ict"), "kfsp.ttai_history")
   assert.equal(getPgCronNameForJobKey("qeoindex.eod_pipeline"), "qeoindex-eod-pipeline-1515-ict")
+  assert.equal(getPgCronNameForJobKey("qeoindex.chart_intraday_maintenance"), "qeoindex-chart-intraday-maintenance-1450-ict")
   assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
   assert.equal(getPgCronNameForJobKey("market.sync_5m"), "sync-universe-5m")
   assert.equal(getPgCronNameForJobKey("market.sync_eod"), undefined)
@@ -149,7 +164,7 @@ test("source manual jobs are distinguished from scheduled jobs", () => {
   }
 })
 
-test("effective QEO-64 catalog has no legacy market EOD overlap", () => {
+test("effective QEO-150 catalog has no legacy market EOD overlap", () => {
   const conflicts = findScheduleConflicts(EFFECTIVE_ADMIN_JOB_CATALOG)
   assert.equal(conflicts.length, 0)
 })
@@ -181,10 +196,10 @@ test("detects legacy 14:50 ICT overlap conflict for historical catalog inputs", 
   assert.match(conflicts[0].reason, /14:50 ICT/)
 })
 
-test("effective catalog has complete structured ICT schedule policies after QEO-64/QEO-85 cutovers", () => {
-  assert.equal(new Set(EFFECTIVE_ADMIN_JOB_CATALOG.map((job) => job.key)).size, 14)
+test("effective catalog has complete structured ICT schedule policies after QEO-150", () => {
+  assert.equal(new Set(EFFECTIVE_ADMIN_JOB_CATALOG.map((job) => job.key)).size, 15)
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 10)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 4)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 5)
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => !isValidSchedulePolicy(job.schedulePolicy)).length, 0)
 
   const ingest = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "wyckoff.ingest")
@@ -201,6 +216,16 @@ test("effective catalog has complete structured ICT schedule policies after QEO-
     assert.equal(job.manualPurpose, "recovery")
     assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
   }
+
+  const chartMaintenance = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.chart_intraday_maintenance")
+  assert.ok(chartMaintenance)
+  assert.deepEqual(chartMaintenance.schedulePolicy, {
+    kind: "fixed_time",
+    timezone: "Asia/Ho_Chi_Minh",
+    cadence: "weekdays",
+    minuteOfDay: 14 * 60 + 50,
+    graceMinutes: 30,
+  })
 
   const research = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "research_reports.daily")
   assert.ok(research)

@@ -8,6 +8,7 @@ import type { AdminJobDefinition, AdminJobView } from "./types.ts"
  */
 export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
+  "qeoindex-chart-intraday-maintenance-1450-ict": "qeoindex.chart_intraday_maintenance",
   "research-reports-daily-0705-ict": "research_reports.daily",
   "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
   "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
@@ -19,9 +20,10 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
   "sync-universe-eod-1450": "market.sync_eod",
 })
 
-/** Active pg_cron ownership after QEO-64/QEO-85 cutovers. */
+/** Active pg_cron ownership after QEO-64/QEO-85/QEO-150 cutovers. */
 export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex.eod_pipeline": "qeoindex-eod-pipeline-1515-ict",
+  "qeoindex.chart_intraday_maintenance": "qeoindex-chart-intraday-maintenance-1450-ict",
   "research_reports.daily": "research-reports-daily-0705-ict",
   "market.sync_5m": "sync-universe-5m",
 })
