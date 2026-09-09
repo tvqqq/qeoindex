@@ -1,15 +1,15 @@
 import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { CanonicalOhlcvBar } from "./contract"
 import {
   listVerifiedColdManifests,
   readVerifiedColdManifest,
   type VerifiedColdManifest,
 } from "./cold-store"
 import {
-  readDerivedHourlyByManifest,
-  upsertDerivedHourlyBars,
+  derivedHourlySourceProof,
+  persistVerifiedDerivedHourlyGeneration,
+  validateDerivedHourlyManifestReadiness,
 } from "./derived-hourly-store"
 import { aggregateChartTimeframe } from "./timeframes"
 
@@ -34,30 +34,6 @@ export interface ChartDerivedHourlyRecoveryMetrics {
   failures: ChartDerivedRecoveryFailure[]
 }
 
-function sameBars(left: CanonicalOhlcvBar[], right: CanonicalOhlcvBar[]) {
-  if (left.length !== right.length) return false
-  const leftByTime = new Map(left.map((bar) => [bar.time, bar]))
-  if (leftByTime.size !== left.length) return false
-  const rightTimes = new Set<number>()
-  for (const b of right) {
-    if (rightTimes.has(b.time)) return false
-    rightTimes.add(b.time)
-    const a = leftByTime.get(b.time)
-    if (!a || a.open !== b.open || a.high !== b.high || a.low !== b.low || a.close !== b.close || a.volume !== b.volume) return false
-  }
-  return true
-}
-
-async function derivedManifestIds(supabase: SupabaseClient, manifestIds: string[]) {
-  if (!manifestIds.length) return new Set<string>()
-  const { data, error } = await supabase
-    .from("chart_ohlcv_derived_hourly")
-    .select("source_manifest_id")
-    .in("source_manifest_id", manifestIds)
-  if (error) throw new Error(`Chart derived recovery coverage read failed: ${error.message}`)
-  return new Set((data || []).map((row) => String(row.source_manifest_id || "")).filter(Boolean))
-}
-
 async function listRecoveryCandidates(supabase: SupabaseClient, limit: number): Promise<VerifiedColdManifest[]> {
   const candidates: VerifiedColdManifest[] = []
   for (let offset = 0; offset < MAX_MANIFEST_SCAN_ROWS && candidates.length < limit; offset += MANIFEST_SCAN_PAGE_SIZE) {
@@ -66,9 +42,9 @@ async function listRecoveryCandidates(supabase: SupabaseClient, limit: number): 
       offset,
     })
     if (!page.length) break
-    const covered = await derivedManifestIds(supabase, page.map((manifest) => manifest.id))
+    const readiness = await validateDerivedHourlyManifestReadiness(supabase, page.map((manifest) => manifest.id))
     for (const manifest of page) {
-      if (!covered.has(manifest.id)) candidates.push(manifest)
+      if (readiness.get(manifest.id)?.ready !== true) candidates.push(manifest)
       if (candidates.length >= limit) break
     }
     if (page.length < MANIFEST_SCAN_PAGE_SIZE) break
@@ -114,20 +90,12 @@ export async function runChartDerivedHourlyRecovery(
         .eq("id", manifest.id)
       if (manifestRefreshError) throw new Error(`Chart derived recovery manifest refresh failed: ${manifestRefreshError.message}`)
 
-      const cached = await upsertDerivedHourlyBars(supabase, {
+      const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
         ticker: manifest.ticker,
         bars: hourlyBars,
-        sourceManifestId: manifest.id,
-        sourceSha256: manifest.sha256,
-        sourceRangeStart: manifest.rangeStart,
-        sourceRangeEnd: manifest.rangeEnd,
-        sourceRawRowCount: manifest.rowCount,
+        ...derivedHourlySourceProof(manifest),
         generatedAt: referenceAt.toISOString(),
       })
-      const persisted = await readDerivedHourlyByManifest(supabase, manifest.id)
-      if (!sameBars(hourlyBars, persisted)) {
-        throw new Error(`Chart derived recovery verification mismatch: ${manifest.id}`)
-      }
 
       manifestsRecovered += 1
       rawRowsVerified += manifest.rowCount
