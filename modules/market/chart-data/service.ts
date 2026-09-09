@@ -18,7 +18,16 @@ import type {
 } from "./contract"
 import { ChartDataRequestError, ChartDataUnavailableError } from "./contract"
 import { isCanonicalDailyHotRowUsable } from "./daily-authority"
-import { readHotIntradayRange, readProviderRequestCoverage, upsertHotIntradayBars } from "./hot-store"
+import {
+  abandonChartIntradayRange,
+  canonicalProviderRangeContentId,
+  ChartClosedRangeCoordinationUnavailableError,
+  claimChartIntradayRange,
+  completeChartIntradayRange,
+  readHotIntradayRange,
+  readProviderRequestCoverage,
+  upsertHotIntradayBars,
+} from "./hot-store"
 import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
 import {
@@ -26,7 +35,17 @@ import {
   normalizeChartProviderResult,
   type ChartOhlcvProvider,
 } from "./provider"
-import { mergeProviderRanges, missingProviderRanges, uncoveredProviderRanges } from "./provider-coverage"
+import {
+  CHART_PROVIDER_SOURCE_KEY,
+  runClosedRangeIngestion,
+  type ClosedRangeIngestionResult,
+} from "./provider-ingestion"
+import {
+  mergeProviderRanges,
+  missingProviderRanges,
+  uncoveredProviderRanges,
+  type ProviderCoverageRange,
+} from "./provider-coverage"
 
 const DAY_SECONDS = 86400
 const MAX_INTRADAY_SPAN_SECONDS = 31 * DAY_SECONDS
@@ -40,6 +59,23 @@ export interface ChartDataServiceDeps {
   provider?: ChartOhlcvProvider
   now?: Date
 }
+
+interface ClosedProviderValue {
+  provider: string
+  bars: CanonicalOhlcvBar[]
+  persisted: boolean
+  changed: boolean
+}
+
+export interface ClosedIntradayRevalidationResult {
+  status: "completed" | "busy" | "reused"
+  provider: string | null
+  rowCount: number
+  changed: boolean
+}
+
+class ProviderRangeFetchError extends Error {}
+class ProviderRangePersistenceError extends Error {}
 
 function normalizedRequest(input: CanonicalChartOhlcvRequest): CanonicalChartOhlcvRequest {
   const ticker = String(input.ticker || "").trim().toUpperCase()
@@ -179,6 +215,140 @@ async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlc
   }
 }
 
+async function fetchClosedProviderValue(
+  provider: ChartOhlcvProvider,
+  request: CanonicalChartOhlcvRequest,
+  range: ProviderCoverageRange,
+) {
+  let providerResult
+  try {
+    providerResult = normalizeChartProviderResult(
+      await provider.fetch({ ...request, from: range.from, to: range.to, includeCurrent: false }),
+      "CUSTOM",
+    )
+  } catch (error) {
+    throw new ProviderRangeFetchError(error instanceof Error ? error.message : "Provider closed-range fetch failed")
+  }
+  const bars = providerResult.bars.filter((bar) => bar.time >= range.from && bar.time <= range.to)
+  if (!bars.length) throw new ProviderRangeFetchError("Provider returned no usable closed 1m bars")
+  return {
+    provider: providerResult.provider,
+    bars,
+    contentId: canonicalProviderRangeContentId({
+      provider: providerResult.provider,
+      requestedFrom: range.from,
+      requestedTo: range.to,
+      bars,
+    }),
+  }
+}
+
+async function persistClosedProviderValue(
+  deps: ChartDataServiceDeps,
+  request: CanonicalChartOhlcvRequest,
+  range: ProviderCoverageRange,
+  now: Date,
+  value: Awaited<ReturnType<typeof fetchClosedProviderValue>>,
+) {
+  try {
+    const persisted = await upsertHotIntradayBars(deps.supabase, {
+      ticker: request.ticker,
+      bars: value.bars,
+      provider: value.provider,
+      fetchedAt: now.toISOString(),
+      detail: {
+        resolution: "1m",
+        requestedFrom: range.from,
+        requestedTo: range.to,
+        liveTail: false,
+        workflow: "QEO-148",
+      },
+    })
+    if (!persisted.batchId || persisted.rowCount !== value.bars.length) {
+      throw new Error("Closed-range persistence is missing exact provenance evidence")
+    }
+    return persisted
+  } catch (error) {
+    throw new ProviderRangePersistenceError(error instanceof Error ? error.message : "Closed-range persistence failed")
+  }
+}
+
+async function runClosedProviderRange(
+  deps: ChartDataServiceDeps,
+  request: CanonicalChartOhlcvRequest,
+  range: ProviderCoverageRange,
+  now: Date,
+  revalidate: boolean,
+): Promise<ClosedRangeIngestionResult<ClosedProviderValue>> {
+  const provider = deps.provider ?? createPrimaryChartOhlcvProvider()
+  const coordinator = {
+    claim: (input: Parameters<typeof claimChartIntradayRange>[1]) => claimChartIntradayRange(deps.supabase, input),
+    complete: (input: Parameters<typeof completeChartIntradayRange>[1]) => completeChartIntradayRange(deps.supabase, input),
+    abandon: (input: Parameters<typeof abandonChartIntradayRange>[1]) => abandonChartIntradayRange(deps.supabase, input),
+  }
+
+  const work = async (claim: Extract<Awaited<ReturnType<typeof claimChartIntradayRange>>, { status: "claimed" }>) => {
+    const fetched = await fetchClosedProviderValue(provider, request, range)
+    if (revalidate && claim.previousContentId === fetched.contentId && claim.previousProvenanceBatchId) {
+      return {
+        value: { provider: fetched.provider, bars: fetched.bars, persisted: false, changed: false },
+        completion: {
+          provider: fetched.provider,
+          rowCount: fetched.bars.length,
+          provenanceBatchId: claim.previousProvenanceBatchId,
+          contentId: fetched.contentId,
+        },
+      }
+    }
+
+    const persisted = await persistClosedProviderValue(deps, request, range, now, fetched)
+    return {
+      value: { provider: fetched.provider, bars: fetched.bars, persisted: true, changed: true },
+      completion: {
+        provider: fetched.provider,
+        rowCount: persisted.rowCount,
+        provenanceBatchId: persisted.batchId,
+        contentId: fetched.contentId,
+      },
+    }
+  }
+
+  try {
+    return await runClosedRangeIngestion({
+      ticker: request.ticker,
+      sourceKey: CHART_PROVIDER_SOURCE_KEY,
+      from: range.from,
+      to: range.to,
+      revalidate,
+    }, coordinator, work)
+  } catch (error) {
+    if (!(error instanceof ChartClosedRangeCoordinationUnavailableError)) throw error
+    // Pending-schema compatibility: never infer success from legacy provenance.
+    // Until the QEO-148 migration is explicitly promoted, preserve chart
+    // availability with the old uncoordinated write path and no success reuse.
+    const fetched = await fetchClosedProviderValue(provider, request, range)
+    const persisted = await persistClosedProviderValue(deps, request, range, now, fetched)
+    return {
+      status: "completed",
+      claim: {
+        status: "claimed",
+        rangeId: "qeo148-schema-unavailable",
+        leaseOwner: "qeo148-schema-unavailable",
+        fence: 1,
+        previousContentId: null,
+        previousProvenanceBatchId: null,
+      },
+      value: { provider: fetched.provider, bars: fetched.bars, persisted: persisted.rowCount > 0, changed: true },
+    }
+  }
+}
+
+function clipRange(range: ProviderCoverageRange, bounds: ProviderCoverageRange): ProviderCoverageRange | null {
+  const from = Math.max(range.from, bounds.from)
+  const to = Math.min(range.to, bounds.to)
+  return to > from ? { from, to } : null
+}
+
 async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartOhlcvRequest): Promise<CanonicalChartOhlcvResult> {
   const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
   const provider = deps.provider ?? createPrimaryChartOhlcvProvider()
@@ -214,54 +384,81 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
 
   let normalized = normalizeCanonicalBars(tagged)
   const effectiveTo = Math.min(request.to, nowSeconds)
-  const requestedRange = { from: request.from, to: effectiveTo }
-  const coveredRanges = coverageRead.status === "fulfilled" ? coverageRead.value : []
-  const uncoveredRanges = normalized.bars.length === 0
-    ? [requestedRange]
-    : missingProviderRanges(requestedRange, coveredRanges)
-  const storageGapRanges = detectTradingSessionGaps(normalized.bars).map((gap) => ({
-    from: gap.fromTime,
-    to: gap.toTime,
-  }))
-  const uncoveredStorageGapRanges = uncoveredProviderRanges(storageGapRanges, coveredRanges)
   const liveTailRange = session.isLiveSession && effectiveTo > request.from
     ? {
         from: Math.max(request.from, currentMinuteStart - LIVE_TAIL_SECONDS),
         to: effectiveTo,
       }
     : null
-  const providerRanges = effectiveTo > request.from
-    ? mergeProviderRanges([
-        ...uncoveredRanges,
-        ...uncoveredStorageGapRanges,
-        ...(liveTailRange && liveTailRange.from < liveTailRange.to ? [liveTailRange] : []),
-      ])
+  const closedRequestedRange = effectiveTo > request.from
+    ? {
+        from: request.from,
+        to: liveTailRange && liveTailRange.from < liveTailRange.to
+          ? Math.min(effectiveTo, liveTailRange.from - 1)
+          : effectiveTo,
+      }
+    : null
+  const coveredRanges = coverageRead.status === "fulfilled" ? coverageRead.value : []
+  if (coverageRead.status === "rejected") errors.push({ code: "STORAGE_UNAVAILABLE" })
+
+  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
+    ? normalized.bars.length === 0
+      ? [closedRequestedRange]
+      : missingProviderRanges(closedRequestedRange, coveredRanges)
     : []
+  const closedStorageGapRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
+    ? detectTradingSessionGaps(normalized.bars)
+        .map((gap) => clipRange({ from: gap.fromTime, to: gap.toTime }, closedRequestedRange))
+        .filter((range): range is ProviderCoverageRange => Boolean(range))
+    : []
+  const closedProviderRanges = mergeProviderRanges([
+    ...closedUncoveredRanges,
+    ...uncoveredProviderRanges(closedStorageGapRanges, coveredRanges),
+  ])
 
   let latestProvider: string | null = null
-  for (const range of providerRanges) {
+  for (const range of closedProviderRanges) {
+    try {
+      const result = await runClosedProviderRange(deps, request, range, now, false)
+      if (result.status === "completed") {
+        latestProvider = result.value.provider
+        tagged.push(...result.value.bars.map((bar) => ({ source: "provider" as const, bar })))
+        if (result.value.persisted) durablePersistedThrough = laterTime(durablePersistedThrough, result.value.bars)
+        normalized = normalizeCanonicalBars(tagged)
+      } else if (result.status === "reused") {
+        try {
+          const refreshed = await readHotIntradayRange(deps.supabase, request.ticker, range.from, range.to)
+          tagged.push(...refreshed.map((bar) => ({ source: "hot" as const, bar })))
+          durablePersistedThrough = laterTime(durablePersistedThrough, refreshed)
+          normalized = normalizeCanonicalBars(tagged)
+        } catch {
+          errors.push({ code: "STORAGE_UNAVAILABLE" })
+        }
+      }
+    } catch (error) {
+      errors.push({ code: error instanceof ProviderRangeFetchError ? "PROVIDER_UNAVAILABLE" : "STORAGE_UNAVAILABLE" })
+    }
+  }
+
+  if (liveTailRange && liveTailRange.from < liveTailRange.to) {
     try {
       const providerResult = normalizeChartProviderResult(
         await provider.fetch({
           ...request,
-          from: range.from,
-          to: range.to,
-          includeCurrent: session.isLiveSession,
+          from: liveTailRange.from,
+          to: liveTailRange.to,
+          includeCurrent: true,
         }),
         "CUSTOM",
       )
-      const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, session.isLiveSession)
-      const providerBars = partition.responseBars
-      if (!providerBars.length) throw new Error("Provider returned no usable 1m bars")
+      const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, true)
+      if (!partition.responseBars.length) throw new ProviderRangeFetchError("Provider returned no usable live-tail 1m bars")
       latestProvider = providerResult.provider
-      tagged.push(...providerBars.map((bar) => ({ source: "provider" as const, bar })))
+      tagged.push(...partition.responseBars.map((bar) => ({ source: "provider" as const, bar })))
       normalized = normalizeCanonicalBars(tagged)
 
       if (partition.completedBars.length) {
         try {
-          const completedRequestedTo = session.isLiveSession
-            ? Math.min(range.to, currentMinuteStart - 1)
-            : range.to
           await upsertHotIntradayBars(deps.supabase, {
             ticker: request.ticker,
             bars: partition.completedBars,
@@ -269,9 +466,9 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
             fetchedAt: now.toISOString(),
             detail: {
               resolution: "1m",
-              requestedFrom: range.from,
-              requestedTo: completedRequestedTo,
-              liveTail: session.isLiveSession,
+              requestedFrom: liveTailRange.from,
+              requestedTo: Math.min(liveTailRange.to, currentMinuteStart - 1),
+              liveTail: true,
             },
           })
           durablePersistedThrough = laterTime(durablePersistedThrough, partition.completedBars)
@@ -311,6 +508,37 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
       currentBarTime: currentBar?.time ?? null,
       persistedThrough: durablePersistedThrough,
     },
+  }
+}
+
+/**
+ * Explicit correction path for QEO-150/repair callers. Ordinary chart reads
+ * never set revalidate=true. An identical source-aware content identity reuses
+ * the previous provenance; a genuine revision is written and auditable before
+ * the durable success marker is replaced.
+ */
+export async function revalidateClosedIntradayRange(
+  deps: ChartDataServiceDeps,
+  input: CanonicalChartOhlcvRequest,
+): Promise<ClosedIntradayRevalidationResult> {
+  const request = normalizedRequest(input)
+  if (request.resolution !== "1m") throw new ChartDataRequestError("Correction revalidation requires canonical 1m")
+  const now = deps.now ?? new Date()
+  const nowSeconds = Math.floor(now.getTime() / 1000)
+  const currentMinuteStart = activeMinuteStart(nowSeconds)
+  const session = getMarketSessionStatus(now)
+  const closedTo = session.isLiveSession ? Math.min(request.to, currentMinuteStart - 1) : Math.min(request.to, nowSeconds)
+  if (closedTo <= request.from) throw new ChartDataRequestError("Correction revalidation requires a closed range")
+
+  const result = await runClosedProviderRange(deps, request, { from: request.from, to: closedTo }, now, true)
+  if (result.status !== "completed") {
+    return { status: result.status, provider: null, rowCount: 0, changed: false }
+  }
+  return {
+    status: "completed",
+    provider: result.value.provider,
+    rowCount: result.value.bars.length,
+    changed: result.value.changed,
   }
 }
 
