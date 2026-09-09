@@ -3,6 +3,12 @@ import type { DiversificationRules } from "../risk-plan/types.ts"
 export type ConcentrationStatus = "WITHIN_PLAN" | "WARNING" | "BREACH" | "UNKNOWN"
 export type ConcentrationCompleteness = "complete" | "partial" | "insufficient"
 
+export type SectorMetadataSnapshot = {
+  source: "canonical_market_universe"
+  sourceAsOfDate: string | null
+  byTicker: Record<string, string | null>
+}
+
 export type ConcentrationPositionInput = {
   ticker: string
   openQty: number
