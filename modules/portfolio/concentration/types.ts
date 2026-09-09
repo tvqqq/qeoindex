@@ -68,6 +68,7 @@ export type PortfolioConcentrationReadModel = {
     openPositionCount: number
     accountEquityVnd: number | null
   }
+  rules: DiversificationRules | null
   tickerMarketValue: ConcentrationCheck[]
   tickerActiveRisk: ConcentrationCheck[]
   sectorActiveRisk: ConcentrationCheck[]
