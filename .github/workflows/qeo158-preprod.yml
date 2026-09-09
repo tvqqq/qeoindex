@@ -124,7 +124,7 @@ jobs:
       - name: Replay migrations from zero
         run: pnpm db:replay:verify
       - name: Generate Database type candidate
-        run: supabase gen types typescript --local > /tmp/database.types.ts
+        run: supabase gen types typescript --local --schema public > /tmp/database.types.ts
       - name: Compare generated Database types
         id: generated_types
         continue-on-error: true
