@@ -1,0 +1,177 @@
+from pathlib import Path
+
+path = Path("components/orderbook/live-orderbook-panel.tsx")
+text = path.read_text()
+
+
+def replace_once(old: str, new: str, label: str) -> None:
+    global text
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{label}: expected 1 match, found {count}")
+    text = text.replace(old, new, 1)
+
+
+replace_once(
+    'export type TradeSide = "BUY" | "SELL" | "UNKNOWN"\nexport type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide }',
+    'export type TradeSide = "BUY" | "SELL" | "UNKNOWN"\nexport type TradeSource = "DNSE_LIVE" | "DNSE_HISTORY" | "SUPABASE_SNAPSHOT"\nexport type StreamTrade = { id: string; time: string; price: number; volume: number; side: TradeSide; source: TradeSource }',
+    "trade provenance types",
+)
+
+replace_once(
+    '  ok: boolean\n  message?: string',
+    '  ok: boolean\n  provider?: string\n  message?: string',
+    "session provider field",
+)
+
+replace_once(
+    '  const parseRawTrades = (rawTrades?: any[]): StreamTrade[] => {',
+    '  const parseRawTrades = (rawTrades?: any[], source: TradeSource): StreamTrade[] => {',
+    "parseRawTrades signature",
+)
+
+replace_once(
+    '          volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,\n          side: explicitSide(trade.side),\n        }\n      })\n      .filter((trade) => trade.price > 0 && trade.volume > 0)',
+    '          volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,\n          side: explicitSide(trade.side),\n          source,\n        }\n      })\n      .filter((trade) => trade.price > 0 && trade.volume > 0)',
+    "parseRawTrades provenance",
+)
+
+replace_once(
+    '            const parsedTrades = parseRawTrades(direct.trades)',
+    '            const parsedTrades = parseRawTrades(direct.trades, "SUPABASE_SNAPSHOT")',
+    "fast Supabase hydrate provenance",
+)
+
+replace_once(
+    '        const historicalTrades: StreamTrade[] = isAto ? [] : parseRawTrades(payload.trades)',
+    '        const historySource: TradeSource = payload.provider === "DNSE" ? "DNSE_HISTORY" : "SUPABASE_SNAPSHOT"\n        const historicalTrades: StreamTrade[] = isAto ? [] : parseRawTrades(payload.trades, historySource)',
+    "REST history provenance",
+)
+
+replace_once(
+    '''                  volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+                  side: explicitSide(trade.side),
+                }
+              }).filter((t) => t.price > 0 && t.volume > 0)
+              setTrades(parsedTrades)''',
+    '''                  volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+                  side: explicitSide(trade.side),
+                  source: "SUPABASE_SNAPSHOT" as const,
+                }
+              }).filter((t) => t.price > 0 && t.volume > 0)
+              setTrades(parsedTrades)''',
+    "fallback Supabase provenance",
+)
+
+replace_once(
+    '    const unsubscribe = subscribeToOrderbookRealtime(symbol, (snapshot) => {\n      if (!snapshot) return\n      if (getMarketUiPhase() === "ATO") return',
+    '    const unsubscribe = subscribeToOrderbookRealtime(symbol, (snapshot) => {\n      if (!snapshot) return\n      // DNSE WebSocket is the source of truth for all live UI behavior.\n      // Supabase/VPS updates are recovery-only and must not overwrite a healthy live stream.\n      if (state === "LIVE") return\n      if (getMarketUiPhase() === "ATO") return',
+    "Supabase live-state gate",
+)
+
+replace_once(
+    '''            volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+            side: explicitSide(trade.side),
+          }
+        }).filter((t) => t.price > 0 && t.volume > 0)
+        setTrades((curr) => mergeTrades(curr, incomingTrades))''',
+    '''            volume: number(trade.volume) * ORDERBOOK_VOLUME_MULTIPLIER,
+            side: explicitSide(trade.side),
+            source: "SUPABASE_SNAPSHOT" as const,
+          }
+        }).filter((t) => t.price > 0 && t.volume > 0)
+        setTrades((curr) => mergeTrades(curr, incomingTrades))''',
+    "Supabase realtime provenance",
+)
+
+replace_once(
+    '  }, [symbol])\n\n  // Realtime Put-Through Polling & Alerting (every 5 seconds)',
+    '  }, [symbol, state])\n\n  // Realtime Put-Through Polling & Alerting (every 5 seconds)',
+    "Supabase subscription state dependency",
+)
+
+replace_once(
+    '              volume,\n              side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),\n            }\n            setTrades((current) => mergeTrades([trade], current))',
+    '              volume,\n              side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),\n              source: "DNSE_LIVE",\n            }\n            setTrades((current) => mergeTrades([trade], current))',
+    "DNSE tick-extra provenance",
+)
+
+replace_once(
+    '  const clusteredTrades = useMemo(() => {\n    return clusterTrades(stream.trades)\n  }, [stream.trades])\n\n  const bestBidPrice',
+    '  const clusteredTrades = useMemo(() => {\n    return clusterTrades(stream.trades)\n  }, [stream.trades])\n  const realtimeWhaleTrades = useMemo(\n    () => clusteredTrades.filter((t) => t.source === "DNSE_LIVE"),\n    [clusteredTrades],\n  )\n\n  const bestBidPrice',
+    "DNSE-live whale candidates",
+)
+
+replace_once(
+    '''  // Reliable Realtime Whale Lottie, Sound & Glow Trigger
+  const seenWhaleIdsRef = useRef<Set<string>>(new Set())
+  const isInitialTradesLoadedRef = useRef(false)
+
+  useEffect(() => {
+    if (!clusteredTrades.length) return
+
+    // On initial data arrival, record historical whale trade IDs to avoid firing on page open
+    if (!isInitialTradesLoadedRef.current) {
+      if (stream.historyState === "READY" || stream.historyState === "PARTIAL" || clusteredTrades.length > 0) {
+        for (const t of clusteredTrades) {
+          if (!isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold) {
+            seenWhaleIdsRef.current.add(t.id)
+          }
+        }
+        isInitialTradesLoadedRef.current = true
+      }
+      return
+    }
+
+    // On subsequent realtime updates, check for any newly arrived whale trades
+    for (const t of clusteredTrades) {
+      if (isAtoTradeTime(t.time) || isAtcTradeTime(t.time)) continue
+
+      if (t.volume >= whaleThreshold) {
+        if (!seenWhaleIdsRef.current.has(t.id)) {
+          seenWhaleIdsRef.current.add(t.id)
+          const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
+          confetti.fire(side, t.volume, t.price)
+          playWhaleSound(side)
+          setIsWhaleGlow(true)
+          setTimeout(() => setIsWhaleGlow(false), 2800)
+        }
+      }
+    }
+  }, [clusteredTrades, whaleThreshold, stream.historyState, confetti])''',
+    '''  // Reliable Realtime Whale Lottie, Sound & Glow Trigger.
+  // Only DNSE WebSocket executions can create realtime behavior; history/snapshots are display/backfill only.
+  const seenWhaleIdsRef = useRef<Set<string>>(new Set())
+  const didInitializeWhaleBaselineRef = useRef(false)
+
+  useEffect(() => {
+    seenWhaleIdsRef.current.clear()
+    didInitializeWhaleBaselineRef.current = false
+  }, [symbol])
+
+  useEffect(() => {
+    // Baseline cached DNSE-live executions when reopening a popup so stale events do not replay.
+    if (!didInitializeWhaleBaselineRef.current) {
+      for (const t of realtimeWhaleTrades) {
+        seenWhaleIdsRef.current.add(t.id)
+      }
+      didInitializeWhaleBaselineRef.current = true
+      return
+    }
+
+    for (const t of realtimeWhaleTrades) {
+      if (isAtoTradeTime(t.time) || isAtcTradeTime(t.time)) continue
+      if (t.volume < whaleThreshold || seenWhaleIdsRef.current.has(t.id)) continue
+
+      seenWhaleIdsRef.current.add(t.id)
+      const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
+      confetti.fire(side, t.volume, t.price)
+      playWhaleSound(side)
+      setIsWhaleGlow(true)
+      setTimeout(() => setIsWhaleGlow(false), 2800)
+    }
+  }, [realtimeWhaleTrades, whaleThreshold, confetti])''',
+    "whale DNSE-live gate",
+)
+
+path.write_text(text)
