@@ -31,6 +31,7 @@ import {
 
 import type { MarketHistoryPoint, MarketSectorHistoryItem, MarketSectorRow } from "@/modules/research/market-insight/data"
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
+import { StockLogo } from "@/components/stock-logo"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -145,6 +146,13 @@ function formatNumber(value: number | null | undefined, decimals = 0) {
 function formatSigned(value: number | null | undefined, decimals = 2, suffix = "") {
   if (value == null || !Number.isFinite(value)) return "—"
   return `${value > 0 ? "+" : ""}${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: decimals }).format(value)}${suffix}`
+}
+
+export function getTopSectorStocks(ratings: InsightsRatingRow[], sectorName: string) {
+  return ratings
+    .filter((row) => row.sector.localeCompare(sectorName, "vi", { sensitivity: "base" }) === 0)
+    .sort((left, right) => right.ratingScore - left.ratingScore || left.ticker.localeCompare(right.ticker))
+    .slice(0, 3)
 }
 
 export const ROTATION_LABELS: Record<string, string> = {
@@ -266,7 +274,7 @@ export function SectorMapPanel({
   }, [sectors])
 
   const topPodiumSectors = React.useMemo(
-    () => currentSectors.filter((sector) => sector.averageChangePct != null).slice(0, 3),
+    () => currentSectors.filter((sector) => sector.averageChangePct != null).slice(0, 6),
     [currentSectors],
   )
 
@@ -424,18 +432,19 @@ export function SectorMapPanel({
       <section className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-5 shadow-xl sm:p-6">
         <SectorPanelHeading icon={Layers} eyebrow="TOP LEADING SECTORS" title="Ngành nghề nổi bật & Sức mạnh dòng tiền" />
 
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div data-leading-sector-grid className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {topPodiumSectors.length === 0 ? (
             <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400 sm:col-span-2 lg:col-span-3">KFSP chưa có dữ liệu Kết quả ngành hợp lệ cho snapshot này.</div>
           ) : null}
           {topPodiumSectors.map((sector, index) => {
-            const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"
+            const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`
             const changePct = sector.averageChangePct ?? 0
             const positive = changePct >= 0
             const SectorIcon = getSectorIcon(sector.displayName)
             const breadthTotal = Math.max(1, sector.advances + sector.unchanged + sector.declines)
+            const topStocks = getTopSectorStocks(ratings, sector.displayName)
             return (
-              <button key={sector.sectorKey} type="button" onClick={() => handleOpenSectorModal(sector.displayName, sector)} className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1b26]/90 p-4 text-left transition-transform duration-150 hover:scale-[1.01] hover:border-teal-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400">
+              <button key={sector.sectorKey} type="button" onClick={() => handleOpenSectorModal(sector.displayName, sector)} className="group relative flex min-h-[285px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1b26]/90 p-4 text-left transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-teal-400/60 hover:shadow-[0_14px_42px_-20px_rgba(45,212,191,.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2 font-mono text-xs font-black uppercase text-slate-200"><span className="text-base">{medal}</span><span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10"><SectorIcon className="size-3.5 text-cyan-400" /></span><span className="truncate">{sector.displayName}</span></div>
                   {sector.rsScore != null ? <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-teal-300">RS {formatNumber(sector.rsScore, 2)}</span> : null}
@@ -445,6 +454,33 @@ export function SectorMapPanel({
                   {sector.tradedValue != null && sector.tradedValue > 0 ? <p className="mt-0.5 font-mono text-xs text-slate-400">GTGD: <strong className="font-bold text-white">{formatNumber(sector.tradedValue, 0)}</strong> tỷ</p> : null}
                 </div>
                 <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800"><span className="h-full bg-emerald-400" style={{ width: `${sector.advances / breadthTotal * 100}%` }} /><span className="h-full bg-amber-400" style={{ width: `${sector.unchanged / breadthTotal * 100}%` }} /><span className="h-full bg-rose-500" style={{ width: `${sector.declines / breadthTotal * 100}%` }} /></div>
+
+                <div data-sector-top-stocks className="mt-4 flex-1 border-t border-white/[0.07] pt-3">
+                  <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">
+                    <span>Top cổ phiếu</span>
+                    <span>Qeo Composite</span>
+                  </div>
+                  {topStocks.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {topStocks.map((stock, stockIndex) => (
+                        <div key={stock.ticker} className="flex items-center gap-2 rounded-lg border border-transparent bg-white/[0.025] px-2 py-1.5 transition-colors group-hover:border-white/[0.04] group-hover:bg-white/[0.04]">
+                          <span className="w-4 shrink-0 text-center font-mono text-[10px] font-black text-slate-500">{stockIndex + 1}</span>
+                          <StockLogo symbol={stock.ticker} size={24} className="shrink-0 rounded-full" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <strong className="font-mono text-xs font-black text-white">{stock.ticker}</strong>
+                              {stock.changePercent != null ? <span className={cn("font-mono text-[10px] font-bold", stock.changePercent >= 0 ? "text-emerald-400" : "text-rose-400")}>{formatSigned(stock.changePercent, 1, "%")}</span> : null}
+                            </div>
+                            <p className="truncate font-sans text-[10px] text-slate-500">{stock.companyName}</p>
+                          </div>
+                          <strong className="shrink-0 rounded-md border border-purple-400/20 bg-purple-400/10 px-1.5 py-0.5 font-mono text-[11px] font-black text-purple-200" aria-label={`Qeo Composite ${formatNumber(stock.ratingScore, 1)}`}>{formatNumber(stock.ratingScore, 1)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-white/[0.06] bg-white/[0.015] px-2 py-3 text-center font-sans text-[11px] text-slate-500">Chưa có dữ liệu Qeo Composite cho ngành này.</div>
+                  )}
+                </div>
               </button>
             )
           })}
