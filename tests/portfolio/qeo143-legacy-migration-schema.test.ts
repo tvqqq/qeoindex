@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const migrationUrl = new URL(
-  "../../supabase/migrations/20260909050000_qeo143_legacy_portfolio_migration.sql",
+  "../../supabase/migrations/20260909044821_qeo143_legacy_portfolio_migration.sql",
   import.meta.url,
 )
 
