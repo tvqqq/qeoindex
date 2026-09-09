@@ -65,7 +65,11 @@ export function HomeStockSearch({ stocks }: HomeStockSearchProps) {
   }
 
   return (
-    <div className="relative mx-auto mt-5 w-full max-w-[560px] text-left">
+    <div
+      data-home-stock-search
+      data-open={isOpen ? "true" : "false"}
+      className="relative mx-auto mt-5 w-full max-w-[560px] text-left"
+    >
       <div className="relative rounded-[28px] border border-white/[0.1] bg-[#202328] p-2 shadow-[0_24px_54px_-28px_rgba(213,255,99,0.32)] transition-[border-color,box-shadow] duration-300 focus-within:border-[#d5ff63]/35 focus-within:shadow-[0_28px_62px_-28px_rgba(213,255,99,0.42)]">
         <div className="flex min-h-[68px] items-center gap-3 rounded-[22px] bg-[#111317] px-4 sm:px-5">
           <Search className="h-5 w-5 shrink-0 text-slate-500" strokeWidth={1.8} aria-hidden="true" />

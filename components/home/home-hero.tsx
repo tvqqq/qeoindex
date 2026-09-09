@@ -16,6 +16,18 @@ import type { HomeHeroData } from "@/modules/home/hero-data"
 
 import styles from "./home-hero.module.css"
 
+const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh"
+
+const VIETNAM_WEEKDAY_LABELS: Record<string, string> = {
+  Monday: "Thứ 2",
+  Tuesday: "Thứ 3",
+  Wednesday: "Thứ 4",
+  Thursday: "Thứ 5",
+  Friday: "Thứ 6",
+  Saturday: "Thứ 7",
+  Sunday: "Chủ nhật",
+}
+
 function formatIndex(value: number | null) {
   if (value == null) return "—"
   return new Intl.NumberFormat("vi-VN", {
@@ -53,6 +65,19 @@ function formatSessionDate(value: string | null) {
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
+function formatCurrentVietnamDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: VIETNAM_TIME_ZONE,
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(now)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ""
+  const weekday = VIETNAM_WEEKDAY_LABELS[part("weekday")] ?? part("weekday")
+  return `${weekday}, ${part("day")}/${part("month")}/${part("year")}`
+}
+
 function formatSnapshotTime(value: string | null) {
   if (!value) return null
   const date = new Date(value)
@@ -61,7 +86,7 @@ function formatSnapshotTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "Asia/Ho_Chi_Minh",
+    timeZone: VIETNAM_TIME_ZONE,
   }).format(date)
 }
 
@@ -141,9 +166,9 @@ function MarketObject({ data }: { data: HomeHeroData["market"] }) {
 function CenterNarrative({ data, stocks }: { data: HomeHeroData; stocks: readonly HomeStockSearchStock[] }) {
   return (
     <div className={`order-1 flex min-w-0 flex-col items-center justify-center px-1 text-center lg:order-2 ${styles.centerEnter}`}>
-      <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+      <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-[10px] font-black tracking-[0.13em] text-slate-400">
         <span className="h-1.5 w-1.5 rounded-full bg-[#d5ff63]" aria-hidden="true" />
-        QEO Market Pulse · {formatSessionDate(data.market.sessionDate)}
+        QeoIndex Pulse · {formatCurrentVietnamDate()}
       </div>
 
       <h1 id="home-market-pulse-title" className="mt-6 max-w-[720px] text-[clamp(2.7rem,5.5vw,5.25rem)] font-black leading-[0.94] tracking-[-0.065em] text-white">
@@ -257,7 +282,7 @@ export function HomeHero({ data, stocks }: { data: HomeHeroData; stocks: readonl
   return (
     <section
       aria-labelledby="home-market-pulse-title"
-      className="relative border-b border-white/[0.055] py-10 sm:py-14 lg:min-h-[620px] lg:py-16"
+      className={`${styles.heroShell} relative border-b border-white/[0.055] py-10 sm:py-14 lg:min-h-[620px] lg:py-16`}
     >
       <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-[42%] h-px w-[76%] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       <div className="relative grid items-center gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)_minmax(0,1fr)] lg:gap-5 xl:gap-8">

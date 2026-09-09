@@ -1,3 +1,11 @@
+.heroShell {
+  transition: padding-bottom 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.heroShell:has([data-home-stock-search][data-open="true"]) {
+  padding-bottom: 360px;
+}
+
 .marketEnter {
   animation: marketEnter 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -59,6 +67,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .heroShell {
+    transition: none;
+  }
+
   .marketEnter,
   .centerEnter,
   .portfolioEnter,
