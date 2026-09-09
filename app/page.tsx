@@ -105,7 +105,7 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
             className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
             aria-hidden="true"
           >
-            <div className={`${MINI_ICON_CLASS} group-hover/card:-translate-y-[4.375rem]`}>
+            <div className={`${MINI_ICON_CLASS} group-hover/card:-translate-y-[3.75rem]`}>
               <MiniTwo className="h-5 w-5" strokeWidth={2.2} />
             </div>
           </div>
