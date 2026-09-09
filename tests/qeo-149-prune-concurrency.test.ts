@@ -123,3 +123,5 @@ test("QEO-147 concurrent generations share the same manifest lock and mutation i
   assert.match(migration, /qeo_validate_chart_derived_hourly_manifests/i)
   assert.match(migration, /insert or update or delete/i)
 })
+
+import "./qeo-148-backfill-idempotency.cases.ts"
