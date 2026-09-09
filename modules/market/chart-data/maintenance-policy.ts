@@ -25,6 +25,7 @@ export type Qeo150AttemptOutcome =
   | "retryable_failure"
   | "failed"
   | "capacity_stop"
+  | "sla_timeout"
   | "unknown"
 
 export interface Qeo150DailyEvidence {
@@ -140,6 +141,7 @@ export function classifyQeo150Freshness(input: Qeo150FreshnessInput): Qeo150Fres
     input.lastAttemptOutcome === "retryable_failure"
     || input.lastAttemptOutcome === "failed"
     || input.lastAttemptOutcome === "capacity_stop"
+    || input.lastAttemptOutcome === "sla_timeout"
   ) {
     return { current: false, evidenceCategory: "failure" }
   }
