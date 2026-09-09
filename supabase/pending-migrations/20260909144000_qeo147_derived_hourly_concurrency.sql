@@ -3,6 +3,8 @@ begin;
 -- QEO-147 follow-up: readiness validation and every derived-row mutation share
 -- one manifest advisory lock. The xact lock closes the publish/prune race while
 -- keeping concurrent generations recoverable rather than falsely READY.
+-- qeo_publish_chart_derived_hourly_readiness invokes the shared validator from
+-- the first QEO-147 migration, so publication inherits this same xact lock.
 create or replace function public.qeo_chart_derived_hourly_manifest_lock_key(
   p_manifest_id uuid
 )
