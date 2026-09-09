@@ -28,7 +28,7 @@ export async function chartIntradayMaintenanceWorkflow(
         .slice(offset)
         .map((stock) => stock.ticker)
         .filter((ticker) => !resultByTicker.has(ticker))
-      const reason = `QEO-150 reconciliation exceeded SLA deadline ${context.slaDeadline}`
+      const reason = `QEO-150 sla_timeout: reconciliation exceeded SLA deadline ${context.slaDeadline}`
       const stopped = await recordChartIntradayMaintenanceFailureStopStep({
         tickers: remaining,
         expectedSession: context.expectedSession,
@@ -72,7 +72,7 @@ export async function chartIntradayMaintenanceWorkflow(
           .slice(offset)
           .map((stock) => stock.ticker)
           .filter((ticker) => !resultByTicker.has(ticker))
-        const reason = `QEO-150 reconciliation exceeded SLA deadline ${context.slaDeadline}`
+        const reason = `QEO-150 sla_timeout: reconciliation exceeded SLA deadline ${context.slaDeadline}`
         const stopped = await recordChartIntradayMaintenanceFailureStopStep({
           tickers: remaining,
           expectedSession: context.expectedSession,
