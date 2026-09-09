@@ -3,9 +3,10 @@
     {
       "logicalName": "qeo150_chart_intraday_maintenance",
       "repositoryVersion": "20260909173000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-150 exact-head preproduction scheduler gate"
+      "productionVersion": "20260909110230",
+      "state": "MAPPED",
+      "evidence": "QEO-150 exact-head gates plus production migration and live scheduler readback",
+      "rationale": "QEO-150 scheduler migration was promoted only after targeted contract, full Verify/build, zero-to-latest replay, generated types and QEO-108/149/147/148 rehearsals passed. Supabase assigned production version 20260909110230 while repository replay keeps reviewed ordering 20260909173000."
     }
   ]
 }
