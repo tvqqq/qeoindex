@@ -1,0 +1,68 @@
+.marketEnter {
+  animation: marketEnter 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.centerEnter {
+  animation: centerEnter 680ms 80ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.portfolioEnter {
+  animation: portfolioEnter 760ms 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.badgeEnter {
+  animation: badgeEnter 620ms 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes marketEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(-28px, 22px, 0) rotate(-8deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes centerEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes portfolioEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(28px, 22px, 0) rotate(8deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes badgeEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketEnter,
+  .centerEnter,
+  .portfolioEnter,
+  .badgeEnter {
+    animation: none;
+  }
+}
