@@ -13,7 +13,7 @@ export function AdminHeader({ actorUserId }: AdminHeaderProps) {
       <div className="mx-auto flex max-w-7xl flex-col gap-3.5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center gap-3.5">
           <Link
-            href="/"
+            href="/board"
             prefetch={false}
             className="group flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[#0c1017] text-slate-400 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300"
             title="Quay lại Bảng điện"

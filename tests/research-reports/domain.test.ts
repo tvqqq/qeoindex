@@ -226,14 +226,14 @@ test("QEO-83 catalog pagination fills responsive 2-column and 3-column card rows
 
 test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycle states", () => {
   const service = readFileSync("modules/research-reports/catalog.ts", "utf8")
-  const page = readFileSync("app/insights/reports/page.tsx", "utf8")
-  const loading = readFileSync("app/insights/reports/loading.tsx", "utf8")
+  const page = readFileSync("app/reports/page.tsx", "utf8")
+  const loading = readFileSync("app/reports/loading.tsx", "utf8")
   const nav = readFileSync("components/top-nav.tsx", "utf8")
 
   assert.match(service, /order\("publish_date", \{ ascending: false \}\)[\s\S]*order\("id", \{ ascending: false \}\)/)
   assert.match(service, /range\(offset, offset \+ RESEARCH_REPORT_CATALOG_PAGE_SIZE - 1\)/)
   assert.doesNotMatch(service, /market_research_report_chunks|market_research_report_ticker_mentions/)
-  assert.match(page, /canonical: "\/insights\/reports"/)
+  assert.match(page, /canonical: "\/reports"/)
   assert.match(page, /getResearchReportCatalog/)
   assert.match(page, /name="q"/)
   assert.match(page, /name="source"/)
@@ -246,7 +246,7 @@ test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycl
   assert.match(page, /Chưa phân tích/)
   assert.match(page, /Đọc PDF lỗi/)
   assert.match(page, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
-  assert.match(nav, /href: "\/insights\/reports"/)
+  assert.match(nav, /href: "\/reports"/)
   assert.match(loading, /TopNav/)
   assert.match(loading, /aria-busy="true"/)
 })

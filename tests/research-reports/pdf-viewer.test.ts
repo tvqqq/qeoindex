@@ -80,6 +80,6 @@ test("pending citation page is applied after PDF metadata resolves and source li
 })
 
 test("Research Reports catalog uses one, two, then three columns as viewport width grows", () => {
-  const code = source("app/insights/reports/page.tsx")
+  const code = source("app/reports/page.tsx")
   assert.match(code, /className=["'][^"']*grid[^"']*md:grid-cols-2[^"']*xl:grid-cols-3[^"']*["']/)
 })

@@ -1,169 +1,147 @@
+import Link from "next/link"
+import {
+  Activity,
+  BarChart3,
+  BookOpenText,
+  Briefcase,
+  CandlestickChart,
+  FileText,
+  LayoutDashboard,
+  LineChart,
+  Radar,
+  SearchCheck,
+  Sparkles,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react"
+
 import { LandingLogin } from "@/components/auth/landing-login"
-import { MarketBoardFilterShell, type FilterBoardUniverseStock } from "@/components/market-board/market-board-filter-shell"
-import type { IndexQuote } from "@/components/live-market-board"
-import { MarketUniverseVersionRefresh } from "@/components/market-universe-version-refresh"
-import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
-import { OrderBookManager } from "@/components/orderbook/orderbook-manager"
-import MarketBoardTransition from "@/components/smoothui/market-board-transition"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/modules/auth/server"
-import { boardSectorGroupForSector, sectorForTicker } from "@/modules/market/sectors"
-import { getCanonicalUniverse, type CanonicalUniverseSnapshot } from "@/modules/market/universe/index"
-import { getCanonicalBoardOverviewSnapshots } from "@/modules/shared/supabase/board-overview"
-import { isTradingSessionOpen, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
-import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
-import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
-import { getIntraday5mSnapshot } from "@/modules/market/realtime/intraday-5m-service"
-import type { LiveStockQuote } from "@/components/live-market-stock"
-import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
-import { getEodForeignRoom } from "@/modules/eod/shares"
-import styles from "./market-board-performance.module.css"
 
 export const dynamic = "force-dynamic"
 
-const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v7"
-
-type InitialBoardData = {
-  universe: FilterBoardUniverseStock[]
-  initialQuotes: Record<string, LiveStockQuote | IndexQuote>
-  initialHistories: Record<string, IntradayPoint[]>
+type HomeMenuItem = {
+  href: string
+  title: string
+  description: string
+  icon: LucideIcon
+  miniIcons: readonly [LucideIcon, LucideIcon, LucideIcon]
+  iconClassName: string
+  borderClassName: string
+  glowClassName: string
 }
 
-function isInitialBoardData(value: unknown): value is InitialBoardData {
-  if (!value || typeof value !== "object") return false
-  const d = value as Partial<InitialBoardData>
-  return Array.isArray(d.universe) && typeof d.initialQuotes === "object" && typeof d.initialHistories === "object"
+const HOME_MENU_ITEMS: HomeMenuItem[] = [
+  {
+    href: "/board",
+    title: "Bảng điện",
+    description: "Theo dõi giá, thanh khoản, sổ lệnh và diễn biến realtime của Top Stocks 200.",
+    icon: LayoutDashboard,
+    miniIcons: [BarChart3, LineChart, Activity],
+    iconClassName: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
+    borderClassName: "hover:border-emerald-400/35",
+    glowClassName: "from-emerald-400/12 via-cyan-400/5 to-transparent",
+  },
+  {
+    href: "/portfolio",
+    title: "Danh mục",
+    description: "Quản lý danh mục, kế hoạch giao dịch, hiệu suất và kỷ luật rủi ro trong một workspace.",
+    icon: Briefcase,
+    miniIcons: [TrendingUp, CandlestickChart, BarChart3],
+    iconClassName: "border-violet-400/25 bg-violet-400/10 text-violet-300",
+    borderClassName: "hover:border-violet-400/35",
+    glowClassName: "from-violet-400/12 via-fuchsia-400/5 to-transparent",
+  },
+  {
+    href: "/insights",
+    title: "Insights thị trường",
+    description: "Đọc VNINDEX, Qeo Rating, dòng tiền, Wyckoff và AI Council từ cùng một góc nhìn thị trường.",
+    icon: Sparkles,
+    miniIcons: [CandlestickChart, Radar, TrendingUp],
+    iconClassName: "border-cyan-400/25 bg-cyan-400/10 text-cyan-300",
+    borderClassName: "hover:border-cyan-400/35",
+    glowClassName: "from-cyan-400/12 via-emerald-400/5 to-transparent",
+  },
+  {
+    href: "/reports",
+    title: "Báo cáo Research",
+    description: "Tra cứu báo cáo vĩ mô, chiến lược và ngành cùng trạng thái ingest, phân tích AI và bằng chứng nguồn.",
+    icon: FileText,
+    miniIcons: [BookOpenText, SearchCheck, BarChart3],
+    iconClassName: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+    borderClassName: "hover:border-amber-400/35",
+    glowClassName: "from-amber-400/12 via-emerald-400/5 to-transparent",
+  },
+]
+
+function MenuCard({ item }: { item: HomeMenuItem }) {
+  const Icon = item.icon
+  const [MiniOne, MiniTwo, MiniThree] = item.miniIcons
+
+  return (
+    <Link
+      href={item.href}
+      prefetch={false}
+      className={[
+        "group relative min-h-[250px] overflow-hidden rounded-3xl border border-white/[0.09] bg-panel/60 p-6 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)]",
+        "transition-[border-color,background-color,transform] duration-200 hover:-translate-y-1 hover:bg-panel/80 motion-reduce:transform-none motion-reduce:transition-none",
+        item.borderClassName,
+      ].join(" ")}
+    >
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.glowClassName} opacity-70`} />
+      <div className="relative flex h-full flex-col sm:flex-row sm:items-center sm:gap-7">
+        <div className="relative mb-6 flex h-28 w-28 shrink-0 items-center justify-center sm:mb-0">
+          <div className={`relative z-10 flex h-20 w-20 items-center justify-center rounded-3xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${item.iconClassName}`}>
+            <Icon className="h-9 w-9" strokeWidth={1.7} />
+          </div>
+
+          <div className="absolute left-0 top-0 flex h-9 w-9 -translate-x-1 translate-y-2 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+            <MiniOne className="h-4 w-4" />
+          </div>
+          <div className="absolute right-0 top-1 flex h-9 w-9 translate-x-1 translate-y-2 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+            <MiniTwo className="h-4 w-4" />
+          </div>
+          <div className="absolute bottom-0 right-2 flex h-9 w-9 translate-x-1 translate-y-1 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+            <MiniThree className="h-4 w-4" />
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-black tracking-tight text-white sm:text-2xl">{item.title}</h2>
+            <span className="text-sm text-slate-600 transition-[color,transform] duration-200 group-hover:translate-x-1 group-hover:text-slate-300 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true">→</span>
+          </div>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{item.description}</p>
+          <div className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors duration-200 group-hover:text-slate-300">
+            Mở workspace
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
 }
 
-function vietnamDateKey(now: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now)
-}
-
-async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniverseSnapshot): Promise<InitialBoardData> {
-  const currentDay = vietnamDateKey(now)
-  const tickers = canonical.stocks.map((stock) => stock.ticker)
-  const [snapshots, liveQuotes, intraday5m] = await Promise.all([
-    getCanonicalBoardOverviewSnapshots(tickers),
-    fetchLiveBatchQuotes(tickers),
-    getIntraday5mSnapshot(tickers, now),
-  ])
-
-  const cachedRowsBySymbol = intraday5m?.rows
-    ? Object.fromEntries(intraday5m.rows.map((row) => [row.symbol, row]))
-    : null
-
-  const universe: FilterBoardUniverseStock[] = canonical.stocks.map((stock) => {
-    const snap = snapshots[stock.ticker]
-    const live = liveQuotes[stock.ticker]
-    const cachedRow = cachedRowsBySymbol?.[stock.ticker]
-    const lastClosePrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || null
-    return {
-      ticker: stock.ticker,
-      rank: stock.rank,
-      sector: boardSectorGroupForSector(stock.sector || sectorForTicker(stock.ticker)).sectors[0],
-      exchange: stock.exchange || "",
-      kfspSector: stock.sector || sectorForTicker(stock.ticker),
-      averageVolume50d: stock.averageVolume50d,
-      marketCapT: stock.marketCapBillion / 1000,
-      lastClose: lastClosePrice,
-      lastCloseDate: snap?.session_date || "",
-    }
-  })
-
-  const initialQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
-  const initialHistories: Record<string, IntradayPoint[]> = {}
-
-  for (const stock of universe) {
-    const snap = snapshots[stock.ticker]
-    const live = liveQuotes[stock.ticker]
-    const cachedRow = cachedRowsBySymbol?.[stock.ticker]
-
-    let intraday: IntradayPoint[] = []
-    if (cachedRow?.points && cachedRow.points.length > 0) {
-      intraday = cachedRow.points.slice(-INITIAL_HISTORY_POINTS)
-    } else if (Array.isArray(snap?.intraday_1m) && snap?.session_date === currentDay && snap.intraday_1m.length > 0) {
-      intraday = (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
-    }
-
-    const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
-    const firstBarOpen = intraday.length > 0 ? ((intraday[0] as any)?.open ?? (intraday[0] as any)?.o ?? intraday[0]?.close) : null
-
-    const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose || firstBarOpen
-    const ref = live?.reference || snap?.reference_price || cachedRow?.reference || firstBarOpen || latestPrice
-
-    if (latestPrice && latestPrice > 0 && ref && ref > 0) {
-      const change = live?.change ?? (latestPrice - ref)
-      const changePercent = live?.changePercent ?? ((change / ref) * 100)
-      initialQuotes[stock.ticker] = {
-        symbol: stock.ticker,
-        price: latestPrice,
-        reference: ref,
-        ceiling: live?.ceiling ?? snap?.ceiling_price ?? Math.round(ref * 1.07 * 100) / 100,
-        floor: live?.floor ?? snap?.floor_price ?? Math.round(ref * 0.93 * 100) / 100,
-        change,
-        changePercent,
-        volume: live?.volume || snap?.total_volume || 0,
-        foreignNetValue: live?.foreignNetValue ?? (snap?.foreign_flow as any)?.foreignNetValue,
-        foreignBuyValue: live?.foreignBuyValue ?? (snap?.foreign_flow as any)?.totalBuyValue,
-        foreignSellValue: live?.foreignSellValue ?? (snap?.foreign_flow as any)?.totalSellValue,
-        foreignBuyVolume: live?.foreignBuyVolume ?? (snap?.foreign_flow as any)?.totalBuyVolume,
-        foreignSellVolume: live?.foreignSellVolume ?? (snap?.foreign_flow as any)?.totalSellVolume,
-        foreignRoom: live?.foreignRoom ?? (snap?.foreign_flow as any)?.foreignRoom ?? getEodForeignRoom(stock.ticker) ?? null,
-        updatedAt: snap?.updated_at || new Date().toISOString(),
-      }
-      if (intraday.length > 0) initialHistories[stock.ticker] = intraday
-    }
-  }
-
-  return { universe, initialQuotes, initialHistories }
-}
-
-export default async function Page() {
+export default async function HomePage() {
   const auth = await getServerAuthContext()
   if (!auth) return <LandingLogin />
 
-  const now = new Date()
-  const canonical = await getCanonicalUniverse()
-  const isSessionOpen = isTradingSessionOpen(now)
-  const session = getMarketSessionStatus(now)
-  const ttlSeconds = session.isLiveSession ? 4 : Math.min(session.ttlSeconds, 3600)
-  const cacheKey = `ssr:${canonical.runId}:${vietnamDateKey(now)}:${session.cacheBucketKey}`
-
-  const { universe, initialQuotes, initialHistories } = await readThroughUiCache({
-    namespace: BOARD_SSR_CACHE_NAMESPACE,
-    key: cacheKey,
-    tag: "board-ssr",
-    name: "QeoIndex Board SSR Initial Data",
-    ttlSeconds,
-    validate: isInitialBoardData,
-    load: () => loadInitialBoardDataCanonical(now, canonical),
-  })
-
   return (
-    <OrderBookProvider>
-      <div data-market-board className={`${styles.performanceSurface} flex h-screen flex-col overflow-hidden bg-background`}>
-        <MarketUniverseVersionRefresh universeRunId={canonical.runId} />
-        <TopNav />
-        <main className="min-h-0 flex-1">
-          <MarketBoardTransition className="h-full min-h-0">
-            <MarketBoardFilterShell
-              universe={universe}
-              initialQuotes={initialQuotes}
-              initialHistories={initialHistories}
-              isSessionOpen={isSessionOpen}
-              userId={auth.user.id}
-              universeRunId={canonical.runId}
-            />
-          </MarketBoardTransition>
-        </main>
-        <OrderBookManager />
-      </div>
-    </OrderBookProvider>
+    <div className="min-h-screen bg-background text-foreground">
+      <TopNav />
+      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
+        <section className="mb-8 max-w-3xl sm:mb-10">
+          <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">QeoIndex Workspace</div>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Chọn không gian làm việc</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-400 sm:text-base">
+            Truy cập nhanh bốn khu vực chính của QeoIndex. Mỗi workspace giữ nguyên dữ liệu và luồng công việc chuyên biệt của nó.
+          </p>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2" aria-label="Các khu vực chính">
+          {HOME_MENU_ITEMS.map((item) => <MenuCard key={item.href} item={item} />)}
+        </section>
+      </main>
+    </div>
   )
 }
