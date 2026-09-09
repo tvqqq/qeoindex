@@ -4,6 +4,10 @@
   isolation: isolate;
 }
 
+.terminalSurface:not(.maximized) > div:first-child {
+  min-height: 420px !important;
+}
+
 .terminalSurface > div:first-child {
   overflow: hidden;
   border-radius: 10px;
@@ -125,6 +129,18 @@
 .maximized > div:first-child > div:nth-child(2) > svg text[fill="#c084fc"],
 .maximized > div:first-child > div:nth-child(2) > svg text[fill="#38bdf8"] {
   transform: translateX(34px);
+}
+
+@media (min-width: 1024px) {
+  .terminalSurface:not(.maximized) > div:first-child {
+    min-height: 460px !important;
+  }
+}
+
+@media (min-width: 1536px) {
+  .terminalSurface:not(.maximized) > div:first-child {
+    min-height: 500px !important;
+  }
 }
 
 @media (max-width: 1279px) {
