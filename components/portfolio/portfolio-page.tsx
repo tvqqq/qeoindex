@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { Activity } from "lucide-react"
 import dynamic from "next/dynamic"
 
 import { AnimatedTabs, type AnimatedTab } from "@/components/smoothui/animated-tabs"
@@ -9,6 +8,7 @@ import { PortfolioBattleHud } from "@/components/portfolio/revamp/portfolio-batt
 import { PortfolioCommandActions } from "@/components/portfolio/revamp/portfolio-command-actions"
 import { PortfolioCommandHeader } from "@/components/portfolio/revamp/portfolio-command-header"
 import { PortfolioPositionGrid } from "@/components/portfolio/revamp/portfolio-position-grid"
+import { PortfolioSectionShell } from "@/components/portfolio/revamp/portfolio-section-shell"
 import { WatchlistPanel, type WatchlistMeta, type WatchlistItem } from "@/components/portfolio/watchlist-panel"
 import { TopNav } from "@/components/top-nav"
 import { extractPortfolioMarketPrices, type PortfolioIntradayPayload } from "@/modules/portfolio/market-prices"
@@ -481,25 +481,22 @@ export function PortfolioPage() {
         )}
 
         {activeTab === "journal" && (
-          <div className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
-              <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-purple-400" />
-                <h2 className="font-ticker text-sm font-extrabold uppercase tracking-wide text-white sm:text-base">
-                  Nhật ký giao dịch chi tiết
-                </h2>
-              </div>
+          <PortfolioSectionShell
+            title="Battle Log · Nhật ký giao dịch"
+            description="Dòng thời gian các giao dịch đã ghi nhận. Thẻ hiển thị dữ kiện giao dịch và provenance hiện có, không suy diễn trạng thái Trade từ raw fills."
+            action={(
               <span className="font-ticker text-xs font-bold text-[var(--color-muted-2)]">
                 {transactions.length} giao dịch ghi nhận
               </span>
-            </div>
+            )}
+          >
             <PortfolioTransactionHistory
               transactions={transactions}
               onDelete={handleTxDelete}
               onEdit={() => {}}
               loading={loadingTx}
             />
-          </div>
+          </PortfolioSectionShell>
         )}
 
         {activeTab === "allocation" && (
