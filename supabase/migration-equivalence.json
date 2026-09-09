@@ -168,7 +168,7 @@
       "productionVersion": "20260902061549",
       "state": "MAPPED",
       "evidence": "production-ledger-and-service-role-rpc-smoke",
-      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository replay filename"
+      "rationale": "QEO-21 service-role retention RPC was applied to production before runtime merge; Supabase production timestamp differs from repository filename"
     },
     {
       "logicalName": "qeo29_job_telemetry_retention",
@@ -337,6 +337,14 @@
       "state": "QUARANTINED",
       "evidence": "qeo147-manifest-lock-readiness-pending-isolated-db-replay",
       "rationale": "QEO-147 manifest-scoped advisory-lock follow-up remains quarantined with the readiness publication migration until isolated concurrent-generation and mutation rehearsal, generated-type and grant verification, plus release-authorized production rollout. No production DDL has been applied."
+    },
+    {
+      "logicalName": "qeo148_closed_range_coordination",
+      "repositoryVersion": "20260909160500",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo148-closed-range-idempotency-pending-isolated-db-rehearsal",
+      "rationale": "QEO-148 durable closed-range claim/completion and interval coverage remain quarantined until isolated replay proves bounded two-client contention, lease expiry/stale-owner fencing, partial-write recovery, over-cap coverage completeness, generated-type/grant parity, and release-authorized production rollout. No production DDL has been applied and historical provenance is untouched."
     },
     {
       "logicalName": "qeo108_chart_capacity_and_index_cleanup",
