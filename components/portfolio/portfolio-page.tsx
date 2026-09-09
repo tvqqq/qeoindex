@@ -527,13 +527,16 @@ export function PortfolioPage() {
         )}
 
         {activeTab === "watchlist" && (
-          <div className="rounded-3xl border border-[#2a2e40] bg-[#0c1017] p-6 shadow-sm">
+          <PortfolioSectionShell
+            title="Scouting Board · Trinh sát"
+            description="Danh sách theo dõi theo dữ kiện: quote phiên, cảnh báo, ghi chú và tags đã lưu."
+          >
             <WatchlistPanel
               initialWatchlists={watchlists}
               initialActiveId={activeWatchlistId ?? (watchlists[0]?.id || "")}
               initialItems={watchlistItems}
             />
-          </div>
+          </PortfolioSectionShell>
         )}
       </div>
 
