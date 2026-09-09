@@ -35,12 +35,13 @@ test("QEO-174 keeps the strategy-card hero but removes PRICE ARENA", () => {
 })
 
 test("QEO-174 expands the compact mini chart while preserving maximize behavior", () => {
+  const chartShell = source("components/stock-detail/chart/stock-chart-terminal-shell.module.css")
   const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
-  assert.match(chart, /min-h-\[420px\]/)
-  assert.match(chart, /lg:min-h-\[460px\]/)
-  assert.match(chart, /2xl:min-h-\[500px\]/)
+  assert.match(chartShell, /min-height:\s*420px/)
+  assert.match(chartShell, /min-height:\s*460px/)
+  assert.match(chartShell, /min-height:\s*500px/)
   assert.match(chart, /isMaximized \? "h-full"/)
 
   assert.match(workstation, /data-qeo174-workstation/)
