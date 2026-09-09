@@ -1,0 +1,35 @@
+name: QEO-159 Concentration Guardrails
+
+on:
+  pull_request:
+    paths:
+      - "modules/portfolio/**"
+      - "modules/market/universe/**"
+      - "app/api/portfolio/**"
+      - "components/portfolio/**"
+      - "tests/portfolio/qeo159-*.test.ts"
+      - ".github/workflows/qeo159-preprod.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo159-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  concentration-domain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-159 deterministic concentration domain
+        run: node --test tests/portfolio/qeo159-concentration-domain.test.ts
