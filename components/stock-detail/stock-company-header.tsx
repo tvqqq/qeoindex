@@ -9,7 +9,6 @@ import { cn } from "@/modules/shared/ui/cn"
 
 import { formatCompactNumber } from "./revamp/stock-card-metrics"
 import { StockCardStat } from "./revamp/stock-card-stat"
-import { StockPriceArena } from "./revamp/stock-price-arena"
 import type { StockDetailData } from "./types"
 
 export function StockCompanyHeader({ data }: { data: StockDetailData }) {
@@ -22,11 +21,8 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
     price,
     change,
     changePct,
-    refPrice,
     ceilingPrice,
     floorPrice,
-    highPrice,
-    lowPrice,
     volume,
     marketCapT,
     pe,
@@ -179,15 +175,6 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
               <StockCardStat label="Vốn hóa" value={marketCapLabel} />
             </div>
           </div>
-
-          <StockPriceArena
-            floorPrice={floorPrice}
-            lowPrice={lowPrice}
-            refPrice={refPrice}
-            currentPrice={price}
-            highPrice={highPrice}
-            ceilingPrice={ceilingPrice}
-          />
         </div>
       </m.section>
     </LazyMotion>
