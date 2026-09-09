@@ -16,6 +16,7 @@ import {
   derivedHourlyColdCoverageComplete,
   readDerivedHourlyRange,
 } from "./derived-hourly-store"
+import { verifiedHourlySourceCoverageComplete } from "./derived-hourly-source-coverage"
 import { chartHotSessionRetentionCutoff, clampChartHistoryRange } from "./history-policy"
 import { readHotIntradayRange } from "./hot-store"
 import { normalizeCanonicalBars } from "./normalize"
@@ -38,6 +39,7 @@ export interface ChartTimeframeServiceDeps extends ChartDataServiceDeps {
   canonicalLoader?: CanonicalLoader
   derivedHourlyLoader?: DerivedHourlyLoader
   derivedCoverageLoader?: DerivedCoverageLoader
+  sourceCoverageLoader?: DerivedCoverageLoader
   hotLoader?: HotLoader
 }
 
@@ -90,6 +92,8 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const sourceRange = sourceRangeForResolution(request.resolution, request.from, request.to)
   const loadDerived: DerivedHourlyLoader = deps.derivedHourlyLoader ?? ((input) => readDerivedHourlyRange(deps.supabase, input.ticker, input.from, input.to))
   const derivedCoverage: DerivedCoverageLoader = deps.derivedCoverageLoader ?? ((input) => derivedHourlyColdCoverageComplete(deps.supabase, input))
+  const sourceCoverage: DerivedCoverageLoader = deps.sourceCoverageLoader
+    ?? (deps.derivedCoverageLoader ? deps.derivedCoverageLoader : (input) => verifiedHourlySourceCoverageComplete(deps.supabase, input))
   const loadHot: HotLoader = deps.hotLoader ?? ((input) => readHotIntradayRange(deps.supabase, input.ticker, input.from, input.to))
 
   const oldFrom = sourceRange.from
@@ -99,6 +103,8 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const oldIntegrityIssues: ChartDataIntegrityIssue[] = []
   let oldHourly: CanonicalOhlcvBar[] = []
   let oldProvider: string | null = null
+  let oldSourceCoverageComplete = !oldRequested
+
   if (oldRequested) {
     let oldHot: CanonicalOhlcvBar[] = []
     try {
@@ -107,17 +113,26 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
       oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
     }
 
+    let cacheReady = false
     try {
-      const coverageComplete = await derivedCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo })
-      if (coverageComplete) {
+      cacheReady = await derivedCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo })
+    } catch {
+      // Readiness evidence itself is unavailable. Verified RAW remains the
+      // authority, but the public result stays PARTIAL rather than inventing
+      // a positive cache/recovery proof.
+      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
+    }
+
+    if (cacheReady) {
+      try {
         const derived = await loadDerived({ ticker: request.ticker, from: oldFrom, to: oldTo })
         if (!oldHot.length) {
           oldHourly = derived
           if (oldHourly.length) oldProvider = "DERIVED_1H_CACHE"
         } else {
           // A derived 1h bar cannot be patched with a partial HOT hour. Read
-          // the verified raw COLD range once, then rebuild only the affected
-          // buckets while reusing the derived cache everywhere else.
+          // verified RAW only for affected buckets, then reuse ready derived
+          // cache everywhere else.
           const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
           const overlapRange = hourlyOverlapRange(oldHot)
           const cold = overlapRange
@@ -133,7 +148,18 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
           if (overlay.unresolvedHotOverlap) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
           if (oldHourly.length) oldProvider = "DERIVED_1H_CACHE+HOT_1M_OVERLAY"
         }
-      } else {
+      } catch {
+        // A cache mutation or concurrent generation can invalidate readiness
+        // after the first check. Never serve that cache: recover from verified
+        // RAW below in the same request.
+        cacheReady = false
+        oldHourly = []
+        oldProvider = null
+      }
+    }
+
+    if (!cacheReady) {
+      try {
         const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
         const cold = await coldStorage.readIntersectingRange({ ticker: request.ticker, from: oldFrom, to: oldTo })
         const normalized = normalizeCanonicalBars([
@@ -143,17 +169,24 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
         oldIntegrityIssues.push(...normalized.integrityIssues)
         oldHourly = aggregateChartTimeframe(normalized.bars, "1h")
         if (oldHourly.length) oldProvider = oldHot.length ? "VERIFIED_COLD_1M_RECOVERY+HOT_1M" : "VERIFIED_COLD_1M_RECOVERY"
-      }
-      if (!oldHourly.length) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-    } catch {
-      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-      // A retained HOT-only range is still useful evidence. It remains
-      // PARTIAL because the failed/unknown older source is preserved above.
-      if (oldHot.length) {
-        oldHourly = aggregateChartTimeframe(oldHot, "1h")
-        oldProvider = "HOT_1M"
+      } catch {
+        oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
+        // Retained HOT-only data is still useful evidence. It must remain
+        // PARTIAL because verified RAW was unavailable for this old segment.
+        if (oldHot.length) {
+          oldHourly = aggregateChartTimeframe(oldHot, "1h")
+          oldProvider = "HOT_1M"
+        }
       }
     }
+
+    try {
+      oldSourceCoverageComplete = await sourceCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo })
+    } catch {
+      oldSourceCoverageComplete = false
+      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
+    }
+    if (!oldHourly.length) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
   }
 
   const recentFrom = Math.max(sourceRange.from, hotCutoff)
@@ -174,7 +207,7 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   integrityIssues.push(...oldIntegrityIssues.filter((issue) => !integrityIssues.some((existing) => JSON.stringify(existing) === JSON.stringify(issue))))
   const errors = mergeErrors(uniqueErrors(recentResults), oldErrors)
   const complete = bars.length > 0
-    && (!oldRequested || oldHourly.length > 0)
+    && (!oldRequested || (oldHourly.length > 0 && oldSourceCoverageComplete))
     && recentResults.every((result) => result.coverage.complete)
     && gaps.length === 0 && integrityIssues.length === 0 && errors.length === 0
 
