@@ -7,10 +7,15 @@ on:
       - "modules/market/chart-data/service.ts"
       - "modules/market/chart-data/storage-capacity.ts"
       - "modules/market/calendar.ts"
+      - "modules/admin/effective-job-catalog.ts"
+      - "modules/admin/job-schedule.ts"
+      - "modules/admin/schedule-policy.ts"
       - "workflows/chart-intraday-maintenance.ts"
       - "app/api/qeoindex/eod/route.ts"
       - "supabase/migrations/*qeo150*"
+      - "supabase/migration-preproduction.json"
       - "tests/qeo-150-intraday-maintenance.cases.ts"
+      - "tests/cron-schedule-catalog.test.ts"
       - ".github/workflows/qeo-150.yml"
   push:
     branches: [main]
@@ -19,10 +24,15 @@ on:
       - "modules/market/chart-data/service.ts"
       - "modules/market/chart-data/storage-capacity.ts"
       - "modules/market/calendar.ts"
+      - "modules/admin/effective-job-catalog.ts"
+      - "modules/admin/job-schedule.ts"
+      - "modules/admin/schedule-policy.ts"
       - "workflows/chart-intraday-maintenance.ts"
       - "app/api/qeoindex/eod/route.ts"
       - "supabase/migrations/*qeo150*"
+      - "supabase/migration-preproduction.json"
       - "tests/qeo-150-intraday-maintenance.cases.ts"
+      - "tests/cron-schedule-catalog.test.ts"
       - ".github/workflows/qeo-150.yml"
 
 jobs:
@@ -39,3 +49,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node --test tests/qeo-150-intraday-maintenance.cases.ts
+      - id: current
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm test:current 2>&1 | tee qeo150-current.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo150-current-contract-log
+          path: qeo150-current.log
+      - if: steps.current.outcome == 'failure'
+        run: exit 1
