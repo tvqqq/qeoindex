@@ -6,6 +6,11 @@ import type { CanonicalOhlcvBar } from "./contract"
 import { persistVerifiedDerivedHourlyGeneration } from "./derived-hourly-store"
 import { chartHotSessionRetentionCutoff } from "./history-policy"
 import {
+  abandonChartIntradayRange,
+  canonicalProviderRangeContentId,
+  ChartClosedRangeCoordinationUnavailableError,
+  claimChartIntradayRange,
+  completeChartIntradayRange,
   readQeo107TerminalAttemptRanges,
   recordChartProviderAttempt,
   upsertHotIntradayBars,
@@ -16,6 +21,7 @@ import {
   normalizeChartProviderResult,
   type ChartOhlcvProvider,
 } from "./provider"
+import { CHART_PROVIDER_SOURCE_KEY, runClosedRangeIngestion } from "./provider-ingestion"
 import { missingProviderRanges } from "./provider-coverage"
 import { aggregateChartTimeframe } from "./timeframes"
 
@@ -83,6 +89,13 @@ export interface Qeo107CoverageRow {
   lastAttemptAt: string | null
 }
 
+class Qeo107RecordedTerminalResult extends Error {
+  constructor(readonly result: Qeo107BootstrapChunkResult) {
+    super(result.error ?? result.status)
+    this.name = "Qeo107RecordedTerminalResult"
+  }
+}
+
 function validTicker(tickerInput: string) {
   const ticker = String(tickerInput || "").trim().toUpperCase()
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new Error(`Invalid QEO-107 ticker: ${tickerInput}`)
@@ -143,6 +156,15 @@ function skippedResult(ticker: string, chunk: Qeo107BootstrapChunk): Qeo107Boots
     derivedHourlyRows: 0,
     failureCodes: [],
     error: null,
+  }
+}
+
+function busyResult(ticker: string, chunk: Qeo107BootstrapChunk): Qeo107BootstrapChunkResult {
+  return {
+    ...skippedResult(ticker, chunk),
+    status: "retryable_failure",
+    failureCodes: ["QEO-148:RANGE_BUSY"],
+    error: "Closed-range ingestion is owned by another active lease",
   }
 }
 
@@ -218,6 +240,171 @@ async function recordProviderFailure(
   })
 }
 
+async function executeBootstrapChunkWork(
+  supabase: SupabaseClient,
+  input: {
+    ticker: string
+    chunk: Qeo107BootstrapChunk
+    referenceAt: Date
+    provider: ChartOhlcvProvider
+    hotCutoff: number
+  },
+) {
+  let providerResult
+  try {
+    providerResult = normalizeChartProviderResult(await input.provider.fetch({
+      ticker: input.ticker,
+      resolution: "1m",
+      from: input.chunk.from,
+      to: input.chunk.to,
+      includeCurrent: false,
+    }), "CUSTOM")
+  } catch (cause) {
+    if (!(cause instanceof ChartOhlcvProviderWaterfallError)) throw cause
+    const status: Qeo107BootstrapChunkStatus = cause.terminalCoverageGap
+      ? "provider_gap"
+      : cause.retryable
+        ? "retryable_failure"
+        : "failed"
+    const failureCodes = cause.failures.map((failure) => `${failure.provider}:${failure.code}`)
+    await recordProviderFailure(supabase, {
+      ticker: input.ticker,
+      chunk: input.chunk,
+      outcome: status,
+      failureCodes,
+      error: cause.message,
+    })
+    throw new Qeo107RecordedTerminalResult({
+      ticker: input.ticker,
+      chunkIndex: input.chunk.index,
+      from: input.chunk.from,
+      to: input.chunk.to,
+      status,
+      provider: null,
+      fetchedRows: 0,
+      hotRows: 0,
+      coldRows: 0,
+      archivedPartitions: 0,
+      derivedHourlyRows: 0,
+      failureCodes,
+      error: cause.message,
+    })
+  }
+
+  const bars = [...providerResult.bars]
+    .filter((bar) => bar.time >= input.chunk.from && bar.time <= input.chunk.to)
+    .sort((a, b) => a.time - b.time)
+  if (!bars.length) {
+    const error = `${providerResult.provider} returned no usable canonical 1m bars`
+    const failureCodes = [`${providerResult.provider}:EMPTY_COVERAGE`]
+    await recordProviderFailure(supabase, { ticker: input.ticker, chunk: input.chunk, outcome: "provider_gap", failureCodes, error })
+    throw new Qeo107RecordedTerminalResult({
+      ticker: input.ticker,
+      chunkIndex: input.chunk.index,
+      from: input.chunk.from,
+      to: input.chunk.to,
+      status: "provider_gap",
+      provider: providerResult.provider,
+      fetchedRows: 0,
+      hotRows: 0,
+      coldRows: 0,
+      archivedPartitions: 0,
+      derivedHourlyRows: 0,
+      failureCodes,
+      error,
+    })
+  }
+
+  const hotBars = bars.filter((bar) => bar.time >= input.hotCutoff)
+  const coldBars = bars.filter((bar) => bar.time < input.hotCutoff)
+  let archivedPartitions = 0
+  let derivedHourlyRows = 0
+
+  if (hotBars.length) {
+    await upsertHotIntradayBars(supabase, {
+      ticker: input.ticker,
+      bars: hotBars,
+      provider: providerResult.provider,
+      fetchedAt: input.referenceAt.toISOString(),
+      recordProvenance: false,
+    })
+  }
+
+  if (coldBars.length) {
+    const coldStorage = createSupabaseColdOhlcvStorage(supabase)
+    for (const partition of partitionByVietnamTradingDate(coldBars)) {
+      const archived = await coldStorage.archiveVerifiedPartition({ ticker: input.ticker, bars: partition.bars })
+      const hourlyBars = aggregateChartTimeframe(partition.bars, "1h")
+      if (!hourlyBars.length) throw new Error(`QEO-107 ${input.ticker} ${partition.tradingDate} produced no deterministic 1h bars`)
+      const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
+        ticker: input.ticker,
+        bars: hourlyBars,
+        sourceManifestId: archived.manifestId,
+        sourceSha256: archived.sha256,
+        sourceRangeStart: partition.bars[0].time,
+        sourceRangeEnd: partition.bars.at(-1)!.time,
+        sourceRawRowCount: archived.rowCount,
+        sourceFormatVersion: 1,
+        sourceCanonicalContentDigest: null,
+        sourceCanonicalContentVersion: null,
+        generatedAt: input.referenceAt.toISOString(),
+      })
+      archivedPartitions += 1
+      derivedHourlyRows += cached.rowCount
+    }
+  }
+
+  const provenance = await recordChartProviderAttempt(supabase, {
+    ticker: input.ticker,
+    provider: providerResult.provider,
+    requestedFrom: input.chunk.from,
+    requestedTo: input.chunk.to,
+    bars,
+    fetchedAt: input.referenceAt.toISOString(),
+    detail: {
+      workflow: "QEO-107",
+      outcome: "success",
+      chunkIndex: input.chunk.index,
+      actualFrom: bars[0].time,
+      actualTo: bars.at(-1)!.time,
+      hotRows: hotBars.length,
+      coldRows: coldBars.length,
+      archivedPartitions,
+      derivedHourlyRows,
+    },
+  })
+
+  const result: Qeo107BootstrapChunkResult = {
+    ticker: input.ticker,
+    chunkIndex: input.chunk.index,
+    from: input.chunk.from,
+    to: input.chunk.to,
+    status: "succeeded",
+    provider: providerResult.provider,
+    fetchedRows: bars.length,
+    hotRows: hotBars.length,
+    coldRows: coldBars.length,
+    archivedPartitions,
+    derivedHourlyRows,
+    failureCodes: [],
+    error: null,
+  }
+  return {
+    value: result,
+    completion: {
+      provider: providerResult.provider,
+      rowCount: bars.length,
+      provenanceBatchId: provenance.batchId,
+      contentId: canonicalProviderRangeContentId({
+        provider: providerResult.provider,
+        requestedFrom: input.chunk.from,
+        requestedTo: input.chunk.to,
+        bars,
+      }),
+    },
+  }
+}
+
 export async function bootstrapChartIntradayChunk(
   supabase: SupabaseClient,
   input: {
@@ -233,144 +420,40 @@ export async function bootstrapChartIntradayChunk(
   if (await alreadyTerminal(supabase, ticker, input.chunk, referenceAt)) return skippedResult(ticker, input.chunk)
 
   const provider = input.provider ?? createPrimaryChartOhlcvProvider()
-  let providerResult
-  try {
-    providerResult = normalizeChartProviderResult(await provider.fetch({
-      ticker,
-      resolution: "1m",
-      from: input.chunk.from,
-      to: input.chunk.to,
-      includeCurrent: false,
-    }), "CUSTOM")
-  } catch (cause) {
-    if (!(cause instanceof ChartOhlcvProviderWaterfallError)) throw cause
-    const status: Qeo107BootstrapChunkStatus = cause.terminalCoverageGap
-      ? "provider_gap"
-      : cause.retryable
-        ? "retryable_failure"
-        : "failed"
-    const failureCodes = cause.failures.map((failure) => `${failure.provider}:${failure.code}`)
-    await recordProviderFailure(supabase, {
-      ticker,
-      chunk: input.chunk,
-      outcome: status,
-      failureCodes,
-      error: cause.message,
-    })
-    return {
-      ticker,
-      chunkIndex: input.chunk.index,
-      from: input.chunk.from,
-      to: input.chunk.to,
-      status,
-      provider: null,
-      fetchedRows: 0,
-      hotRows: 0,
-      coldRows: 0,
-      archivedPartitions: 0,
-      derivedHourlyRows: 0,
-      failureCodes,
-      error: cause.message,
-    }
-  }
-
-  const bars = [...providerResult.bars]
-    .filter((bar) => bar.time >= input.chunk.from && bar.time <= input.chunk.to)
-    .sort((a, b) => a.time - b.time)
-  if (!bars.length) {
-    const error = `${providerResult.provider} returned no usable canonical 1m bars`
-    const failureCodes = [`${providerResult.provider}:EMPTY_COVERAGE`]
-    await recordProviderFailure(supabase, { ticker, chunk: input.chunk, outcome: "provider_gap", failureCodes, error })
-    return {
-      ticker,
-      chunkIndex: input.chunk.index,
-      from: input.chunk.from,
-      to: input.chunk.to,
-      status: "provider_gap",
-      provider: providerResult.provider,
-      fetchedRows: 0,
-      hotRows: 0,
-      coldRows: 0,
-      archivedPartitions: 0,
-      derivedHourlyRows: 0,
-      failureCodes,
-      error,
-    }
-  }
-
-  const hotBars = bars.filter((bar) => bar.time >= hotCutoff)
-  const coldBars = bars.filter((bar) => bar.time < hotCutoff)
-  let archivedPartitions = 0
-  let derivedHourlyRows = 0
-
-  if (hotBars.length) {
-    await upsertHotIntradayBars(supabase, {
-      ticker,
-      bars: hotBars,
-      provider: providerResult.provider,
-      fetchedAt: referenceAt.toISOString(),
-      recordProvenance: false,
-    })
-  }
-
-  if (coldBars.length) {
-    const coldStorage = createSupabaseColdOhlcvStorage(supabase)
-    for (const partition of partitionByVietnamTradingDate(coldBars)) {
-      const archived = await coldStorage.archiveVerifiedPartition({ ticker, bars: partition.bars })
-      const hourlyBars = aggregateChartTimeframe(partition.bars, "1h")
-      if (!hourlyBars.length) throw new Error(`QEO-107 ${ticker} ${partition.tradingDate} produced no deterministic 1h bars`)
-      const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
-        ticker,
-        bars: hourlyBars,
-        sourceManifestId: archived.manifestId,
-        sourceSha256: archived.sha256,
-        sourceRangeStart: partition.bars[0].time,
-        sourceRangeEnd: partition.bars.at(-1)!.time,
-        sourceRawRowCount: archived.rowCount,
-        sourceFormatVersion: 1,
-        sourceCanonicalContentDigest: null,
-        sourceCanonicalContentVersion: null,
-        generatedAt: referenceAt.toISOString(),
-      })
-      archivedPartitions += 1
-      derivedHourlyRows += cached.rowCount
-    }
-  }
-
-  await recordChartProviderAttempt(supabase, {
+  const work = () => executeBootstrapChunkWork(supabase, {
     ticker,
-    provider: providerResult.provider,
-    requestedFrom: input.chunk.from,
-    requestedTo: input.chunk.to,
-    bars,
-    fetchedAt: referenceAt.toISOString(),
-    detail: {
-      workflow: "QEO-107",
-      outcome: "success",
-      chunkIndex: input.chunk.index,
-      actualFrom: bars[0].time,
-      actualTo: bars.at(-1)!.time,
-      hotRows: hotBars.length,
-      coldRows: coldBars.length,
-      archivedPartitions,
-      derivedHourlyRows,
-    },
+    chunk: input.chunk,
+    referenceAt,
+    provider,
+    hotCutoff,
   })
+  const coordinator = {
+    claim: (claimInput: Parameters<typeof claimChartIntradayRange>[1]) => claimChartIntradayRange(supabase, claimInput),
+    complete: (completionInput: Parameters<typeof completeChartIntradayRange>[1]) => completeChartIntradayRange(supabase, completionInput),
+    abandon: (abandonInput: Parameters<typeof abandonChartIntradayRange>[1]) => abandonChartIntradayRange(supabase, abandonInput),
+  }
 
-  return {
-    ticker,
-    chunkIndex: input.chunk.index,
-    from: input.chunk.from,
-    to: input.chunk.to,
-    status: "succeeded",
-    provider: providerResult.provider,
-    fetchedRows: bars.length,
-    hotRows: hotBars.length,
-    coldRows: coldBars.length,
-    archivedPartitions,
-    derivedHourlyRows,
-    failureCodes: [],
-    error: null,
+  try {
+    const coordinated = await runClosedRangeIngestion({
+      ticker,
+      sourceKey: CHART_PROVIDER_SOURCE_KEY,
+      from: input.chunk.from,
+      to: input.chunk.to,
+    }, coordinator, work)
+    if (coordinated.status === "completed") return coordinated.value
+    if (coordinated.status === "reused") return skippedResult(ticker, input.chunk)
+    return busyResult(ticker, input.chunk)
+  } catch (error) {
+    if (error instanceof Qeo107RecordedTerminalResult) return error.result
+    if (!(error instanceof ChartClosedRangeCoordinationUnavailableError)) throw error
+    // QEO-148 migration is quarantined until release authorization. Keep the
+    // existing bootstrap available, but do not synthesize durable success.
+    try {
+      return (await work()).value
+    } catch (fallbackError) {
+      if (fallbackError instanceof Qeo107RecordedTerminalResult) return fallbackError.result
+      throw fallbackError
+    }
   }
 }
 

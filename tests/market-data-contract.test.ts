@@ -205,7 +205,8 @@ test("QEO-93 sparse 1m gaps already covered by a successful provider request are
   assert.deepEqual(partiallyCovered, [{ from: 150, to: 200 }])
 
   const serviceSource = readFileSync(new URL("../modules/market/chart-data/service.ts", import.meta.url), "utf8")
-  assert.match(serviceSource, /uncoveredProviderRanges\(storageGapRanges,\s*coveredRanges\)/)
+  assert.match(serviceSource, /uncoveredProviderRanges\(closedStorageGapRanges,\s*coveredRanges\)/)
+  assert.match(serviceSource, /closedProviderRanges/)
 })
 
 test("QEO-93 canonical Daily reader paginates beyond the Supabase 1000-row response cap", () => {

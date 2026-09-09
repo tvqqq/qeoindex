@@ -123,3 +123,16 @@ test("QEO-147 concurrent generations share the same manifest lock and mutation i
   assert.match(migration, /qeo_validate_chart_derived_hourly_manifests/i)
   assert.match(migration, /insert or update or delete/i)
 })
+
+test("QEO-148 coverage RPC is one ordered JSONB scalar so disjoint intervals cannot hit the REST row cap", () => {
+  const migration = readFileSync(new URL("../supabase/pending-migrations/20260909160500_qeo148_closed_range_coordination.sql", import.meta.url), "utf8")
+  const rehearsal = readFileSync(new URL("../scripts/db/rehearse-qeo148-closed-range.sh", import.meta.url), "utf8")
+  assert.match(migration, /qeo_chart_intraday_success_coverage[\s\S]*?returns jsonb/i)
+  assert.match(migration, /jsonb_agg/i)
+  assert.match(migration, /order by[\s\S]*?range_start[\s\S]*?range_end/i)
+  assert.match(rehearsal, /jsonb_array_length/i)
+  assert.match(rehearsal, /1201/)
+  assert.match(rehearsal, /disjoint/i)
+})
+
+import "./qeo-148-backfill-idempotency.cases.ts"

@@ -1,6 +1,6 @@
 import "server-only"
 
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CanonicalOhlcvBar } from "./contract"
 import {
@@ -8,6 +8,12 @@ import {
   proveHotArchivePartitionsEligibility,
   type HotArchiveRetentionProof,
 } from "./hot-retention"
+import type {
+  ClosedRangeClaim,
+  ClosedRangeClaimInput,
+  ClosedRangeCompletion,
+  ClosedRangeLeaseIdentity,
+} from "./provider-ingestion"
 import type { ProviderCoverageRange } from "./provider-coverage"
 
 export { proveHotArchivePartitionEligibility, proveHotArchivePartitionsEligibility }
@@ -16,6 +22,8 @@ export type { HotArchiveRetentionProof }
 const UPSERT_CHUNK_SIZE = 500
 export const CHART_HOT_READ_PAGE_SIZE = 500
 export const CHART_HOT_READ_MAX_PAGES = 64
+const PROVENANCE_READ_PAGE_SIZE = 500
+const PROVENANCE_READ_MAX_PAGES = 64
 const ARCHIVE_DISCOVERY_ROWS_PER_PARTITION = 300
 const ARCHIVE_DISCOVERY_MAX_ROWS = 10_000
 
@@ -58,6 +66,13 @@ function requestedCoverageRange(row: Record<string, unknown>): ProviderCoverageR
   return { from: Math.floor(from), to: Math.floor(to) }
 }
 
+function durableCoverageRange(row: Record<string, unknown>): ProviderCoverageRange | null {
+  const fromMs = row.range_start ? new Date(String(row.range_start)).getTime() : NaN
+  const toMs = row.range_end ? new Date(String(row.range_end)).getTime() : NaN
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return null
+  return { from: Math.floor(fromMs / 1000), to: Math.floor(toMs / 1000) }
+}
+
 function vietnamDateKey(epochSeconds: number) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(epochSeconds * 1000))
 }
@@ -70,6 +85,10 @@ function missingQeo149WriterRpc(error: PostgrestErrorLike) {
   return error.code === "PGRST202" || /qeo_upsert_chart_intraday_bars/i.test(error.message ?? "") && /not find|not found/i.test(error.message ?? "")
 }
 
+function missingQeo148CoordinationRpc(error: PostgrestErrorLike) {
+  return error.code === "PGRST202" || /qeo_(chart_intraday_success_coverage|claim_chart_intraday_range|complete_chart_intraday_range|abandon_chart_intraday_range)/i.test(error.message ?? "") && /not find|not found/i.test(error.message ?? "")
+}
+
 function missingHotContentIdentityColumns(error: PostgrestErrorLike) {
   const message = error.message ?? ""
   const missingColumn = error.code === "42703" || error.code === "PGRST204" || /column.*not found|could not find.*column/i.test(message)
@@ -80,6 +99,13 @@ export class ChartHotContentIdentityUnavailableError extends Error {
   constructor(message = "QEO-149 HOT content identity schema is unavailable") {
     super(message)
     this.name = "ChartHotContentIdentityUnavailableError"
+  }
+}
+
+export class ChartClosedRangeCoordinationUnavailableError extends Error {
+  constructor(message = "QEO-148 closed-range coordination schema is unavailable") {
+    super(message)
+    this.name = "ChartClosedRangeCoordinationUnavailableError"
   }
 }
 
@@ -279,12 +305,112 @@ export async function readOldestHotIntradayTime(supabase: SupabaseClient): Promi
 }
 
 export async function readProviderRequestCoverage(supabase: SupabaseClient, ticker: string, from: number, to: number): Promise<ProviderCoverageRange[]> {
-  const { data, error } = await supabase.from("chart_ohlcv_provenance_batches").select("row_count,range_start,range_end,detail")
-    .eq("ticker", ticker).eq("base_resolution", "1m")
-    .lte("range_start", new Date(to * 1000).toISOString()).gte("range_end", new Date(from * 1000).toISOString())
-    .order("range_start", { ascending: true })
-  if (error) throw new Error(`Chart provenance coverage read failed: ${error.message}`)
-  return (data || []).map((row) => provenanceCoverageRange(row as Record<string, unknown>)).filter((range): range is ProviderCoverageRange => Boolean(range))
+  const { data, error } = await supabase.rpc("qeo_chart_intraday_success_coverage", {
+    p_ticker: ticker,
+    p_source_key: "PRIMARY_PROVIDER",
+    p_range_start: new Date(from * 1000).toISOString(),
+    p_range_end: new Date(to * 1000).toISOString(),
+  })
+  if (error) {
+    if (missingQeo148CoordinationRpc(error)) return []
+    throw new Error(`Chart durable coverage read failed: ${error.message}`)
+  }
+  const rows = (data || []) as Array<Record<string, unknown>>
+  const ranges = rows.map(durableCoverageRange)
+  if (ranges.some((range) => range == null)) throw new Error("Chart durable coverage read returned malformed range evidence")
+  return ranges.filter((range): range is ProviderCoverageRange => Boolean(range))
+}
+
+export function canonicalProviderRangeContentId(input: {
+  provider: string
+  requestedFrom: number
+  requestedTo: number
+  bars: CanonicalOhlcvBar[]
+}) {
+  const sorted = [...input.bars].sort((left, right) => left.time - right.time)
+  const payload = [
+    input.provider.trim(),
+    `${input.requestedFrom}:${input.requestedTo}`,
+    ...sorted.map((bar) => [bar.time, bar.open, bar.high, bar.low, bar.close, bar.volume].join(",")),
+  ].join("\n")
+  return createHash("sha256").update(payload, "utf8").digest("hex")
+}
+
+export async function claimChartIntradayRange(
+  supabase: SupabaseClient,
+  input: ClosedRangeClaimInput,
+): Promise<ClosedRangeClaim> {
+  const leaseOwner = randomUUID()
+  const { data, error } = await supabase.rpc("qeo_claim_chart_intraday_range", {
+    p_ticker: input.ticker,
+    p_source_key: input.sourceKey,
+    p_range_start: new Date(input.from * 1000).toISOString(),
+    p_range_end: new Date(input.to * 1000).toISOString(),
+    p_lease_owner: leaseOwner,
+    p_revalidate: input.revalidate,
+    p_lease_seconds: 60,
+  })
+  if (error) {
+    if (missingQeo148CoordinationRpc(error)) throw new ChartClosedRangeCoordinationUnavailableError()
+    throw new Error(`Chart closed-range claim failed: ${error.message}`)
+  }
+  const raw = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  if (raw.status === "covered") return { status: "covered" }
+  if (raw.status === "busy") return { status: "busy", leaseExpiresAt: raw.leaseExpiresAt ? String(raw.leaseExpiresAt) : null }
+  const fence = finite(raw.fence)
+  const rangeId = String(raw.rangeId ?? "")
+  const returnedOwner = String(raw.leaseOwner ?? "")
+  if (raw.status !== "claimed" || !rangeId || returnedOwner !== leaseOwner || fence == null || !Number.isSafeInteger(fence) || fence <= 0) {
+    throw new Error("Chart closed-range claim returned malformed fencing evidence")
+  }
+  const previousContentId = typeof raw.previousContentId === "string" && /^[a-f0-9]{64}$/.test(raw.previousContentId) ? raw.previousContentId : null
+  const previousProvenanceBatchId = typeof raw.previousProvenanceBatchId === "string" && raw.previousProvenanceBatchId ? raw.previousProvenanceBatchId : null
+  return {
+    status: "claimed",
+    rangeId,
+    leaseOwner,
+    fence,
+    previousContentId,
+    previousProvenanceBatchId,
+  }
+}
+
+export async function completeChartIntradayRange(
+  supabase: SupabaseClient,
+  input: ClosedRangeLeaseIdentity & ClosedRangeCompletion,
+): Promise<{ status: "completed" | "stale" }> {
+  const { data, error } = await supabase.rpc("qeo_complete_chart_intraday_range", {
+    p_range_id: input.rangeId,
+    p_lease_owner: input.leaseOwner,
+    p_lease_fence: input.fence,
+    p_provider: input.provider,
+    p_row_count: input.rowCount,
+    p_provenance_batch_id: input.provenanceBatchId,
+    p_content_id: input.contentId,
+  })
+  if (error) {
+    if (missingQeo148CoordinationRpc(error)) throw new ChartClosedRangeCoordinationUnavailableError()
+    throw new Error(`Chart closed-range completion failed: ${error.message}`)
+  }
+  const raw = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  if (raw.status !== "completed" && raw.status !== "stale") throw new Error(`Chart closed-range completion returned invalid status=${String(raw.status)}`)
+  return { status: raw.status }
+}
+
+export async function abandonChartIntradayRange(
+  supabase: SupabaseClient,
+  input: ClosedRangeLeaseIdentity & { reason: string },
+) {
+  const { error } = await supabase.rpc("qeo_abandon_chart_intraday_range", {
+    p_range_id: input.rangeId,
+    p_lease_owner: input.leaseOwner,
+    p_lease_fence: input.fence,
+    p_reason: input.reason,
+  })
+  if (error) {
+    if (missingQeo148CoordinationRpc(error)) throw new ChartClosedRangeCoordinationUnavailableError()
+    throw new Error(`Chart closed-range abandon failed: ${error.message}`)
+  }
 }
 
 export async function readQeo107TerminalAttemptRanges(
@@ -293,26 +419,32 @@ export async function readQeo107TerminalAttemptRanges(
   from: number,
   to: number,
 ): Promise<Qeo107TerminalAttemptRange[]> {
-  const { data, error } = await supabase.from("chart_ohlcv_provenance_batches").select("row_count,range_start,range_end,detail")
-    .eq("ticker", ticker).eq("base_resolution", "1m")
-    .lte("range_start", new Date(to * 1000).toISOString()).gte("range_end", new Date(from * 1000).toISOString())
-    .order("fetched_at", { ascending: true })
-  if (error) throw new Error(`QEO-107 bootstrap attempt read failed: ${error.message}`)
-
   const ranges: Qeo107TerminalAttemptRange[] = []
-  for (const row of (data || []) as Array<Record<string, unknown>>) {
-    const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail) ? row.detail as Record<string, unknown> : {}
-    if (detail.workflow !== "QEO-107") continue
-    if (detail.outcome === "provider_gap") {
-      const range = requestedCoverageRange(row)
-      if (range) ranges.push({ ...range, outcome: "provider_gap" })
-      continue
+  for (let page = 0; page < PROVENANCE_READ_MAX_PAGES; page += 1) {
+    const offset = page * PROVENANCE_READ_PAGE_SIZE
+    const { data, error } = await supabase.from("chart_ohlcv_provenance_batches").select("id,row_count,range_start,range_end,fetched_at,detail")
+      .eq("ticker", ticker).eq("base_resolution", "1m")
+      .lte("range_start", new Date(to * 1000).toISOString()).gte("range_end", new Date(from * 1000).toISOString())
+      .order("fetched_at", { ascending: true }).order("id", { ascending: true })
+      .range(offset, offset + PROVENANCE_READ_PAGE_SIZE - 1)
+    if (error) throw new Error(`QEO-107 bootstrap attempt read failed: ${error.message}`)
+
+    const rows = (data || []) as Array<Record<string, unknown>>
+    for (const row of rows) {
+      const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail) ? row.detail as Record<string, unknown> : {}
+      if (detail.workflow !== "QEO-107") continue
+      if (detail.outcome === "provider_gap") {
+        const range = requestedCoverageRange(row)
+        if (range) ranges.push({ ...range, outcome: "provider_gap" })
+        continue
+      }
+      if (detail.outcome !== "success" || (finite(row.row_count) ?? 0) <= 0) continue
+      const range = provenanceCoverageRange(row)
+      if (range) ranges.push({ ...range, outcome: "success" })
     }
-    if (detail.outcome !== "success" || (finite(row.row_count) ?? 0) <= 0) continue
-    const range = provenanceCoverageRange(row)
-    if (range) ranges.push({ ...range, outcome: "success" })
+    if (rows.length < PROVENANCE_READ_PAGE_SIZE) return ranges
   }
-  return ranges
+  throw new Error(`QEO-107 bootstrap attempt read reached its ${PROVENANCE_READ_MAX_PAGES}-page bound`)
 }
 
 export async function recordChartProviderAttempt(supabase: SupabaseClient, input: ChartProviderAttemptInput) {
