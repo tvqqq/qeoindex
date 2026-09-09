@@ -2,8 +2,10 @@ import {
   QEO150_MAINTENANCE_BATCH_SIZE,
   QEO150_MAX_RETRYABLE_ATTEMPTS,
   checkChartIntradayMaintenanceCapacityStep,
+  checkChartIntradayMaintenanceExecutionGateStep,
   finishChartIntradayMaintenanceStep,
   recordChartIntradayMaintenanceCapacityStopStep,
+  recordChartIntradayMaintenanceFailureStopStep,
   runChartIntradayMaintenanceTickerStep,
   startChartIntradayMaintenanceStep,
   type Qeo150MaintenanceSummary,
@@ -19,7 +21,25 @@ export async function chartIntradayMaintenanceWorkflow(
   const context = await startChartIntradayMaintenanceStep(startedAtIso, dispatchId)
   const resultByTicker = new Map<string, Qeo150MaintenanceTickerResult>()
 
-  for (let offset = 0; offset < context.stocks.length; offset += QEO150_MAINTENANCE_BATCH_SIZE) {
+  maintenance: for (let offset = 0; offset < context.stocks.length; offset += QEO150_MAINTENANCE_BATCH_SIZE) {
+    const executionGate = await checkChartIntradayMaintenanceExecutionGateStep({ slaDeadline: context.slaDeadline })
+    if (executionGate.deadlineExceeded) {
+      const remaining = context.stocks
+        .slice(offset)
+        .map((stock) => stock.ticker)
+        .filter((ticker) => !resultByTicker.has(ticker))
+      const reason = `QEO-150 reconciliation exceeded SLA deadline ${context.slaDeadline}`
+      const stopped = await recordChartIntradayMaintenanceFailureStopStep({
+        tickers: remaining,
+        expectedSession: context.expectedSession,
+        dispatchId: context.dispatchId,
+        referenceAt: context.startedAt,
+        reason,
+      })
+      for (const result of stopped) resultByTicker.set(result.ticker, result)
+      break
+    }
+
     const batch = context.stocks.slice(offset, offset + QEO150_MAINTENANCE_BATCH_SIZE)
     const capacityGate = offset === 0
       ? {
@@ -46,6 +66,24 @@ export async function chartIntradayMaintenanceWorkflow(
 
     let pending = batch.map((stock) => stock.ticker)
     for (let attempt = 1; attempt <= QEO150_MAX_RETRYABLE_ATTEMPTS && pending.length; attempt += 1) {
+      const retryGate = await checkChartIntradayMaintenanceExecutionGateStep({ slaDeadline: context.slaDeadline })
+      if (retryGate.deadlineExceeded) {
+        const remaining = context.stocks
+          .slice(offset)
+          .map((stock) => stock.ticker)
+          .filter((ticker) => !resultByTicker.has(ticker))
+        const reason = `QEO-150 reconciliation exceeded SLA deadline ${context.slaDeadline}`
+        const stopped = await recordChartIntradayMaintenanceFailureStopStep({
+          tickers: remaining,
+          expectedSession: context.expectedSession,
+          dispatchId: context.dispatchId,
+          referenceAt: context.startedAt,
+          reason,
+        })
+        for (const result of stopped) resultByTicker.set(result.ticker, result)
+        break maintenance
+      }
+
       const attemptResults = await Promise.all(pending.map((ticker) => runChartIntradayMaintenanceTickerStep({
         ticker,
         expectedSession: context.expectedSession,
