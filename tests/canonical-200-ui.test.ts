@@ -90,3 +90,19 @@ test("QEO-162 homepage refreshes VNINDEX, replaces the CTA with a canonical stoc
   assert.match(divider, /<path/)
   assert.doesNotMatch(`${home}\n${hero}\n${stockSearch}\n${divider}`, /transition-all|backdrop-blur|backdrop-filter/)
 })
+
+test("QEO-163 pulse uses the current Vietnam date and an open stock finder reserves workspace clearance", () => {
+  const hero = source("components/home/home-hero.tsx")
+  const stockSearch = source("components/home/home-stock-search.tsx")
+
+  assert.match(hero, /formatCurrentVietnamDate/, "Pulse label should derive from the current Asia\/Ho_Chi_Minh date")
+  assert.match(hero, /QeoIndex Pulse · \{formatCurrentVietnamDate\(\)\}/, "Pulse copy should use the approved mixed-case label and current date")
+  assert.doesNotMatch(hero, /QEO Market Pulse · \{formatSessionDate\(data\.market\.sessionDate\)\}/, "Pulse must not use the persisted market session date")
+
+  assert.match(stockSearch, /data-home-stock-search/, "stock finder root should expose open-state styling scope")
+  assert.match(stockSearch, /data-open=\{isOpen \? "true" : "false"\}/, "stock finder should expose combobox open state to CSS")
+  assert.match(stockSearch, /pb-\[360px\]/, "open dropdown should reserve enough vertical clearance before workspace cards")
+  assert.match(stockSearch, /transition-\[padding-bottom\]/, "clearance should animate only the bounded padding property")
+  assert.match(stockSearch, /motion-reduce:transition-none/, "clearance motion should respect reduced-motion")
+  assert.doesNotMatch(`${hero}\n${stockSearch}`, /transition-all|backdrop-blur|backdrop-filter/)
+})
