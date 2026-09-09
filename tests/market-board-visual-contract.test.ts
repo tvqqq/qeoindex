@@ -3,6 +3,10 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { BOARD_SECTOR_GROUPS } from "../modules/market/sectors.ts"
 import {
+  DNSE_NORMAL_USER_CHANNEL_LIMIT,
+  buildDnseBoardSubscriptionPlan,
+} from "../modules/market/board/dnse-subscriptions.ts"
+import {
   defaultStockFilterCriteria,
   filterBoardTickers,
   isValidDailyFilterCache,
@@ -287,4 +291,20 @@ test("market board filter preference merge preserves unrelated settings", () => 
       stockFilter: criteria,
     },
   })
+})
+
+test("DNSE normalUser board subscription stays within the 200-channel budget for canonical Top 200", () => {
+  const symbols = Array.from({ length: 200 }, (_, index) => `S${String(index + 1).padStart(3, "0")}`)
+  const plan = buildDnseBoardSubscriptionPlan(symbols)
+
+  assert.equal(plan.realtimeSymbols.length, 200)
+  assert.deepEqual(plan.overflowSymbols, [])
+  assert.ok(plan.subscriptionCount <= DNSE_NORMAL_USER_CHANNEL_LIMIT, `subscriptionCount=${plan.subscriptionCount}`)
+})
+
+test("market board uses the budgeted DNSE plan and derives mini-chart updates from realtime ticks", () => {
+  assert.match(boardSource, /buildDnseBoardSubscriptionPlan\(symbolList\)/)
+  assert.match(boardSource, /channels: subscriptionPlan\.channels/)
+  assert.match(boardSource, /type === "t"[\s\S]*pushFiveMinuteClose\(ticker, price, timestamp\)/)
+  assert.doesNotMatch(boardSource, /INDEX_CHANNELS/)
 })
