@@ -1,12 +1,7 @@
 import "server-only"
 
 import { getCanonicalUniverse } from "@/modules/market/universe"
-
-export type SectorMetadataSnapshot = {
-  source: "canonical_market_universe"
-  sourceAsOfDate: string | null
-  byTicker: Record<string, string | null>
-}
+import type { SectorMetadataSnapshot } from "./types.ts"
 
 function normalizeTicker(value: string): string {
   return value.trim().toUpperCase()
