@@ -16,8 +16,10 @@ import {
 } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
+import { HomeHero } from "@/components/home/home-hero"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/modules/auth/server"
+import { getHomeHeroData } from "@/modules/home/hero-data"
 
 export const dynamic = "force-dynamic"
 
@@ -171,20 +173,28 @@ export default async function HomePage() {
   const auth = await getServerAuthContext()
   if (!auth) return <LandingLogin />
 
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <TopNav />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
-        <section className="mb-8 max-w-3xl sm:mb-10">
-          <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">QeoIndex Workspace</div>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Chọn không gian làm việc</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-400 sm:text-base">
-            Truy cập nhanh bốn khu vực chính của QeoIndex. Mỗi workspace giữ nguyên dữ liệu và luồng công việc chuyên biệt của nó.
-          </p>
-        </section>
+  const heroData = await getHomeHeroData(auth)
 
-        <section className="group/home grid gap-4 md:grid-cols-2" aria-label="Các khu vực chính">
-          {HOME_MENU_ITEMS.map((item) => <MenuCard key={item.href} item={item} />)}
+  return (
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+      <TopNav />
+      <main>
+        <div className="mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8">
+          <HomeHero data={heroData} />
+        </div>
+
+        <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
+          <div className="mb-8 max-w-3xl sm:mb-10">
+            <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">QeoIndex Workspace</div>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Chọn workspace để đi sâu</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400 sm:text-base">
+              Từ snapshot tổng quan, đi thẳng vào bảng điện, danh mục, Insights hoặc Research với dữ liệu và workflow chuyên biệt.
+            </p>
+          </div>
+
+          <section className="group/home grid gap-4 md:grid-cols-2" aria-label="Các khu vực chính">
+            {HOME_MENU_ITEMS.map((item) => <MenuCard key={item.href} item={item} />)}
+          </section>
         </section>
       </main>
     </div>

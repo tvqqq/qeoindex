@@ -289,3 +289,38 @@ test("QEO-160 gives every homepage workspace its own accent theme", () => {
     "shared satellite base class must not force the board lime accent onto every card",
   )
 })
+
+test("QEO-161 homepage hero presents Market Pulse and Portfolio with deterministic data and compositor-safe motion", () => {
+  const home = source("app/page.tsx")
+
+  assert.match(home, /getHomeHeroData/, "authenticated homepage should load the bounded hero read model")
+  assert.match(home, /<HomeHero data=\{heroData\}/, "homepage should render the cinematic hero before workspace cards")
+
+  const hero = source("components/home/home-hero.tsx")
+  const heroData = source("modules/home/hero-data.ts")
+  const heroCss = source("components/home/home-hero.module.css")
+
+  assert.match(hero, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,0\.95fr\)_minmax\(0,1fr\)\]/, "desktop hero should use the approved three-zone composition")
+  for (const href of ["/insights", "/board", "/portfolio", "/reports"]) {
+    assert.ok(hero.includes(`href="${href}"`), `hero should expose ${href}`)
+  }
+  assert.match(hero, /-rotate-\[5deg\]/, "market object should rest with a physical-card tilt")
+  assert.match(hero, /rotate-\[5deg\]/, "portfolio object should counter-tilt for visual balance")
+  assert.match(hero, /hover:rotate-0/, "physical hero objects should straighten on hover")
+  assert.match(hero, /bg-\[#d5ff63\]/, "primary hero CTA should use the approved lime surface")
+
+  assert.match(heroData, /import "server-only"/, "hero data must stay server-only")
+  assert.match(heroData, /market_insight_daily/, "hero market state should use persisted canonical market insight")
+  assert.match(heroData, /market_insight_indexes/, "hero should read the published VNINDEX snapshot")
+  assert.match(heroData, /market_insight_sectors/, "hero should read bounded sector leadership evidence")
+  assert.match(heroData, /portfolio_transactions/, "hero portfolio facts should be user-scoped accounting evidence")
+  assert.match(heroData, /computePortfolioPositions/, "portfolio hero must reuse canonical AVCO accounting")
+  assert.match(heroData, /Thị trường tích cực/, "headline mapping should include a deterministic constructive state")
+  assert.match(heroData, /Rủi ro đang cao/, "headline mapping should include a deterministic risk-off state")
+  assert.match(heroData, /Theo dõi thị trường/, "headline mapping should fail open to neutral copy")
+  assert.doesNotMatch(heroData, /openai|fetchTradingViewIndexes|getIntraday5mSnapshot|fetchLiveBatchQuotes/i, "homepage hero must not trigger LLM or fresh market-provider fan-out")
+
+  assert.match(heroCss, /@keyframes/, "hero should have one-shot entrance motion")
+  assert.match(heroCss, /prefers-reduced-motion/, "hero motion must respect reduced-motion preference")
+  assert.doesNotMatch(`${home}\n${hero}\n${heroCss}`, /transition-all|backdrop-blur|backdrop-filter/, "cinematic hero must preserve UI performance invariants")
+})
