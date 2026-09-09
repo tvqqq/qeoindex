@@ -25,7 +25,11 @@ import {
   proveHotArchivePartitionEligibility,
   proveHotArchivePartitionsEligibility,
 } from "../modules/market/chart-data/hot-retention.ts"
-import { aggregateChartTimeframe, overlayHourlyHotOnDerived } from "../modules/market/chart-data/timeframes.ts"
+import {
+  aggregateChartTimeframe,
+  hourlyCoverageIsComplete,
+  overlayHourlyHotOnDerived,
+} from "../modules/market/chart-data/timeframes.ts"
 
 const DAY = 86400
 
@@ -242,6 +246,31 @@ test("QEO-146 hourly reads compose protected older HOT without dropping partial-
     assert.ok(bars.length > 0, `${resolution} should retain the protected Aug 24 source`)
     assert.deepEqual(bars, [...bars].sort((a, b) => a.time - b.time))
   }
+})
+
+test("QEO-146 unknown old-source coverage can never report COMPLETE", () => {
+  assert.equal(hourlyCoverageIsComplete({
+    barsPresent: true,
+    oldRequested: true,
+    oldCoverageProven: false,
+    recentCoverageComplete: true,
+    hasGaps: false,
+    hasIntegrityIssues: false,
+    hasErrors: false,
+  }), false)
+  assert.equal(hourlyCoverageIsComplete({
+    barsPresent: true,
+    oldRequested: true,
+    oldCoverageProven: true,
+    recentCoverageComplete: true,
+    hasGaps: false,
+    hasIntegrityIssues: false,
+    hasErrors: false,
+  }), true)
+
+  const service = source("modules/market/chart-data/timeframe-service.ts")
+  assert.match(service, /oldCoverageProven/)
+  assert.match(service, /hourlyCoverageIsComplete/)
 })
 
 test("QEO-103 legacy derived recovery re-verifies cold raw before cache persistence", () => {
