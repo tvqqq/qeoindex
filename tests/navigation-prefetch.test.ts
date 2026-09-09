@@ -233,7 +233,7 @@ test("QEO-155 homepage icon cluster matches the approved reference geometry and 
   assert.match(home, /group-hover\/card:-translate-x-\[3\.625rem\]/, "left satellite should move 58px from the shared center")
   assert.match(home, /group-hover\/card:translate-x-\[3\.625rem\]/, "right satellite should move 58px from the shared center")
   assert.match(home, /group-hover\/card:-translate-y-\[1\.5rem\]/, "left and right satellites should share the same 24px upward offset")
-  assert.match(home, /group-hover\/card:-translate-y-\[4\.375rem\]/, "top satellite should move 70px straight upward")
+  assert.match(home, /group-hover\/card:-translate-y-\[3\.75rem\]/, "top satellite should move 60px upward so the main tile partially overlaps it")
   assert.match(home, /group-hover\/card:-rotate-\[12deg\]/, "left satellite should tilt outward")
   assert.match(home, /group-hover\/card:rotate-\[12deg\]/, "right satellite should tilt outward symmetrically")
   assert.match(home, /h-10 w-10/, "satellite tiles should remain 40px square")
