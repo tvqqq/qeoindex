@@ -267,7 +267,7 @@ test("QEO-149 hot writes prefer the locked writer and isolate the quarantined-sc
   assert.match(upsert, /supabase\.rpc\("qeo_upsert_chart_intraday_bars"/)
   assert.match(upsert, /if \(offset === 0 && missingQeo149WriterRpc\(error\)\)/)
   assert.match(upsert, /upsertHotIntradayBarsLegacy/)
-  assert.match(fallback, /qeo_ensure_chart_intraday_session_partition/)
+  assert.match(fallback, /ensureHotIntradaySessionPartitions\(supabase, sorted\)/)
   assert.match(fallback, /\.from\("chart_ohlcv_intraday"\)\.upsert/)
 })
 
