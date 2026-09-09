@@ -9,7 +9,7 @@ This document owns the active user-facing chart-data persistence/read contract. 
 QeoIndex has two canonical raw OHLCV persistence concerns:
 
 | Concern | Raw resolution | Active store | Purpose |
-| --- | --- | --- | --- |
+| --- | ---: | --- |
 | EOD / Wyckoff | `1D` | `market_ohlcv_history` | Completed Daily evidence for EOD, Wyckoff and deterministic Weekly derivation. |
 | Interactive chart | `1m` | `chart_ohlcv_intraday` + private Storage bucket `chart-ohlcv` | Exact intraday chart history with verified hot/cold lifecycle. |
 
@@ -57,13 +57,13 @@ Bootstrap and provider-coverage discovery continue to use the bounded global
 cutoff in this release. An exact per-ticker coverage RPC can be introduced as a
 follow-up if bootstrap coverage needs the same stronger proof.
 
-The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`. The native session cutover (`20260906024500_qeo108_chart_intraday_session_partitions`) and correction-safe writer/prune (`20260909100000_qeo149_correction_safe_prune`) remain explicitly QUARANTINED pending isolated replay and the two-session rehearsal; pending files are not production evidence.
+The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`. The correction-safe writer/prune source (`20260909100000_qeo149_correction_safe_prune`) is active in repository replay and maps to production version `20260909084222`. The native session cutover (`20260906024500_qeo108_chart_intraday_session_partitions`) remains explicitly QUARANTINED pending its isolated partition rehearsal; its pending file is not production evidence.
 
 ### QEO-149 mixed-version rollout
 
-While the correction-safe migration is still quarantined, application code must remain compatible with the currently deployed schema without weakening prune safety. HOT writes first call `qeo_upsert_chart_intraday_bars`; **only** an explicit missing-RPC response may fall back to the legacy partition-ensure + direct upsert path. Other writer-RPC failures remain fatal. Verified COLD manifest reads first request QEO-149 content-identity columns and retry the legacy projection only when those columns are explicitly absent.
+QEO-149 is active in production and repository replay, so the locked writer/prune protocol is the authoritative HOT mutation path. Application code retains an explicit missing-RPC compatibility fallback only for an older mixed-version environment or rollback boundary: HOT writes first call `qeo_upsert_chart_intraday_bars`; **only** an explicit missing-RPC response may fall back to the legacy partition-ensure + direct upsert path. Other writer-RPC failures remain fatal. Verified COLD manifest reads first request QEO-149 content-identity columns and retry the legacy projection only when those columns are explicitly absent.
 
-Archive/prune has no legacy unsafe fallback. If HOT `content_digest` / `content_version` columns are absent, the candidate is deferred as `content_identity_unavailable`, no archive/cache/prune authority is reached, and HOT rows remain intact. After the QEO-149 migration is activated, service-role direct HOT mutation is revoked and the locked writer/prune protocol becomes mandatory. Rollback therefore means disabling/defering prune, not reverting to the old count-only prune authority.
+Archive/prune has no legacy unsafe fallback. If HOT `content_digest` / `content_version` columns are absent, the candidate is deferred as `content_identity_unavailable`, no archive/cache/prune authority is reached, and HOT rows remain intact. In the active QEO-149 schema, service-role direct HOT mutation is revoked and the locked writer/prune protocol is mandatory. Rollback therefore means disabling/defering prune, not reverting to the old count-only prune authority.
 
 ## Cold raw 1m archive
 
