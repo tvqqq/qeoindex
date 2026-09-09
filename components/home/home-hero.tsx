@@ -257,7 +257,7 @@ export function HomeHero({ data, stocks }: { data: HomeHeroData; stocks: readonl
   return (
     <section
       aria-labelledby="home-market-pulse-title"
-      className="relative overflow-hidden border-b border-white/[0.055] py-10 sm:py-14 lg:min-h-[620px] lg:py-16"
+      className="relative border-b border-white/[0.055] py-10 sm:py-14 lg:min-h-[620px] lg:py-16"
     >
       <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-[42%] h-px w-[76%] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       <div className="relative grid items-center gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)_minmax(0,1fr)] lg:gap-5 xl:gap-8">
