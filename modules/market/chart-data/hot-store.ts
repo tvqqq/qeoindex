@@ -315,7 +315,8 @@ export async function readProviderRequestCoverage(supabase: SupabaseClient, tick
     if (missingQeo148CoordinationRpc(error)) return []
     throw new Error(`Chart durable coverage read failed: ${error.message}`)
   }
-  const ranges = (data || []).map((row) => durableCoverageRange(row as Record<string, unknown>))
+  const rows = (data || []) as Array<Record<string, unknown>>
+  const ranges = rows.map(durableCoverageRange)
   if (ranges.some((range) => range == null)) throw new Error("Chart durable coverage read returned malformed range evidence")
   return ranges.filter((range): range is ProviderCoverageRange => Boolean(range))
 }
