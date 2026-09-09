@@ -29,7 +29,7 @@ test("market intelligence uses one equal-height three-column overview row", () =
 
   assert.match(dashboard, /data-market-intelligence-overview-row[^>]*className="[^"]*xl:grid-cols-3[^"]*xl:items-stretch/)
   assert.match(dashboard, /data-market-summary-column[^>]*className="[^"]*h-full/)
-  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^\"]*\[&>\*\]:h-full/)
+  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
   assert.match(dashboard, /data-market-index-column[^>]*className="[^"]*h-full/)
   assert.match(dashboard, /data-market-sentiment-column[\s\S]*<MarketSentimentCard data=\{data\}/)
   assert.match(dashboard, /data-market-index-column[\s\S]*grid-cols-2[\s\S]*indexes\.map\(\(item\) => <IndexTile/)
