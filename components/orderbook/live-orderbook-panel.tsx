@@ -693,7 +693,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   }, [symbol, initialMeta])
 
   // Parse raw trade objects to StreamTrade model
-  const parseRawTrades = (rawTrades?: any[], source: TradeSource): StreamTrade[] => {
+  const parseRawTrades = (rawTrades: any[] | undefined, source: TradeSource): StreamTrade[] => {
     return (rawTrades ?? [])
       .map((trade: any, index: number) => {
         const rawPrice = number(trade.price)
