@@ -323,6 +323,22 @@
       "rationale": "The date-scoped lifecycle-lock writer/prune protocol remains pending until isolated migration replay, the bounded two-session concurrency rehearsal (including child/provenance mutation denial), generated-type parity, and release-authorized production rollout are complete. No production DDL has been applied; this entry remains QUARANTINED."
     },
     {
+      "logicalName": "qeo147_derived_hourly_readiness",
+      "repositoryVersion": "20260909143000",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo147-complete-cache-publication-pending-isolated-db-replay",
+      "rationale": "QEO-147 durable derived-hourly readiness publication remains quarantined until isolated replay, fault-injection, generated-type and grant verification plus release-authorized production rollout. Legacy rows remain UNKNOWN and application routing fails closed to verified RAW without this schema. No production DDL has been applied."
+    },
+    {
+      "logicalName": "qeo147_derived_hourly_concurrency",
+      "repositoryVersion": "20260909144000",
+      "productionVersion": null,
+      "state": "QUARANTINED",
+      "evidence": "qeo147-manifest-lock-readiness-pending-isolated-db-replay",
+      "rationale": "QEO-147 manifest-scoped advisory-lock follow-up remains quarantined with the readiness publication migration until isolated concurrent-generation and mutation rehearsal, generated-type and grant verification, plus release-authorized production rollout. No production DDL has been applied."
+    },
+    {
       "logicalName": "qeo108_chart_capacity_and_index_cleanup",
       "repositoryVersion": "20260906030037",
       "productionVersion": "20260906030037",
