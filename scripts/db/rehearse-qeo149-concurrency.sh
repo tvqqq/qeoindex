@@ -225,12 +225,12 @@ begin
     end if;
 
     for i in 1..(case when v_case = 'FEWER' then 4 else 5 end) loop
-    v_bar_time := (v_newer_dates[i]::timestamp + time '09:15') at time zone 'Asia/Ho_Chi_Minh';
-    v_rows := v_rows || jsonb_build_array(jsonb_build_object(
-      'bar_time', v_bar_time,
-      'open', 10.0 + i, 'high', 10.2 + i, 'low', 9.9 + i, 'close', 10.1 + i, 'volume', 1000 + i,
-      'provenance_batch_id', v_batch, 'fetched_at', now()
-    ));
+      v_bar_time := (v_newer_dates[i]::timestamp + time '09:15') at time zone 'Asia/Ho_Chi_Minh';
+      v_rows := v_rows || jsonb_build_array(jsonb_build_object(
+        'bar_time', v_bar_time,
+        'open', 10.0 + i, 'high', 10.2 + i, 'low', 9.9 + i, 'close', 10.1 + i, 'volume', 1000 + i,
+        'provenance_batch_id', v_batch, 'fetched_at', now()
+      ));
     end loop;
 
     perform public.qeo_upsert_chart_intraday_bars(v_ticker, v_rows);
@@ -605,7 +605,13 @@ SQL
     wait_pid "$HOLDER_PID" "$ORDER writer holder" "$TMP_DIR/$ORDER-holder.log"
     wait_pid "$RECLAIM_PID" "$ORDER reclaim" "$TMP_DIR/$ORDER-reclaim.log"
     psql_local -f - <<SQL
-select case when exists (select 1 from public.chart_ohlcv_intraday where ticker = '$TICKER' and bar_time = ('$DATE'::date::timestamp + time '10:00') at time zone 'Asia/Ho_Chi_Minh') then 1 else 1/0 end;
+do \$function\$
+begin
+  if not exists (select 1 from public.chart_ohlcv_intraday where ticker = '$TICKER' and bar_time = ('$DATE'::date::timestamp + time '10:00') at time zone 'Asia/Ho_Chi_Minh') then
+    raise exception 'QEO-149 rehearsal: WRITER_FIRST row did not survive reclaim';
+  end if;
+end;
+\$function\$;
 SQL
   else
     # First empty the dedicated date. The writer starts while DROP still owns
@@ -641,7 +647,13 @@ SQL
     wait_pid "$HOLDER_PID" "$ORDER reclaim holder" "$TMP_DIR/$ORDER-holder.log"
     wait_pid "$WRITER_PID" "$ORDER writer" "$TMP_DIR/$ORDER-writer.log"
     psql_local -f - <<SQL
-select case when exists (select 1 from public.chart_ohlcv_intraday where ticker = '$TICKER' and bar_time = ('$DATE'::date::timestamp + time '10:01') at time zone 'Asia/Ho_Chi_Minh') then 1 else 1/0 end;
+do \$function\$
+begin
+  if not exists (select 1 from public.chart_ohlcv_intraday where ticker = '$TICKER' and bar_time = ('$DATE'::date::timestamp + time '10:01') at time zone 'Asia/Ho_Chi_Minh') then
+    raise exception 'QEO-149 rehearsal: RECLAIM_FIRST writer row did not survive';
+  end if;
+end;
+\$function\$;
 SQL
   fi
 done
@@ -750,7 +762,13 @@ if wait "$TIMEOUT_WRITER"; then
 fi
 wait_pid "$TIMEOUT_HOLDER" "lock-timeout holder" "$TMP_DIR/timeout-holder.log"
 psql_local -f - <<SQL
-select case when not exists (select 1 from public.chart_ohlcv_intraday where ticker = '$LOCK_TIMEOUT_TICKER' and bar_time = ('$LOCK_TIMEOUT_DATE'::date::timestamp + time '12:00') at time zone 'Asia/Ho_Chi_Minh') then 1 else 1/0 end;
+do \$function\$
+begin
+  if exists (select 1 from public.chart_ohlcv_intraday where ticker = '$LOCK_TIMEOUT_TICKER' and bar_time = ('$LOCK_TIMEOUT_DATE'::date::timestamp + time '12:00') at time zone 'Asia/Ho_Chi_Minh') then
+    raise exception 'QEO-149 rehearsal: lock-timeout writer left a partial row';
+  end if;
+end;
+\$function\$;
 SQL
 
 printf '\nQEO-149 isolated two-session concurrency rehearsal: PASS\n'
