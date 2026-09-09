@@ -12,7 +12,7 @@ on:
       - ".github/workflows/qeo158-preprod.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: qeo158-${{ github.event.pull_request.number || github.ref }}
@@ -136,31 +136,11 @@ jobs:
           name: qeo158-database-types
           path: /tmp/database.types.ts
           retention-days: 3
-      - name: Sync generated Database types to feature branch
-        if: steps.generated_types.outcome == 'failure'
-        env:
-          QEO_HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          candidate="/tmp/database.types.ts"
-          test -f "$candidate"
-          git fetch origin "$QEO_HEAD_REF"
-          rm -rf /tmp/qeo158-head
-          git worktree add --detach /tmp/qeo158-head FETCH_HEAD
-          cp "$candidate" /tmp/qeo158-head/modules/shared/supabase/database.types.ts
-          cd /tmp/qeo158-head
-          if git diff --quiet -- modules/shared/supabase/database.types.ts; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add modules/shared/supabase/database.types.ts
-          git commit -m "chore(db): regenerate Supabase types for QEO-158"
-          git push origin HEAD:"$QEO_HEAD_REF"
       - name: Require committed generated types
         if: steps.generated_types.outcome == 'failure'
         run: |
-          echo "Generated Supabase Database types were synchronized; rerun on the new commit is required."
+          echo "Generated Supabase Database types differ from the committed source."
+          echo "Download the qeo158-database-types artifact, update the feature branch explicitly, and rerun exact-head CI."
           exit 1
       - name: Stop local Supabase
         if: always()
