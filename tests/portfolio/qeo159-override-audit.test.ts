@@ -54,7 +54,7 @@ test("persisted planned Trade uses an isolated QEO-137 mutation helper with audi
   assert.match(persistence, /\/journal/)
   assert.match(persistence, /Concentration\/diversification override/)
   assert.match(persistence, /concentration_override/)
-  assert.match(persistence, /override_reason:\s*input\.overrideReason/)
+  assert.match(persistence, /override_reason:\s*overrideReason/)
   assert.match(persistence, /Không thể lưu bằng chứng override/)
   assert.match(advisor, /Lưu Trade dự kiến/)
 })
