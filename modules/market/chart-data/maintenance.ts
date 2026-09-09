@@ -108,7 +108,17 @@ async function readLatestQeo150Attempts(supabase: SupabaseClient, tickers: strin
         : {}
       const rawOutcome = String(detail.outcome || "none") as Qeo150AttemptOutcome
       const allowed: Qeo150AttemptOutcome[] = [
-        "ingested", "provider_gap", "retryable_failure", "failed", "capacity_stop", "unknown",
+        "already_fresh",
+        "ingested",
+        "reused",
+        "no_trade",
+        "suspension",
+        "provider_gap",
+        "retryable_failure",
+        "failed",
+        "capacity_stop",
+        "sla_timeout",
+        "unknown",
       ]
       latest.set(ticker, {
         outcome: allowed.includes(rawOutcome) ? rawOutcome : "none",
@@ -224,31 +234,34 @@ export async function readChartIntradayMaintenanceReport(
   })
 }
 
-async function recordTerminalAttempt(
+export async function recordQeo150OutcomeEvidence(
   supabase: SupabaseClient,
   input: {
     ticker: string
-    from: number
-    to: number
-    dispatchId: string
     expectedSession: string
-    outcome: Extract<Qeo150AttemptOutcome, "provider_gap" | "retryable_failure" | "failed" | "capacity_stop" | "unknown">
-    error: string
+    dispatchId: string
+    outcome: Exclude<Qeo150AttemptOutcome, "none">
+    error?: string | null
     failureCodes?: string[]
+    provider?: string | null
+    rowCount?: number
   },
 ) {
+  const ticker = validTicker(input.ticker)
+  const range = qeo150SessionRange(input.expectedSession)
   await recordChartProviderAttempt(supabase, {
-    ticker: input.ticker,
-    provider: "WATERFALL",
-    requestedFrom: input.from,
-    requestedTo: input.to,
+    ticker,
+    provider: input.provider?.trim() || "QEO150_MAINTENANCE",
+    requestedFrom: range.from,
+    requestedTo: range.to,
     detail: {
       workflow: "QEO-150",
       dispatchId: input.dispatchId,
       expectedSession: input.expectedSession,
       outcome: input.outcome,
-      error: input.error.slice(0, 240),
+      error: (input.error ?? "").slice(0, 240),
       failureCodes: input.failureCodes ?? [],
+      observedRowCount: input.rowCount ?? 0,
     },
   })
 }
@@ -365,14 +378,18 @@ export async function ingestClosedIntradayRange(
     })
 
     if (coordinated.status === "reused") {
+      await recordQeo150OutcomeEvidence(supabase, {
+        ticker,
+        expectedSession: input.expectedSession,
+        dispatchId: input.dispatchId,
+        outcome: "reused",
+      })
       return { ticker, outcome: "reused", provider: null, rowCount: 0, error: null }
     }
     if (coordinated.status === "busy") {
       const error = "QEO-148 closed-range claim remained busy after bounded retries"
-      await recordTerminalAttempt(supabase, {
+      await recordQeo150OutcomeEvidence(supabase, {
         ticker,
-        from: range.from,
-        to: range.to,
         dispatchId: input.dispatchId,
         expectedSession: input.expectedSession,
         outcome: "retryable_failure",
@@ -393,10 +410,8 @@ export async function ingestClosedIntradayRange(
       ? error
       : new Qeo150ProviderError(error instanceof Error ? error.message : String(error ?? "QEO-150 ingestion failure"), "failed", [])
     try {
-      await recordTerminalAttempt(supabase, {
+      await recordQeo150OutcomeEvidence(supabase, {
         ticker,
-        from: range.from,
-        to: range.to,
         dispatchId: input.dispatchId,
         expectedSession: input.expectedSession,
         outcome: classified.outcome,
@@ -420,12 +435,9 @@ export async function recordQeo150CapacityStop(
   supabase: SupabaseClient,
   input: { ticker: string; expectedSession: string; dispatchId: string; reason: string },
 ) {
-  const range = qeo150SessionRange(input.expectedSession)
   try {
-    await recordTerminalAttempt(supabase, {
-      ticker: validTicker(input.ticker),
-      from: range.from,
-      to: range.to,
+    await recordQeo150OutcomeEvidence(supabase, {
+      ticker: input.ticker,
       dispatchId: input.dispatchId,
       expectedSession: input.expectedSession,
       outcome: "capacity_stop",
