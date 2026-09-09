@@ -70,7 +70,7 @@ export function ExternalCashFlowPanel({ portfolioId }: { portfolioId: string }) 
     try {
       await addCashFlow({
         flow_type: flowType,
-        signed_amount_vnd: signedAmount,
+        amount_vnd: signedAmount,
         effective_at: effectiveDate.toISOString(),
         note: note.trim() || null,
       })
