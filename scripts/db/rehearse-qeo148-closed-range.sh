@@ -258,27 +258,46 @@ values
    '2026-08-11T02:00:00Z', '2026-08-12T18:01:00Z', 2402, now(),
    jsonb_build_object('workflow','QEO-148-REHEARSAL','case','1201-disjoint-over-rest-cap'));
 
-do $function$
-declare
-  v_from integer := 0;
-  v_to integer;
-  v_rows jsonb;
-begin
-  while v_from <= 2401 loop
-    v_to := least(v_from + 499, 2401);
-    select jsonb_agg(jsonb_build_object(
-      'bar_time', '2026-08-11T02:00:00Z'::timestamptz + g * interval '1 minute',
-      'open', 40 + g / 10000.0, 'high', 41 + g / 10000.0,
-      'low', 39 + g / 10000.0, 'close', 40.5 + g / 10000.0,
-      'volume', 400 + g, 'provenance_batch_id', :'batch'::uuid, 'fetched_at', now()
-    ) order by g)
-    into v_rows
-    from generate_series(v_from, v_to) g;
-    perform public.qeo_upsert_chart_intraday_bars('Q148CAP', v_rows);
-    v_from := v_to + 1;
-  end loop;
-end;
-$function$;
+select public.qeo_upsert_chart_intraday_bars('Q148CAP', (
+  select jsonb_agg(jsonb_build_object(
+    'bar_time', '2026-08-11T02:00:00Z'::timestamptz + g * interval '1 minute',
+    'open', 40 + g / 10000.0, 'high', 41 + g / 10000.0,
+    'low', 39 + g / 10000.0, 'close', 40.5 + g / 10000.0,
+    'volume', 400 + g, 'provenance_batch_id', :'batch'::uuid, 'fetched_at', now()
+  ) order by g) from generate_series(0, 499) g
+));
+select public.qeo_upsert_chart_intraday_bars('Q148CAP', (
+  select jsonb_agg(jsonb_build_object(
+    'bar_time', '2026-08-11T02:00:00Z'::timestamptz + g * interval '1 minute',
+    'open', 40 + g / 10000.0, 'high', 41 + g / 10000.0,
+    'low', 39 + g / 10000.0, 'close', 40.5 + g / 10000.0,
+    'volume', 400 + g, 'provenance_batch_id', :'batch'::uuid, 'fetched_at', now()
+  ) order by g) from generate_series(500, 999) g
+));
+select public.qeo_upsert_chart_intraday_bars('Q148CAP', (
+  select jsonb_agg(jsonb_build_object(
+    'bar_time', '2026-08-11T02:00:00Z'::timestamptz + g * interval '1 minute',
+    'open', 40 + g / 10000.0, 'high', 41 + g / 10000.0,
+    'low', 39 + g / 10000.0, 'close', 40.5 + g / 10000.0,
+    'volume', 400 + g, 'provenance_batch_id', :'batch'::uuid, 'fetched_at', now()
+  ) order by g) from generate_series(1000, 1499) g
+));
+select public.qeo_upsert_chart_intraday_bars('Q148CAP', (
+  select jsonb_agg(jsonb_build_object(
+    'bar_time', '2026-08-11T02:00:00Z'::timestamptz + g * interval '1 minute',
+    'open', 40 + g / 10000.0, 'high', 41 + g / 10000.0,
+    'low', 39 + g / 10000.0, 'close', 40.5 + g / 10000.0,
+    'volume', 400 + g, 'provenance_batch_id', :'batch'::uuid, 'fetched_at', now()
+  ) order by g) from generate_series(1500, 1999) g
+));
+select public.qeo_upsert_chart_intraday_bars('Q148CAP', (
+  select jsonb_agg(jsonb_build_object(
+    'bar_time', '2026-08-11T02:00:00Z'::timestamptz + g * interval '1 minute',
+    'open', 40 + g / 10000.0, 'high', 41 + g / 10000.0,
+    'low', 39 + g / 10000.0, 'close', 40.5 + g / 10000.0,
+    'volume', 400 + g, 'provenance_batch_id', :'batch'::uuid, 'fetched_at', now()
+  ) order by g) from generate_series(2000, 2401) g
+));
 reset role;
 
 -- PostgreSQL-only test scaffolding. Publish metadata only after all 2402 HOT rows
