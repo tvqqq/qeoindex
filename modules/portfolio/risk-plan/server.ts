@@ -218,6 +218,8 @@ function normalizeMoneyManagementPlanInput(input: unknown): MoneyManagementPlanI
       enabled: requiredBoolean(diversificationRules.enabled, "diversificationRules.enabled"),
       ...(diversificationRules.maxSectorRiskPercent != null ? { maxSectorRiskPercent: finiteNumber(diversificationRules.maxSectorRiskPercent, "diversificationRules.maxSectorRiskPercent") } : {}),
       ...(diversificationRules.concentrationWarningPercent != null ? { concentrationWarningPercent: finiteNumber(diversificationRules.concentrationWarningPercent, "diversificationRules.concentrationWarningPercent") } : {}),
+      ...(diversificationRules.maxTickerConcentrationPercent != null ? { maxTickerConcentrationPercent: finiteNumber(diversificationRules.maxTickerConcentrationPercent, "diversificationRules.maxTickerConcentrationPercent") } : {}),
+      ...(diversificationRules.maxConcurrentOpenPositions != null ? { maxConcurrentOpenPositions: finiteNumber(diversificationRules.maxConcurrentOpenPositions, "diversificationRules.maxConcurrentOpenPositions") } : {}),
     },
     riskCapitalPolicy: normalizedRiskCapitalPolicy,
     notes: body.notes == null ? null : String(body.notes),
