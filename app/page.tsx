@@ -75,6 +75,9 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
   },
 ]
 
+const MINI_ICON_CLASS =
+  "absolute left-1/2 top-1/2 z-0 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 scale-75 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none"
+
 function MenuCard({ item }: { item: HomeMenuItem }) {
   const Icon = item.icon
   const [MiniOne, MiniTwo, MiniThree] = item.miniIcons
@@ -84,36 +87,47 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
       href={item.href}
       prefetch={false}
       className={[
-        "group relative min-h-[250px] overflow-hidden rounded-3xl border border-white/[0.09] bg-panel/60 p-6 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)]",
-        "transition-[border-color,background-color,transform] duration-200 hover:-translate-y-1 hover:bg-panel/80 motion-reduce:transform-none motion-reduce:transition-none",
+        "group/card relative min-h-[250px] overflow-hidden rounded-3xl border border-white/[0.09] bg-panel/60 p-6 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)]",
+        "transition-[border-color,background-color,transform,opacity,filter] duration-300 ease-out group-hover/home:blur-[2px] group-hover/home:opacity-40 hover:!blur-none hover:!opacity-100 hover:-translate-y-1 hover:bg-panel/80 focus-visible:!blur-none focus-visible:!opacity-100 motion-reduce:transform-none motion-reduce:transition-none",
         item.borderClassName,
       ].join(" ")}
     >
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.glowClassName} opacity-70`} />
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.glowClassName} opacity-70 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none`} />
       <div className="relative flex h-full flex-col sm:flex-row sm:items-center sm:gap-7">
-        <div className="relative mb-6 flex h-28 w-28 shrink-0 items-center justify-center sm:mb-0">
-          <div className={`relative z-10 flex h-20 w-20 items-center justify-center rounded-3xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${item.iconClassName}`}>
-            <Icon className="h-9 w-9" strokeWidth={1.7} />
-          </div>
-
-          <div className="absolute left-0 top-0 flex h-9 w-9 -translate-x-1 translate-y-2 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+        <div className="relative mb-6 flex h-32 w-36 shrink-0 items-center justify-center sm:mb-0">
+          <div
+            className={`${MINI_ICON_CLASS} group-hover/card:-translate-x-[4rem] group-hover/card:-translate-y-[2.4rem] group-hover/card:scale-100 group-hover/card:opacity-100`}
+            aria-hidden="true"
+          >
             <MiniOne className="h-4 w-4" />
           </div>
-          <div className="absolute right-0 top-1 flex h-9 w-9 translate-x-1 translate-y-2 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+          <div
+            className={`${MINI_ICON_CLASS} group-hover/card:-translate-y-[4.5rem] group-hover/card:scale-100 group-hover/card:opacity-100`}
+            aria-hidden="true"
+          >
             <MiniTwo className="h-4 w-4" />
           </div>
-          <div className="absolute bottom-0 right-2 flex h-9 w-9 translate-x-1 translate-y-1 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
+          <div
+            className={`${MINI_ICON_CLASS} group-hover/card:translate-x-[3rem] group-hover/card:-translate-y-[2.4rem] group-hover/card:scale-100 group-hover/card:opacity-100`}
+            aria-hidden="true"
+          >
             <MiniThree className="h-4 w-4" />
+          </div>
+
+          <div
+            className={`relative z-10 flex h-20 w-20 items-center justify-center rounded-3xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-[1.12] group-hover/card:shadow-[0_18px_40px_-20px_rgba(255,255,255,0.32)] motion-reduce:transform-none motion-reduce:transition-none ${item.iconClassName}`}
+          >
+            <Icon className="h-9 w-9" strokeWidth={1.7} />
           </div>
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-black tracking-tight text-white sm:text-2xl">{item.title}</h2>
-            <span className="text-sm text-slate-600 transition-[color,transform] duration-200 group-hover:translate-x-1 group-hover:text-slate-300 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true">→</span>
+            <span className="text-sm text-slate-600 transition-[color,transform] duration-300 group-hover/card:translate-x-1 group-hover/card:text-slate-300 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true">→</span>
           </div>
           <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{item.description}</p>
-          <div className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors duration-200 group-hover:text-slate-300">
+          <div className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors duration-300 group-hover/card:text-slate-300">
             Mở workspace
           </div>
         </div>
@@ -138,7 +152,7 @@ export default async function HomePage() {
           </p>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2" aria-label="Các khu vực chính">
+        <section className="group/home grid gap-4 md:grid-cols-2" aria-label="Các khu vực chính">
           {HOME_MENU_ITEMS.map((item) => <MenuCard key={item.href} item={item} />)}
         </section>
       </main>
