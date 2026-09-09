@@ -97,7 +97,7 @@ export async function POST(
   const flowType = String(body.flow_type ?? "") as FlowType
   if (!FLOW_TYPES.includes(flowType)) return err("Loại dòng vốn ngoài không hợp lệ.", 400)
 
-  const amount = Number(body.signed_amount_vnd)
+  const amount = Number(body.amount_vnd)
   if (!Number.isFinite(amount)) return err("Số tiền dòng vốn không hợp lệ.", 400)
   if (amount === 0) return err("Số tiền dòng vốn phải khác 0.", 400)
   if (flowType === "deposit" && !(amount > 0)) {
