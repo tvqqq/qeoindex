@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add deterministic, user-plan-driven ticker/sector/open-position concentration checks to the current Portfolio Risk read model and QEO-139 pre-trade planner, with fail-closed `UNKNOWN` semantics and auditable override reasons.
+**Goal:** Add deterministic, user-plan-driven ticker/sector/open-position concentration checks to Portfolio Risk and the QEO-139 pre-trade planner, with fail-closed `UNKNOWN` semantics and auditable override reasons.
 
-**Architecture:** Keep concentration semantics in a focused pure domain under `modules/portfolio/concentration/`. Reuse QEO-141 Account Equity and per-open-trade Active Risk without recalculating risk, consume only structured canonical sector metadata, nest the current concentration read model into the existing Portfolio Risk response, and reuse QEO-137 planned-Trade/journal APIs for persisted override audit. QEO-139 sizing math remains unchanged; concentration projection is a post-sizing advisory layer.
+**Architecture:** Keep all concentration math/status rules in `modules/portfolio/concentration/`. QEO-141 remains authoritative for Account Equity and per-open-trade Active Risk; canonical market-universe sector metadata is the only classification input. Current concentration is nested into the existing Portfolio Risk response so Tài sản needs no second risk fetch. QEO-139 sizing is unchanged; a pure post-sizing projector consumes the current concentration exposure snapshot. Persisted overrides use existing QEO-137 planned-Trade + journal APIs.
 
 **Tech Stack:** TypeScript 5.7, Node `node:test`, Next.js 16 App Router, React 19, Supabase/Postgres existing JSONB risk-plan storage, GitHub Actions, pnpm 10.28.
 
@@ -13,72 +13,58 @@
 ## Global Constraints
 
 - No AI/LLM classification or recommendation.
-- No universal ticker/sector/open-position diversification threshold may be silently introduced.
-- `concentrationWarningPercent` remains advisory; it is not promoted into a hard breach threshold.
-- `maxSectorRiskPercent` means sector Active Risk / current Account Equity, not sector market-value weight.
-- Account Equity denominator must reuse QEO-141/QEO-158 current post-external-flow Account Equity.
-- Active Risk must reuse QEO-141 `activeRiskVnd`; QEO-159 must not independently recalculate stop risk.
-- Missing structured sector metadata is `UNKNOWN`; never call `sectorForTicker()` as classification evidence because its fallback guesses `Công nghiệp & Vật liệu`.
-- Partial evidence may prove a hard `BREACH` when the known lower bound already exceeds the threshold; partial evidence must never prove `WITHIN_PLAN` when missing evidence could increase the metric.
-- QEO-139 trade-size formula and lot rounding remain unchanged.
-- Concentration warnings/breaches are advisory and never block recording an already-executed/historical fill.
-- Override reasons are persisted through existing QEO-137 Trade journal `override_reason`; do not create a parallel audit table.
-- Expected DB migration: none. `diversification_rules` remains versioned JSONB.
+- No universal diversification threshold may be silently introduced.
+- `concentrationWarningPercent` is advisory; it is never promoted to a hard breach threshold.
+- `maxSectorRiskPercent` means sector Active Risk / current Account Equity.
+- Account Equity denominator is the QEO-141/QEO-158 current post-external-flow value.
+- Active Risk is reused from QEO-141 `activeRiskVnd`; QEO-159 never recalculates stop risk independently.
+- Missing structured sector metadata is `UNKNOWN`; do not call `sectorForTicker()` as classification evidence because its fallback guesses `Công nghiệp & Vật liệu`.
+- Partial evidence may prove `BREACH` when the known lower bound already exceeds a hard threshold; partial evidence must not prove `WITHIN_PLAN` when missing evidence can increase the metric.
+- QEO-139 sizing formula, lot rounding, risk amount and Trade Size remain unchanged.
+- Warnings/breaches are advisory and never block recording already-executed/historical fills.
+- Override reasons persist through QEO-137 journal `override_reason`; no parallel audit table.
+- Expected DB migration: none; `diversification_rules` remains versioned JSONB.
 
----
+## File Map
 
-## File map
-
-### New concentration domain
-
-- `modules/portfolio/concentration/types.ts` — public current/projected check types, inputs, read model, completeness/provenance.
-- `modules/portfolio/concentration/evaluate-current.ts` — pure current portfolio evaluator and status precedence.
-- `modules/portfolio/concentration/project-trade.ts` — pure one-trade projection after QEO-139 sizing.
-- `modules/portfolio/concentration/sector-metadata.ts` — server-only canonical sector adapter backed by `getCanonicalUniverse()` and explicit missing classification.
-- `components/portfolio/concentration/portfolio-concentration-panel.tsx` — current concentration summary rendered inside Tài sản/risk dashboard.
-- `components/portfolio/concentration/projected-concentration-panel.tsx` — projected checks next to QEO-139 calculator output.
-
-### Existing files to modify
-
-- `modules/portfolio/risk-plan/types.ts` — add optional plan fields.
-- `modules/portfolio/risk-plan/validation.ts` — validate optional hard limits.
-- `modules/portfolio/risk-plan/server.ts` — normalize new JSON fields without defaults.
-- `components/portfolio/risk-plan/money-management-plan-form.tsx` — user-editable optional limits.
-- `modules/portfolio/risk-engine/types.ts` — nest `PortfolioConcentrationReadModel` into canonical risk response.
-- `modules/portfolio/risk-engine/server.ts` — compose canonical positions/current prices/QEO-141 Active Risk/current plan/sector metadata into evaluator input.
-- `modules/portfolio/risk-sizing/types.ts` — expose current plan ID and canonical sector lookup metadata needed by planning/persistence; do not alter sizing result math.
-- `modules/portfolio/risk-sizing/server.ts` — return concentration + canonical sector metadata for planner.
-- `components/portfolio/risk-engine/portfolio-risk-dashboard-core.tsx` — render current concentration panel.
-- `components/portfolio/portfolio-capital-allocation.tsx` — pass concentration context into planner.
-- `components/portfolio/risk-sizing/trade-size-advisor.tsx` — render projected advisory status and persist a planned Trade/journal override on explicit confirmation.
-- `tests/test-contracts.json` — register QEO-159 tests.
-- `.github/workflows/qeo159-preprod.yml` — focused read-only QEO-159 gate.
-
-### Tests
-
+**Create**
+- `modules/portfolio/concentration/types.ts`
+- `modules/portfolio/concentration/evaluate-current.ts`
+- `modules/portfolio/concentration/project-trade.ts`
+- `modules/portfolio/concentration/sector-metadata.ts`
+- `components/portfolio/concentration/portfolio-concentration-panel.tsx`
+- `components/portfolio/concentration/projected-concentration-panel.tsx`
 - `tests/portfolio/qeo159-concentration-domain.test.ts`
 - `tests/portfolio/qeo159-concentration-server.test.ts`
 - `tests/portfolio/qeo159-concentration-projection.test.ts`
 - `tests/portfolio/qeo159-concentration-ui.test.ts`
-- modify `tests/portfolio/qeo138-risk-plan-domain.test.ts`
-- modify `tests/portfolio/qeo138-risk-plan-ui.test.ts`
-- modify relevant QEO-139/QEO-141 contract tests only where their public read-model contract changes.
+- `.github/workflows/qeo159-preprod.yml`
+
+**Modify**
+- `modules/portfolio/risk-plan/types.ts`
+- `modules/portfolio/risk-plan/validation.ts`
+- `modules/portfolio/risk-plan/server.ts`
+- `components/portfolio/risk-plan/money-management-plan-form.tsx`
+- `modules/portfolio/risk-engine/types.ts`
+- `modules/portfolio/risk-engine/server.ts`
+- `modules/portfolio/risk-sizing/types.ts`
+- `modules/portfolio/risk-sizing/server.ts`
+- `components/portfolio/risk-sizing/use-risk-sizing-context.ts`
+- `components/portfolio/risk-engine/portfolio-risk-dashboard-core.tsx`
+- `components/portfolio/portfolio-capital-allocation.tsx`
+- `components/portfolio/risk-sizing/trade-size-advisor.tsx`
+- `tests/portfolio/qeo138-risk-plan-domain.test.ts`
+- `tests/portfolio/qeo138-risk-plan-ui.test.ts`
+- relevant QEO-139/QEO-141 contract tests when public response shapes change
+- `tests/test-contracts.json`
 
 ---
 
-### Task 1: Extend Money Management Plan diversification JSON contract
+### Task 1: Extend the versioned diversification-plan JSON contract
 
-**Files:**
-- Modify: `modules/portfolio/risk-plan/types.ts`
-- Modify: `modules/portfolio/risk-plan/validation.ts`
-- Modify: `modules/portfolio/risk-plan/server.ts`
-- Modify: `components/portfolio/risk-plan/money-management-plan-form.tsx`
-- Modify: `tests/portfolio/qeo138-risk-plan-domain.test.ts`
-- Modify: `tests/portfolio/qeo138-risk-plan-ui.test.ts`
+**Files:** risk-plan types/validation/server/form + QEO-138 domain/UI tests.
 
-**Interfaces:**
-- Consumes: existing versioned `portfolio_money_management_plans.diversification_rules` JSONB.
-- Produces:
+**Produces**
 
 ```ts
 export type DiversificationRules = {
@@ -90,38 +76,16 @@ export type DiversificationRules = {
 }
 ```
 
-- [ ] **Step 1: Write RED domain tests for new optional fields**
-
-Add cases proving:
-
-```ts
-validateMoneyManagementPlan({
-  ...basePlan,
-  diversificationRules: {
-    enabled: true,
-    concentrationWarningPercent: 20,
-    maxTickerConcentrationPercent: 30,
-    maxSectorRiskPercent: 6,
-    maxConcurrentOpenPositions: 8,
-  },
-})
-```
-
-passes, while `0`, `>100`, non-finite percentages and non-positive/non-integer concurrent-position counts throw `INVALID_PLAN`. Also prove old `{ enabled: false }` and old plans with only the two legacy optional fields remain valid.
-
-- [ ] **Step 2: Run the focused domain test and verify RED**
-
-Run:
+- [ ] **Write RED domain tests.** Prove `maxTickerConcentrationPercent` accepts finite `(0,100]`; `maxConcurrentOpenPositions` accepts positive integers only; legacy `{enabled:false}` and old two-field JSON remain valid.
+- [ ] **Run RED:**
 
 ```bash
 node --test tests/portfolio/qeo138-risk-plan-domain.test.ts
 ```
 
-Expected: FAIL because the new fields are absent/unvalidated.
+Expected: new-field cases fail.
 
-- [ ] **Step 3: Implement the type and validation contract**
-
-In `types.ts`, add the two new optional fields. In `validation.ts`, validate:
+- [ ] **Implement type + validation:**
 
 ```ts
 if (input.diversificationRules.maxTickerConcentrationPercent != null) {
@@ -132,11 +96,7 @@ if (input.diversificationRules.maxConcurrentOpenPositions != null) {
 }
 ```
 
-Do not add defaults and do not require fields when `enabled` is false.
-
-- [ ] **Step 4: Extend request normalization without hidden defaults**
-
-In `normalizeMoneyManagementPlanInput`, copy only present values:
+- [ ] **Normalize request fields only when present:**
 
 ```ts
 ...(diversificationRules.maxTickerConcentrationPercent != null
@@ -147,28 +107,16 @@ In `normalizeMoneyManagementPlanInput`, copy only present values:
   : {}),
 ```
 
-The existing JSONB RPC payload remains unchanged structurally; no migration/generated DB type update is allowed in this task.
+Do not persist defaults.
 
-- [ ] **Step 5: Add RED→GREEN UI contract coverage**
-
-Add two explicit optional fields under `Diversification & Risk Capital`:
-
-- `Max Ticker Concentration` — `%`, hard limit, optional.
-- `Max Concurrent Open Positions` — integer, hard limit, optional.
-
-Submit only when diversification is enabled and input is non-empty. Keep `Concentration Warning` advisory wording and `Max Sector Risk` wording. Update `qeo138-risk-plan-ui.test.ts` to assert labels/help and JSON key serialization.
-
-- [ ] **Step 6: Run QEO-138 focused tests**
-
-Run:
+- [ ] **Add UI fields:** `Max Ticker Concentration` (%) and `Max Concurrent Open Positions` (integer), both optional and serialized only when diversification is enabled and the input is non-empty. Preserve advisory wording for `Concentration Warning`.
+- [ ] **Run GREEN:**
 
 ```bash
 node --test tests/portfolio/qeo138-risk-plan-domain.test.ts tests/portfolio/qeo138-risk-plan-ui.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
+- [ ] **Commit:**
 
 ```bash
 git add modules/portfolio/risk-plan/types.ts modules/portfolio/risk-plan/validation.ts modules/portfolio/risk-plan/server.ts components/portfolio/risk-plan/money-management-plan-form.tsx tests/portfolio/qeo138-risk-plan-domain.test.ts tests/portfolio/qeo138-risk-plan-ui.test.ts
@@ -177,21 +125,16 @@ git commit -m "feat(QEO-159): extend diversification plan limits"
 
 ---
 
-### Task 2: Build the pure current concentration evaluator
+### Task 2: Implement pure current concentration evaluation
 
-**Files:**
-- Create: `modules/portfolio/concentration/types.ts`
-- Create: `modules/portfolio/concentration/evaluate-current.ts`
-- Create: `tests/portfolio/qeo159-concentration-domain.test.ts`
+**Files:** create concentration types/evaluator/domain test.
 
-**Interfaces:**
-- Consumes a pure input independent of Supabase/React:
+**Consumes**
 
 ```ts
 export type ConcentrationPositionInput = {
   ticker: string
-  openQty: number
-  currentPriceKvnd: number | null
+  marketValueVnd: number | null
 }
 
 export type ConcentrationRiskInput = {
@@ -218,93 +161,67 @@ export type CurrentConcentrationInput = {
 }
 ```
 
-- Produces `PortfolioConcentrationReadModel` with `WITHIN_PLAN | WARNING | BREACH | UNKNOWN` checks.
-
-- [ ] **Step 1: Write RED tests for deterministic metrics and status semantics**
-
-Cover these exact behaviors:
-
-```ts
-// 40m market value / 100m equity = 40%
-assert.equal(topTicker.metricValue, 40)
-
-// known sector risk 7m / 100m equity = 7% > max 6%
-assert.equal(sectorCheck.status, "BREACH")
-
-// unknown sector classification never becomes Công nghiệp & Vật liệu
-assert.deepEqual(model.unknownClassificationTickers, ["ZZZ"])
-assert.equal(unknownSectorCheck.status, "UNKNOWN")
-
-// no configured relevant threshold does not invent safety/breach
-assert.equal(noRuleCheck.status, "UNKNOWN")
-assert.equal(noRuleCheck.reason, "rule_not_configured")
-```
-
-Also cover warning-only ticker rule, hard ticker breach, multiple risk rows aggregated by ticker, distinct ticker position count, and non-positive Account Equity.
-
-- [ ] **Step 2: Run test and verify RED**
-
-```bash
-node --test tests/portfolio/qeo159-concentration-domain.test.ts
-```
-
-Expected: FAIL because the module does not exist.
-
-- [ ] **Step 3: Define normalized check/read-model types**
-
-In `types.ts`, define:
+**Produces**
 
 ```ts
 export type ConcentrationStatus = "WITHIN_PLAN" | "WARNING" | "BREACH" | "UNKNOWN"
-export type ConcentrationCompleteness = "complete" | "partial" | "insufficient"
 
 export type ConcentrationCheck = {
   id: string
   kind: "ticker_market_value" | "ticker_active_risk" | "sector_active_risk" | "open_position_count"
   status: ConcentrationStatus
-  metricValue: number | null
-  metricUnit: "percent" | "count" | "vnd"
+  metricValue: number | null       // percentage for exposure checks, count for position count
+  amountVnd: number | null         // raw market value / known Active Risk used for projection and audit
   warningThreshold: number | null
   breachThreshold: number | null
   ticker: string | null
   sector: string | null
   basis: string
-  completeness: ConcentrationCompleteness
+  completeness: "complete" | "partial" | "insufficient"
   provenance: string[]
   reason: string
 }
+
+export type ConcentrationExposureSnapshot = {
+  openTickers: string[]
+  tickerMarketValueVnd: Record<string, number | null>
+  tickerKnownActiveRiskVnd: Record<string, number>
+  tickerRiskComplete: Record<string, boolean>
+  sectorKnownActiveRiskVnd: Record<string, number>
+  sectorRiskComplete: Record<string, boolean>
+}
 ```
 
-Also define `PortfolioConcentrationReadModel` exactly enough to expose summary, ticker market value, ticker Active Risk, sector Active Risk, open-position check, unknown classification tickers, plan version and sector source date.
+`PortfolioConcentrationReadModel` contains summary/status arrays plus this `exposure` snapshot so projection never recomputes current portfolio aggregation in React.
 
-- [ ] **Step 4: Implement calculation helpers and fail-closed evaluation**
-
-Required formulas:
-
-```ts
-marketValueVnd = openQty * currentPriceKvnd * 1_000
-marketValuePercent = marketValueVnd / accountEquityVnd * 100
-activeRiskPercent = knownActiveRiskVnd / accountEquityVnd * 100
-```
-
-Rules:
-
-- hard known lower-bound `>` threshold => `BREACH` even if partial;
-- hard rule below threshold + partial evidence => `UNKNOWN`;
-- warning-only known complete metric >= warning => `WARNING`;
-- no relevant configured threshold => `UNKNOWN/rule_not_configured`;
-- disabled/no plan => metrics may exist but no invented plan compliance;
-- overall precedence `BREACH > WARNING > UNKNOWN > WITHIN_PLAN`.
-
-- [ ] **Step 5: Run domain tests and verify GREEN**
+- [ ] **Write RED tests** for: 40m/100m = 40%; ticker hard breach; warning-only state; sector 7m/100m > 6% breach; missing sector => `UNKNOWN`; no configured rule => `UNKNOWN/rule_not_configured`; multiple Trade rows aggregate one ticker; distinct ticker position count; non-positive equity => percentage `UNKNOWN`; partial known lower-bound breach remains `BREACH`; partial below threshold => `UNKNOWN`.
+- [ ] **Run RED:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-domain.test.ts
 ```
 
-Expected: PASS.
+- [ ] **Implement evaluator** with formulas:
 
-- [ ] **Step 6: Commit**
+```ts
+percent = amountVnd / accountEquityVnd * 100
+```
+
+and overall precedence:
+
+```text
+BREACH > WARNING > UNKNOWN > WITHIN_PLAN
+```
+
+No rule means no invented plan compliance.
+
+- [ ] **Run GREEN:**
+
+```bash
+node --test tests/portfolio/qeo159-concentration-domain.test.ts
+```
+
+- [ ] **Commit:**
 
 ```bash
 git add modules/portfolio/concentration/types.ts modules/portfolio/concentration/evaluate-current.ts tests/portfolio/qeo159-concentration-domain.test.ts
@@ -313,17 +230,11 @@ git commit -m "feat(QEO-159): add deterministic concentration evaluator"
 
 ---
 
-### Task 3: Add structured sector metadata adapter and compose current risk read model
+### Task 3: Add structured sector evidence and compose it into QEO-141 risk context
 
-**Files:**
-- Create: `modules/portfolio/concentration/sector-metadata.ts`
-- Modify: `modules/portfolio/risk-engine/types.ts`
-- Modify: `modules/portfolio/risk-engine/server.ts`
-- Create: `tests/portfolio/qeo159-concentration-server.test.ts`
-- Modify relevant QEO-141 server contract test if it asserts the complete risk read-model shape.
+**Files:** create sector adapter; modify risk-engine types/server; create QEO-159 server test; update QEO-141 shape tests if needed.
 
-**Interfaces:**
-- Produces:
+**Produces**
 
 ```ts
 export type SectorMetadataSnapshot = {
@@ -337,33 +248,23 @@ export async function loadStructuredSectorMetadata(
 ): Promise<SectorMetadataSnapshot>
 ```
 
-- `PortfolioRiskReadModel` gains:
+and:
 
 ```ts
-concentration: PortfolioConcentrationReadModel
+export type PortfolioRiskReadModel = {
+  // existing fields unchanged
+  concentration: PortfolioConcentrationReadModel
+}
 ```
 
-- [ ] **Step 1: Write RED server/source-contract tests**
-
-Tests must prove:
-
-1. `sector-metadata.ts` imports `getCanonicalUniverse`.
-2. It does not import/call `sectorForTicker`.
-3. Missing requested ticker or `stock.sector == null/""` maps to `null`.
-4. `getPortfolioRiskContext` passes its already-computed `summary.positions`, `currentPricesKvnd`, `active.rows`, `account.equityVnd`, latest plan diversification JSON and structured sector map into `evaluateCurrentConcentration`.
-5. QEO-141 `activeRiskVnd` values are consumed unchanged.
-
-- [ ] **Step 2: Run test and verify RED**
+- [ ] **Write RED server tests** proving `sector-metadata.ts` uses `getCanonicalUniverse()`, never imports `sectorForTicker`, maps missing/blank sector to `null`, and `getPortfolioRiskContext` feeds its already-computed Account Equity/current position values/QEO-141 `active.rows` into `evaluateCurrentConcentration`.
+- [ ] **Run RED:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-server.test.ts
 ```
 
-Expected: FAIL.
-
-- [ ] **Step 3: Implement canonical sector adapter**
-
-Implementation shape:
+- [ ] **Implement sector adapter:**
 
 ```ts
 import "server-only"
@@ -377,56 +278,28 @@ export async function loadStructuredSectorMetadata(tickers?: readonly string[]) 
     if (wanted && !wanted.has(stock.ticker)) continue
     byTicker[stock.ticker] = stock.sector?.trim() || null
   }
-  if (wanted) {
-    for (const ticker of wanted) byTicker[ticker] ??= null
-  }
+  if (wanted) for (const ticker of wanted) byTicker[ticker] ??= null
   return { source: "canonical_market_universe" as const, sourceAsOfDate: snapshot.sourceAsOfDate || null, byTicker }
 }
 ```
 
-Do not add a fallback sector.
-
-- [ ] **Step 4: Compose concentration after canonical risk/account calculations**
-
-In `getPortfolioRiskContext`, after `summary`, `currentPricesKvnd`, `account`, `active` and current plan are available:
+- [ ] **Compose current market values server-side** from canonical positions/current prices already loaded by risk-engine:
 
 ```ts
-const sectorMetadata = await loadStructuredSectorMetadata(openTickers)
-const concentration = evaluateCurrentConcentration({
-  accountEquityVnd: fundingHistoryStatus === "known" ? account.equityVnd : null,
-  positions: summary.positions.map((position) => ({
-    ticker: position.ticker,
-    openQty: position.openQty,
-    currentPriceKvnd: currentPricesKvnd[position.ticker] ?? null,
-  })),
-  activeRiskRows: active.rows.map((row) => ({
-    tradeId: row.tradeId,
-    ticker: row.ticker,
-    activeRiskVnd: row.activeRiskVnd,
-    riskStatus: row.riskStatus,
-  })),
-  sectors: openTickers.map((ticker) => ({
-    ticker,
-    sector: sectorMetadata.byTicker[ticker] ?? null,
-    source: sectorMetadata.source,
-    sourceAsOfDate: sectorMetadata.sourceAsOfDate,
-  })),
-  rules: normalizeDiversificationRules(plan?.diversification_rules),
-  planVersion: plan?.version ?? null,
-})
+marketValueVnd: currentPricesKvnd[position.ticker] == null
+  ? null
+  : position.openQty * currentPricesKvnd[position.ticker]! * 1_000
 ```
 
-Create a small fail-closed JSON normalizer for the plan fields; invalid persisted values must be treated as absent/unknown, not coerced into a threshold.
+Pass `account.equityVnd` only when current funding/equity denominator is reliable; otherwise percentage checks stay `UNKNOWN`. Parse persisted diversification JSON fail-closed: invalid persisted fields become absent, never thresholds.
 
-- [ ] **Step 5: Run QEO-159 + QEO-141 focused tests**
+- [ ] **Run regressions:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo141-*.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
+- [ ] **Commit:**
 
 ```bash
 git add modules/portfolio/concentration/sector-metadata.ts modules/portfolio/risk-engine/types.ts modules/portfolio/risk-engine/server.ts tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo141-*.test.ts
@@ -435,73 +308,36 @@ git commit -m "feat(QEO-159): compose concentration into portfolio risk"
 
 ---
 
-### Task 4: Surface current concentration in Tài sản without a second browser risk fetch
+### Task 4: Render current concentration in Tài sản with no extra risk fetch
 
-**Files:**
-- Create: `components/portfolio/concentration/portfolio-concentration-panel.tsx`
-- Modify: `components/portfolio/risk-engine/portfolio-risk-dashboard-core.tsx`
-- Create/extend: `tests/portfolio/qeo159-concentration-ui.test.ts`
+**Files:** create current panel; modify `portfolio-risk-dashboard-core.tsx`; extend UI test.
 
-**Interfaces:**
-- Consumes `risk.concentration` from the existing `usePortfolioRiskContext()` response.
-- Produces no independent current-concentration fetch/hook.
-
-- [ ] **Step 1: Write RED UI source contract**
-
-Assert the panel renders and labels:
-
-- `Tập trung danh mục`
-- top ticker by market-value concentration
-- top ticker by Active Risk
-- top sector by Active Risk
-- open-position count versus configured max when configured
-- `Chưa đủ dữ liệu phân ngành` when unknown classifications exist
-- status labels for `BREACH`, `WARNING`, `UNKNOWN`, `WITHIN_PLAN`
-
-Also assert `portfolio-risk-dashboard-core.tsx` passes `risk.concentration` into the new panel and does not introduce `/api/portfolio/.../concentration` fetch code.
-
-- [ ] **Step 2: Run test and verify RED**
+- [ ] **Write RED UI contract** asserting labels `Tập trung danh mục`, top ticker market-value concentration, top ticker Active Risk, top sector Active Risk, open-position rule and `Chưa đủ dữ liệu phân ngành`; assert status copy for all four states.
+- [ ] **Assert architecture:** dashboard consumes `risk.concentration`; new component must not fetch `/api/portfolio/.../concentration` or recalculate percentages.
+- [ ] **Run RED:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-ui.test.ts
 ```
 
-Expected: FAIL.
-
-- [ ] **Step 3: Implement compact panel**
-
-The panel should sort/render already-calculated checks only; it must not recalculate percentages in React. Use existing card/border/typography language and explicit amber/slate treatment for incomplete evidence. A green `WITHIN_PLAN` badge is permitted only when that check is complete.
-
-- [ ] **Step 4: Integrate into current dashboard**
-
-Place the panel after Account/Risk summary and before per-trade cards, so Tài sản shows current risk and concentration in one canonical response.
-
-- [ ] **Step 5: Run UI + typecheck**
+- [ ] **Implement panel** by sorting/rendering already-calculated checks. A green `WITHIN_PLAN` treatment is allowed only for complete evidence.
+- [ ] **Integrate after Account/Risk summary and before per-Trade cards.**
+- [ ] **Run GREEN + types:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-ui.test.ts
 pnpm typecheck
 ```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add components/portfolio/concentration/portfolio-concentration-panel.tsx components/portfolio/risk-engine/portfolio-risk-dashboard-core.tsx tests/portfolio/qeo159-concentration-ui.test.ts
-git commit -m "feat(QEO-159): show portfolio concentration guardrails"
-```
+- [ ] **Commit.**
 
 ---
 
-### Task 5: Add pure planned-trade concentration projection
+### Task 5: Implement pure one-trade concentration projection
 
-**Files:**
-- Create: `modules/portfolio/concentration/project-trade.ts`
-- Create: `tests/portfolio/qeo159-concentration-projection.test.ts`
+**Files:** create projector + projection test.
 
-**Interfaces:**
-- Consumes:
+**Consumes**
 
 ```ts
 export type PlannedConcentrationTradeInput = {
@@ -515,89 +351,46 @@ export type PlannedConcentrationTradeInput = {
 export type ProjectTradeConcentrationInput = {
   current: PortfolioConcentrationReadModel
   accountEquityVnd: number | null
-  currentTickerMarketValueVnd: number
-  currentTickerKnownActiveRiskVnd: number
-  currentSectorKnownActiveRiskVnd: number
-  currentOpenPositionCount: number
-  tickerAlreadyOpen: boolean
   rules: DiversificationRules | null
   trade: PlannedConcentrationTradeInput
 }
-
-export function projectTradeConcentration(
-  input: ProjectTradeConcentrationInput,
-): ProjectedTradeConcentrationResult
 ```
 
-- [ ] **Step 1: Write RED projection tests**
-
-Cover:
+**Derives only from `current.exposure`:**
 
 ```ts
-// new ticker pushes market-value concentration over configured max
-assert.equal(result.tickerMarketValue.status, "BREACH")
-
-// scale-in does not increment open-position count
-assert.equal(result.openPositions.metricValue, currentCount)
-
-// new ticker increments count by one
-assert.equal(result.openPositions.metricValue, currentCount + 1)
-
-// unknown planned sector
-assert.equal(result.sectorActiveRisk.status, "UNKNOWN")
+plannedMarketValueVnd = plannedQty * plannedEntryKvnd * 1_000
+projectedTickerMarketValueVnd = (current.exposure.tickerMarketValueVnd[ticker] ?? 0) + plannedMarketValueVnd
+projectedTickerKnownActiveRiskVnd = (current.exposure.tickerKnownActiveRiskVnd[ticker] ?? 0) + plannedRiskVnd
+projectedSectorKnownActiveRiskVnd = sector == null
+  ? null
+  : (current.exposure.sectorKnownActiveRiskVnd[sector] ?? 0) + plannedRiskVnd
+projectedOpenPositionCount = current.summary.openPositionCount + (current.exposure.openTickers.includes(ticker) ? 0 : plannedQty > 0 ? 1 : 0)
 ```
 
-Also prove projected sector Active Risk adds `plannedRiskVnd`, projected ticker Active Risk adds `plannedRiskVnd`, denominator remains current Account Equity, and QEO-139 sizing/quantity is never modified.
-
-- [ ] **Step 2: Run test and verify RED**
+- [ ] **Write RED tests:** projected ticker breach, sector breach, unknown planned sector, scale-in count unchanged, new ticker count +1, denominator remains current Account Equity, and returned result never mutates planned Qty/Risk/Trade Size.
+- [ ] **Run RED:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-projection.test.ts
 ```
 
-Expected: FAIL.
-
-- [ ] **Step 3: Implement the pure projector**
-
-Required arithmetic:
-
-```ts
-const plannedMarketValueVnd = plannedQty * plannedEntryKvnd * 1_000
-const projectedTickerMarketValueVnd = currentTickerMarketValueVnd + plannedMarketValueVnd
-const projectedTickerKnownActiveRiskVnd = currentTickerKnownActiveRiskVnd + plannedRiskVnd
-const projectedSectorKnownActiveRiskVnd = currentSectorKnownActiveRiskVnd + plannedRiskVnd
-const projectedOpenPositionCount = currentOpenPositionCount + (tickerAlreadyOpen ? 0 : plannedQty > 0 ? 1 : 0)
-```
-
-Reuse the same threshold/status helpers as current evaluation so current and projected semantics cannot drift.
-
-- [ ] **Step 4: Run current + projection domain tests**
+- [ ] **Implement projector** reusing the same status helper used by current evaluation. Missing current risk/sector completeness must propagate `UNKNOWN` unless a known lower-bound hard breach is already proven.
+- [ ] **Run GREEN:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-projection.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add modules/portfolio/concentration/project-trade.ts tests/portfolio/qeo159-concentration-projection.test.ts
-git commit -m "feat(QEO-159): project planned trade concentration"
-```
+- [ ] **Commit.**
 
 ---
 
-### Task 6: Extend QEO-139 planning context with canonical sector metadata and concentration data
+### Task 6: Expose current concentration + canonical sector lookup to QEO-139 planner
 
-**Files:**
-- Modify: `modules/portfolio/risk-sizing/types.ts`
-- Modify: `modules/portfolio/risk-sizing/server.ts`
-- Modify: `components/portfolio/risk-sizing/use-risk-sizing-context.ts`
-- Modify: relevant QEO-139 server/API tests.
+**Files:** risk-sizing types/server/hook + QEO-139 context tests.
 
-**Interfaces:**
-- `RiskSizingServerContext` gains:
+**RiskSizingServerContext gains**
 
 ```ts
 moneyManagementPlanId: string | null
@@ -609,76 +402,80 @@ sectorMetadata: {
 }
 ```
 
-The sector map may contain the current canonical universe (<= current product max 200 names) so free-text planner tickers can be resolved without a per-keystroke server request. A ticker absent from the map is `null/UNKNOWN`.
+The sector map may contain the current canonical universe (product max <= 200 rows), allowing free-text planner ticker lookup without per-keystroke server calls. Absent ticker => `null/UNKNOWN`.
 
-- [ ] **Step 1: Write RED QEO-139 context tests**
-
-Assert:
-
-- `concentration` is the exact nested object returned by QEO-141 risk context;
-- `moneyManagementPlanId` comes from the current latest plan or null;
-- `sectorMetadata` comes from `loadStructuredSectorMetadata()` and never `sectorForTicker()`;
-- existing `defaultTradeRiskPercent`, `knownActiveRiskVnd`, `maxActiveRiskPercent`, win/payoff and risk-state fields remain unchanged.
-
-- [ ] **Step 2: Run focused QEO-139 tests and verify RED**
+- [ ] **Write RED QEO-139 tests:** concentration object is passed through exactly from risk context; current latest plan ID is returned; sector map comes from `loadStructuredSectorMetadata()`; existing risk amount/default/Optimal-f evidence fields are unchanged.
+- [ ] **Run RED:**
 
 ```bash
 node --test tests/portfolio/qeo139-*.test.ts
 ```
 
-Expected: FAIL on missing new context fields only; calculator math tests remain GREEN.
+Calculator tests should remain green; context tests fail for missing fields.
 
-- [ ] **Step 3: Implement server/client context pass-through**
-
-`getRiskSizingContext` should reuse `risk.concentration`; call `loadStructuredSectorMetadata()` once for the canonical universe map and return it. Do not call concentration formulas again here.
-
-- [ ] **Step 4: Run QEO-139 + QEO-141 + QEO-159 server tests**
+- [ ] **Implement server/hook pass-through.** Do not recompute concentration here.
+- [ ] **Run:**
 
 ```bash
 node --test tests/portfolio/qeo139-*.test.ts tests/portfolio/qeo141-*.test.ts tests/portfolio/qeo159-concentration-server.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add modules/portfolio/risk-sizing/types.ts modules/portfolio/risk-sizing/server.ts components/portfolio/risk-sizing/use-risk-sizing-context.ts tests/portfolio/qeo139-*.test.ts
-git commit -m "feat(QEO-159): expose concentration planning context"
-```
+- [ ] **Commit.**
 
 ---
 
-### Task 7: Show projected conflict and persist auditable override on planned Trade confirmation
+### Task 7: Show projected conflicts and persist advisory override through QEO-137 journal
 
-**Files:**
-- Create: `components/portfolio/concentration/projected-concentration-panel.tsx`
-- Modify: `components/portfolio/portfolio-capital-allocation.tsx`
-- Modify: `components/portfolio/risk-sizing/trade-size-advisor.tsx`
-- Modify: `tests/portfolio/qeo159-concentration-ui.test.ts`
-- Add/modify a QEO-159 API/source contract test covering existing Trade + journal calls.
+**Files:** projected panel + capital allocation + trade-size advisor + QEO-159 UI/API contracts.
 
-**Interfaces:**
-- Consumes QEO-139 `TradeSizeResult` only after it is `ready`.
-- Persists through existing endpoints:
+**Existing persistence endpoints only**
 
 ```text
 POST /api/portfolio/{portfolioId}/trades
 POST /api/portfolio/{portfolioId}/trades/{tradeId}/journal
 ```
 
-- Planned Trade create payload uses existing frozen QEO-137 fields and does not invent new persistence:
+- [ ] **Write RED UI tests** proving a ready calculator draft renders projected ticker market value, ticker Active Risk, sector Active Risk/unknown state and open-position status, plus explicit copy that diversification does not change sizing math.
+- [ ] **Write RED audit tests** proving `WARNING/BREACH` does not disable calculation; persisted confirmation requires explicit `live|paper` mode; conflict confirmation requires non-empty override reason; normal confirmation needs no override reason; transaction/fill UI/routes remain untouched.
+- [ ] **Run RED:**
+
+```bash
+node --test tests/portfolio/qeo159-concentration-ui.test.ts
+```
+
+- [ ] **Compute draft projection** with:
+
+```ts
+const plannedSector = riskContext?.sectorMetadata.byTicker[normalizedTicker] ?? null
+const projected = projectTradeConcentration({
+  current: riskContext.concentration,
+  accountEquityVnd: accountEquityContext.valueVnd,
+  rules: riskContext.concentration.rules,
+  trade: {
+    ticker: normalizedTicker,
+    plannedQty: result.tradeSizeShares,
+    plannedEntryKvnd: plannedEntryKvnd!,
+    plannedRiskVnd: result.totalRiskConsumptionVnd!,
+    sector: plannedSector,
+  },
+})
+```
+
+If the final read-model shape stores rules under a differently named typed field, use that exact field consistently in Task 2/5/7; do not reparse JSON in React.
+
+- [ ] **Preserve existing local simulation action.** Add a separate explicit `Lưu Trade dự kiến` persistence action; do not silently persist every local simulation.
+- [ ] **Build existing QEO-137 `TradeCreateInput`:**
 
 ```ts
 {
-  ticker,
-  mode,
+  ticker: normalizedTicker,
+  mode: selectedMode,
   status: "planned",
   trade_type: null,
   timeframe: null,
   system_tags: [],
   setup_tags: [],
-  money_management_plan_id: riskContext.moneyManagementPlanId,
+  money_management_plan_id: riskContext?.moneyManagementPlanId ?? null,
   planned_entry: plannedEntryKvnd,
   initial_stop_loss_exit: initialStopKvnd,
   initial_account_equity: accountEquityContext.valueVnd,
@@ -694,26 +491,7 @@ POST /api/portfolio/{portfolioId}/trades/{tradeId}/journal
 }
 ```
 
-- [ ] **Step 1: Write RED projection UI tests**
-
-Assert the calculator displays, for a ready draft:
-
-- projected ticker concentration;
-- projected ticker Active Risk;
-- projected sector Active Risk or `Chưa đủ dữ liệu phân ngành`;
-- projected open-position rule;
-- explicit text that the sizing formula/Trade Size is unchanged by the advisory result.
-
-Use `projectTradeConcentration()` in the component; do not reproduce formulas in JSX.
-
-- [ ] **Step 2: Write RED override-audit contract tests**
-
-Contract must prove:
-
-1. `BREACH` or `WARNING` does **not** disable the ordinary calculation result.
-2. Explicit `Lưu Trade dự kiến` confirmation requires the user to choose `live|paper` because QEO-137 Trade persistence requires mode; do not silently default a mode.
-3. If projected overall state is `WARNING` or `BREACH`, confirmation requires a non-empty override reason.
-4. After `POST /trades` returns `trade.id`, the client posts a journal entry:
+- [ ] **When any projected check is `WARNING` or `BREACH`, after Trade creation POST this existing journal input:**
 
 ```ts
 {
@@ -727,157 +505,67 @@ Contract must prove:
 }
 ```
 
-5. If no warning/breach exists, no override journal is required.
-6. No transaction/fill route or `add-transaction-dialog.tsx` validation is changed by QEO-159.
+If Trade creation succeeds but journal persistence fails, show an explicit audit failure and do not claim the override was recorded; do not auto-delete the Trade.
 
-- [ ] **Step 3: Run UI tests and verify RED**
-
-```bash
-node --test tests/portfolio/qeo159-concentration-ui.test.ts
-```
-
-Expected: FAIL.
-
-- [ ] **Step 4: Implement projected panel using canonical planner context**
-
-Determine planned sector only by:
-
-```ts
-const plannedSector = riskContext?.sectorMetadata.byTicker[normalizedTicker] ?? null
-```
-
-Determine `tickerAlreadyOpen` from current canonical concentration/position rows, not from whether another local planned row exists.
-
-Render status with advisory copy. Never modify `result.tradeSizeShares`, `result.riskAmountVnd` or calculator inputs from concentration output.
-
-- [ ] **Step 5: Implement explicit persisted planned-Trade confirmation**
-
-Keep the existing local `Thêm giao dịch dự kiến` simulation behavior. Add a separate explicit persist action such as `Lưu Trade dự kiến` so QEO-159 does not silently turn every local simulation into database state.
-
-Confirmation requirements:
-
-- `TradeSizeResult.status === "ready"`;
-- normalized ticker present;
-- explicit `live|paper` mode selected;
-- if projected state has any `WARNING`/`BREACH`, override reason is non-empty.
-
-Call existing Trade endpoint. On success, if override is required, immediately call existing journal endpoint with the returned trade ID. If the journal write fails after Trade creation, surface an explicit audit failure and do not claim the override was recorded; do not delete the created Trade automatically.
-
-- [ ] **Step 6: Preserve executed/historical fill behavior**
-
-Do not modify `components/portfolio/add-transaction-dialog.tsx`, transaction POST validation, or fill APIs. Add a source-contract assertion that those files/routes are not imported by the concentration confirmation gate.
-
-- [ ] **Step 7: Run UI + Trade-domain regressions**
+- [ ] **Do not modify** `components/portfolio/add-transaction-dialog.tsx` or transaction/fill validation. Historical/executed fills remain recordable regardless of concentration state.
+- [ ] **Run:**
 
 ```bash
 node --test tests/portfolio/qeo159-concentration-ui.test.ts tests/portfolio/qeo137-*.test.ts tests/portfolio/qeo139-*.test.ts
 pnpm typecheck
 ```
 
-Expected: PASS.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add components/portfolio/concentration/projected-concentration-panel.tsx components/portfolio/portfolio-capital-allocation.tsx components/portfolio/risk-sizing/trade-size-advisor.tsx tests/portfolio/qeo159-concentration-ui.test.ts tests/portfolio/qeo137-*.test.ts tests/portfolio/qeo139-*.test.ts
-git commit -m "feat(QEO-159): add projected guardrails and override audit"
-```
+- [ ] **Commit.**
 
 ---
 
-### Task 8: Register tests and add a focused read-only QEO-159 workflow
+### Task 8: Register QEO-159 tests and add a read-only focused workflow
 
-**Files:**
-- Modify: `tests/test-contracts.json`
-- Create: `.github/workflows/qeo159-preprod.yml`
+**Files:** `tests/test-contracts.json`, create `.github/workflows/qeo159-preprod.yml`.
 
-**Interfaces:**
-- Produces focused CI with no write permissions and no self-mutating generated files.
-
-- [ ] **Step 1: Register all new tests in the canonical manifest**
-
-Add QEO-159 test files to the appropriate current/UI suites so `pnpm test:manifest` recognizes them.
-
-- [ ] **Step 2: Create workflow path filters**
-
-Trigger on PR/push changes to:
-
-```yaml
-- "modules/portfolio/concentration/**"
-- "modules/portfolio/risk-plan/**"
-- "modules/portfolio/risk-engine/**"
-- "modules/portfolio/risk-sizing/**"
-- "modules/portfolio/trades/**"
-- "components/portfolio/**"
-- "app/api/portfolio/**"
-- "tests/portfolio/qeo159-*.test.ts"
-- "tests/portfolio/qeo138-*.test.ts"
-- "tests/portfolio/qeo139-*.test.ts"
-- "tests/portfolio/qeo141-*.test.ts"
-- "tests/test-contracts.json"
-- ".github/workflows/qeo159-preprod.yml"
-```
-
-Set:
+- [ ] **Register all four QEO-159 tests** in canonical current/UI suites.
+- [ ] **Create path filters** covering `modules/portfolio/concentration/**`, risk-plan/risk-engine/risk-sizing/trades, `components/portfolio/**`, portfolio APIs, QEO-138/139/141/159 tests, manifest and the workflow itself.
+- [ ] **Use read-only permission:**
 
 ```yaml
 permissions:
   contents: read
 ```
 
-Do not grant `contents: write` and do not commit/push generated artifacts.
-
-- [ ] **Step 3: Add focused jobs**
-
-At minimum:
+- [ ] **Focused jobs:**
 
 ```yaml
-- domain: node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-projection.test.ts
-- integration: node --test tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo138-*.test.ts tests/portfolio/qeo139-*.test.ts tests/portfolio/qeo141-*.test.ts
-- ui-contract: node --test tests/portfolio/qeo159-concentration-ui.test.ts
-- verify-contract: pnpm test:manifest && pnpm typecheck
+# domain
+node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-projection.test.ts
+# integration
+node --test tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo138-*.test.ts tests/portfolio/qeo139-*.test.ts tests/portfolio/qeo141-*.test.ts
+# ui
+node --test tests/portfolio/qeo159-concentration-ui.test.ts
+# contract
+pnpm test:manifest && pnpm typecheck
 ```
 
-Do not add local Supabase replay to this focused workflow because QEO-159 has no migration. DB Drift/Verify remain independent canonical gates.
+No Supabase replay is added to this focused workflow because QEO-159 introduces no migration. DB Drift stays an independent canonical gate.
 
-- [ ] **Step 4: Run manifest verification locally**
+- [ ] **Run:**
 
 ```bash
 pnpm test:manifest
 ```
 
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add tests/test-contracts.json .github/workflows/qeo159-preprod.yml
-git commit -m "ci(QEO-159): add concentration guardrail gate"
-```
+- [ ] **Commit.**
 
 ---
 
-### Task 9: Full regression, exact-head PR, and acceptance evidence handoff
+### Task 9: Exact-head regression, PR, preview/browser acceptance and QEO-144 handoff
 
-**Files:**
-- Modify only if evidence/result documentation is required after tests; no source changes after final exact-head gate without rerunning the gate.
-
-**Interfaces:**
-- Produces a frozen PR head with exact-head evidence and a QEO-144 handoff.
-
-- [ ] **Step 1: Run focused tests from a clean branch/worktree**
+- [ ] **Run focused suite:**
 
 ```bash
-node --test \
-  tests/portfolio/qeo159-concentration-domain.test.ts \
-  tests/portfolio/qeo159-concentration-server.test.ts \
-  tests/portfolio/qeo159-concentration-projection.test.ts \
-  tests/portfolio/qeo159-concentration-ui.test.ts
+node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo159-concentration-projection.test.ts tests/portfolio/qeo159-concentration-ui.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 2: Run mandatory regressions**
+- [ ] **Run mandatory regressions:**
 
 ```bash
 node --test tests/portfolio/qeo138-*.test.ts
@@ -885,11 +573,10 @@ node --test tests/portfolio/qeo139-*.test.ts
 node --test tests/portfolio/qeo141-*.test.ts
 node --test tests/portfolio/qeo142-*.test.ts
 node --test tests/portfolio/qeo158-*.test.ts
+node --test tests/portfolio/qeo137-*.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 3: Run canonical repository gates**
+- [ ] **Run repository gates:**
 
 ```bash
 pnpm test:manifest
@@ -898,57 +585,17 @@ pnpm typecheck
 pnpm build
 ```
 
-Expected: PASS.
+`modules/shared/supabase/database.types.ts` and `supabase/migrations/` must have no QEO-159 changes. Any such change is an architecture stop/review condition.
 
-Because QEO-159 has no migration, generated DB types must remain unchanged. If `git diff -- modules/shared/supabase/database.types.ts supabase/migrations` shows a QEO-159 change, stop and review the architecture before proceeding.
+- [ ] **Open Draft PR:** `QEO-159: deterministic concentration and diversification guardrails`.
+- [ ] **Require same-final-SHA success** for Verify, DB Drift Reconciliation, QEO-159, QEO-138, QEO-139, QEO-141, QEO-142, QEO-158 and QEO-137. Source change => refresh all exact-head evidence.
+- [ ] **Preview/browser acceptance:** on the deployed PR/production surface with an authenticated portfolio, verify current concentration panel renders; a concentrated ticker produces expected warning/breach when the user's configured plan supports it; a ticker lacking structured classification shows `UNKNOWN`; a projected new Trade conflict is shown without changing calculated Trade Size; conflict persistence requires an override reason. Do not mutate real user thresholds or fabricate Trade/fill history solely for the test—use existing safe data or reversible planned-Trade records.
+- [ ] **After merge/deploy:** verify canonical production API/page health, no runtime errors, QEO-141 Active Risk reconciliation, structured sector provenance, and no migration to run.
+- [ ] **Update Linear QEO-159 + QEO-144** with final SHA, workflow run IDs, deployment ID, no-migration statement, reconciliation facts and any remaining completeness limitation. Mark QEO-159 `Done` only after merge + required production acceptance.
 
-- [ ] **Step 4: Open/update PR as Draft until CI is exact-head GREEN**
+## Plan Self-Review Result
 
-PR title:
-
-```text
-QEO-159: deterministic concentration and diversification guardrails
-```
-
-PR body must state:
-
-- user plan is authoritative; no universal diversification defaults;
-- structured sector source with explicit `UNKNOWN`;
-- ticker market-value, ticker Active Risk, sector Active Risk, open-position checks;
-- QEO-139 projection does not alter sizing formula;
-- override reason persists through QEO-137 journal;
-- no migration expected.
-
-- [ ] **Step 5: Require exact-head GitHub Actions**
-
-At minimum confirm success on the same final SHA for:
-
-- Verify;
-- DB Drift Reconciliation;
-- QEO-159 focused workflow;
-- QEO-138 Risk Plan;
-- QEO-139 Risk Sizing;
-- QEO-141 Portfolio Risk Engine;
-- QEO-142 Performance;
-- QEO-158 External Cash Flows;
-- QEO-137 Trade Domain when touched by override integration.
-
-If a workflow fails from infrastructure only, inspect logs and rerun only failed jobs without changing source. If source changes, all exact-head evidence must be refreshed.
-
-- [ ] **Step 6: Production/preproduction acceptance after merge/deploy**
-
-Verify with real production data without fabricating rows:
-
-- latest plan JSON round-trips configured diversification fields if a safe existing test plan/value exists; otherwise verify read compatibility without mutating user settings;
-- current ticker market-value percentage reconciles to canonical holding market value / current Account Equity;
-- ticker Active Risk sums exactly to QEO-141 rows;
-- sector Active Risk uses structured sector values only;
-- missing classification remains explicit `UNKNOWN`;
-- no QEO-159 migration exists or needs applying;
-- production page/API responds without runtime errors.
-
-Do not create artificial deposit/trade/fill history merely to produce acceptance evidence.
-
-- [ ] **Step 7: Update Linear/QEO-144 evidence**
-
-Add QEO-159 final PR SHA, workflow run IDs, production deploy ID, no-migration statement, reconciliation facts and any remaining data-completeness limitation to QEO-159 and QEO-144. Move QEO-159 to `Done` only after merge + required production acceptance is complete.
+- Spec coverage: all QEO-159 acceptance items map to Tasks 1–9, including current metrics, sector `UNKNOWN`, plan-driven thresholds, projected trade conflict, no universal defaults, override audit, UI/browser coverage and QEO-144 handoff.
+- Placeholder scan: no `TBD`, `TODO`, “implement later”, unspecified error-handling steps or deferred tests remain.
+- Type consistency: current evaluator emits raw exposure VND plus percentages; projector consumes the same read-model exposure snapshot, so React does not reverse-calculate amounts or duplicate current aggregation.
+- Scope check: no DB schema change, no AI classification, no covariance/VaR work, and no change to QEO-139 sizing formula.
