@@ -5,6 +5,8 @@ import test from "node:test"
 const qeo108Migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
 const qeo149Migration = readFileSync(new URL("../supabase/pending-migrations/20260909100000_qeo149_correction_safe_prune.sql", import.meta.url), "utf8")
 const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
+const coldStore = readFileSync(new URL("../modules/market/chart-data/cold-store.ts", import.meta.url), "utf8")
+const archiveLifecycle = readFileSync(new URL("../modules/market/chart-data/archive-lifecycle.ts", import.meta.url), "utf8")
 const harness = readFileSync(new URL("../scripts/db/rehearse-qeo149-concurrency.sh", import.meta.url), "utf8")
 const workflow = readFileSync(new URL("../.github/workflows/db-drift.yml", import.meta.url), "utf8")
 
@@ -36,13 +38,24 @@ test("QEO-149 stamps only inserted/updated rows and routes mutations through the
   assert.match(qeo149Migration, /return jsonb_build_object\([\s\S]*?'status', 'deferred'/i)
 })
 
-test("QEO-149 hot-store uses bounded writer RPC results", () => {
+test("QEO-149 hot-store prefers the locked writer but preserves the quarantined-schema fallback", () => {
   assert.match(hotStore, /supabase\.rpc\("qeo_upsert_chart_intraday_bars"/i)
   assert.match(hotStore, /p_rows: chunk/i)
   assert.match(hotStore, /result\.status !== "upserted"/i)
   assert.match(hotStore, /writer row accounting mismatch/i)
-  assert.doesNotMatch(hotStore, /qeo_ensure_chart_intraday_session_partition/i)
-  assert.doesNotMatch(hotStore, /\.from\("chart_ohlcv_intraday"\)\.upsert/i)
+  assert.match(hotStore, /missingQeo149WriterRpc/i)
+  assert.match(hotStore, /ensureHotIntradaySessionPartitions/i)
+  assert.match(hotStore, /upsertHotIntradayBarsLegacy/i)
+})
+
+test("QEO-149 quarantined rollout keeps legacy COLD reads working and disables unsafe prune", () => {
+  assert.match(coldStore, /LEGACY_MANIFEST_SELECT/)
+  assert.match(coldStore, /QEO149_MANIFEST_SELECT/)
+  assert.match(coldStore, /missingCanonicalContentManifestColumns/i)
+  assert.match(hotStore, /ChartHotContentIdentityUnavailableError/)
+  assert.match(hotStore, /missingHotContentIdentityColumns/i)
+  assert.match(archiveLifecycle, /content_identity_unavailable/)
+  assert.match(archiveLifecycle, /ChartHotContentIdentityUnavailableError/)
 })
 
 test("QEO-149 real two-session rehearsal is wired after QEO-108", () => {
