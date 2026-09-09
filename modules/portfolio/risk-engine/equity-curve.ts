@@ -160,11 +160,13 @@ export function buildEquityCurve({
     kind: "baseline",
     equityVnd: baselineEquityVnd,
     flowAdjustedEquityVnd: baselineEquityVnd,
+    externalFlowVnd: 0,
     cumulativeExternalFlowVnd: 0,
     fundingHistoryStatus,
     status: Number.isFinite(initialCapitalVnd) ? "complete" : "incomplete",
     missingTickers: [],
   }]
+  let representedExternalFlowVnd = 0
 
   for (const session of sessions) {
     const transactionsToDate = transactions.filter(
@@ -178,11 +180,16 @@ export function buildEquityCurve({
       externalCashFlows: flowsToDate,
       fundingHistoryStatus,
     })
+    const externalFlowVnd = roundVnd(
+      snapshot.cumulativeExternalFlowVnd - representedExternalFlowVnd,
+    )
+    representedExternalFlowVnd = snapshot.cumulativeExternalFlowVnd
     points.push({
       key: session,
       kind: "daily",
       equityVnd: snapshot.equityVnd,
       flowAdjustedEquityVnd: snapshot.flowAdjustedEquityVnd,
+      externalFlowVnd,
       cumulativeExternalFlowVnd: snapshot.cumulativeExternalFlowVnd,
       fundingHistoryStatus,
       status: snapshot.completeness === "complete" ? "complete" : "incomplete",
@@ -198,11 +205,15 @@ export function buildEquityCurve({
       externalCashFlows,
       fundingHistoryStatus,
     })
+    const externalFlowVnd = roundVnd(
+      snapshot.cumulativeExternalFlowVnd - representedExternalFlowVnd,
+    )
     points.push({
       key: current.key,
       kind: "current",
       equityVnd: snapshot.equityVnd,
       flowAdjustedEquityVnd: snapshot.flowAdjustedEquityVnd,
+      externalFlowVnd,
       cumulativeExternalFlowVnd: snapshot.cumulativeExternalFlowVnd,
       fundingHistoryStatus,
       status: snapshot.completeness === "complete" ? "complete" : "incomplete",
