@@ -1,7 +1,7 @@
 import {
   isVietnamSecuritiesTradingDateKey,
   vietnamDateKey,
-} from "@/modules/market/calendar"
+} from "../calendar.ts"
 
 export const QEO150_CONFIGURED_CLOSE_SECONDS = 14 * 3600 + 46 * 60
 export const QEO150_CONFIGURED_OPEN_SECONDS = 9 * 3600
