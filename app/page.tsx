@@ -27,7 +27,6 @@ type HomeMenuItem = {
   description: string
   icon: LucideIcon
   miniIcons: readonly [LucideIcon, LucideIcon, LucideIcon]
-  iconClassName: string
   borderClassName: string
   glowClassName: string
 }
@@ -39,7 +38,6 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Theo dõi giá, thanh khoản, sổ lệnh và diễn biến realtime của Top Stocks 200.",
     icon: LayoutDashboard,
     miniIcons: [BarChart3, LineChart, Activity],
-    iconClassName: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
     borderClassName: "hover:border-emerald-400/35",
     glowClassName: "from-emerald-400/12 via-cyan-400/5 to-transparent",
   },
@@ -49,7 +47,6 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Quản lý danh mục, kế hoạch giao dịch, hiệu suất và kỷ luật rủi ro trong một workspace.",
     icon: Briefcase,
     miniIcons: [TrendingUp, CandlestickChart, BarChart3],
-    iconClassName: "border-violet-400/25 bg-violet-400/10 text-violet-300",
     borderClassName: "hover:border-violet-400/35",
     glowClassName: "from-violet-400/12 via-fuchsia-400/5 to-transparent",
   },
@@ -59,7 +56,6 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Đọc VNINDEX, Qeo Rating, dòng tiền, Wyckoff và AI Council từ cùng một góc nhìn thị trường.",
     icon: Sparkles,
     miniIcons: [CandlestickChart, Radar, TrendingUp],
-    iconClassName: "border-cyan-400/25 bg-cyan-400/10 text-cyan-300",
     borderClassName: "hover:border-cyan-400/35",
     glowClassName: "from-cyan-400/12 via-emerald-400/5 to-transparent",
   },
@@ -69,14 +65,13 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Tra cứu báo cáo vĩ mô, chiến lược và ngành cùng trạng thái ingest, phân tích AI và bằng chứng nguồn.",
     icon: FileText,
     miniIcons: [BookOpenText, SearchCheck, BarChart3],
-    iconClassName: "border-amber-400/25 bg-amber-400/10 text-amber-300",
     borderClassName: "hover:border-amber-400/35",
     glowClassName: "from-amber-400/12 via-emerald-400/5 to-transparent",
   },
 ]
 
 const MINI_ICON_CLASS =
-  "absolute left-1/2 top-1/2 z-0 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 scale-75 items-center justify-center rounded-xl border border-white/[0.12] bg-[#10161e] text-slate-300 opacity-0 shadow-md transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none"
+  "flex h-10 w-10 scale-[0.78] items-center justify-center rounded-xl border border-[#363b44] bg-[#1b1e24] text-[#b7f64d] opacity-0 shadow-[0_16px_30px_-16px_rgba(0,0,0,0.95)] transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-100 group-hover/card:opacity-100 motion-reduce:transform-none motion-reduce:transition-none"
 
 function MenuCard({ item }: { item: HomeMenuItem }) {
   const Icon = item.icon
@@ -94,30 +89,41 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
     >
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.glowClassName} opacity-70 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none`} />
       <div className="relative flex h-full flex-col sm:flex-row sm:items-center sm:gap-7">
-        <div className="relative mb-6 flex h-32 w-36 shrink-0 items-center justify-center sm:mb-0">
+        <div className="relative mb-6 flex h-36 w-40 shrink-0 items-center justify-center sm:mb-0">
           <div
-            className={`${MINI_ICON_CLASS} group-hover/card:-translate-x-[4rem] group-hover/card:-translate-y-[2.4rem] group-hover/card:scale-100 group-hover/card:opacity-100`}
+            data-home-mini-anchor
+            className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
             aria-hidden="true"
           >
-            <MiniOne className="h-4 w-4" />
-          </div>
-          <div
-            className={`${MINI_ICON_CLASS} group-hover/card:-translate-y-[4.5rem] group-hover/card:scale-100 group-hover/card:opacity-100`}
-            aria-hidden="true"
-          >
-            <MiniTwo className="h-4 w-4" />
-          </div>
-          <div
-            className={`${MINI_ICON_CLASS} group-hover/card:translate-x-[3rem] group-hover/card:-translate-y-[2.4rem] group-hover/card:scale-100 group-hover/card:opacity-100`}
-            aria-hidden="true"
-          >
-            <MiniThree className="h-4 w-4" />
+            <div className={`${MINI_ICON_CLASS} group-hover/card:-translate-x-[3.625rem] group-hover/card:-translate-y-[1.5rem] group-hover/card:-rotate-[12deg]`}>
+              <MiniOne className="h-5 w-5" strokeWidth={2.2} />
+            </div>
           </div>
 
           <div
-            className={`relative z-10 flex h-20 w-20 items-center justify-center rounded-3xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-[1.12] group-hover/card:shadow-[0_18px_40px_-20px_rgba(255,255,255,0.32)] motion-reduce:transform-none motion-reduce:transition-none ${item.iconClassName}`}
+            data-home-mini-anchor
+            className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
+            aria-hidden="true"
           >
-            <Icon className="h-9 w-9" strokeWidth={1.7} />
+            <div className={`${MINI_ICON_CLASS} group-hover/card:-translate-y-[4.375rem]`}>
+              <MiniTwo className="h-5 w-5" strokeWidth={2.2} />
+            </div>
+          </div>
+
+          <div
+            data-home-mini-anchor
+            className="absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
+            aria-hidden="true"
+          >
+            <div className={`${MINI_ICON_CLASS} group-hover/card:translate-x-[3.625rem] group-hover/card:-translate-y-[1.5rem] group-hover/card:rotate-[12deg]`}>
+              <MiniThree className="h-5 w-5" strokeWidth={2.2} />
+            </div>
+          </div>
+
+          <div
+            className="relative z-10 flex h-[86px] w-[86px] items-center justify-center rounded-[24px] border border-[#9fd32f]/35 bg-gradient-to-br from-[#e3f7a6] via-[#b7e54d] to-[#7bc20c] text-[#111317] shadow-[0_20px_38px_-22px_rgba(0,0,0,0.95)] transition-[transform,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-[1.12] group-hover/card:shadow-[0_26px_48px_-22px_rgba(132,204,22,0.65)] motion-reduce:transform-none motion-reduce:transition-none"
+          >
+            <Icon className="h-10 w-10" strokeWidth={2} />
           </div>
         </div>
 
