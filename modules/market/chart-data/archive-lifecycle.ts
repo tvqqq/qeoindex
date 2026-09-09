@@ -2,7 +2,7 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
-import { upsertDerivedHourlyBars } from "./derived-hourly-store"
+import { persistVerifiedDerivedHourlyGeneration } from "./derived-hourly-store"
 import {
   CHART_HOT_RETENTION_DAYS,
   CHART_HOT_RETENTION_SESSIONS,
@@ -128,15 +128,17 @@ export async function runChartIntradayArchiveLifecycle(
       const beforeArchive = await readPartition(supabase, partition, cutoff)
       if (!beforeArchive.length) continue
       const beforeArchiveBars = beforeArchive.map((snapshot) => snapshot.bar)
+      const canonicalContentDigest = canonicalHotContentDigest(beforeArchive)
+      const canonicalContentVersion = canonicalHotContentVersion(beforeArchive)
       const archived = await cold.archiveVerifiedPartition({
         ticker: partition.ticker,
         bars: beforeArchiveBars,
-        canonicalContentDigest: canonicalHotContentDigest(beforeArchive),
-        canonicalContentVersion: canonicalHotContentVersion(beforeArchive),
+        canonicalContentDigest,
+        canonicalContentVersion,
       })
       const hourlyBars = aggregateChartTimeframe(beforeArchiveBars, "1h")
       if (!hourlyBars.length) throw new Error("Verified raw archive produced no deterministic 1h cache bars")
-      const cached = await upsertDerivedHourlyBars(supabase, {
+      const cached = await persistVerifiedDerivedHourlyGeneration(supabase, {
         ticker: partition.ticker,
         bars: hourlyBars,
         sourceManifestId: archived.manifestId,
@@ -144,6 +146,9 @@ export async function runChartIntradayArchiveLifecycle(
         sourceRangeStart: beforeArchiveBars[0].time,
         sourceRangeEnd: beforeArchiveBars.at(-1)!.time,
         sourceRawRowCount: archived.rowCount,
+        sourceFormatVersion: 1,
+        sourceCanonicalContentDigest: canonicalContentDigest,
+        sourceCanonicalContentVersion: canonicalContentVersion,
         generatedAt: referenceAt.toISOString(),
       })
       const beforePrune = await readPartition(supabase, partition, cutoff)
@@ -152,8 +157,8 @@ export async function runChartIntradayArchiveLifecycle(
         manifestId: archived.manifestId,
         sha256: archived.sha256,
         rowCount: archived.rowCount,
-        canonicalContentDigest: canonicalHotContentDigest(beforeArchive),
-        canonicalContentVersion: canonicalHotContentVersion(beforeArchive),
+        canonicalContentDigest,
+        canonicalContentVersion,
         newerTradingDates: retentionProof.newerTradingDates,
       })
       if (deletedRows.status === "deferred") {
