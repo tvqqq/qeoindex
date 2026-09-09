@@ -32,5 +32,5 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: QEO-144 browser harness contract
-        run: node --test tests/portfolio/qeo144-browser-harness-contract.test.ts
+      - name: QEO-144 acceptance contracts
+        run: pnpm test:qeo144
