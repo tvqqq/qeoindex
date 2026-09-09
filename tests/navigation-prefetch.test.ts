@@ -210,3 +210,18 @@ test("QEO-152 makes the authenticated root a four-destination homepage and moves
   assert.match(nav, /href="\/board"/)
   assert.match(adminHeader, /href="\/board"/)
 })
+
+test("QEO-154 homepage hover interaction zooms the active icon, reveals mini icons behind it, and blurs siblings", () => {
+  const home = source("app/page.tsx")
+
+  assert.match(home, /group\/home/, "homepage grid should coordinate sibling hover state without client hydration")
+  assert.match(home, /group-hover\/home:blur-\[2px\]/, "non-hovered cards should use a light transient blur")
+  assert.match(home, /group-hover\/home:opacity-40/, "non-hovered cards should dim while a sibling is active")
+  assert.match(home, /hover:!blur-none/, "the active card must remain sharp")
+  assert.match(home, /hover:!opacity-100/, "the active card must remain fully visible")
+  assert.match(home, /group-hover\/card:scale-\[1\.12\]/, "the main icon should zoom on hover")
+  assert.match(home, /z-0/, "mini icons should stay on the back layer")
+  assert.match(home, /z-10/, "the main icon should stay above the mini icons")
+  assert.match(home, /transition-\[opacity,transform\]/, "mini icons should animate with bounded properties")
+  assert.doesNotMatch(home, /transition-all|backdrop-blur|backdrop-filter/, "homepage hover effect must preserve the performance contract")
+})
