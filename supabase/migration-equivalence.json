@@ -317,10 +317,10 @@
     {
       "logicalName": "qeo149_correction_safe_prune",
       "repositoryVersion": "20260909100000",
-      "productionVersion": null,
-      "state": "QUARANTINED",
-      "evidence": "qeo149-unreleased-correction-safe-prune-pending-isolated-db-replay",
-      "rationale": "The date-scoped lifecycle-lock writer/prune protocol remains pending until isolated migration replay, the bounded two-session concurrency rehearsal (including child/provenance mutation denial), generated-type parity, and release-authorized production rollout are complete. No production DDL has been applied; this entry remains QUARANTINED."
+      "productionVersion": "20260909084222",
+      "state": "MAPPED",
+      "evidence": "qeo149-production-ledger-schema-grants-and-rollback-writer-smoke",
+      "rationale": "Production applied the reviewed QEO-149 correction-safe writer/prune contract as version 20260909084222 after isolated replay and release verification. Production readback verified 139,006 retained HOT rows with valid content identity, the locked writer and six-argument prune RPCs, absence of the legacy count-only prune, revoked direct service-role HOT mutation with service-role-only writer/prune execution, and a rollback-only service-role writer smoke with zero persistent mutation. Repository replay keeps the reviewed 20260909100000 source ordering; QEO-108 native partition cutover remains separately QUARANTINED."
     },
     {
       "logicalName": "qeo147_derived_hourly_readiness",

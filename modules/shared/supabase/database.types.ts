@@ -763,6 +763,8 @@ export type Database = {
           archive_format: string
           base_resolution: string
           byte_count: number | null
+          canonical_content_digest: string | null
+          canonical_content_version: number | null
           created_at: string
           format_version: number
           id: string
@@ -780,6 +782,8 @@ export type Database = {
           archive_format: string
           base_resolution: string
           byte_count?: number | null
+          canonical_content_digest?: string | null
+          canonical_content_version?: number | null
           created_at?: string
           format_version?: number
           id?: string
@@ -797,6 +801,8 @@ export type Database = {
           archive_format?: string
           base_resolution?: string
           byte_count?: number | null
+          canonical_content_digest?: string | null
+          canonical_content_version?: number | null
           created_at?: string
           format_version?: number
           id?: string
@@ -887,6 +893,8 @@ export type Database = {
           bar_time: string
           base_resolution: string
           close: number
+          content_digest: string
+          content_version: number
           fetched_at: string
           high: number
           low: number
@@ -899,6 +907,8 @@ export type Database = {
           bar_time: string
           base_resolution: string
           close: number
+          content_digest: string
+          content_version?: number
           fetched_at?: string
           high: number
           low: number
@@ -911,6 +921,8 @@ export type Database = {
           bar_time?: string
           base_resolution?: string
           close?: number
+          content_digest?: string
+          content_version?: number
           fetched_at?: string
           high?: number
           low?: number
@@ -4800,6 +4812,22 @@ export type Database = {
           ticker: string
         }[]
       }
+      qeo_chart_intraday_row_content_digest: {
+        Args: {
+          p_bar_time: string
+          p_base_resolution: string
+          p_close: number
+          p_content_version: number
+          p_fetched_at: string
+          p_high: number
+          p_low: number
+          p_open: number
+          p_provenance_batch_id: string
+          p_ticker: string
+          p_volume: number
+        }
+        Returns: string
+      }
       qeo_chart_intraday_session_coverage: {
         Args: { p_hot_cutoff: string; p_tickers: string[] }
         Returns: {
@@ -4808,6 +4836,10 @@ export type Database = {
           last_hot_session: string
           ticker: string
         }[]
+      }
+      qeo_chart_intraday_session_lock_key: {
+        Args: { p_trading_date: string }
+        Returns: number
       }
       qeo_chart_storage_capacity: { Args: never; Returns: Json }
       qeo_create_portfolio_money_management_plan: {
@@ -4872,6 +4904,10 @@ export type Database = {
           sync_run_id: string
           system_job_run_id: string
         }[]
+      }
+      qeo_ensure_chart_intraday_session_partition_locked: {
+        Args: { p_trading_date: string }
+        Returns: Json
       }
       qeo_finalize_kfsp_manual_lifecycle: {
         Args: {
@@ -5007,6 +5043,9 @@ export type Database = {
       }
       qeo_prune_verified_chart_intraday_partition: {
         Args: {
+          p_expected_content_digest: string
+          p_expected_content_version: number
+          p_expected_newer_sessions: string[]
           p_expected_row_count: number
           p_expected_sha256: string
           p_manifest_id: string
@@ -5094,6 +5133,10 @@ export type Database = {
       qeo_trigger_market_snapshot_bootstrap: { Args: never; Returns: number }
       qeo_trigger_market_universe_monthly: { Args: never; Returns: number }
       qeo_trigger_research_reports_daily: { Args: never; Returns: number }
+      qeo_upsert_chart_intraday_bars: {
+        Args: { p_rows: Json; p_ticker: string }
+        Returns: Json
+      }
       qeo_verify_eod_scheduler_secret: {
         Args: { p_secret: string }
         Returns: boolean
