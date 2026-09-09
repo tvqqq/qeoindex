@@ -31,3 +31,44 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: QEO-158 cash-flow schema contract
         run: node --test tests/portfolio/qeo158-cash-flow-schema.test.ts
+
+  postgres-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: supabase start
+      - name: Replay migrations from zero
+        run: pnpm db:replay:verify
+      - name: Generate Database type candidate
+        run: supabase gen types typescript --local > /tmp/database.types.ts
+      - name: Compare generated Database types
+        id: generated_types
+        continue-on-error: true
+        run: diff -u modules/shared/supabase/database.types.ts /tmp/database.types.ts
+      - name: Upload generated Database type candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo158-database-types
+          path: /tmp/database.types.ts
+      - name: Require committed generated types
+        if: steps.generated_types.outcome != 'success'
+        run: |
+          echo "Generated Supabase Database types differ from the committed file."
+          exit 1
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
