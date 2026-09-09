@@ -38,10 +38,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: QEO-143 schema contract
         run: node --test tests/portfolio/qeo143-legacy-migration-schema.test.ts
-      - name: QEO-143 migrated Trade completeness
-        run: node --test tests/portfolio/qeo143-read-model-completeness.test.ts
-      - name: QEO-143 Scorecard eligibility boundary
-        run: node --test tests/portfolio/qeo143-performance-eligibility.test.ts
       - name: Existing Portfolio AVCO regression
         run: node --test tests/portfolio-pnl.test.ts
       - name: Start local Supabase
@@ -50,6 +46,10 @@ jobs:
         run: pnpm db:replay:verify
       - name: QEO-143 Postgres migration integration
         run: bash scripts/db/verify-qeo143-legacy-migration.sh
+      - name: QEO-143 migrated Trade completeness
+        run: node --test tests/portfolio/qeo143-read-model-completeness.test.ts
+      - name: QEO-143 Scorecard eligibility boundary
+        run: node --test tests/portfolio/qeo143-performance-eligibility.test.ts
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
