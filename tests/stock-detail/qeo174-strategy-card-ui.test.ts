@@ -41,7 +41,7 @@ test("QEO-174 renders CARD STATS as a compact flat strip", () => {
   assert.match(header, /grid grid-cols-3/)
   assert.match(header, /xl:grid-cols-6/)
   assert.doesNotMatch(header, /Fundamental \+ market snapshot/)
-  assert.doesNotMatch(header, /detail=/)
+  assert.doesNotMatch(header, /VND \/ cp|phiên hiện tại/)
 
   assert.match(stat, /border-l/)
   assert.match(stat, /py-1\.5/)
