@@ -2,7 +2,6 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
-import type { CanonicalOhlcvBar } from "./contract"
 import { upsertDerivedHourlyBars } from "./derived-hourly-store"
 import {
   CHART_HOT_RETENTION_DAYS,
@@ -11,11 +10,15 @@ import {
   chartHotSessionRetentionCutoff,
 } from "./history-policy"
 import {
+  ChartHotContentIdentityUnavailableError,
   dropEmptyHotIntradaySessionPartition,
+  canonicalHotContentDigest,
+  canonicalHotContentVersion,
   listExpiredHotPartitions,
   pruneVerifiedHotIntradayPartition,
   proveHotArchivePartitionsEligibility,
-  readHotIntradayRange,
+  readHotIntradaySnapshot,
+  type HotIntradaySnapshot,
   readOldestHotIntradayTime,
   type HotArchivePartition,
 } from "./hot-store"
@@ -63,23 +66,20 @@ export interface ChartIntradayArchiveMetrics {
   oldestHotBar: string | null
 }
 
-function sameBars(left: CanonicalOhlcvBar[], right: CanonicalOhlcvBar[]) {
-  if (left.length !== right.length) return false
-  const leftByTime = new Map(left.map((bar) => [bar.time, bar]))
-  if (leftByTime.size !== left.length) return false
-  const rightTimes = new Set<number>()
-  for (const b of right) {
-    if (rightTimes.has(b.time)) return false
-    rightTimes.add(b.time)
-    const a = leftByTime.get(b.time)
-    if (!a || a.open !== b.open || a.high !== b.high || a.low !== b.low || a.close !== b.close || a.volume !== b.volume) return false
-  }
-  return true
+async function readPartition(supabase: SupabaseClient, partition: HotArchivePartition, cutoff: number) {
+  const snapshots = await readHotIntradaySnapshot(supabase, partition.ticker, partition.from, partition.toExclusive - 1)
+  return snapshots.filter((snapshot) => snapshot.bar.time < cutoff)
 }
 
-async function readPartition(supabase: SupabaseClient, partition: HotArchivePartition, cutoff: number) {
-  const bars = await readHotIntradayRange(supabase, partition.ticker, partition.from, partition.toExclusive - 1)
-  return bars.filter((bar) => bar.time < cutoff)
+function sameSnapshots(left: HotIntradaySnapshot[], right: HotIntradaySnapshot[]) {
+  if (left.length !== right.length) return false
+  return left.every((snapshot, index) => {
+    const other = right[index]
+    return other
+      && snapshot.bar.time === other.bar.time
+      && snapshot.contentDigest === other.contentDigest
+      && snapshot.contentVersion === other.contentVersion
+  })
 }
 
 function failure(partition: HotArchivePartition, cause: unknown): ChartArchiveFailure {
@@ -126,28 +126,64 @@ export async function runChartIntradayArchiveLifecycle(
         continue
       }
 
-      const beforeArchive = await readPartition(supabase, partition, cutoff)
+      let beforeArchive: HotIntradaySnapshot[]
+      try {
+        beforeArchive = await readPartition(supabase, partition, cutoff)
+      } catch (cause) {
+        if (cause instanceof ChartHotContentIdentityUnavailableError) {
+          deferred.push({
+            ticker: partition.ticker,
+            tradingDate: partition.tradingDate,
+            reason: "content_identity_unavailable",
+            newerTradingDates: retentionProof.newerTradingDates,
+            rowsScanned: retentionProof.rowsScanned,
+            pagesRead: retentionProof.pagesRead,
+          })
+          continue
+        }
+        throw cause
+      }
       if (!beforeArchive.length) continue
-      const archived = await cold.archiveVerifiedPartition({ ticker: partition.ticker, bars: beforeArchive })
-      const hourlyBars = aggregateChartTimeframe(beforeArchive, "1h")
+      const beforeArchiveBars = beforeArchive.map((snapshot) => snapshot.bar)
+      const archived = await cold.archiveVerifiedPartition({
+        ticker: partition.ticker,
+        bars: beforeArchiveBars,
+        canonicalContentDigest: canonicalHotContentDigest(beforeArchive),
+        canonicalContentVersion: canonicalHotContentVersion(beforeArchive),
+      })
+      const hourlyBars = aggregateChartTimeframe(beforeArchiveBars, "1h")
       if (!hourlyBars.length) throw new Error("Verified raw archive produced no deterministic 1h cache bars")
       const cached = await upsertDerivedHourlyBars(supabase, {
         ticker: partition.ticker,
         bars: hourlyBars,
         sourceManifestId: archived.manifestId,
         sourceSha256: archived.sha256,
-        sourceRangeStart: beforeArchive[0].time,
-        sourceRangeEnd: beforeArchive.at(-1)!.time,
+        sourceRangeStart: beforeArchiveBars[0].time,
+        sourceRangeEnd: beforeArchiveBars.at(-1)!.time,
         sourceRawRowCount: archived.rowCount,
         generatedAt: referenceAt.toISOString(),
       })
       const beforePrune = await readPartition(supabase, partition, cutoff)
-      if (!sameBars(beforeArchive, beforePrune)) throw new Error("Chart hot partition changed during archive/cache verification; prune aborted")
+      if (!sameSnapshots(beforeArchive, beforePrune)) throw new Error("Chart hot partition changed during archive/cache verification; prune proof revalidation aborted")
       const deletedRows = await pruneVerifiedHotIntradayPartition(supabase, {
         manifestId: archived.manifestId,
         sha256: archived.sha256,
         rowCount: archived.rowCount,
+        canonicalContentDigest: canonicalHotContentDigest(beforeArchive),
+        canonicalContentVersion: canonicalHotContentVersion(beforeArchive),
+        newerTradingDates: retentionProof.newerTradingDates,
       })
+      if (deletedRows.status === "deferred") {
+        deferred.push({
+          ticker: partition.ticker,
+          tradingDate: partition.tradingDate,
+          reason: deletedRows.reason ?? "content_mismatch",
+          newerTradingDates: retentionProof.newerTradingDates,
+          rowsScanned: retentionProof.rowsScanned,
+          pagesRead: retentionProof.pagesRead,
+        })
+        continue
+      }
       const reclaim = await dropEmptyHotIntradaySessionPartition(supabase, partition.tradingDate)
       if (reclaim?.status === "dropped") sessionPartitionsDropped += 1
       partitionsArchived += 1
@@ -155,7 +191,7 @@ export async function runChartIntradayArchiveLifecycle(
       rowsArchived += archived.rowCount
       bytesWritten += archived.byteCount
       hourlyRowsCached += cached.rowCount
-      rowsPruned += deletedRows
+      rowsPruned += deletedRows.deletedRows
     } catch (cause) {
       failures.push(failure(partition, cause))
     }

@@ -1,5 +1,6 @@
 import "server-only"
 
+import { createHash } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { CanonicalOhlcvBar } from "./contract"
 import {
@@ -17,6 +18,8 @@ export const CHART_HOT_READ_PAGE_SIZE = 500
 export const CHART_HOT_READ_MAX_PAGES = 64
 const ARCHIVE_DISCOVERY_ROWS_PER_PARTITION = 300
 const ARCHIVE_DISCOVERY_MAX_ROWS = 10_000
+
+type PostgrestErrorLike = { code?: string | null; message?: string | null }
 
 function finite(value: unknown) {
   const number = Number(value)
@@ -59,8 +62,25 @@ function vietnamDateKey(epochSeconds: number) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(epochSeconds * 1000))
 }
 
-function missingPartitionRpc(error: { code?: string | null; message?: string | null }) {
+function missingPartitionRpc(error: PostgrestErrorLike) {
   return error.code === "PGRST202" || /qeo_ensure_chart_intraday_session_partition/i.test(error.message ?? "") && /not find|not found/i.test(error.message ?? "")
+}
+
+function missingQeo149WriterRpc(error: PostgrestErrorLike) {
+  return error.code === "PGRST202" || /qeo_upsert_chart_intraday_bars/i.test(error.message ?? "") && /not find|not found/i.test(error.message ?? "")
+}
+
+function missingHotContentIdentityColumns(error: PostgrestErrorLike) {
+  const message = error.message ?? ""
+  const missingColumn = error.code === "42703" || error.code === "PGRST204" || /column.*not found|could not find.*column/i.test(message)
+  return missingColumn && /content_(digest|version)/i.test(message)
+}
+
+export class ChartHotContentIdentityUnavailableError extends Error {
+  constructor(message = "QEO-149 HOT content identity schema is unavailable") {
+    super(message)
+    this.name = "ChartHotContentIdentityUnavailableError"
+  }
 }
 
 async function ensureHotIntradaySessionPartitions(supabase: SupabaseClient, bars: CanonicalOhlcvBar[]) {
@@ -76,6 +96,18 @@ export interface HotArchivePartition {
   tradingDate: string
   from: number
   toExclusive: number
+}
+
+export interface HotIntradaySnapshot {
+  bar: CanonicalOhlcvBar
+  contentDigest: string
+  contentVersion: number
+}
+
+export interface HotArchivePruneResult {
+  status: "pruned" | "deferred"
+  reason?: "content_mismatch" | "retention_mismatch"
+  deletedRows: number
 }
 
 export interface HotSessionPartitionDropResult {
@@ -125,6 +157,47 @@ export async function readHotIntradayRange(supabase: SupabaseClient, ticker: str
   throw new Error(`Chart hot-store read reached its ${CHART_HOT_READ_MAX_PAGES}-page bound`)
 }
 
+function storedRowToSnapshot(row: Record<string, unknown>): HotIntradaySnapshot | null {
+  const bar = storedRowToBar(row)
+  const contentDigest = String(row.content_digest ?? "")
+  const contentVersion = Number(row.content_version)
+  if (!bar || !/^[a-f0-9]{64}$/.test(contentDigest) || !Number.isSafeInteger(contentVersion) || contentVersion <= 0) return null
+  return { bar, contentDigest, contentVersion }
+}
+
+export function canonicalHotContentDigest(rows: HotIntradaySnapshot[]) {
+  if (!rows.length) throw new Error("Cannot build a canonical HOT content digest from an empty snapshot")
+  const sorted = [...rows].sort((left, right) => left.bar.time - right.bar.time)
+  if (sorted.some((row, index) => index > 0 && row.bar.time === sorted[index - 1].bar.time)) throw new Error("Canonical HOT snapshot contains duplicate timestamps")
+  return createHash("sha256").update(sorted.map((row) => row.contentDigest).join(""), "utf8").digest("hex")
+}
+
+export function canonicalHotContentVersion(rows: HotIntradaySnapshot[]) {
+  if (!rows.length) throw new Error("Cannot build a canonical HOT content version from an empty snapshot")
+  return Math.max(...rows.map((row) => row.contentVersion))
+}
+
+export async function readHotIntradaySnapshot(
+  supabase: SupabaseClient,
+  ticker: string,
+  from: number,
+  to: number,
+): Promise<HotIntradaySnapshot[]> {
+  const { data, error } = await supabase.from("chart_ohlcv_intraday")
+    .select("bar_time,open,high,low,close,volume,content_digest,content_version")
+    .eq("ticker", ticker).eq("base_resolution", "1m")
+    .gte("bar_time", new Date(from * 1000).toISOString()).lte("bar_time", new Date(to * 1000).toISOString())
+    .order("bar_time", { ascending: true })
+  if (error) {
+    if (missingHotContentIdentityColumns(error)) throw new ChartHotContentIdentityUnavailableError()
+    throw new Error(`Chart hot-store snapshot read failed: ${error.message}`)
+  }
+  const rows = (data || []) as Array<Record<string, unknown>>
+  const snapshots = rows.map(storedRowToSnapshot)
+  if (snapshots.some((snapshot) => snapshot == null)) throw new Error("Chart hot-store snapshot contains unknown content identity")
+  return snapshots.filter((snapshot): snapshot is HotIntradaySnapshot => Boolean(snapshot))
+}
+
 /**
  * Discover bounded candidates with the global session cutoff. The returned
  * partitions still require proveHotArchivePartitionEligibility before any
@@ -152,18 +225,32 @@ export async function listExpiredHotPartitions(supabase: SupabaseClient, input: 
 
 export async function pruneVerifiedHotIntradayPartition(
   supabase: SupabaseClient,
-  input: { manifestId: string; sha256: string; rowCount: number },
-): Promise<number> {
+  input: {
+    manifestId: string
+    sha256: string
+    rowCount: number
+    canonicalContentDigest: string
+    canonicalContentVersion: number
+    newerTradingDates: string[]
+  },
+): Promise<HotArchivePruneResult> {
   const { data, error } = await supabase.rpc("qeo_prune_verified_chart_intraday_partition", {
     p_manifest_id: input.manifestId,
     p_expected_sha256: input.sha256,
     p_expected_row_count: input.rowCount,
+    p_expected_content_digest: input.canonicalContentDigest,
+    p_expected_content_version: input.canonicalContentVersion,
+    p_expected_newer_sessions: input.newerTradingDates,
   })
   if (error) throw new Error(`Chart hot archive prune RPC failed: ${error.message}`)
   const raw = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  const status = raw.status
   const deletedRows = finite(raw.deletedRows)
-  if (deletedRows == null || deletedRows !== input.rowCount) throw new Error(`Chart hot archive prune RPC returned invalid deletedRows=${String(raw.deletedRows)}`)
-  return deletedRows
+  if (status === "deferred" && (raw.reason === "content_mismatch" || raw.reason === "retention_mismatch") && deletedRows === 0) {
+    return { status, reason: raw.reason, deletedRows }
+  }
+  if (status !== "pruned" || deletedRows == null || deletedRows !== input.rowCount) throw new Error(`Chart hot archive prune RPC returned invalid status=${String(status)} deletedRows=${String(raw.deletedRows)}`)
+  return { status, deletedRows }
 }
 
 export async function dropEmptyHotIntradaySessionPartition(
@@ -254,6 +341,20 @@ export async function recordChartProviderAttempt(supabase: SupabaseClient, input
   return { batchId: String(batch.id), rowCount: bars.length }
 }
 
+async function upsertHotIntradayBarsLegacy(
+  supabase: SupabaseClient,
+  sorted: CanonicalOhlcvBar[],
+  rows: Array<Record<string, unknown>>,
+) {
+  await ensureHotIntradaySessionPartitions(supabase, sorted)
+  for (let offset = 0; offset < rows.length; offset += UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(offset, offset + UPSERT_CHUNK_SIZE)
+    const { error } = await supabase.from("chart_ohlcv_intraday").upsert(chunk, { onConflict: "ticker,base_resolution,bar_time" })
+    if (error) throw new Error(`Chart hot-store legacy upsert failed: ${error.message}`)
+  }
+  return rows.length
+}
+
 export async function upsertHotIntradayBars(
   supabase: SupabaseClient,
   input: {
@@ -268,7 +369,6 @@ export async function upsertHotIntradayBars(
 ) {
   if (!input.bars.length) return { batchId: null as string | null, rowCount: 0 }
   const sorted = [...input.bars].sort((a, b) => a.time - b.time)
-  await ensureHotIntradaySessionPartitions(supabase, sorted)
   const fetchedAt = input.fetchedAt ?? new Date().toISOString()
   const provenance = input.provenanceBatchId
     ? { batchId: input.provenanceBatchId, rowCount: sorted.length }
@@ -288,9 +388,28 @@ export async function upsertHotIntradayBars(
     open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume,
     provenance_batch_id: provenance.batchId, fetched_at: fetchedAt,
   }))
+  let writtenRows = 0
   for (let offset = 0; offset < rows.length; offset += UPSERT_CHUNK_SIZE) {
-    const { error } = await supabase.from("chart_ohlcv_intraday").upsert(rows.slice(offset, offset + UPSERT_CHUNK_SIZE), { onConflict: "ticker,base_resolution,bar_time" })
-    if (error) throw new Error(`Chart hot-store upsert failed: ${error.message}`)
+    const chunk = rows.slice(offset, offset + UPSERT_CHUNK_SIZE)
+    const { data, error } = await supabase.rpc("qeo_upsert_chart_intraday_bars", {
+      p_ticker: input.ticker,
+      p_rows: chunk,
+    })
+    if (error) {
+      if (offset === 0 && missingQeo149WriterRpc(error)) {
+        writtenRows = await upsertHotIntradayBarsLegacy(supabase, sorted, rows)
+        break
+      }
+      throw new Error(`Chart hot-store writer RPC failed: ${error.message}`)
+    }
+    const result = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
+    const resultTicker = String(result.ticker ?? "").trim().toUpperCase()
+    const resultRows = finite(result.rowCount)
+    if (result.status !== "upserted" || resultTicker !== input.ticker.trim().toUpperCase() || resultRows == null || resultRows !== chunk.length) {
+      throw new Error(`Chart hot-store writer RPC returned invalid result status=${String(result.status)} rowCount=${String(result.rowCount)}`)
+    }
+    writtenRows += resultRows
   }
-  return { batchId: provenance.batchId, rowCount: rows.length }
+  if (writtenRows !== rows.length) throw new Error(`Chart hot-store writer row accounting mismatch: expected ${rows.length}, wrote ${writtenRows}`)
+  return { batchId: provenance.batchId, rowCount: writtenRows }
 }

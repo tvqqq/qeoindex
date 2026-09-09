@@ -36,7 +36,7 @@ If overlapping canonical sources disagree, the selected bar follows deterministi
 `chart_ohlcv_intraday` is the server-side hot store for canonical `1m` bars.
 
 - target retention is **31 complete Vietnam calendar days**;
-- pruning is partitioned by ticker + Vietnam trading date so a session is never split by a rolling UTC cutoff;
+- pruning is scoped to one ticker's Vietnam trading date while physical HOT partitions are keyed by the Vietnam date lifecycle;
 - the lifecycle is bounded and failures are partition-isolated;
 - provider/provenance evidence remains batch-scoped in `chart_ohlcv_provenance_batches`.
 
@@ -48,8 +48,8 @@ strictly newer than the candidate boundary. A ticker with only four newer
 sessions therefore remains HOT even when another ticker has enough history;
 the candidate is eligible only when it is sixth-or-older for that ticker.
 Malformed timestamps, query failures, a bounded proof-page cap, and fewer than
-five newer sessions all defer the candidate. Deferred partitions are recorded
-in archive metrics and never reach archive, cache, or prune. A candidate with
+five newer sessions all defer the candidate. Deferred retention candidates are
+recorded in archive metrics and never reach archive, cache, or prune. A candidate with
 fewer than five newer sessions is a normal protected partition; read failures,
 malformed evidence, and proof-cap exhaustion keep the lifecycle partial.
 
@@ -57,7 +57,13 @@ Bootstrap and provider-coverage discovery continue to use the bounded global
 cutoff in this release. An exact per-ticker coverage RPC can be introduced as a
 follow-up if bootstrap coverage needs the same stronger proof.
 
-The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`.
+The base QEO-92 schema was activated by migration `20260905065836_qeo92_chart_ohlcv_intraday`. QEO-103 extends the lifecycle through `20260905115319_qeo103_chart_storage_lifecycle`. The native session cutover (`20260906024500_qeo108_chart_intraday_session_partitions`) and correction-safe writer/prune (`20260909100000_qeo149_correction_safe_prune`) remain explicitly QUARANTINED pending isolated replay and the two-session rehearsal; pending files are not production evidence.
+
+### QEO-149 mixed-version rollout
+
+While the correction-safe migration is still quarantined, application code must remain compatible with the currently deployed schema without weakening prune safety. HOT writes first call `qeo_upsert_chart_intraday_bars`; **only** an explicit missing-RPC response may fall back to the legacy partition-ensure + direct upsert path. Other writer-RPC failures remain fatal. Verified COLD manifest reads first request QEO-149 content-identity columns and retry the legacy projection only when those columns are explicitly absent.
+
+Archive/prune has no legacy unsafe fallback. If HOT `content_digest` / `content_version` columns are absent, the candidate is deferred as `content_identity_unavailable`, no archive/cache/prune authority is reached, and HOT rows remain intact. After the QEO-149 migration is activated, service-role direct HOT mutation is revoked and the locked writer/prune protocol becomes mandatory. Rollback therefore means disabling/defering prune, not reverting to the old count-only prune authority.
 
 ## Cold raw 1m archive
 
@@ -66,6 +72,7 @@ Cold chart history is stored in the private Supabase Storage bucket `chart-ohlcv
 - archive objects use immutable checksum-addressed `.ndjson.gz` paths;
 - `chart_ohlcv_cold_manifests` records ticker, base resolution, exact covered range, row count, SHA-256, format version and byte count;
 - an archive object is downloaded and verified against SHA-256 + row count before its manifest is accepted for pruning;
+- QEO-149 separately records a database-stamped canonical content digest and monotonic content version for each HOT row; the manifest stores the aggregate proof, including exact OHLCV timestamps and correction-relevant provenance identity;
 - an already-existing matching object/manifest is verified and reused idempotently;
 - object paths and bucket details remain server-only.
 
@@ -85,10 +92,35 @@ hot raw 1m snapshot
   -> cold readback + SHA256 + row-count verify
   -> deterministic 1h cache persist
   -> hot snapshot re-read / equality check
-  -> service-role manifest-verified atomic prune RPC
+  -> service-role manifest/content/retention-verified atomic prune RPC
 ```
 
-The prune RPC refuses deletion when the manifest, checksum, row count, or derived-cache evidence does not match. Any exception rolls back the delete transaction. Daily/Wyckoff history is never touched by this RPC.
+The QEO-108 `qeo108-chart-session:<date>` namespace is the single physical HOT
+partition lifecycle lock. `qeo_chart_intraday_session_lock_key(date)` is shared
+by partition ensure/drop, the service-role-only `qeo_upsert_chart_intraday_bars`
+writer, and prune. The writer validates a bounded (maximum 500-row) JSON batch,
+derives distinct Vietnam dates, locks them in ascending order, ensures every
+partition while those locks remain held, and performs one set-based upsert.
+Once QEO-149 is active, application code therefore does not run a separate
+ensure transaction followed by a direct HOT upsert.
+
+The prune RPC locks the candidate date plus all supplied newer proof dates in
+ascending order before taking the manifest row lock. It then revalidates the
+manifest, derived-cache evidence, five distinct newer ticker sessions, and
+exact HOT content/version inside the transaction. Equal row counts with changed
+OHLCV, timestamps, inserts, or provenance therefore return a reason-coded
+deferral with zero deletes. Missing or malformed proof fails closed; a writer
+queued behind prune waits and its write survives after prune commits. Object-byte
+SHA-256 and canonical content digest are distinct values. Any exception rolls
+back the delete transaction, and Daily/Wyckoff history is never touched by this
+RPC.
+
+The HOT trigger stamps content identity only on INSERT/UPDATE; it takes no
+advisory lock. Service-role direct INSERT/UPDATE/DELETE/TRUNCATE on the parent
+and every physical child is revoked after schema cutover. Provenance batches are
+SELECT/INSERT only for service-role because their `ON DELETE SET NULL` foreign
+key could otherwise rewrite correction-relevant HOT rows outside the lifecycle
+lock.
 
 ### Legacy cold-to-derived recovery
 

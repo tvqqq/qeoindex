@@ -1,0 +1,75 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import test from "node:test"
+
+const qeo108Migration = readFileSync(new URL("../supabase/pending-migrations/20260906024500_qeo108_chart_intraday_session_partitions.sql", import.meta.url), "utf8")
+const qeo149Migration = readFileSync(new URL("../supabase/pending-migrations/20260909100000_qeo149_correction_safe_prune.sql", import.meta.url), "utf8")
+const hotStore = readFileSync(new URL("../modules/market/chart-data/hot-store.ts", import.meta.url), "utf8")
+const coldStore = readFileSync(new URL("../modules/market/chart-data/cold-store.ts", import.meta.url), "utf8")
+const archiveLifecycle = readFileSync(new URL("../modules/market/chart-data/archive-lifecycle.ts", import.meta.url), "utf8")
+const harness = readFileSync(new URL("../scripts/db/rehearse-qeo149-concurrency.sh", import.meta.url), "utf8")
+const workflow = readFileSync(new URL("../.github/workflows/db-drift.yml", import.meta.url), "utf8")
+
+test("QEO-149 uses the QEO-108 date lifecycle namespace", () => {
+  assert.match(qeo108Migration, /create or replace function public\.qeo_chart_intraday_session_lock_key\(p_trading_date date\)/i)
+  assert.match(qeo108Migration, /qeo108-chart-session:' \|\| p_trading_date::text/i)
+  assert.match(qeo108Migration, /qeo_ensure_chart_intraday_session_partition_locked/i)
+  assert.match(qeo108Migration, /perform pg_advisory_xact_lock\(public\.qeo_chart_intraday_session_lock_key\(p_trading_date\)\)/i)
+  assert.match(qeo108Migration, /qeo_drop_empty_chart_intraday_session_partition[\s\S]*?perform pg_advisory_xact_lock[\s\S]*?v_name :=/i)
+  assert.doesNotMatch(qeo149Migration, /qeo149-chart-ticker-session/i)
+})
+
+test("QEO-149 stamps only inserted/updated rows and routes mutations through the RPC", () => {
+  assert.match(qeo149Migration, /create sequence if not exists public\.chart_ohlcv_intraday_content_version_seq/i)
+  assert.match(qeo149Migration, /create trigger qeo149_chart_intraday_content_identity\s+before insert or update on public\.chart_ohlcv_intraday/i)
+  assert.doesNotMatch(qeo149Migration, /before insert or update or delete on public\.chart_ohlcv_intraday/i)
+  assert.match(qeo149Migration, /create or replace function public\.qeo_upsert_chart_intraday_bars\(\s*p_ticker text,\s*p_rows jsonb/i)
+  assert.match(qeo149Migration, /jsonb_array_length\(p_rows\)[\s\S]*?> 500/i)
+  assert.match(qeo149Migration, /qeo_upsert_chart_intraday_bars[\s\S]*?on conflict \(ticker, base_resolution, bar_time\) do update/i)
+  assert.match(qeo149Migration, /for v_date in[\s\S]*?order by 1[\s\S]*?pg_advisory_xact_lock/i)
+  assert.match(qeo149Migration, /revoke all privileges on table public\.chart_ohlcv_intraday from service_role/i)
+  assert.match(qeo149Migration, /grant select on table public\.chart_ohlcv_intraday to service_role/i)
+  assert.match(qeo149Migration, /revoke all privileges on table public\.chart_ohlcv_provenance_batches from service_role/i)
+  assert.match(qeo149Migration, /grant select, insert on table public\.chart_ohlcv_provenance_batches to service_role/i)
+  assert.match(qeo149Migration, /drop function if exists public\.qeo_prune_verified_chart_intraday_partition\(uuid, text, integer\)/i)
+  assert.match(qeo149Migration, /create or replace function public\.qeo_prune_verified_chart_intraday_partition\(\s*p_manifest_id uuid,[\s\S]*?p_expected_newer_sessions text\[\]/i)
+  assert.match(qeo149Migration, /v_lock_dates[\s\S]*?order by value[\s\S]*?for update/i)
+  assert.match(qeo149Migration, /string_agg\(h\.content_digest, '' order by h\.bar_time\)/i)
+  assert.match(qeo149Migration, /return jsonb_build_object\([\s\S]*?'status', 'deferred'/i)
+})
+
+test("QEO-149 hot-store prefers the locked writer but preserves the quarantined-schema fallback", () => {
+  assert.match(hotStore, /supabase\.rpc\("qeo_upsert_chart_intraday_bars"/i)
+  assert.match(hotStore, /p_rows: chunk/i)
+  assert.match(hotStore, /result\.status !== "upserted"/i)
+  assert.match(hotStore, /writer row accounting mismatch/i)
+  assert.match(hotStore, /missingQeo149WriterRpc/i)
+  assert.match(hotStore, /ensureHotIntradaySessionPartitions/i)
+  assert.match(hotStore, /upsertHotIntradayBarsLegacy/i)
+})
+
+test("QEO-149 quarantined rollout keeps legacy COLD reads working and disables unsafe prune", () => {
+  assert.match(coldStore, /LEGACY_MANIFEST_SELECT/)
+  assert.match(coldStore, /QEO149_MANIFEST_SELECT/)
+  assert.match(coldStore, /missingCanonicalContentManifestColumns/i)
+  assert.match(hotStore, /ChartHotContentIdentityUnavailableError/)
+  assert.match(hotStore, /missingHotContentIdentityColumns/i)
+  assert.match(archiveLifecycle, /content_identity_unavailable/)
+  assert.match(archiveLifecycle, /ChartHotContentIdentityUnavailableError/)
+})
+
+test("QEO-149 real two-session rehearsal is wired after QEO-108", () => {
+  assert.match(harness, /independent|background|session/i)
+  assert.match(harness, /qeo_upsert_chart_intraday_bars/i)
+  assert.match(harness, /qeo_prune_verified_chart_intraday_partition/i)
+  assert.match(harness, /qeo149/i)
+  assert.match(harness, /PGAPPNAME/)
+  assert.match(harness, /wait_for_advisory_holder/)
+  assert.match(harness, /wait_for_advisory_wait/)
+  assert.match(harness, /pg_locks/)
+  assert.match(harness, /QEO-108 native partition contract/)
+  assert.match(harness, /malformed retention proof changed HOT row count/)
+  assert.match(harness, /direct service_role child UPDATE unexpectedly succeeded/)
+  assert.equal((harness.match(/for v_child in/g) ?? []).length, 1)
+  assert.match(workflow, /rehearse-qeo108-chart-storage\.sh[\s\S]*?rehearse-qeo149-concurrency\.sh/i)
+})

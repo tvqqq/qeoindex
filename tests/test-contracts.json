@@ -495,6 +495,16 @@
       ]
     },
     {
+      "path": "tests/qeo-149-prune-concurrency.test.ts",
+      "owner": "market",
+      "invariant": "QEO-149 preserves exact HOT content and correction-safe writer/prune serialization.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "db"
+      ]
+    },
+    {
       "path": "tests/market-insight-edge-types.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market insight edge types contract.",

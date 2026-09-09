@@ -131,7 +131,23 @@ alter table public.chart_ohlcv_intraday enable row level security;
 revoke all on table public.chart_ohlcv_intraday from public, anon, authenticated;
 grant select, insert, update, delete on table public.chart_ohlcv_intraday to service_role;
 
-create or replace function public.qeo_ensure_chart_intraday_session_partition(p_trading_date date)
+-- The physical partition lifecycle has one lock namespace. QEO-149 reuses
+-- this helper for bulk writes and prune; keep the qeo108 key text stable so a
+-- cutover-era caller cannot interleave with a later writer.
+create or replace function public.qeo_chart_intraday_session_lock_key(p_trading_date date)
+returns bigint
+language sql
+immutable
+strict
+set search_path = 'pg_catalog', 'public'
+as $function$
+  select hashtextextended('qeo108-chart-session:' || p_trading_date::text, 0)
+$function$;
+
+-- Internal implementation. Callers must already hold the date lifecycle
+-- advisory lock. Keeping relation resolution and CREATE under that lock makes
+-- ensure + first write one ordered protocol once QEO-149 installs its writer.
+create or replace function public.qeo_ensure_chart_intraday_session_partition_locked(p_trading_date date)
 returns jsonb
 language plpgsql
 security definer
@@ -153,7 +169,6 @@ begin
     return jsonb_build_object('status', 'legacy_unpartitioned', 'tradingDate', p_trading_date);
   end if;
 
-  perform pg_advisory_xact_lock(hashtextextended('qeo108-chart-session:' || p_trading_date::text, 0));
   v_name := 'chart_ohlcv_intraday_' || to_char(p_trading_date, 'YYYYMMDD');
   v_child := to_regclass('public.' || v_name);
   if v_child is not null then
@@ -179,6 +194,21 @@ begin
 end;
 $$;
 
+create or replace function public.qeo_ensure_chart_intraday_session_partition(p_trading_date date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = 'pg_catalog', 'public'
+as $$
+begin
+  if p_trading_date is null or p_trading_date < date '2000-01-01' or p_trading_date > current_date + 7 then
+    raise exception 'QEO-108 invalid intraday partition date: %', p_trading_date;
+  end if;
+  perform pg_advisory_xact_lock(public.qeo_chart_intraday_session_lock_key(p_trading_date));
+  return public.qeo_ensure_chart_intraday_session_partition_locked(p_trading_date);
+end;
+$$;
+
 create or replace function public.qeo_drop_empty_chart_intraday_session_partition(p_trading_date date)
 returns jsonb
 language plpgsql
@@ -193,6 +223,12 @@ begin
   if p_trading_date is null then
     raise exception 'QEO-108 session partition drop requires a trading date';
   end if;
+
+  -- Acquire the lifecycle lock before relation lookup, row counting, and any
+  -- detach/drop operation. Writers and reclaim therefore cannot race a
+  -- partition that is being resolved or removed.
+  perform pg_advisory_xact_lock(public.qeo_chart_intraday_session_lock_key(p_trading_date));
+
   v_name := 'chart_ohlcv_intraday_' || to_char(p_trading_date, 'YYYYMMDD');
   v_child := to_regclass('public.' || v_name);
   if v_child is null then
@@ -205,7 +241,6 @@ begin
     raise exception 'QEO-108 refused to drop non-child relation: %', v_name;
   end if;
 
-  perform pg_advisory_xact_lock(hashtextextended('qeo108-chart-session:' || p_trading_date::text, 0));
   execute format('select count(*) from public.%I', v_name) into v_rows;
   if v_rows <> 0 then
     return jsonb_build_object('status', 'blocked', 'tradingDate', p_trading_date, 'remainingRows', v_rows);
@@ -371,6 +406,8 @@ $$;
 
 revoke all on function public.qeo_ensure_chart_intraday_session_partition(date) from public, anon, authenticated;
 grant execute on function public.qeo_ensure_chart_intraday_session_partition(date) to service_role;
+revoke all on function public.qeo_ensure_chart_intraday_session_partition_locked(date) from public, anon, authenticated, service_role;
+revoke all on function public.qeo_chart_intraday_session_lock_key(date) from public, anon, authenticated, service_role;
 revoke all on function public.qeo_drop_empty_chart_intraday_session_partition(date) from public, anon, authenticated;
 grant execute on function public.qeo_drop_empty_chart_intraday_session_partition(date) to service_role;
 revoke all on function public.qeo_chart_storage_capacity() from public;

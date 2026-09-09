@@ -8,6 +8,8 @@ import type { CanonicalOhlcvBar } from "./contract"
 const BUCKET = "chart-ohlcv"
 const ARCHIVE_FORMAT_VERSION = 1
 const VERIFIED_MANIFEST_READ_LIMIT = 1_000
+const LEGACY_MANIFEST_SELECT = "id,ticker,base_resolution,object_path,range_start,range_end,row_count,sha256,archive_format,verified_at,format_version,byte_count"
+const QEO149_MANIFEST_SELECT = `${LEGACY_MANIFEST_SELECT},canonical_content_digest,canonical_content_version`
 
 type ColdBaseResolution = "1m" | "1D"
 
@@ -24,6 +26,8 @@ type ManifestRow = {
   verified_at?: unknown
   format_version?: unknown
   byte_count?: unknown
+  canonical_content_digest?: unknown
+  canonical_content_version?: unknown
 }
 
 export interface VerifiedColdManifest {
@@ -38,6 +42,8 @@ export interface VerifiedColdManifest {
   archiveFormat: "ndjson.gz"
   formatVersion: number
   byteCount: number | null
+  canonicalContentDigest: string | null
+  canonicalContentVersion: number | null
 }
 
 export interface ColdReadResult {
@@ -52,6 +58,8 @@ export interface ColdArchiveResult {
   rowCount: number
   byteCount: number
   reused: boolean
+  canonicalContentDigest: string | null
+  canonicalContentVersion: number | null
 }
 
 export interface ColdOhlcvStorage {
@@ -61,6 +69,8 @@ export interface ColdOhlcvStorage {
     bars: CanonicalOhlcvBar[]
     provenanceBatchId?: string | null
     provenance?: Record<string, unknown>
+    canonicalContentDigest?: string
+    canonicalContentVersion?: number
   }): Promise<ColdArchiveResult>
 }
 
@@ -109,6 +119,13 @@ function finiteEpoch(value: unknown) {
   return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null
 }
 
+function missingCanonicalContentManifestColumns(error: { code?: string | null; message?: string | null } | null | undefined) {
+  if (!error) return false
+  const message = error.message ?? ""
+  const missingColumn = error.code === "42703" || error.code === "PGRST204" || /column.*not found|could not find.*column/i.test(message)
+  return missingColumn && /canonical_content_(digest|version)/i.test(message)
+}
+
 function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
   const id = String(raw.id || "")
   const ticker = String(raw.ticker || "").trim().toUpperCase()
@@ -120,10 +137,14 @@ function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
   const sha256 = String(raw.sha256 || "")
   const formatVersion = Number(raw.format_version ?? ARCHIVE_FORMAT_VERSION)
   const byteCountValue = raw.byte_count == null ? null : Number(raw.byte_count)
+  const canonicalContentDigest = raw.canonical_content_digest == null ? null : String(raw.canonical_content_digest)
+  const canonicalContentVersion = raw.canonical_content_version == null ? null : Number(raw.canonical_content_version)
   if (!id || !ticker || (baseResolution !== "1m" && baseResolution !== "1D") || !objectPath || rangeStart == null || rangeEnd == null || rangeEnd < rangeStart) return null
   if (!Number.isInteger(rowCount) || rowCount <= 0 || !/^[a-f0-9]{64}$/.test(sha256)) return null
   if (raw.archive_format !== "ndjson.gz" || !raw.verified_at || formatVersion !== ARCHIVE_FORMAT_VERSION) return null
   if (byteCountValue != null && (!Number.isFinite(byteCountValue) || byteCountValue <= 0)) return null
+  if (canonicalContentDigest != null && !/^[a-f0-9]{64}$/.test(canonicalContentDigest)) return null
+  if (canonicalContentVersion != null && (!Number.isSafeInteger(canonicalContentVersion) || canonicalContentVersion <= 0)) return null
   return {
     id,
     ticker,
@@ -136,7 +157,26 @@ function manifestFromRow(raw: ManifestRow): VerifiedColdManifest | null {
     archiveFormat: "ndjson.gz",
     formatVersion,
     byteCount: byteCountValue,
+    canonicalContentDigest,
+    canonicalContentVersion,
   }
+}
+
+async function queryVerifiedColdManifests(
+  supabase: SupabaseClient,
+  input: { ticker?: string; from?: number; to?: number; limit: number; offset: number; baseResolution: ColdBaseResolution },
+  columns: string,
+) {
+  let query = supabase.from("chart_ohlcv_cold_manifests")
+    .select(columns)
+    .eq("base_resolution", input.baseResolution)
+    .not("verified_at", "is", null)
+    .order("range_start", { ascending: true })
+    .range(input.offset, input.offset + input.limit - 1)
+  if (input.ticker) query = query.eq("ticker", input.ticker)
+  if (input.from != null) query = query.gte("range_end", new Date(input.from * 1000).toISOString())
+  if (input.to != null) query = query.lte("range_start", new Date(input.to * 1000).toISOString())
+  return query
 }
 
 export async function listVerifiedColdManifests(
@@ -146,18 +186,13 @@ export async function listVerifiedColdManifests(
   const limit = Math.max(1, Math.min(VERIFIED_MANIFEST_READ_LIMIT, Math.floor(input.limit ?? VERIFIED_MANIFEST_READ_LIMIT)))
   const offset = Math.max(0, Math.floor(input.offset ?? 0))
   const baseResolution = input.baseResolution ?? "1m"
-  let query = supabase.from("chart_ohlcv_cold_manifests")
-    .select("id,ticker,base_resolution,object_path,range_start,range_end,row_count,sha256,archive_format,verified_at,format_version,byte_count")
-    .eq("base_resolution", baseResolution)
-    .not("verified_at", "is", null)
-    .order("range_start", { ascending: true })
-    .range(offset, offset + limit - 1)
-  if (input.ticker) query = query.eq("ticker", input.ticker)
-  if (input.from != null) query = query.gte("range_end", new Date(input.from * 1000).toISOString())
-  if (input.to != null) query = query.lte("range_start", new Date(input.to * 1000).toISOString())
-  const { data, error } = await query
-  if (error) throw new Error(`Chart verified cold manifest read failed: ${error.message}`)
-  return ((data || []) as ManifestRow[]).map(manifestFromRow).filter((manifest): manifest is VerifiedColdManifest => Boolean(manifest))
+  const queryInput = { ...input, limit, offset, baseResolution }
+  let result = await queryVerifiedColdManifests(supabase, queryInput, QEO149_MANIFEST_SELECT)
+  if (missingCanonicalContentManifestColumns(result.error)) {
+    result = await queryVerifiedColdManifests(supabase, queryInput, LEGACY_MANIFEST_SELECT)
+  }
+  if (result.error) throw new Error(`Chart verified cold manifest read failed: ${result.error.message}`)
+  return ((result.data || []) as ManifestRow[]).map(manifestFromRow).filter((manifest): manifest is VerifiedColdManifest => Boolean(manifest))
 }
 
 export async function readVerifiedColdManifest(
@@ -190,30 +225,58 @@ function createResolutionColdOhlcvStorage(supabase: SupabaseClient, baseResoluti
       return { bars, manifestsRead }
     },
 
-    async archiveVerifiedPartition({ ticker, bars, provenanceBatchId = null, provenance = {} }) {
+    async archiveVerifiedPartition({
+      ticker,
+      bars,
+      provenanceBatchId = null,
+      provenance = {},
+      canonicalContentDigest = undefined,
+      canonicalContentVersion = undefined,
+    }) {
       if (!bars.length) throw new Error("Cannot archive an empty chart partition")
+      if ((canonicalContentDigest == null) !== (canonicalContentVersion == null)) throw new Error("Canonical chart content identity must include digest and version together")
+      if (canonicalContentDigest != null && !/^[a-f0-9]{64}$/.test(canonicalContentDigest)) throw new Error("Invalid canonical chart content digest")
+      if (canonicalContentVersion != null && (!Number.isSafeInteger(canonicalContentVersion) || canonicalContentVersion <= 0)) throw new Error("Invalid canonical chart content version")
+      const hasCanonicalIdentity = canonicalContentDigest != null && canonicalContentVersion != null
       const sorted = [...bars].sort((a, b) => a.time - b.time)
       const bytes = serializeBars(sorted)
       const checksum = hash(bytes)
       const objectPath = archivePath(baseResolution, ticker, sorted, checksum)
       const rangeStart = new Date(sorted[0].time * 1000).toISOString()
       const rangeEnd = new Date(sorted.at(-1)!.time * 1000).toISOString()
+      const lookupColumns = hasCanonicalIdentity
+        ? "id,object_path,row_count,sha256,canonical_content_digest,canonical_content_version"
+        : "id,object_path,row_count,sha256"
 
       const { data: existingRows, error: lookupError } = await supabase.from("chart_ohlcv_cold_manifests")
-        .select("id,object_path,row_count,sha256")
+        .select(lookupColumns)
         .eq("ticker", ticker).eq("base_resolution", baseResolution).eq("range_start", rangeStart).eq("range_end", rangeEnd).eq("sha256", checksum).limit(1)
       if (lookupError) throw new Error(`Chart cold manifest lookup failed: ${lookupError.message}`)
       const existing = (existingRows || [])[0] as ManifestRow | undefined
       if (existing?.id && existing.object_path) {
         await verifyStoredObject(supabase, { objectPath: String(existing.object_path), checksum, rowCount: sorted.length })
-        const { error: refreshError } = await supabase.from("chart_ohlcv_cold_manifests").update({
+        const refresh: Record<string, unknown> = {
           verified_at: new Date().toISOString(),
           format_version: ARCHIVE_FORMAT_VERSION,
           byte_count: bytes.byteLength,
           provenance,
-        }).eq("id", String(existing.id))
+        }
+        if (hasCanonicalIdentity) {
+          refresh.canonical_content_digest = canonicalContentDigest
+          refresh.canonical_content_version = canonicalContentVersion
+        }
+        const { error: refreshError } = await supabase.from("chart_ohlcv_cold_manifests").update(refresh).eq("id", String(existing.id))
         if (refreshError) throw new Error(`Chart cold manifest refresh failed: ${refreshError.message}`)
-        return { manifestId: String(existing.id), objectPath: String(existing.object_path), sha256: checksum, rowCount: sorted.length, byteCount: bytes.byteLength, reused: true }
+        return {
+          manifestId: String(existing.id),
+          objectPath: String(existing.object_path),
+          sha256: checksum,
+          rowCount: sorted.length,
+          byteCount: bytes.byteLength,
+          reused: true,
+          canonicalContentDigest: hasCanonicalIdentity ? canonicalContentDigest : null,
+          canonicalContentVersion: hasCanonicalIdentity ? canonicalContentVersion : null,
+        }
       }
 
       let reused = false
@@ -229,7 +292,7 @@ function createResolutionColdOhlcvStorage(supabase: SupabaseClient, baseResoluti
         await verifyStoredObject(supabase, { objectPath, checksum, rowCount: sorted.length })
       }
 
-      const { data: manifest, error: manifestError } = await supabase.from("chart_ohlcv_cold_manifests").upsert({
+      const manifestPayload: Record<string, unknown> = {
         ticker,
         base_resolution: baseResolution,
         range_start: rangeStart,
@@ -243,9 +306,23 @@ function createResolutionColdOhlcvStorage(supabase: SupabaseClient, baseResoluti
         provenance_batch_id: provenanceBatchId,
         provenance,
         verified_at: new Date().toISOString(),
-      }, { onConflict: "ticker,base_resolution,range_start,range_end,sha256" }).select("id").single()
+      }
+      if (hasCanonicalIdentity) {
+        manifestPayload.canonical_content_digest = canonicalContentDigest
+        manifestPayload.canonical_content_version = canonicalContentVersion
+      }
+      const { data: manifest, error: manifestError } = await supabase.from("chart_ohlcv_cold_manifests").upsert(manifestPayload, { onConflict: "ticker,base_resolution,range_start,range_end,sha256" }).select("id").single()
       if (manifestError || !manifest?.id) throw new Error(`Chart cold manifest upsert failed: ${manifestError?.message ?? "missing manifest id"}`)
-      return { manifestId: String(manifest.id), objectPath, sha256: checksum, rowCount: sorted.length, byteCount: bytes.byteLength, reused }
+      return {
+        manifestId: String(manifest.id),
+        objectPath,
+        sha256: checksum,
+        rowCount: sorted.length,
+        byteCount: bytes.byteLength,
+        reused,
+        canonicalContentDigest: hasCanonicalIdentity ? canonicalContentDigest : null,
+        canonicalContentVersion: hasCanonicalIdentity ? canonicalContentVersion : null,
+      }
     },
   }
 }
