@@ -104,8 +104,8 @@ test("QEO-159 diversification fields serialize only as explicit optional plan in
   assert.match(source, /numeric\(maxConcurrentOpenPositions\)/)
   assert.match(tooltip, /"Max Ticker Concentration":\s*"Tập trung tối đa mỗi mã"/)
   assert.match(tooltip, /"Max Concurrent Open Positions":\s*"Số vị thế mở đồng thời tối đa"/)
-  assert.doesNotMatch(source, /useState\("30"\).*maxTickerConcentration/s)
-  assert.doesNotMatch(source, /useState\("8"\).*maxConcurrentOpenPositions/s)
+  assert.doesNotMatch(source, /useState\("30"\)[\s\S]*maxTickerConcentration/)
+  assert.doesNotMatch(source, /useState\("8"\)[\s\S]*maxConcurrentOpenPositions/)
 })
 
 test("risk planning UI talks only to authenticated portfolio APIs", () => {
