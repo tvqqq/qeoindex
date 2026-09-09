@@ -5,11 +5,9 @@ import { BOARD_SECTOR_GROUPS } from "../modules/market/sectors.ts"
 import {
   DNSE_NORMAL_USER_CHANNEL_LIMIT,
   buildDnseBoardSubscriptionPlan,
-} from "../modules/market/board/dnse-subscriptions.ts"
-import {
   rewriteDnseBoardSubscriptionMessage,
   synthesizeDnseOhlcFromTickMessage,
-} from "../modules/market/providers/dnse/market-stream.ts"
+} from "../modules/market/board/dnse-subscriptions.ts"
 import {
   defaultStockFilterCriteria,
   filterBoardTickers,
