@@ -16,11 +16,7 @@ export interface RawTransaction {
   id: string
   trade_id?: string | null
   record_origin?: "native" | "legacy_pre_trade_domain"
-  legacy_migration_status?:
-    | "not_applicable"
-    | "legacy_ungrouped"
-    | "deterministic_grouped"
-    | "manually_reviewed"
+  legacy_migration_status?: "not_applicable" | "legacy_ungrouped" | "deterministic_grouped" | "manually_reviewed"
   ticker: string
   action: TransactionAction
   quantity: number
