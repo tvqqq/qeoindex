@@ -32,4 +32,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: QEO-159 deterministic concentration domain
-        run: node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo159-concentration-ui.test.ts tests/portfolio/qeo159-concentration-projection.test.ts tests/portfolio/qeo159-risk-sizing-context.test.ts
+        run: node --test tests/portfolio/qeo159-concentration-domain.test.ts tests/portfolio/qeo159-concentration-server.test.ts tests/portfolio/qeo159-concentration-ui.test.ts tests/portfolio/qeo159-concentration-projection.test.ts tests/portfolio/qeo159-risk-sizing-context.test.ts tests/portfolio/qeo159-override-audit.test.ts
