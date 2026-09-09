@@ -1,14 +1,25 @@
 import { deriveTradeFillHistory, type TradeFillHistoryEntry } from "./fill-history.ts"
 import { deriveTradeCloseReview, type TradeCloseReview } from "./review.ts"
-import type { TradeMode, TradeStatus } from "./types.ts"
+import type {
+  PersistedTradeMode,
+  TradeGroupingStatus,
+  TradeOrigin,
+  TradeStatus,
+} from "./types.ts"
 
 type TradeReadRow = {
   id: string
   portfolio_id: string
   user_id: string
   ticker: string
-  mode: TradeMode
+  mode: PersistedTradeMode
   status: TradeStatus
+  origin?: TradeOrigin
+  grouping_status?: TradeGroupingStatus
+  scorecard_eligible?: boolean
+  legacy_opened_on?: string | null
+  legacy_closed_on?: string | null
+  legacy_source_transaction_count?: number | null
   money_management_plan_id?: string | null
   planned_entry?: number | null
   initial_stop_loss_exit?: number | null
@@ -95,6 +106,9 @@ export type TradeReadModel = {
   }
   closeReview: TradeCloseReview
   completeness: {
+    tradeGroupingState: TradeGroupingStatus
+    modeState: "known" | "unknown"
+    scorecardState: "eligible" | "ineligible"
     stopState: "known" | "unknown"
     initialRiskState: "available" | "partial" | "unknown"
     journalState: "available" | "unavailable"
@@ -230,6 +244,9 @@ export function buildTradeReadModel({
     },
     closeReview,
     completeness: {
+      tradeGroupingState: trade.grouping_status ?? "native",
+      modeState: trade.mode === "unknown" ? "unknown" : "known",
+      scorecardState: trade.scorecard_eligible === false ? "ineligible" : "eligible",
       stopState: latestStop ? "known" : "unknown",
       initialRiskState: initialRiskState(trade),
       journalState: chronologicalJournal.length > 0 ? "available" : "unavailable",

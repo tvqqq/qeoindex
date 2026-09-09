@@ -59,6 +59,15 @@ export function deriveClosedTradeOutcomes({
   let excludedClosedTradeCount = 0
 
   for (const trade of closedCandidates) {
+    // Native rows created before QEO-143 do not carry this optional field in older
+    // fixtures, so only an explicit false is ineligible. Migration rows also use
+    // mode=unknown, which is independently excluded. The server read model always
+    // supplies the persisted scorecard_eligible boolean after QEO-143.
+    if (trade.scorecard_eligible === false || trade.mode === "unknown") {
+      excludedClosedTradeCount += 1
+      continue
+    }
+
     if (!trade.closed_at) {
       excludedClosedTradeCount += 1
       continue

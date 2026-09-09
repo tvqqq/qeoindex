@@ -58,6 +58,18 @@ function ActionBadge({ action }: { action: TransactionAction }) {
   }
 }
 
+function LegacyMigrationBadge({ transaction }: { transaction: RawTransaction }) {
+  if (transaction.record_origin !== "legacy_pre_trade_domain") return null
+  const grouped = transaction.legacy_migration_status === "deterministic_grouped"
+    || transaction.legacy_migration_status === "manually_reviewed"
+
+  return (
+    <span className="inline-flex items-center rounded-md border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+      {grouped ? "Legacy · đã nhóm" : "Legacy · chưa nhóm Trade"}
+    </span>
+  )
+}
+
 export function PortfolioTransactionHistory({
   transactions,
   onDelete,
@@ -73,6 +85,14 @@ export function PortfolioTransactionHistory({
     for (const t of transactions) set.add(t.ticker)
     return Array.from(set).sort()
   }, [transactions])
+
+  const hasUngroupedLegacy = useMemo(
+    () => transactions.some((transaction) => (
+      transaction.record_origin === "legacy_pre_trade_domain"
+      && transaction.legacy_migration_status === "legacy_ungrouped"
+    )),
+    [transactions],
+  )
 
   const filteredTransactions = useMemo(() => {
     const list = selectedTicker === "all"
@@ -148,6 +168,12 @@ export function PortfolioTransactionHistory({
         </div>
       )}
 
+      {hasUngroupedLegacy && (
+        <p className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs text-amber-100/80">
+          Giao dịch legacy chưa nhóm vẫn được tính P&L nhưng không được đưa vào Scorecard theo Trade.
+        </p>
+      )}
+
       {/* Transactions table */}
       <div className="overflow-x-auto rounded-2xl border border-[#252837] bg-[#0d0f17]">
         <Table>
@@ -207,7 +233,10 @@ export function PortfolioTransactionHistory({
 
                   {/* Loại */}
                   <TableCell className="py-0 px-2">
-                    <ActionBadge action={tx.action} />
+                    <div className="flex flex-col items-start gap-1">
+                      <ActionBadge action={tx.action} />
+                      <LegacyMigrationBadge transaction={tx} />
+                    </div>
                   </TableCell>
 
                   {/* Khối lượng */}

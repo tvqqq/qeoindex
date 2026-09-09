@@ -13,7 +13,7 @@ const TICKER_RE = /^[A-Z0-9]{2,12}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const SELECT_FIELDS =
-  "id,portfolio_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
+  "id,portfolio_id,trade_id,record_origin,legacy_migration_status,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
 function err(msg: string, status = 500) {
   return NextResponse.json({ ok: false, error: msg }, { status, headers: NO_STORE })

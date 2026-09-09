@@ -3586,21 +3586,27 @@ export type Database = {
           created_at: string
           estimated_commission: number | null
           final_review: string | null
+          grouping_status: string
           id: string
           initial_account_equity: number | null
           initial_risk_amount: number | null
           initial_risk_amount_per_share: number | null
           initial_risk_percent: number | null
           initial_stop_loss_exit: number | null
+          legacy_closed_on: string | null
+          legacy_opened_on: string | null
+          legacy_source_transaction_count: number | null
           lesson_learned: string | null
           mode: string
           money_management_plan_id: string | null
           opened_at: string | null
+          origin: string
           planned_entry: number | null
           planned_position_value: number | null
           planned_trade_size: number | null
           portfolio_id: string
           pre_trade_plan: string | null
+          scorecard_eligible: boolean
           setup_tags: string[]
           slippage_allowance: number | null
           status: string
@@ -3617,21 +3623,27 @@ export type Database = {
           created_at?: string
           estimated_commission?: number | null
           final_review?: string | null
+          grouping_status?: string
           id?: string
           initial_account_equity?: number | null
           initial_risk_amount?: number | null
           initial_risk_amount_per_share?: number | null
           initial_risk_percent?: number | null
           initial_stop_loss_exit?: number | null
+          legacy_closed_on?: string | null
+          legacy_opened_on?: string | null
+          legacy_source_transaction_count?: number | null
           lesson_learned?: string | null
           mode?: string
           money_management_plan_id?: string | null
           opened_at?: string | null
+          origin?: string
           planned_entry?: number | null
           planned_position_value?: number | null
           planned_trade_size?: number | null
           portfolio_id: string
           pre_trade_plan?: string | null
+          scorecard_eligible?: boolean
           setup_tags?: string[]
           slippage_allowance?: number | null
           status?: string
@@ -3648,21 +3660,27 @@ export type Database = {
           created_at?: string
           estimated_commission?: number | null
           final_review?: string | null
+          grouping_status?: string
           id?: string
           initial_account_equity?: number | null
           initial_risk_amount?: number | null
           initial_risk_amount_per_share?: number | null
           initial_risk_percent?: number | null
           initial_stop_loss_exit?: number | null
+          legacy_closed_on?: string | null
+          legacy_opened_on?: string | null
+          legacy_source_transaction_count?: number | null
           lesson_learned?: string | null
           mode?: string
           money_management_plan_id?: string | null
           opened_at?: string | null
+          origin?: string
           planned_entry?: number | null
           planned_position_value?: number | null
           planned_trade_size?: number | null
           portfolio_id?: string
           pre_trade_plan?: string | null
+          scorecard_eligible?: boolean
           setup_tags?: string[]
           slippage_allowance?: number | null
           status?: string
@@ -3698,11 +3716,13 @@ export type Database = {
           fee: number
           fee_rate: number
           id: string
+          legacy_migration_status: string
           mistake_tags: string[]
           note: string | null
           portfolio_id: string
           price: number
           quantity: number
+          record_origin: string
           setup_tags: string[]
           stop_loss_1: number | null
           stop_loss_2: number | null
@@ -3723,11 +3743,13 @@ export type Database = {
           fee?: number
           fee_rate?: number
           id?: string
+          legacy_migration_status?: string
           mistake_tags?: string[]
           note?: string | null
           portfolio_id: string
           price?: number
           quantity: number
+          record_origin?: string
           setup_tags?: string[]
           stop_loss_1?: number | null
           stop_loss_2?: number | null
@@ -3748,11 +3770,13 @@ export type Database = {
           fee?: number
           fee_rate?: number
           id?: string
+          legacy_migration_status?: string
           mistake_tags?: string[]
           note?: string | null
           portfolio_id?: string
           price?: number
           quantity?: number
+          record_origin?: string
           setup_tags?: string[]
           stop_loss_1?: number | null
           stop_loss_2?: number | null
@@ -3841,6 +3865,60 @@ export type Database = {
           display_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      qeo143_legacy_migration_audit: {
+        Row: {
+          buy_quantity_after: number
+          buy_quantity_before: number
+          completed_at: string
+          fees_after: number
+          fees_before: number
+          id: string
+          notional_after: number
+          notional_before: number
+          rows_grouped: number
+          rows_scanned: number
+          rows_unresolved: number
+          run_key: string
+          sell_quantity_after: number
+          sell_quantity_before: number
+          trades_created: number
+        }
+        Insert: {
+          buy_quantity_after?: number
+          buy_quantity_before?: number
+          completed_at?: string
+          fees_after?: number
+          fees_before?: number
+          id?: string
+          notional_after?: number
+          notional_before?: number
+          rows_grouped: number
+          rows_scanned: number
+          rows_unresolved: number
+          run_key: string
+          sell_quantity_after?: number
+          sell_quantity_before?: number
+          trades_created: number
+        }
+        Update: {
+          buy_quantity_after?: number
+          buy_quantity_before?: number
+          completed_at?: string
+          fees_after?: number
+          fees_before?: number
+          id?: string
+          notional_after?: number
+          notional_before?: number
+          rows_grouped?: number
+          rows_scanned?: number
+          rows_unresolved?: number
+          run_key?: string
+          sell_quantity_after?: number
+          sell_quantity_before?: number
+          trades_created?: number
         }
         Relationships: []
       }
@@ -4976,6 +5054,16 @@ export type Database = {
       qeo_verify_market_ai_dispatch_secret: {
         Args: { p_secret: string }
         Returns: boolean
+      }
+      qeo143_backfill_legacy_portfolio_trades: {
+        Args: never
+        Returns: {
+          audit_id: string
+          rows_grouped: number
+          rows_scanned: number
+          rows_unresolved: number
+          trades_created: number
+        }[]
       }
       refresh_ai_council_agent_stats: {
         Args: { p_as_of_date?: string }

@@ -11,13 +11,18 @@ import {
   normalizeStopEventInput,
   normalizeTradeCreateInput,
 } from "./validation.ts"
-import { type TradeStatus } from "./types.ts"
+import {
+  type PersistedTradeMode,
+  type TradeGroupingStatus,
+  type TradeOrigin,
+  type TradeStatus,
+} from "./types.ts"
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const TRADE_SELECT = "id,portfolio_id,user_id,ticker,mode,status,trade_type,timeframe,system_tags,setup_tags,money_management_plan_id,planned_entry,initial_stop_loss_exit,initial_account_equity,initial_risk_percent,initial_risk_amount,initial_risk_amount_per_share,planned_trade_size,planned_position_value,estimated_commission,slippage_allowance,opened_at,closed_at,pre_trade_plan,thesis_summary,final_review,lesson_learned,created_at,updated_at" as const
+const TRADE_SELECT = "id,portfolio_id,user_id,ticker,mode,status,origin,grouping_status,scorecard_eligible,legacy_opened_on,legacy_closed_on,legacy_source_transaction_count,trade_type,timeframe,system_tags,setup_tags,money_management_plan_id,planned_entry,initial_stop_loss_exit,initial_account_equity,initial_risk_percent,initial_risk_amount,initial_risk_amount_per_share,planned_trade_size,planned_position_value,estimated_commission,slippage_allowance,opened_at,closed_at,pre_trade_plan,thesis_summary,final_review,lesson_learned,created_at,updated_at" as const
 
-const FILL_SELECT = "id,portfolio_id,user_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,created_at,updated_at" as const
+const FILL_SELECT = "id,portfolio_id,user_id,trade_id,record_origin,legacy_migration_status,ticker,action,quantity,price,fee,fee_rate,transaction_date,created_at,updated_at" as const
 
 const STOP_SELECT = "id,trade_id,portfolio_id,user_id,ticker,stop_type,price,quantity_covered,signal,reason,effective_at,created_at" as const
 
@@ -54,8 +59,14 @@ type TradeRow = Record<string, unknown> & {
   portfolio_id: string
   user_id: string
   ticker: string
-  mode: "live" | "paper"
+  mode: PersistedTradeMode
   status: TradeStatus
+  origin: TradeOrigin
+  grouping_status: TradeGroupingStatus
+  scorecard_eligible: boolean
+  legacy_opened_on: string | null
+  legacy_closed_on: string | null
+  legacy_source_transaction_count: number | null
   trade_type: "day" | "position" | null
   timeframe: string | null
   system_tags: string[]
@@ -82,6 +93,8 @@ type FillRow = Record<string, unknown> & {
   portfolio_id: string
   user_id: string
   trade_id: string | null
+  record_origin: "native" | "legacy_pre_trade_domain"
+  legacy_migration_status: "not_applicable" | "legacy_ungrouped" | "deterministic_grouped" | "manually_reviewed"
   ticker: string
   action: string
   quantity: number
@@ -193,6 +206,9 @@ function normalizedPlanPatch(trade: TradeRow, input: unknown) {
   const body = asInputRecord(input)
   if (body.status !== undefined) {
     throw new TradeDomainError("STATUS_REQUIRES_TRANSITION", "Trade status must be changed through transitionTrade")
+  }
+  if (trade.mode === "unknown") {
+    throw new TradeDomainError("LEGACY_TRADE_IMMUTABLE", "Legacy migrated Trades require explicit review before plan edits")
   }
 
   const candidate = normalizeTradeCreateInput({
@@ -647,12 +663,18 @@ export async function readPortfolioTradeContext(
     : groupedCount === 0
       ? "ungrouped"
       : "mixed"
+  const legacyUngroupedCount = transactions.filter(
+    (row) => row.record_origin === "legacy_pre_trade_domain" && row.legacy_migration_status === "legacy_ungrouped",
+  ).length
+  const deterministicLegacyCount = transactions.filter(
+    (row) => row.record_origin === "legacy_pre_trade_domain" && row.legacy_migration_status === "deterministic_grouped",
+  ).length
 
   return {
     portfolioId,
     moneyManagementPlanRef: null,
     legacyTransactions,
-    completeness: { legacyGrouping },
+    completeness: { legacyGrouping, legacyUngroupedCount, deterministicLegacyCount },
     trades: trades.map((trade) =>
       buildTradeReadModel({
         trade,

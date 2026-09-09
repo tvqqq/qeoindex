@@ -1,6 +1,17 @@
 export const TRADE_MODES = ["live", "paper"] as const
 export type TradeMode = (typeof TRADE_MODES)[number]
 
+// Legacy migration may persist a Trade whose historical live/paper mode was not
+// recorded. Normal user-created Trades intentionally remain constrained by
+// TradeMode / TRADE_MODES above.
+export type PersistedTradeMode = TradeMode | "unknown"
+
+export const TRADE_ORIGINS = ["native", "legacy_migration"] as const
+export type TradeOrigin = (typeof TRADE_ORIGINS)[number]
+
+export const TRADE_GROUPING_STATUSES = ["native", "deterministic", "manually_reviewed"] as const
+export type TradeGroupingStatus = (typeof TRADE_GROUPING_STATUSES)[number]
+
 export const TRADE_STATUSES = [
   "planned",
   "open",

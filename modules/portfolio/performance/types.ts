@@ -5,13 +5,17 @@ export type PerformancePopulation = "live" | "paper" | "combined"
 export type PerformanceTradeInput = {
   id: string
   ticker: string
-  mode: "live" | "paper"
+  mode: "live" | "paper" | "unknown"
   status: string
   timeframe: string | null
   system_tags: string[]
   setup_tags: string[]
   initial_risk_amount: number | null
   closed_at: string | null
+  scorecard_eligible?: boolean
+  origin?: "native" | "legacy_migration"
+  grouping_status?: "native" | "deterministic" | "manually_reviewed"
+  legacy_closed_on?: string | null
 }
 
 export type PerformanceJournalInput = {

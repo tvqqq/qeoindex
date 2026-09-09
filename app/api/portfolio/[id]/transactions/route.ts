@@ -55,7 +55,7 @@ async function validatedTradeId(
 }
 
 const SELECT_FIELDS =
-  "id,portfolio_id,trade_id,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
+  "id,portfolio_id,trade_id,record_origin,legacy_migration_status,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
 /** GET /api/portfolio/[id]/transactions — list transactions for a portfolio */
 export async function GET(
