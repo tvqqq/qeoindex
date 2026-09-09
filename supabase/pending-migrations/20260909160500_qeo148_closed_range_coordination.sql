@@ -66,16 +66,17 @@ as $function$
   )
 $function$;
 
--- Server-side gaps-and-islands avoids the PostgREST row cap entirely. Only
--- rows with durable success_at are coverage. Provenance/failure/lease presence
--- alone can never suppress retry.
+-- Server-side gaps-and-islands returns one ordered JSONB scalar, not a rowset,
+-- so PostgREST result-row limits cannot truncate even >1000 disjoint intervals.
+-- Only rows with durable success_at are coverage. Provenance/failure/lease
+-- presence alone can never suppress retry.
 create or replace function public.qeo_chart_intraday_success_coverage(
   p_ticker text,
   p_source_key text,
   p_range_start timestamptz,
   p_range_end timestamptz
 )
-returns table(range_start timestamptz, range_end timestamptz)
+returns jsonb
 language sql
 stable
 security definer
@@ -104,11 +105,24 @@ as $function$
       sum(case when o.prior_max_end is null or o.range_start > o.prior_max_end then 1 else 0 end)
         over (order by o.range_start, o.range_end, o.id) as group_id
     from ordered o
+  ), merged as (
+    select
+      greatest(min(g.range_start), p_range_start) as range_start,
+      least(max(g.range_end), p_range_end) as range_end
+    from grouped g
+    group by g.group_id
   )
-  select min(g.range_start), max(g.range_end)
-  from grouped g
-  group by g.group_id
-  order by min(g.range_start), max(g.range_end)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'range_start', m.range_start,
+        'range_end', m.range_end
+      )
+      order by m.range_start, m.range_end
+    ),
+    '[]'::jsonb
+  )
+  from merged m
 $function$;
 
 create or replace function public.qeo_claim_chart_intraday_range(
@@ -150,7 +164,9 @@ begin
 
   if not coalesce(p_revalidate, false) and exists (
     select 1
-    from public.qeo_chart_intraday_success_coverage(v_ticker, v_source_key, p_range_start, p_range_end) c
+    from jsonb_to_recordset(
+      public.qeo_chart_intraday_success_coverage(v_ticker, v_source_key, p_range_start, p_range_end)
+    ) as c(range_start timestamptz, range_end timestamptz)
     where c.range_start <= p_range_start and c.range_end >= p_range_end
   ) then
     return jsonb_build_object('status', 'covered');
