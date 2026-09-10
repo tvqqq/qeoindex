@@ -93,6 +93,7 @@ export interface MarketHistoryPoint {
   aboveMa200Pct: number | null
   foreignNetValue: number | null
   proprietaryNetValue: number | null
+  otherFlowNetValue: number | null
   totalTradedValue: number | null
   vnindexClose: number | null
   vnindexChangePct: number | null
@@ -229,7 +230,7 @@ export async function getMarketCloseInsightData(
       .order("rank", { ascending: true }),
     supabase
       .from("market_insight_daily")
-      .select("session_date,market_regime,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,total_traded_value")
+      .select("session_date,market_regime,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,other_flow_net_value,total_traded_value")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(61),
@@ -392,6 +393,7 @@ export async function getMarketCloseInsightData(
       aboveMa200Pct: row.above_ma200_pct != null ? Number(row.above_ma200_pct) : null,
       foreignNetValue: row.foreign_net_value != null ? Number(row.foreign_net_value) : null,
       proprietaryNetValue: row.proprietary_net_value != null ? Number(row.proprietary_net_value) : null,
+      otherFlowNetValue: row.other_flow_net_value != null ? Number(row.other_flow_net_value) : null,
       totalTradedValue: row.total_traded_value != null ? Number(row.total_traded_value) : null,
       vnindexClose: vnindexHistoryByDate.get(String(row.session_date))?.close ?? null,
       vnindexChangePct: vnindexHistoryByDate.get(String(row.session_date))?.changePct ?? null,
