@@ -6,6 +6,7 @@ import {
 } from "@/components/insights/market-close-charts"
 import { BreadthDivergenceBadge, MaBreadthChart } from "@/components/insights/market-breadth-divergence-chart"
 import { VnindexContributionBadge, VnindexContributorsView } from "@/components/insights/vnindex-contributors-view"
+import { LeadershipConcentrationView } from "@/components/insights/leadership-concentration-view"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView, MarketSentimentCard, MarketSentimentHistoryCard } from "@/components/insights/market-health-view"
@@ -18,6 +19,7 @@ import { buildMarketSessionChanges, type MarketSessionChanges } from "@/modules/
 import { buildLiquidityContext, type LiquidityContext } from "@/modules/research/market-insight/liquidity-context"
 import { buildBreadthDivergenceContext } from "@/modules/research/market-insight/breadth-divergence"
 import { buildVnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"
+import { buildLeadershipConcentrationContext } from "@/modules/research/market-insight/leadership-concentration"
 import { buildInstitutionalFlowPersistence } from "@/modules/research/market-insight/institutional-flow-persistence"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
@@ -173,6 +175,10 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
     vnindexChange: vnindex?.change ?? null,
     leaders: data.leaders,
   })
+  const leadershipConcentration = buildLeadershipConcentrationContext({
+    vnindexTradedValueMillion: vnindex?.tradedValue ?? null,
+    candidates: data.leadershipLiquidity ?? [],
+  })
   const flowPersistence = buildInstitutionalFlowPersistence({
     sessionDate: data.sessionDate,
     history,
@@ -255,7 +261,10 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
                 <div className="min-w-0">
                   <IndexImpactChart leaders={[...vnindexContributors.pullers.slice(0, 5), ...vnindexContributors.draggers.slice(0, 5)]} />
                 </div>
-                <VnindexContributorsView context={vnindexContributors} />
+                <div className="space-y-3">
+                  <VnindexContributorsView context={vnindexContributors} />
+                  <LeadershipConcentrationView context={leadershipConcentration} />
+                </div>
               </div>
             </ChartPanel>
           </div>

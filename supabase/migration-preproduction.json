@@ -31,6 +31,14 @@
       "state": "REPO_AHEAD",
       "evidence": "QEO-186 RED/GREEN producer contract and PR #435 preproduction Verify",
       "rationale": "QEO-186 adds only the same-session KFSP candidate price and daily-return evidence needed to derive explicitly labeled Qeo VNINDEX contributor estimates. The migration remains repo-ahead until the exact PR head passes full Verify and production promotion/readback is completed."
+    },
+    {
+      "logicalName": "qeo188_candidate_traded_value_for_leadership_concentration",
+      "repositoryVersion": "20260910211000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-188 approved exact-liquidity and million-to-billion denominator contract with RED producer/consumer coverage",
+      "rationale": "QEO-188 persists same-session KFSP traded_value_1d_billion so Leadership Concentration can rank factual liquidity and compare Top 5/10 against VNINDEX traded value after explicit million-to-billion normalization. It remains repo-ahead until exact-head Verify and production migration/readback complete."
     }
   ]
 }

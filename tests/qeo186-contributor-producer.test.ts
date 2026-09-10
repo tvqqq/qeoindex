@@ -90,3 +90,5 @@ test("QEO-186 UI discloses that index-point contribution is a Qeo estimate from 
   const contributors = read("components/insights/vnindex-contributors-view.tsx")
   assert.match(`${dashboard}\n${contributors}`, /Qeo[^\n]*(ước tính|estimate)[^\n]*KFSP/i)
 })
+
+import "./qeo188-leadership-concentration.cases.ts"
