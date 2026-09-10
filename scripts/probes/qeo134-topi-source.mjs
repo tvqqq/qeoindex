@@ -22,34 +22,32 @@ const scripts = [...page.text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
   .map((match) => absoluteUrl(PAGE_URL, match[1]))
   .filter(Boolean)
 
-const discovered = new Set()
-const context = []
+const evidence = []
 for (const scriptUrl of scripts) {
   const script = await fetchText(scriptUrl)
   if (!script.ok) continue
-  for (const match of script.text.matchAll(/https?:\/\/apiclient\.topi\.vn\/api-web\/[A-Za-z0-9_?=&./-]+|\/api-web\/[A-Za-z0-9_?=&./-]+/g)) {
-    discovered.add(match[0])
-  }
-  const lowered = script.text.toLowerCase()
-  for (const needle of ["vn-index", "fear", "greed", "tamly", "tâm lý", "marketindex", "market-index"]) {
+  const text = script.text
+  const lowered = text.toLowerCase()
+  const anchors = [
+    "changefilter:function(t){this.filterday=t},fetchdata:function",
+    "fgchart",
+    "sentimentlevelid",
+    "getmarket",
+    "marketindex",
+  ]
+  for (const anchor of anchors) {
     let from = 0
-    for (let count = 0; count < 5; count += 1) {
-      const index = lowered.indexOf(needle, from)
+    for (let count = 0; count < 12; count += 1) {
+      const index = lowered.indexOf(anchor, from)
       if (index < 0) break
-      context.push({
+      evidence.push({
         script: scriptUrl,
-        needle,
-        snippet: script.text.slice(Math.max(0, index - 240), Math.min(script.text.length, index + 420)),
+        anchor,
+        snippet: text.slice(Math.max(0, index - 1600), Math.min(text.length, index + 5000)),
       })
-      from = index + needle.length
+      from = index + anchor.length
     }
   }
 }
 
-console.log(JSON.stringify({
-  pageStatus: page.status,
-  scriptCount: scripts.length,
-  scripts,
-  endpoints: [...discovered],
-  context,
-}, null, 2))
+console.log(JSON.stringify({ pageStatus: page.status, scripts, evidence }, null, 2))
