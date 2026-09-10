@@ -19,28 +19,23 @@ jobs:
           from pathlib import Path
           path = Path('supabase/functions/_shared/market-close-normalizer-base.ts')
           text = path.read_text()
-          old = '''  const vnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")
-          const contributorEstimate = estimateVnindexContributors({
-            vnindexValue: vnindex?.value ?? null,
-            vnindexChange: vnindex?.change ?? null,
-            advances: vnindex?.advances ?? 0,
-            declines: vnindex?.declines ?? 0,
-            unchanged: vnindex?.unchanged ?? 0,
-            candidates: contributorCandidates,
-          })'''
-          new = '''  const contributorVnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")
-          const contributorEstimate = estimateVnindexContributors({
-            vnindexValue: contributorVnindex?.value ?? null,
-            vnindexChange: contributorVnindex?.change ?? null,
-            advances: contributorVnindex?.advances ?? 0,
-            declines: contributorVnindex?.declines ?? 0,
-            unchanged: contributorVnindex?.unchanged ?? 0,
-            candidates: contributorCandidates,
-          })'''
-          if old in text:
-              path.write_text(text.replace(old, new, 1))
-          elif new not in text:
-              raise SystemExit('QEO-186 contributor VNINDEX block not found')
+          replacements = {
+              '  const vnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")': '  const contributorVnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")',
+              '    vnindexValue: vnindex?.value ?? null,': '    vnindexValue: contributorVnindex?.value ?? null,',
+              '    vnindexChange: vnindex?.change ?? null,': '    vnindexChange: contributorVnindex?.change ?? null,',
+              '    advances: vnindex?.advances ?? 0,': '    advances: contributorVnindex?.advances ?? 0,',
+              '    declines: vnindex?.declines ?? 0,': '    declines: contributorVnindex?.declines ?? 0,',
+              '    unchanged: vnindex?.unchanged ?? 0,': '    unchanged: contributorVnindex?.unchanged ?? 0,',
+          }
+          changed = False
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+                  changed = True
+              elif new not in text:
+                  raise SystemExit(f'QEO-186 integration line missing: {old}')
+          if changed:
+              path.write_text(text)
           PY
       - name: Commit integration fix if needed
         run: |
