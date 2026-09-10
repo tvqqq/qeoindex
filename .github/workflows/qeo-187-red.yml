@@ -1,0 +1,33 @@
+name: QEO-187 RED
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-187-market-insightsp1-institutional-flow-persistence-1d-5d-20d
+    paths:
+      - .github/workflows/qeo-187-red.yml
+
+permissions:
+  contents: write
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Append and commit RED contracts
+        run: node scripts/tmp-qeo187-red.mjs
+      - name: Prove RED
+        run: node --test tests/market-insight-ui-performance.test.ts
