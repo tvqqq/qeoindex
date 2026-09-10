@@ -16,11 +16,13 @@ test("QEO-171 has an isolated authenticated production browser acceptance harnes
   const workflow = read(workflowPath)
   const spec = read(specPath)
 
+  assert.match(workflow, /workflow_dispatch:/)
   assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/)
   assert.match(workflow, /QEO171_BASE_URL:\s*https:\/\/qeoindex\.qeoqeo\.com/)
   assert.match(workflow, /QEO171_TEST_EMAIL:\s*\$\{\{\s*secrets\.QEO171_TEST_EMAIL\s*\}\}/)
   assert.match(workflow, /QEO171_TEST_PASSWORD:\s*\$\{\{\s*secrets\.QEO171_TEST_PASSWORD\s*\}\}/)
   assert.match(workflow, /QEO171_AUTH_AVAILABLE/)
+  assert.match(workflow, /QEO171_ACCEPTANCE_EXECUTED=false/)
   assert.match(workflow, /acceptance skipped: encrypted QA credentials are not provisioned/i)
   assert.match(workflow, /playwright install --with-deps chromium/)
   assert.match(workflow, /qeo171-stock-chart-production\.spec\.ts --project=desktop/)
