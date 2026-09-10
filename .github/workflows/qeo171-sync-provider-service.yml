@@ -18,23 +18,7 @@ jobs:
         with:
           ref: test/qeo-171-production-chart-acceptance-v2
       - name: Make every closed recovery range session-aware
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("modules/market/chart-data/service.ts")
-          source = path.read_text()
-          before = '''  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
-    ? normalized.bars.length === 0
-      ? [closedRequestedRange]
-      : missingTradingProviderRanges(closedRequestedRange, coveredRanges)
-    : []'''
-          after = '''  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
-    ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)
-    : []'''
-          if before not in source:
-              raise SystemExit("QEO-171 zero-storage recovery target not found")
-          path.write_text(source.replace(before, after, 1))
-          PY
+        run: python -c 'from pathlib import Path; p=Path("modules/market/chart-data/service.ts"); s=p.read_text(); old="    ? normalized.bars.length === 0\n      ? [closedRequestedRange]\n      : missingTradingProviderRanges(closedRequestedRange, coveredRanges)"; new="    ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)"; assert old in s, "QEO-171 zero-storage recovery target not found"; p.write_text(s.replace(old,new,1))'
       - name: Commit production fix
         run: |
           git config user.name "qeoindex-ci"
