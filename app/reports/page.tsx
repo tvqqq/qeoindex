@@ -109,9 +109,7 @@ function statusView(item: ResearchReportCatalogItem) {
 
 function descriptionView(item: ResearchReportCatalogItem) {
   if (item.description) return item.description
-  if (item.analysisStatus === "ready") return "Chưa có mô tả tóm tắt cho phiên bản phân tích hiện tại."
-  if (item.analysisStatus === "processing") return "Mô tả sẽ hiển thị sau khi AI hoàn tất phân tích báo cáo."
-  return "Mô tả sẽ được trích xuất khi báo cáo hoàn tất quy trình phân tích."
+  return "Chưa có mô tả tóm tắt cho phiên bản phân tích hiện tại."
 }
 
 function recommendationView(item: ResearchReportCatalogItem) {
@@ -276,7 +274,7 @@ export default async function ResearchReportsCatalogPage({
                 return (
                   <article
                     key={item.id}
-                    className="group relative flex h-full min-h-[440px] min-w-0 flex-col overflow-hidden rounded-[28px] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(25,28,31,0.94),rgba(10,14,17,0.98))] p-5 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)] transition-colors hover:border-emerald-300/25 sm:p-6"
+                    className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(25,28,31,0.94),rgba(10,14,17,0.98))] p-5 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)] transition-colors hover:border-emerald-300/25 sm:p-6"
                   >
                     <Link
                       href={`/research/reports/${item.id}`}
@@ -302,14 +300,11 @@ export default async function ResearchReportsCatalogPage({
                         </span>
                       </div>
 
-                      <h2 className="mt-5 min-h-[84px] line-clamp-3 text-lg font-black leading-7 tracking-tight text-white sm:text-xl">
+                      <h2 className="mt-5 line-clamp-3 text-lg font-black leading-7 tracking-tight text-white sm:text-xl">
                         {item.title}
                       </h2>
-                      <p className="mt-3 h-[60px] line-clamp-3 text-sm leading-5 text-slate-400">
-                        {descriptionView(item)}
-                      </p>
 
-                      <div className="mt-5 grid grid-cols-2 gap-2.5">
+                      <div className="mt-4 grid grid-cols-2 gap-2.5">
                         <div className={`h-[98px] min-w-0 rounded-2xl border p-3.5 ${status.className}`}>
                           <div className="text-[10px] font-black uppercase tracking-[0.16em] opacity-75">TRẠNG THÁI AI</div>
                           <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
@@ -328,6 +323,12 @@ export default async function ResearchReportsCatalogPage({
                           ) : null}
                         </div>
                       </div>
+
+                      {item.analysisStatus === "ready" ? (
+                        <p className="mt-4 line-clamp-3 text-sm leading-5 text-slate-400">
+                          {descriptionView(item)}
+                        </p>
+                      ) : null}
 
                       <div className="mt-auto pt-5">
                         <div className="border-t border-white/[0.075] pt-4">
