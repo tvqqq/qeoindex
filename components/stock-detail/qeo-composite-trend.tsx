@@ -141,6 +141,11 @@ export function QeoCompositeTrend({
   const hoveredComposite = hoveredCompositeIndex == null ? null : compositeHistory[hoveredCompositeIndex]
   const hoveredScore = normalizeScore(hoveredComposite?.compositeScore)
   const hoveredPoint = hoveredCompositeIndex == null ? null : chartPoints[hoveredCompositeIndex]
+  const tooltipAlignment = hoveredCompositeIndex === 0
+    ? "translate-x-0"
+    : hoveredCompositeIndex === compositeHistory.length - 1
+      ? "-translate-x-full"
+      : "-translate-x-1/2"
 
   return (
     <div
@@ -224,7 +229,10 @@ export function QeoCompositeTrend({
               {hoveredComposite && hoveredScore != null && hoveredPoint ? (
                 <div
                   data-qeo-composite-tooltip
-                  className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-md border border-violet-200/20 bg-slate-950/95 px-1.5 py-0.5 font-mono text-[9px] font-black text-violet-100 shadow-lg"
+                  className={cn(
+                    "pointer-events-none absolute top-0 z-10 rounded-md border border-violet-200/20 bg-slate-950/95 px-1.5 py-0.5 font-mono text-[9px] font-black text-violet-100 shadow-lg",
+                    tooltipAlignment,
+                  )}
                   style={{ left: `${(hoveredPoint.x / chartWidth) * 100}%` }}
                 >
                   {Math.round(hoveredScore)} · {formatSessionDate(hoveredComposite.asOfDate)}
