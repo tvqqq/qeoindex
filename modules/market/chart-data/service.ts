@@ -402,9 +402,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   if (coverageRead.status === "rejected") errors.push({ code: "STORAGE_UNAVAILABLE" })
 
   const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
-    ? normalized.bars.length === 0
-      ? [closedRequestedRange]
-      : missingTradingProviderRanges(closedRequestedRange, coveredRanges)
+    ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)
     : []
   const closedStorageGapRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
     ? detectTradingSessionGaps(normalized.bars)
