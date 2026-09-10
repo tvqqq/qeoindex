@@ -25,8 +25,8 @@ test("QEO-134 market intelligence replaces the old index column with sentiment h
 
   assert.match(dashboard, /data-market-intelligence-overview-row[^>]*className="[^"]*xl:grid-cols-3[^"]*xl:items-stretch/)
   assert.match(dashboard, /data-market-summary-column[^>]*className="[^"]*h-full/)
-  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^\"]*\[&>\*\]:h-full/)
-  assert.match(dashboard, /data-market-sentiment-history-column[^>]*className="[^"]*h-full[^\"]*\[&>\*\]:h-full/)
+  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
+  assert.match(dashboard, /data-market-sentiment-history-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
   assert.match(dashboard, /data-market-sentiment-column[\s\S]*<MarketSentimentCard data=\{data\}/)
   assert.match(dashboard, /data-market-sentiment-history-column[\s\S]*<MarketSentimentHistoryCard data=\{data\}/)
   assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must remain removed")
