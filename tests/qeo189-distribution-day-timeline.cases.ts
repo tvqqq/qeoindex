@@ -57,6 +57,25 @@ test("QEO-189 keeps the latest 25 market sessions in chronological order", async
   )
 })
 
+test("QEO-189 uses the immediately preceding anchor to verify the first visible session", async () => {
+  const { buildDistributionDayTimeline } = await loadTimelineBuilder()
+  const history = Array.from({ length: 26 }, (_, index) => {
+    const day = String(index + 1).padStart(2, "0")
+    return session(`2026-08-${day}`, index === 0 ? 1 : 2)
+  })
+
+  const context = buildDistributionDayTimeline({
+    sessionDate: "2026-08-26",
+    currentDistributionCount: 2,
+    history,
+  })
+
+  assert.equal(context.sessions.length, 25)
+  assert.equal(context.sessions[0]?.sessionDate, "2026-08-02")
+  assert.equal(context.sessions[0]?.isDistributionDay, true)
+  assert.equal(context.verifiedMarks25, 1)
+})
+
 test("QEO-189 marks only verified canonical count increments and fails closed across missing observations", async () => {
   const { buildDistributionDayTimeline } = await loadTimelineBuilder()
   const context = buildDistributionDayTimeline({
