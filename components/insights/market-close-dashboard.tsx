@@ -250,8 +250,8 @@ function IndexTile({ item }: { item: MarketCloseDashboardData["indexes"][number]
   const positive = (item.changePct ?? 0) >= 0
   const total = Math.max(1, item.advances + item.unchanged + item.declines)
   return (
-    <Card className={cn(surface, "group py-0 transition-colors hover:border-teal-300/20")}>
-      <CardContent className="p-3">
+    <Card className={cn(surface, "group border border-white/[0.12] py-0 transition-colors hover:border-teal-300/30")}>
+      <CardContent className="p-4 sm:p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <span className="font-mono text-xs font-black text-slate-200">{item.indexCode}</span>

@@ -618,13 +618,25 @@ const SENTIMENT_HISTORY_RANGES = [
   { label: "Tất cả", days: 0 },
 ] as const
 
+function getSentimentHistoryLabel(score: number) {
+  if (score < 30) return "Sợ hãi cực độ"
+  if (score < 45) return "Sợ hãi"
+  if (score < 56) return "Trung lập"
+  if (score < 71) return "Tham lam"
+  return "Tham lam cực độ"
+}
+
 function SentimentHistoryTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { tradingDate?: string; value?: number } }> }) {
   const point = payload?.[0]?.payload
   if (!active || !point || point.value == null) return null
+  const sentimentLabel = getSentimentHistoryLabel(point.value)
   return (
-    <div className="rounded-lg border border-white/15 bg-[#08131e] p-2.5 font-mono text-xs shadow-xl">
-      <p className="text-[11px] text-slate-400">{point.tradingDate}</p>
-      <p className="mt-1 font-bold text-cyan-300">Điểm tâm lý: {point.value.toFixed(1)}</p>
+    <div className="rounded-lg border border-white/15 bg-[#08131e] p-2.5 shadow-xl">
+      <p className="font-mono text-[11px] text-slate-400">{point.tradingDate}</p>
+      <div className="mt-1 flex items-center gap-2">
+        <span className="rounded bg-amber-300 px-1.5 py-0.5 font-mono text-sm font-black text-slate-950">{point.value.toFixed(0)}</span>
+        <span className="text-sm font-semibold text-slate-100">{sentimentLabel}</span>
+      </div>
     </div>
   )
 }
@@ -645,30 +657,32 @@ export function MarketSentimentHistoryCard({ data }: { data: MarketCloseDashboar
 
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
-      <MarketWidgetChildHeader icon={BarChart3} title="Lịch sử chỉ báo tâm lý" description="Diễn biến điểm tâm lý theo thời gian" asOf={data.asOf} quality={data.qualityStatus} />
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <label htmlFor="market-sentiment-history-range" className="text-xs font-medium text-slate-400">Hiển thị</label>
-        <select
-          id="market-sentiment-history-range"
-          value={rangeDays}
-          onChange={(event) => setRangeDays(Number(event.target.value))}
-          className="h-8 rounded-md border border-white/10 bg-[#08131e] px-2 font-mono text-xs font-bold text-slate-200 outline-none focus:border-cyan-400/50"
-        >
-          {SENTIMENT_HISTORY_RANGES.map((range) => <option key={range.days} value={range.days}>{range.label}</option>)}
-        </select>
-      </div>
+      <MarketWidgetChildHeader
+        icon={BarChart3}
+        title="Lịch sử chỉ báo tâm lý"
+        description="Diễn biến điểm tâm lý theo thời gian"
+        asOf={data.asOf}
+        quality={data.qualityStatus}
+        actions={
+          <div className="flex items-center gap-2">
+            <label htmlFor="market-sentiment-history-range" className="text-xs font-medium text-slate-400">Hiển thị</label>
+            <select
+              id="market-sentiment-history-range"
+              value={rangeDays}
+              onChange={(event) => setRangeDays(Number(event.target.value))}
+              className="h-8 rounded-md border border-white/10 bg-[#08131e] px-2 font-mono text-xs font-bold text-slate-200 outline-none focus:border-cyan-400/50"
+            >
+              {SENTIMENT_HISTORY_RANGES.map((range) => <option key={range.days} value={range.days}>{range.label}</option>)}
+            </select>
+          </div>
+        }
+      />
       {visibleHistory.length === 0 ? (
         <div className="flex h-[210px] items-center justify-center text-sm text-slate-500">Chưa có lịch sử chỉ báo tâm lý.</div>
       ) : (
         <div className="mt-2 h-[210px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={visibleHistory} margin={{ top: 12, right: 8, left: -24, bottom: 0 }}>
-              <defs>
-                <linearGradient id="sentimentHistoryGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.38} />
-                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.03} />
-                </linearGradient>
-              </defs>
+            <ComposedChart data={visibleHistory} margin={{ top: 12, right: 8, left: -24, bottom: 0 }}>
               <CartesianGrid stroke={GRID_COLOR} vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="tradingDate" axisLine={{ stroke: "rgba(255,255,255,0.16)" }} tickLine={false} tick={{ fill: AXIS_COLOR, fontSize: 9, fontFamily: "monospace" }} minTickGap={28} tickFormatter={(value) => String(value).slice(5)} />
               <YAxis domain={[0, 100]} ticks={[0, 30, 45, 56, 71, 100]} axisLine={false} tickLine={false} tick={{ fill: AXIS_COLOR, fontSize: 9, fontFamily: "monospace" }} />
@@ -677,8 +691,15 @@ export function MarketSentimentHistoryCard({ data }: { data: MarketCloseDashboar
               <ReferenceLine y={56} stroke="rgba(148,163,184,0.3)" strokeDasharray="3 3" />
               <ReferenceLine y={71} stroke="rgba(45,212,191,0.35)" strokeDasharray="3 3" />
               <Tooltip content={<SentimentHistoryTooltip />} />
-              <Area type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={2.4} fill="url(#sentimentHistoryGradient)" dot={false} activeDot={{ r: 3.5 }} />
-            </AreaChart>
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#f8fafc"
+                strokeWidth={2.2}
+                dot={false}
+                activeDot={{ r: 3.5, fill: "#f8fafc" }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
