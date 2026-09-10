@@ -370,6 +370,22 @@ test("QEO-186 fails closed for invalid denominator and preserves valid concentra
   }
 })
 
+test("QEO-186 fails closed when same-direction contributor evidence is absent", async () => {
+  const modulePath = path.resolve("modules/research/market-insight/vnindex-contributors.ts")
+  const { buildVnindexContributorsContext } = await import(modulePath)
+
+  for (const input of [
+    { vnindexChange: 2, leaders: [{ category: "index_down", ticker: "DOWN", estimatedIndexPoints: -1, rank: 1 }] },
+    { vnindexChange: -2, leaders: [{ category: "index_up", ticker: "UP", estimatedIndexPoints: 1, rank: 1 }] },
+    { vnindexChange: 2, leaders: [] },
+  ]) {
+    const context = buildVnindexContributorsContext(input)
+    assert.equal(context.top5ContributionPct, null)
+    assert.equal(context.top10ContributionPct, null)
+    assert.equal(context.concentrationState, "unknown")
+  }
+})
+
 test("QEO-186 renders contributors after market health and before deep-dive charts", () => {
   const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
   const helperPath = path.resolve("modules/research/market-insight/vnindex-contributors.ts")
