@@ -6,7 +6,7 @@ function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 }
 
-test("QEO-150 recovery accepts only completed Vietnam trading sessions", async () => {
+test("QEO-150 recovery accepts only completed Vietnam trading sessions inside the latest-five HOT window", async () => {
   const policy = await import("../../modules/market/chart-data/maintenance-policy.ts")
   const recoverable = Reflect.get(policy, "isQeo150RecoverableCompletedSession") as
     | undefined
@@ -16,6 +16,8 @@ test("QEO-150 recovery accepts only completed Vietnam trading sessions", async (
   const afterClose = new Date("2026-09-10T12:20:00.000Z") // 19:20 ICT
   assert.equal(recoverable!("2026-09-10", afterClose), true)
   assert.equal(recoverable!("2026-09-09", afterClose), true)
+  assert.equal(recoverable!("2026-09-04", afterClose), true)
+  assert.equal(recoverable!("2026-09-03", afterClose), false)
   assert.equal(recoverable!("2026-09-11", afterClose), false)
   assert.equal(recoverable!("2026-09-12", afterClose), false)
 })
