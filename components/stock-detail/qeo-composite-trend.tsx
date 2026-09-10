@@ -161,32 +161,20 @@ export function QeoCompositeTrend({
             {rsHistory.map((point, index) => {
               const isLatest = index === rsHistory.length - 1
               const roundedScore = Math.round(point.stockRs)
-              const ringColor = rsRingColor(point.stockRs)
               return (
                 <div
                   key={`${point.asOfDate}-${index}`}
                   data-rs-ring
                   data-current-rs={isLatest ? "true" : undefined}
                   className={cn(
-                    "grid size-10 shrink-0 place-items-center rounded-full transition-shadow",
+                    "grid size-10 shrink-0 place-items-center rounded-full font-mono text-[14px] font-black text-slate-950 shadow-inner transition-shadow",
                     isLatest && "shadow-[0_0_18px_rgba(103,232,249,0.28)]",
                   )}
+                  style={{ backgroundColor: rsRingColor(point.stockRs) }}
                   title={`RS ${point.asOfDate}: ${roundedScore}`}
                   aria-label={`RS ${point.asOfDate}: ${roundedScore}${isLatest ? ", mới nhất" : ""}`}
                 >
-                  <div
-                    className="relative grid size-9 place-items-center rounded-full p-[2px]"
-                    style={{
-                      background: `conic-gradient(${ringColor} ${point.stockRs * 3.6}deg, rgba(51,65,85,0.5) 0deg)`,
-                    }}
-                  >
-                    <span
-                      className="grid size-full place-items-center rounded-full font-mono text-[14px] font-black text-slate-950 shadow-inner"
-                      style={{ backgroundColor: rsRingColor(point.stockRs) }}
-                    >
-                      {roundedScore}
-                    </span>
-                  </div>
+                  {roundedScore}
                 </div>
               )
             })}
