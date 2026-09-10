@@ -1,3 +1,5 @@
+import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../calendar.ts"
+
 export interface ProviderCoverageRange {
   from: number
   to: number
@@ -57,6 +59,57 @@ export function missingProviderRanges(
 
   if (cursor < normalizedRequest.to) missing.push({ from: cursor, to: normalizedRequest.to })
   return missing.filter((range) => range.to > range.from)
+}
+
+function addVietnamCalendarDay(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00+07:00`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return vietnamDateKey(date)
+}
+
+function sessionRange(dateKey: string, start: string, end: string): ProviderCoverageRange {
+  return {
+    from: Math.floor(Date.parse(`${dateKey}T${start}+07:00`) / 1000),
+    to: Math.floor(Date.parse(`${dateKey}T${end}+07:00`) / 1000),
+  }
+}
+
+function tradingSessionRanges(request: ProviderCoverageRange): ProviderCoverageRange[] {
+  if (!Number.isFinite(request.from) || !Number.isFinite(request.to) || request.to <= request.from) return []
+
+  const normalizedRequest = { from: Math.floor(request.from), to: Math.floor(request.to) }
+  const lastDateKey = vietnamDateKey(normalizedRequest.to * 1000)
+  let dateKey = vietnamDateKey(normalizedRequest.from * 1000)
+  const ranges: ProviderCoverageRange[] = []
+
+  for (let guard = 0; dateKey <= lastDateKey && guard < 3700; guard += 1) {
+    if (isVietnamSecuritiesTradingDateKey(dateKey)) {
+      for (const range of [
+        sessionRange(dateKey, "09:00:00", "11:30:00"),
+        sessionRange(dateKey, "13:00:00", "14:46:00"),
+      ]) {
+        const clipped = normalizeRange(range, normalizedRequest)
+        if (clipped && clipped.to > clipped.from) ranges.push(clipped)
+      }
+    }
+    dateKey = addVietnamCalendarDay(dateKey)
+  }
+
+  return ranges
+}
+
+/**
+ * Provider recovery is only meaningful inside actual Vietnam securities
+ * trading windows. Successful coverage can legitimately stop at session close;
+ * overnight, lunch, weekends and after-close must never become blocking fetches.
+ */
+export function missingTradingProviderRanges(
+  request: ProviderCoverageRange,
+  coveredRanges: ProviderCoverageRange[],
+): ProviderCoverageRange[] {
+  return mergeProviderRanges(
+    tradingSessionRanges(request).flatMap((range) => missingProviderRanges(range, coveredRanges)),
+  )
 }
 
 /**

@@ -42,7 +42,7 @@ import {
 } from "./provider-ingestion"
 import {
   mergeProviderRanges,
-  missingProviderRanges,
+  missingTradingProviderRanges,
   uncoveredProviderRanges,
   type ProviderCoverageRange,
 } from "./provider-coverage"
@@ -402,9 +402,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   if (coverageRead.status === "rejected") errors.push({ code: "STORAGE_UNAVAILABLE" })
 
   const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
-    ? normalized.bars.length === 0
-      ? [closedRequestedRange]
-      : missingProviderRanges(closedRequestedRange, coveredRanges)
+    ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)
     : []
   const closedStorageGapRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
     ? detectTradingSessionGaps(normalized.bars)
