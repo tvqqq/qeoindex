@@ -30,16 +30,33 @@ export type Qeo150AttemptOutcome =
   | "unknown"
 
 export interface Qeo150DailyEvidence {
+  open?: number | null
+  high?: number | null
+  low?: number | null
+  close?: number | null
   volume: number
   provider: string | null
   providerDetail: string | null
   sourceUrl: string | null
 }
 
+export interface Qeo150IntradayEvidence {
+  rowCount: number
+  firstBarAt: string | null
+  lastBarAt: string | null
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
 export interface Qeo150FreshnessInput {
   expectedSession: string
   actualSession: string | null
   dailyEvidence: Qeo150DailyEvidence | null
+  intradayEvidence?: Qeo150IntradayEvidence | null
+  terminalReconciled?: boolean
   lastAttemptOutcome: Qeo150AttemptOutcome
 }
 
@@ -138,8 +155,50 @@ export function isVerifiedQeo150NoTradeEvidence(evidence: Qeo150DailyEvidence | 
     && (evidence.providerDetail ?? "").startsWith("Verified final market-close repair")
 }
 
+function finiteOhlcv(evidence: Qeo150DailyEvidence | null) {
+  if (!evidence) return null
+  const values = [evidence.open, evidence.high, evidence.low, evidence.close, evidence.volume]
+  if (!values.every((value) => typeof value === "number" && Number.isFinite(value))) return null
+  return {
+    open: evidence.open as number,
+    high: evidence.high as number,
+    low: evidence.low as number,
+    close: evidence.close as number,
+    volume: evidence.volume,
+  }
+}
+
+function closeEnough(left: number, right: number) {
+  const scale = Math.max(1, Math.abs(left), Math.abs(right))
+  return Math.abs(left - right) <= scale * 1e-8
+}
+
+export function qeo150DailyEvidenceFingerprint(evidence: Qeo150DailyEvidence | null) {
+  const ohlcv = finiteOhlcv(evidence)
+  if (!ohlcv || ohlcv.volume <= 0) return null
+  return `v1:${ohlcv.open}|${ohlcv.high}|${ohlcv.low}|${ohlcv.close}|${ohlcv.volume}`
+}
+
+export function qeo150TerminalSessionReconciled(
+  dailyEvidence: Qeo150DailyEvidence | null,
+  intradayEvidence: Qeo150IntradayEvidence | null | undefined,
+) {
+  const daily = finiteOhlcv(dailyEvidence)
+  if (!daily || daily.volume <= 0 || !intradayEvidence || intradayEvidence.rowCount <= 0) return false
+  if (![intradayEvidence.open, intradayEvidence.high, intradayEvidence.low, intradayEvidence.close, intradayEvidence.volume].every(Number.isFinite)) {
+    return false
+  }
+  return closeEnough(daily.open, intradayEvidence.open)
+    && closeEnough(daily.high, intradayEvidence.high)
+    && closeEnough(daily.low, intradayEvidence.low)
+    && closeEnough(daily.close, intradayEvidence.close)
+    && Math.abs(daily.volume - intradayEvidence.volume) <= 0.5
+}
+
 export function classifyQeo150Freshness(input: Qeo150FreshnessInput): Qeo150FreshnessClassification {
-  if (input.actualSession === input.expectedSession) {
+  const terminalReconciled = input.terminalReconciled === true
+    || qeo150TerminalSessionReconciled(input.dailyEvidence, input.intradayEvidence)
+  if (input.actualSession === input.expectedSession && terminalReconciled) {
     return { current: true, evidenceCategory: "traded" }
   }
   if (explicitSuspensionEvidence(input.dailyEvidence)) {

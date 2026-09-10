@@ -21,7 +21,7 @@ test("QEO-150 expected completed session respects configured close, holidays, we
   assert.equal(expectedCompletedVietnamSession(new Date("2026-09-09T06:00:01.000Z"), { closeSeconds: 13 * 3600 }), "2026-09-09")
 })
 
-test("QEO-150 freshness requires exact expected-session identity; five old HOT sessions are stale", () => {
+test("QEO-150 freshness requires exact expected-session identity and positive terminal proof", () => {
   const stale = classifyQeo150Freshness({
     expectedSession: "2026-09-08",
     actualSession: "2026-09-04",
@@ -31,14 +31,72 @@ test("QEO-150 freshness requires exact expected-session identity; five old HOT s
   assert.equal(stale.current, false)
   assert.equal(stale.evidenceCategory, "provider_gap")
 
-  const current = classifyQeo150Freshness({
+  const sameDateOnly = classifyQeo150Freshness({
     expectedSession: "2026-09-08",
     actualSession: "2026-09-08",
     dailyEvidence: { volume: 1_250_000, provider: "VCI", providerDetail: null, sourceUrl: null },
     lastAttemptOutcome: "none",
   })
-  assert.equal(current.current, true)
-  assert.equal(current.evidenceCategory, "traded")
+  assert.equal(sameDateOnly.current, false)
+  assert.equal(sameDateOnly.evidenceCategory, "provider_gap")
+})
+
+test("QEO-150 same-session HOT requires terminal Daily reconciliation, not merely a matching date", () => {
+  const partialSameSession = classifyQeo150Freshness({
+    expectedSession: "2026-09-10",
+    actualSession: "2026-09-10",
+    dailyEvidence: {
+      open: 247.7,
+      high: 249.5,
+      low: 244.4,
+      close: 247.7,
+      volume: 4_481_800,
+      provider: "VCI",
+      providerDetail: null,
+      sourceUrl: null,
+    },
+    intradayEvidence: {
+      rowCount: 225,
+      firstBarAt: "2026-09-10T02:15:00.000Z",
+      lastBarAt: "2026-09-10T07:29:00.000Z",
+      open: 247.7,
+      high: 249.5,
+      low: 244.4,
+      close: 249.1,
+      volume: 3_051_500,
+    },
+    lastAttemptOutcome: "none",
+  })
+  assert.equal(partialSameSession.current, false)
+  assert.equal(partialSameSession.evidenceCategory, "provider_gap")
+
+  const thinButReconciled = classifyQeo150Freshness({
+    expectedSession: "2026-09-10",
+    actualSession: "2026-09-10",
+    dailyEvidence: {
+      open: 12.3,
+      high: 12.5,
+      low: 12.2,
+      close: 12.4,
+      volume: 8_700,
+      provider: "VCI",
+      providerDetail: null,
+      sourceUrl: null,
+    },
+    intradayEvidence: {
+      rowCount: 7,
+      firstBarAt: "2026-09-10T02:15:00.000Z",
+      lastBarAt: "2026-09-10T07:45:00.000Z",
+      open: 12.3,
+      high: 12.5,
+      low: 12.2,
+      close: 12.4,
+      volume: 8_700,
+    },
+    lastAttemptOutcome: "none",
+  })
+  assert.equal(thinButReconciled.current, true)
+  assert.equal(thinButReconciled.evidenceCategory, "traded")
 })
 
 test("QEO-150 keeps no-trade, suspension, provider gap, failure and unknown distinct", () => {
