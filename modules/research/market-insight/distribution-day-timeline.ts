@@ -39,21 +39,24 @@ export function buildDistributionDayTimeline(input: {
   currentDistributionWindow?: string | null
   history: DistributionHistoryPoint[]
 }): DistributionDayTimelineContext {
-  const ordered = input.history
+  const windowWithAnchor = input.history
     .filter((item) => item.sessionDate && item.sessionDate <= input.sessionDate)
     .slice()
     .sort((a, b) => a.sessionDate.localeCompare(b.sessionDate))
-    .slice(-25)
+    .slice(-26)
+  const visibleStartIndex = Math.max(0, windowWithAnchor.length - 25)
 
   let unverifiedTransitionCount25 = 0
-  const sessions: DistributionTimelineSession[] = ordered.map((item, index) => {
+  const analyzed: DistributionTimelineSession[] = windowWithAnchor.map((item, index) => {
     const count = canonicalCount(item.distributionCount)
-    const previousCount = index > 0 ? canonicalCount(ordered[index - 1]?.distributionCount) : null
+    const previousCount = index > 0 ? canonicalCount(windowWithAnchor[index - 1]?.distributionCount) : null
     const volume = positiveFinite(item.totalMatchedVolume)
-    const previousVolume = index > 0 ? positiveFinite(ordered[index - 1]?.totalMatchedVolume) : null
+    const previousVolume = index > 0 ? positiveFinite(windowWithAnchor[index - 1]?.totalMatchedVolume) : null
     const hasVerifiedTransition = index > 0 && count != null && previousCount != null
 
-    if (index > 0 && !hasVerifiedTransition) unverifiedTransitionCount25 += 1
+    if (index >= visibleStartIndex && index > 0 && !hasVerifiedTransition) {
+      unverifiedTransitionCount25 += 1
+    }
 
     return {
       sessionDate: item.sessionDate,
@@ -70,6 +73,7 @@ export function buildDistributionDayTimeline(input: {
         : null,
     }
   })
+  const sessions = analyzed.slice(-25)
 
   const markedIndexes = sessions.flatMap((item, index) => item.isDistributionDay ? [index] : [])
   const lastMarkIndex = markedIndexes.at(-1)
