@@ -23,6 +23,14 @@
       "state": "MAPPED",
       "evidence": "QEO-105 first-rollout no-op and dedicated-route hardening promoted immediately after the base migration; production baseline and route/deployment readback passed",
       "rationale": "Supabase production version 20260910101723 hardens first rollout as a no-op baseline and routes future transition dispatches only to /api/qeoindex/chart-universe-bootstrap. Production readback showed complete baseline state, zero per-ticker rows, zero attempts and no dispatch request for the existing canonical 200."
+    },
+    {
+      "logicalName": "qeo186_candidate_price_change_for_index_contributors",
+      "repositoryVersion": "20260910193000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-186 RED/GREEN producer contract and PR #435 preproduction Verify",
+      "rationale": "QEO-186 adds only the same-session KFSP candidate price and daily-return evidence needed to derive explicitly labeled Qeo VNINDEX contributor estimates. The migration remains repo-ahead until the exact PR head passes full Verify and production promotion/readback is completed."
     }
   ]
 }
