@@ -3,7 +3,7 @@ name: QEO-171 Production Chart Acceptance
 on:
   pull_request:
     paths:
-      - "tests/qeo171-production-chart-acceptance-contract.test.ts"
+      - "tests/qeo171/**"
       - "tests/browser/qeo171-stock-chart-production.spec.ts"
       - ".github/workflows/qeo171-production-acceptance.yml"
 
@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: QEO-171 acceptance harness contract
-        run: node --test tests/qeo171-production-chart-acceptance-contract.test.ts
+        run: node --test tests/qeo171/production-chart-acceptance-contract.test.ts
 
   production-browser:
     needs: contract
