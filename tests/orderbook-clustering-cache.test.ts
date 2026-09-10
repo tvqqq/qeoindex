@@ -155,6 +155,47 @@ test("orderbook realtime behavior is explicitly gated to DNSE live provenance", 
   )
 })
 
+test("DNSE live trades use stable provider identity instead of random ids", () => {
+  const source = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
+  const liveTradeBlock = source.match(
+    /\/\/ Tick extra trade execution[\s\S]*?setTrades\(\(current\) => mergeTrades\(\[trade\], current\)\)/,
+  )?.[0] ?? ""
+
+  assert.ok(liveTradeBlock, "expected to find the DNSE tick_extra trade block")
+  assert.doesNotMatch(
+    liveTradeBlock,
+    /Math\.random/,
+    "a replayed DNSE execution must generate the same trade id so mergeTrades can dedupe it",
+  )
+  assert.match(
+    liveTradeBlock,
+    /transId|tradeId|sequence|seqNo|sID/,
+    "live trade identity should prefer a provider supplied execution/sequence id",
+  )
+})
+
+test("orderbook websocket ignores stale connection attempts and stale socket callbacks", () => {
+  const source = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
+  const wsBlock = source.match(
+    /\/\/ WebSocket Live Stream[\s\S]*?\}, \[symbol, reconnectKey\]\)/,
+  )?.[0] ?? ""
+
+  assert.ok(wsBlock, "expected to find the orderbook websocket effect")
+  assert.match(wsBlock, /let connectionGeneration = 0/)
+  assert.match(wsBlock, /const generation = \+\+connectionGeneration/)
+  assert.match(
+    wsBlock,
+    /disposed \|\| generation !== connectionGeneration/,
+    "an auth response from an obsolete connect() attempt must not create another socket",
+  )
+  assert.match(wsBlock, /const nextSocket = new WebSocket\(/)
+  assert.match(
+    wsBlock,
+    /socket !== nextSocket/,
+    "callbacks from an obsolete socket must not mutate orderbook state or schedule reconnects",
+  )
+})
+
 test("calculateSessionCountdown handles ATO (09:00 - 09:15) and ATC (14:30 - 14:45) exact boundaries", async () => {
   const { calculateSessionCountdown } = await import("../modules/market/realtime/session-countdown.ts")
 
