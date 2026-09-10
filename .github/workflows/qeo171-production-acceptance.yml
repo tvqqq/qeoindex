@@ -100,6 +100,12 @@ jobs:
               raise SystemExit("QEO-171 server-session wait patch target not found")
           source = source.replace(auth_before, auth_after, 1)
 
+          manager_before = 'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").getByRole("button").last().click().catch(() => {})'
+          manager_after = 'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").locator("..").getByRole("button").click()'
+          if manager_before not in source:
+              raise SystemExit("QEO-171 object-manager close patch target not found")
+          source = source.replace(manager_before, manager_after, 1)
+
           path.write_text(source)
           PY
       - name: Install Chromium
