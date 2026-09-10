@@ -17,27 +17,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: test/qeo-171-production-chart-acceptance-v2
-      - name: Route closed recovery through trading-session coverage
+      - name: Make every closed recovery range session-aware
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path("modules/market/chart-data/service.ts")
           source = path.read_text()
-          before_import = '''  mergeProviderRanges,
-            missingProviderRanges,
-            uncoveredProviderRanges,'''.replace("            ", "")
-          after_import = '''  mergeProviderRanges,
-            missingTradingProviderRanges,
-            uncoveredProviderRanges,'''.replace("            ", "")
-          if before_import not in source:
-              raise SystemExit("QEO-171 provider coverage import target not found")
-          source = source.replace(before_import, after_import, 1)
-          before_call = ': missingProviderRanges(closedRequestedRange, coveredRanges)'
-          after_call = ': missingTradingProviderRanges(closedRequestedRange, coveredRanges)'
-          if before_call not in source:
-              raise SystemExit("QEO-171 closed recovery target not found")
-          source = source.replace(before_call, after_call, 1)
-          path.write_text(source)
+          before = '''  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
+            ? normalized.bars.length === 0
+              ? [closedRequestedRange]
+              : missingTradingProviderRanges(closedRequestedRange, coveredRanges)
+            : []'''.replace("            ", "")
+          after = '''  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
+            ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)
+            : []'''.replace("            ", "")
+          if before not in source:
+              raise SystemExit("QEO-171 zero-storage recovery target not found")
+          path.write_text(source.replace(before, after, 1))
           PY
       - name: Commit production fix
         run: |
@@ -45,5 +41,5 @@ jobs:
           git config user.email "qeoindex-ci@users.noreply.github.com"
           git add modules/market/chart-data/service.ts
           git diff --cached --check
-          git commit -m "fix(QEO-171): skip non-trading provider recovery"
+          git commit -m "fix(QEO-171): route empty storage through session recovery"
           git push origin HEAD:test/qeo-171-production-chart-acceptance-v2
