@@ -26,7 +26,7 @@ jobs:
           version: 10.28.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: QEO-171 acceptance harness contract
@@ -70,56 +70,10 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.auth.outputs.available == 'true'
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.auth.outputs.available == 'true'
-      - name: Align acceptance selectors with current production auth gate
-        if: steps.auth.outputs.available == 'true'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("tests/browser/qeo171-stock-chart-production.spec.ts")
-          source = path.read_text()
-
-          selector_before = 'await page.getByLabel(/mật khẩu/i).fill(TEST_PASSWORD)'
-          selector_after = 'await page.getByRole("textbox", { name: "Mật khẩu", exact: true }).fill(TEST_PASSWORD)'
-          if selector_before not in source:
-              raise SystemExit("QEO-171 password selector patch target not found")
-          source = source.replace(selector_before, selector_after, 1)
-
-          auth_before = 'await expect(page.getByText(/đăng nhập qeoindex/i)).toBeHidden()'
-          auth_after = (
-              auth_before
-              + '\n  await expect.poll('
-              + '\n    () => page.evaluate(async () => (await fetch("/api/me", { cache: "no-store" })).status),'
-              + '\n    { timeout: 15_000 },'
-              + '\n  ).toBe(200)'
-          )
-          if auth_before not in source:
-              raise SystemExit("QEO-171 server-session wait patch target not found")
-          source = source.replace(auth_before, auth_after, 1)
-
-          manager_before = 'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").getByRole("button").last().click().catch(() => {})'
-          manager_after = 'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").locator("..").getByRole("button").click()'
-          if manager_before not in source:
-              raise SystemExit("QEO-171 object-manager close patch target not found")
-          source = source.replace(manager_before, manager_after)
-
-          guard_before = 'await expect(page.locator(\'[title="Thu nhỏ chart"]\')).toBeVisible()\n    await page.keyboard.press("ArrowDown")'
-          guard_after = 'await expect(page.locator(\'[title="Thu nhỏ chart"]\')).toBeVisible()\n    await page.keyboard.press("Backspace")\n    await page.keyboard.press("ArrowDown")'
-          if guard_before not in source:
-              raise SystemExit("QEO-171 editable Backquote guard patch target not found")
-          source = source.replace(guard_before, guard_after, 1)
-
-          reload_before = 'await expect(page.getByText(new RegExp(note.slice(0, 18)))).toBeVisible()'
-          reload_after = 'await expect(page.getByText(new RegExp(note.slice(0, 18))).first()).toBeVisible()'
-          if reload_before not in source:
-              raise SystemExit("QEO-171 reload text assertion patch target not found")
-          source = source.replace(reload_before, reload_after, 1)
-
-          path.write_text(source)
-          PY
       - name: Install Chromium
         if: steps.auth.outputs.available == 'true'
         run: pnpm exec playwright install --with-deps chromium
