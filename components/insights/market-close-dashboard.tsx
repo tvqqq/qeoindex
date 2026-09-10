@@ -38,12 +38,6 @@ function formatSigned(value: number | null | undefined, decimals = 2, suffix = "
   return `${value > 0 ? "+" : ""}${formatNumber(value, decimals)}${suffix}`
 }
 
-function formatTime(iso: string) {
-  try {
-    return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso))
-  } catch { return iso }
-}
-
 function getDistributionDayGuidance(value: number | null | undefined): { message: string; tone?: PulseTone } {
   if (value == null || !Number.isFinite(value)) return { message: "Chưa có dữ liệu" }
 
