@@ -160,6 +160,7 @@ export interface MarketCloseDashboardData {
   sectors: MarketSectorRow[]
   sectorHistory?: MarketSectorHistoryItem[]
   leaders: MarketLeaderItem[]
+  leadershipLiquidity?: Array<{ ticker: string; tradedValueBillion: number | null }>
   observations: MarketObservation[]
   history: MarketHistoryPoint[]
   /** Provenance shared by the AI packet builder and the Edge runtime. */
@@ -209,7 +210,7 @@ export async function getMarketCloseInsightData(
   const isStale = targetDate < today
 
   // 2. Fetch daily, indexes, sectors, leaders in parallel
-  const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes, sectorHistoryRes] = await Promise.all([
+  const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes, sectorHistoryRes, leadershipLiquidityRes] = await Promise.all([
     supabase
       .from("market_insight_daily")
       .select("*")
@@ -248,6 +249,12 @@ export async function getMarketCloseInsightData(
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(300),
+    supabase
+      .from("kfsp_universe_candidate_snapshots")
+      .select("ticker,traded_value_1d_billion")
+      .eq("as_of_date", targetDate)
+      .eq("exchange", "HOSE")
+      .order("traded_value_1d_billion", { ascending: false }),
   ])
 
   const daily = dailyRes.data
@@ -369,6 +376,11 @@ export async function getMarketCloseInsightData(
     qualityStatus: (row.quality_status as QualityStatus) || "healthy",
     evidenceRefs: Array.isArray(row.evidence_refs) ? (row.evidence_refs as EvidenceRef[]) : [],
     asOf: String(row.as_of || new Date().toISOString()),
+  }))
+
+  const leadershipLiquidity = leadershipLiquidityRes.error ? [] : (leadershipLiquidityRes.data || []).map((row: Record<string, unknown>) => ({
+    ticker: String(row.ticker || "").toUpperCase(),
+    tradedValueBillion: row.traded_value_1d_billion != null ? Number(row.traded_value_1d_billion) : null,
   }))
 
   const vnindexHistoryByDate = new Map(
@@ -549,6 +561,7 @@ export async function getMarketCloseInsightData(
     sectors,
     sectorHistory,
     leaders,
+    leadershipLiquidity,
     observations,
     history,
     marketInsightProvenance: provenanceAvailable ? {

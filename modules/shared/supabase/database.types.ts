@@ -1757,6 +1757,7 @@ export type Database = {
           sector: string | null
           sync_run_id: string
           ticker: string
+          traded_value_1d_billion: number | null
           volume_1d: number | null
         }
         Insert: {
@@ -1771,6 +1772,7 @@ export type Database = {
           sector?: string | null
           sync_run_id: string
           ticker: string
+          traded_value_1d_billion?: number | null
           volume_1d?: number | null
         }
         Update: {
@@ -1785,6 +1787,7 @@ export type Database = {
           sector?: string | null
           sync_run_id?: string
           ticker?: string
+          traded_value_1d_billion?: number | null
           volume_1d?: number | null
         }
         Relationships: []
