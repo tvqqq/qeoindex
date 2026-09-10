@@ -56,22 +56,22 @@ old_liquidity = '''        <SessionChangeMetric
           value={formatNumber(changes.liquidity.current, 0)}
           detail={changes.liquidity.deltaPct == null ? "Chưa đủ dữ liệu" : `${formatSigned(changes.liquidity.deltaPct, 1, "%")} vs phiên trước`}
         />'''
-new_liquidity = '''        <LiquidityContextMetric context={liquidityContext} />'''
+new_liquidity = '''        <LiquidityContextMetric liquidityContext={liquidityContext} />'''
 if old_liquidity not in dashboard:
     raise SystemExit("missing liquidity tile anchor")
 dashboard = dashboard.replace(old_liquidity, new_liquidity, 1)
 
 marker = '''function formatSessionDelta(delta: number | null, decimals: number, suffix = "") {'''
-component = '''function LiquidityContextMetric({ context }: { context: LiquidityContext }) {
-  const hasMinimumHistory = context.current != null && context.historyCount >= 20
-  const stateLabel = context.state === "confirmed"
+component = '''function LiquidityContextMetric({ liquidityContext }: { liquidityContext: LiquidityContext }) {
+  const hasMinimumHistory = liquidityContext.current != null && liquidityContext.historyCount >= 20
+  const stateLabel = liquidityContext.state === "confirmed"
     ? "Xác nhận"
-    : context.state === "weak"
+    : liquidityContext.state === "weak"
       ? "Yếu"
       : hasMinimumHistory
         ? "Trung tính"
         : "Chưa đủ dữ liệu"
-  const stateTone = context.state === "confirmed" ? "up" : context.state === "weak" ? "down" : undefined
+  const stateTone = liquidityContext.state === "confirmed" ? "up" : liquidityContext.state === "weak" ? "down" : undefined
 
   return (
     <div data-market-liquidity-context className="min-w-0 rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
@@ -83,14 +83,14 @@ component = '''function LiquidityContextMetric({ context }: { context: Liquidity
           stateTone === "down" && "border-rose-300/20 bg-rose-300/[0.08] text-rose-300",
         )}>Tín hiệu · {stateLabel}</span>
       </div>
-      <strong className="mt-0.5 block truncate font-mono text-sm font-black text-white">{formatNumber(context.current, 0)}</strong>
+      <strong className="mt-0.5 block truncate font-mono text-sm font-black text-white">{formatNumber(liquidityContext.current, 0)}</strong>
       <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-400">
-        {context.vsMa20Pct == null ? "MA20 thanh khoản: chưa đủ dữ liệu" : `${formatSigned(context.vsMa20Pct, 1, "%")} vs MA20 thanh khoản`}
+        {liquidityContext.vsMa20Pct == null ? "MA20 thanh khoản: chưa đủ dữ liệu" : `${formatSigned(liquidityContext.vsMa20Pct, 1, "%")} vs MA20 thanh khoản`}
       </span>
       <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
-        {context.percentile60 == null
-          ? `Percentile 60 phiên: chưa đủ dữ liệu (${context.historyCount}/20 tối thiểu)`
-          : `Percentile 60 phiên: P${formatNumber(context.percentile60, 0)}`}
+        {liquidityContext.percentile60 == null
+          ? `Percentile 60 phiên: chưa đủ dữ liệu (${liquidityContext.historyCount}/20 tối thiểu)`
+          : `Percentile 60 phiên: P${formatNumber(liquidityContext.percentile60, 0)}`}
       </span>
     </div>
   )
