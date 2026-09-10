@@ -60,15 +60,15 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
     <LazyMotion features={domAnimation}>
       <m.section
         data-qeo174-strategy-card
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.997 }}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 10, scale: 0.995 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        whileHover={shouldReduceMotion ? undefined : { y: -1 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: "easeOut" }}
-        className="group relative overflow-hidden rounded-2xl border border-indigo-300/[0.14] bg-[radial-gradient(circle_at_12%_0%,rgba(99,102,241,0.14),transparent_34%),radial-gradient(circle_at_88%_10%,rgba(34,211,238,0.07),transparent_30%),linear-gradient(145deg,#0a0f18_0%,#070b12_48%,#080c14_100%)] shadow-[0_16px_52px_rgba(0,0,0,0.3)] transition-shadow hover:shadow-[0_20px_62px_rgba(15,23,42,0.42)]"
+        whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
+        className="group relative overflow-hidden rounded-[28px] border border-indigo-300/[0.16] bg-[radial-gradient(circle_at_12%_0%,rgba(99,102,241,0.16),transparent_34%),radial-gradient(circle_at_88%_10%,rgba(34,211,238,0.09),transparent_30%),linear-gradient(145deg,#0a0f18_0%,#070b12_48%,#080c14_100%)] shadow-[0_22px_70px_rgba(0,0,0,0.34)] transition-shadow hover:shadow-[0_26px_80px_rgba(15,23,42,0.48)]"
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.1] [background-image:linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:28px_28px]"
+          className="pointer-events-none absolute inset-0 opacity-[0.12] [background-image:linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:28px_28px]"
         />
         <div
           aria-hidden="true"
@@ -76,7 +76,7 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
         />
 
         <div className="relative p-3 sm:p-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)_auto] lg:items-center">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)_auto] lg:items-center">
             <div className="flex min-w-0 items-center gap-3">
               <StockIdentity
                 ticker={ticker}
