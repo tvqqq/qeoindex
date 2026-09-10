@@ -192,7 +192,7 @@ export function InstitutionalFlowChart({ context }: { context: InstitutionalFlow
   const twentyDayMax = maxFor("twentyDay")
 
   return (
-    <div data-institutional-flow-persistence className="overflow-x-auto rounded-xl border border-white/[0.07] bg-[#07131d]/70" role="table" aria-label="Institutional flow persistence Today 5D 20D">
+    <div data-institutional-flow-persistence className="overflow-x-auto rounded-xl border border-white/[0.07] bg-[#07131d]/70" role="table" aria-label="Institutional flow persistence · Khối ngoại · Tự doanh · Khác · Today · 5D · 20D">
       <div className="min-w-[640px]">
         <div className="grid grid-cols-[minmax(92px,1.15fr)_repeat(3,minmax(88px,1fr))_minmax(132px,1.35fr)] border-b border-white/[0.07] bg-black/10 px-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400" role="row">
           <span className="px-2 py-2.5">Nhóm</span>
