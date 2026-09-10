@@ -7,6 +7,7 @@ import {
 import { BreadthDivergenceBadge, MaBreadthChart } from "@/components/insights/market-breadth-divergence-chart"
 import { VnindexContributionBadge, VnindexContributorsView } from "@/components/insights/vnindex-contributors-view"
 import { LeadershipConcentrationView } from "@/components/insights/leadership-concentration-view"
+import { DistributionDayTimeline } from "@/components/insights/distribution-day-timeline"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView, MarketSentimentCard, MarketSentimentHistoryCard } from "@/components/insights/market-health-view"
@@ -21,6 +22,7 @@ import { buildBreadthDivergenceContext } from "@/modules/research/market-insight
 import { buildVnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"
 import { buildLeadershipConcentrationContext } from "@/modules/research/market-insight/leadership-concentration"
 import { buildInstitutionalFlowPersistence } from "@/modules/research/market-insight/institutional-flow-persistence"
+import { buildDistributionDayTimeline } from "@/modules/research/market-insight/distribution-day-timeline"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
@@ -183,6 +185,12 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
     sessionDate: data.sessionDate,
     history,
   })
+  const distributionTimeline = buildDistributionDayTimeline({
+    sessionDate: data.sessionDate,
+    currentDistributionCount: dailySummary.distributionCount,
+    currentDistributionWindow: dailySummary.distributionWindow,
+    history,
+  })
 
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
@@ -248,6 +256,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
 
           <div data-market-health-embedded className="mt-5 border-t border-white/[0.07] pt-5">
             <MarketHealthView data={data} history={history} />
+            <DistributionDayTimeline context={distributionTimeline}/>
           </div>
 
           <div data-vnindex-contributors aria-label="Đóng góp VNINDEX · Top 5 / Top 10" className="mt-5">
