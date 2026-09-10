@@ -157,15 +157,12 @@ test("QEO-180 finds missing sessions inside a fresh latest-five HOT window", asy
   )
 })
 
-test("QEO-180 maintenance catches up exact missing sessions without invoking full bootstrap", () => {
-  const maintenance = source("modules/market/chart-data/maintenance.ts")
-  const steps = source("modules/market/chart-data/maintenance-workflow-steps.ts")
-  const workflow = source("workflows/chart-intraday-maintenance.ts")
+test("QEO-180 is dispatched beside QEO-150 while QEO-150 keeps exclusive current-session ownership", () => {
+  const route = source("app/api/qeoindex/eod/route.ts")
+  const qeo150Workflow = source("workflows/chart-intraday-maintenance.ts")
 
-  assert.match(maintenance, /readQeo180MissingHotSessions/)
-  assert.match(steps, /runChartIntradayContinuityCatchupStep/)
-  assert.match(workflow, /runChartIntradayContinuityCatchupStep/)
-  assert.match(workflow, /missingHotSessions/)
-  assert.match(maintenance, /workflow:\s*"QEO-180"/)
-  assert.doesNotMatch(workflow, /chartIntradayBootstrapWorkflow|bootstrapChartIntradayChunk/)
+  assert.match(route, /chartIntradayHotContinuityWorkflow/)
+  assert.match(route, /hotContinuityWorkflowRunId/)
+  assert.match(route, /qeo180-/)
+  assert.doesNotMatch(qeo150Workflow, /chartIntradayBootstrapWorkflow|bootstrapChartIntradayChunk/)
 })
