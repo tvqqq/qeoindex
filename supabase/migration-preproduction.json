@@ -7,6 +7,22 @@
       "state": "MAPPED",
       "evidence": "QEO-150 exact-head gates plus production migration and live scheduler readback",
       "rationale": "QEO-150 scheduler migration was promoted only after targeted contract, full Verify/build, zero-to-latest replay, generated types and QEO-108/149/147/148 rehearsals passed. Supabase assigned production version 20260909110230 while repository replay keeps reviewed ordering 20260909173000."
+    },
+    {
+      "logicalName": "qeo105_chart_universe_bootstrap",
+      "repositoryVersion": "20260910164500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-105 TDD transition/orchestration contract and production baseline audit",
+      "rationale": "Reviewed pre-production migration for exact Top-200 transition state, added-only bootstrap orchestration, isolated per-ticker outcomes and post-publish async handoff. Production promotion remains pending until PR gates and safe baseline acceptance complete."
+    },
+    {
+      "logicalName": "qeo105_chart_universe_bootstrap_hardening",
+      "repositoryVersion": "20260910170000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-105 first-rollout no-op and dedicated-route hardening contract",
+      "rationale": "Reviewed follow-up hardening ensures the first observed published universe becomes a no-op baseline rather than a false 200-ticker transition and isolates dispatch to the QEO-105 machine route. Production promotion remains pending."
     }
   ]
 }
