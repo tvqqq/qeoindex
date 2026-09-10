@@ -179,33 +179,50 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
       </div>
 
       <div className={pdfHidden
-        ? "lg:grid lg:grid-cols-1 lg:items-start lg:gap-5"
+        ? "lg:grid lg:grid-cols-[minmax(280px,3fr)_minmax(0,7fr)] lg:items-start lg:gap-5"
         : "lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] lg:items-start lg:gap-5"}
       >
-        <section
-          id="report-panel-pdf"
-          data-report-panel="pdf"
-          role="tabpanel"
-          aria-labelledby="report-tab-pdf"
-          ref={viewerRegionRef}
-          tabIndex={-1}
-          className={`${navigation.activeTab === "pdf" ? "block" : "hidden"} outline-none ${pdfHidden ? "lg:hidden" : "lg:block"}`}
-        >
-          <PdfViewer
-            reportId={report.id}
-            title={report.title}
-            requestedPage={navigation.requestedPage}
-            originalSourceLink={report.originalSourceLink}
-            originalPdfUrl={report.originalPdfUrl}
-            onPageResolved={(page) => {
-              setNavigation((current) => current.requestedPage === page
-                ? { ...current, requestedPage: null }
-                : current)
-            }}
-          />
-        </section>
+        <div data-report-left-column="pdf-chat" className="space-y-5 lg:block">
+          <section
+            id="report-panel-pdf"
+            data-report-panel="pdf"
+            role="tabpanel"
+            aria-labelledby="report-tab-pdf"
+            ref={viewerRegionRef}
+            tabIndex={-1}
+            className={`${navigation.activeTab === "pdf" ? "block" : "hidden"} outline-none ${pdfHidden ? "lg:hidden" : "lg:block"}`}
+          >
+            <PdfViewer
+              reportId={report.id}
+              title={report.title}
+              requestedPage={navigation.requestedPage}
+              originalSourceLink={report.originalSourceLink}
+              originalPdfUrl={report.originalPdfUrl}
+              onPageResolved={(page) => {
+                setNavigation((current) => current.requestedPage === page
+                  ? { ...current, requestedPage: null }
+                  : current)
+              }}
+            />
+          </section>
 
-        <div className={pdfHidden ? "space-y-5 lg:col-span-full lg:block" : "space-y-5 lg:block"}>
+          <section
+            id="report-panel-chat"
+            data-report-panel="chat"
+            role="tabpanel"
+            aria-labelledby="report-tab-chat"
+            className={`${navigation.activeTab === "chat" ? "block" : "hidden"} lg:block ${pdfHidden ? "lg:mt-0" : "lg:mt-5"}`}
+          >
+            <ReportChat
+              reportId={report.id}
+              analysisStatus={report.analysisStatus}
+              onNavigateCitation={navigateToCitation}
+              expanded={pdfHidden}
+            />
+          </section>
+        </div>
+
+        <div data-report-analysis-column="analysis" className="lg:block">
           <section
             id="report-panel-analysis"
             data-report-panel="analysis"
@@ -216,21 +233,6 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
             <AnalysisPanel
               analysisStatus={report.analysisStatus}
               analysis={report.analysis}
-              onNavigateCitation={navigateToCitation}
-              expanded={pdfHidden}
-            />
-          </section>
-
-          <section
-            id="report-panel-chat"
-            data-report-panel="chat"
-            role="tabpanel"
-            aria-labelledby="report-tab-chat"
-            className={`${navigation.activeTab === "chat" ? "block" : "hidden"} lg:block`}
-          >
-            <ReportChat
-              reportId={report.id}
-              analysisStatus={report.analysisStatus}
               onNavigateCitation={navigateToCitation}
               expanded={pdfHidden}
             />
