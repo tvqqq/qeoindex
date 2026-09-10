@@ -104,13 +104,19 @@ jobs:
           manager_after = 'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").locator("..").getByRole("button").click()'
           if manager_before not in source:
               raise SystemExit("QEO-171 object-manager close patch target not found")
-          source = source.replace(manager_before, manager_after, 1)
+          source = source.replace(manager_before, manager_after)
 
           guard_before = 'await expect(page.locator(\'[title="Thu nhỏ chart"]\')).toBeVisible()\n    await page.keyboard.press("ArrowDown")'
           guard_after = 'await expect(page.locator(\'[title="Thu nhỏ chart"]\')).toBeVisible()\n    await page.keyboard.press("Backspace")\n    await page.keyboard.press("ArrowDown")'
           if guard_before not in source:
               raise SystemExit("QEO-171 editable Backquote guard patch target not found")
           source = source.replace(guard_before, guard_after, 1)
+
+          reload_before = 'await expect(page.getByText(new RegExp(note.slice(0, 18)))).toBeVisible()'
+          reload_after = 'await expect(page.getByText(new RegExp(note.slice(0, 18))).first()).toBeVisible()'
+          if reload_before not in source:
+              raise SystemExit("QEO-171 reload text assertion patch target not found")
+          source = source.replace(reload_before, reload_after, 1)
 
           path.write_text(source)
           PY
