@@ -93,3 +93,4 @@ test("QEO-186 UI discloses that index-point contribution is a Qeo estimate from 
 
 import "./qeo188-leadership-concentration.cases.ts"
 import "./qeo189-distribution-day-timeline.cases.ts"
+import "./qeo190-valuation-snapshot.cases.ts"
