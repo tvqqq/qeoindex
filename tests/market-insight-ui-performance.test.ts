@@ -214,3 +214,79 @@ test("market health SVG coordinates are stable across server and browser hydrati
   assert.match(health, /Number\(value\.toFixed\(6\)\)/)
   assert.ok((health.match(/stableSvgCoordinate\(/g) || []).length >= 17, "all computed gauge coordinates must be rounded")
 })
+
+function qeo185History(vnindexStart: number, vnindexEnd: number, ma50Start: number, ma50End: number, count = 10) {
+  return Array.from({ length: count }, (_, index) => {
+    const ratio = count <= 1 ? 1 : index / (count - 1)
+    return {
+      sessionDate: `2026-09-${String(index + 1).padStart(2, "0")}`,
+      vnindexClose: vnindexStart + (vnindexEnd - vnindexStart) * ratio,
+      aboveMa20Pct: 50 + 4 * ratio,
+      aboveMa50Pct: ma50Start + (ma50End - ma50Start) * ratio,
+    }
+  })
+}
+
+test("QEO-185 classifies multi-session breadth confirmation and divergences", async () => {
+  const modulePath = path.resolve("modules/research/market-insight/breadth-divergence.ts")
+  assert.ok(fs.existsSync(modulePath), "QEO-185 must add a pure breadth-divergence helper")
+  const { buildBreadthDivergenceContext } = await import(modulePath)
+
+  const confirmation = buildBreadthDivergenceContext({
+    sessionDate: "2026-09-10",
+    history: qeo185History(1000, 1010, 50, 55),
+  })
+  assert.equal(confirmation.state, "confirmation")
+  assert.equal(confirmation.vnindexChangePct, 1)
+  assert.equal(confirmation.ma50ChangePp, 5)
+
+  const bearish = buildBreadthDivergenceContext({
+    sessionDate: "2026-09-10",
+    history: qeo185History(1000, 1010, 60, 55),
+  })
+  assert.equal(bearish.state, "bearish_divergence")
+
+  const recovery = buildBreadthDivergenceContext({
+    sessionDate: "2026-09-10",
+    history: qeo185History(1000, 990, 40, 45),
+  })
+  assert.equal(recovery.state, "recovery_divergence")
+
+  const neutral = buildBreadthDivergenceContext({
+    sessionDate: "2026-09-10",
+    history: qeo185History(1000, 1005, 50, 53),
+  })
+  assert.equal(neutral.state, "neutral")
+})
+
+test("QEO-185 stays unknown without at least eight paired sessions in the ten-session window", async () => {
+  const modulePath = path.resolve("modules/research/market-insight/breadth-divergence.ts")
+  assert.ok(fs.existsSync(modulePath), "QEO-185 must add a pure breadth-divergence helper")
+  const { buildBreadthDivergenceContext } = await import(modulePath)
+
+  const context = buildBreadthDivergenceContext({
+    sessionDate: "2026-09-10",
+    history: qeo185History(1000, 1010, 50, 55, 7),
+  })
+  assert.equal(context.state, "unknown")
+  assert.equal(context.vnindexChangePct, null)
+  assert.equal(context.ma50ChangePp, null)
+})
+
+test("QEO-185 upgrades the existing trend-health card with divergence context instead of adding a new dashboard section", () => {
+  const dashboard = fs.readFileSync(path.resolve("components/insights/market-close-dashboard.tsx"), "utf8")
+  const breadthViewPath = path.resolve("components/insights/market-breadth-divergence-chart.tsx")
+
+  assert.ok(fs.existsSync(breadthViewPath), "QEO-185 must add the focused breadth divergence view")
+  const breadthView = fs.readFileSync(breadthViewPath, "utf8")
+
+  assert.match(dashboard, /buildBreadthDivergenceContext\(\{[\s\S]*sessionDate: data\.sessionDate[\s\S]*history/)
+  assert.match(dashboard, /title="Sức khỏe xu hướng"[\s\S]*actions=\{<BreadthDivergenceBadge state=\{breadthDivergence\.state\}/)
+  assert.match(dashboard, /<MaBreadthChart daily=\{dailySummary\} context=\{breadthDivergence\}/)
+  assert.equal((dashboard.match(/title="Sức khỏe xu hướng"/g) || []).length, 1, "breadth divergence must enrich the existing card only")
+
+  assert.match(breadthView, /dataKey="vnindexClose"/)
+  assert.match(breadthView, /dataKey="aboveMa50Pct"/)
+  assert.match(breadthView, /aboveMa20Pct/)
+  for (const label of ["MA10", "MA20", "MA50", "MA200"]) assert.match(breadthView, new RegExp(label))
+})
