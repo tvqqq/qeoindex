@@ -1752,6 +1752,8 @@ export type Database = {
           exchange: string | null
           fetched_at: string
           market_cap_billion: number | null
+          price: number | null
+          price_change_pct: number | null
           sector: string | null
           sync_run_id: string
           ticker: string
@@ -1764,6 +1766,8 @@ export type Database = {
           exchange?: string | null
           fetched_at?: string
           market_cap_billion?: number | null
+          price?: number | null
+          price_change_pct?: number | null
           sector?: string | null
           sync_run_id: string
           ticker: string
@@ -1776,6 +1780,8 @@ export type Database = {
           exchange?: string | null
           fetched_at?: string
           market_cap_billion?: number | null
+          price?: number | null
+          price_change_pct?: number | null
           sector?: string | null
           sync_run_id?: string
           ticker?: string

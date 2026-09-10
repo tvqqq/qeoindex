@@ -243,7 +243,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
             <ChartPanel
               icon={BarChart3}
               title="Đóng góp VNINDEX"
-              description="Top mã kéo tăng/giảm và mức độ tập trung đóng góp"
+              description="Qeo ước tính từ dữ liệu vốn hóa & biến động giá KFSP · top mã kéo tăng/giảm"
               actions={<VnindexContributionBadge context={vnindexContributors} />}
             >
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">

@@ -1,3 +1,5 @@
+import { estimateVnindexContributors, type VnindexContributorCandidate } from "./vnindex-contributor-estimator.ts"
+
 export type MarketRegime = "TÍCH CỰC" | "PHÂN HÓA" | "THẬN TRỌNG" | "RỦI RO"
 export type RotationState = "leading" | "recovering" | "weakening" | "lagging" | "unknown"
 export type QualityStatus = "healthy" | "degraded" | "failing" | "stale"
@@ -270,6 +272,7 @@ export function parseVerifiedMarketClosePayloads(params: {
   topVolatilityTickers?: unknown
   getLivePayload?: unknown
   getLiveOk?: boolean
+  contributorCandidates?: VnindexContributorCandidate[]
   providerIndexes: NormalizedIndexRow[]
 }): NormalizedMarketSnapshot {
   const {
@@ -298,6 +301,7 @@ export function parseVerifiedMarketClosePayloads(params: {
     topVolatilityTickers,
     getLivePayload,
     getLiveOk = false,
+    contributorCandidates = [],
     providerIndexes,
   } = params
 
@@ -709,6 +713,39 @@ export function parseVerifiedMarketClosePayloads(params: {
     })
 
     if (leaders.length > 0) coverage.get_live = true
+  }
+
+  const vnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")
+  const contributorEstimate = estimateVnindexContributors({
+    vnindexValue: vnindex?.value ?? null,
+    vnindexChange: vnindex?.change ?? null,
+    advances: vnindex?.advances ?? 0,
+    declines: vnindex?.declines ?? 0,
+    unchanged: vnindex?.unchanged ?? 0,
+    candidates: contributorCandidates,
+  })
+
+  if (contributorEstimate.status === "ready") {
+    for (const contributor of contributorEstimate.contributors) {
+      leaders.push({
+        session_date: sessionDate,
+        category: contributor.category,
+        rank: contributor.rank,
+        ticker: contributor.ticker,
+        price: contributor.price,
+        change_pct: contributor.changePct,
+        estimated_index_points: contributor.estimatedIndexPoints,
+        metric_value: contributor.estimatedIndexPoints,
+        metric_label: "Qeo ước tính · cap-weight từ dữ liệu KFSP",
+        quality_status: "healthy",
+        missing_fields: [],
+        evidence_refs: [
+          { field: "estimated_index_points", source_class: "market_leaders", observed_at: asOfIso, unit: "Qeo estimated index points" },
+        ],
+        source_timestamp: asOfIso,
+        as_of: asOfIso,
+      })
+    }
   }
 
   // 9. Build compound staged items
