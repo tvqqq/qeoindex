@@ -1,5 +1,5 @@
-name: QEO-183 RED
-on:
+name: QEO 183 red helper
+"on":
   push:
     branches:
       - tvq9612/qeo-183-what-changed-today
@@ -13,16 +13,14 @@ jobs:
         with:
           ref: tvq9612/qeo-183-what-changed-today
           fetch-depth: 0
-      - name: Add RED tests and prove failure
-        shell: bash
+      - name: Add RED tests
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('tests/market-insight-layout-regression.test.ts')
+          p = Path("tests/market-insight-layout-regression.test.ts")
           s = p.read_text()
           marker = 'test("QEO-183 derives session deltas without mixing sentiment sources", async () => {'
-          if marker not in s:
-              s += r'''
+          block = '''
 
 test("QEO-183 derives session deltas without mixing sentiment sources", async () => {
   const modulePath = path.resolve("modules/research/market-insight/session-changes.ts")
@@ -45,27 +43,10 @@ test("QEO-183 derives session deltas without mixing sentiment sources", async ()
       totalTradedValue: 1200,
     },
     history: [
-      {
-        sessionDate: "2026-09-09",
-        marketRegime: "Accumulation",
-        riskScore: 0.6,
-        aboveMa20Pct: 60,
-        aboveMa50Pct: 50,
-        foreignNetValue: 100,
-        totalTradedValue: 1000,
-      },
-      {
-        sessionDate: "2026-09-10",
-        marketRegime: "Markup",
-        riskScore: 0.7,
-        aboveMa20Pct: 57,
-        aboveMa50Pct: 45,
-        foreignNetValue: -200,
-        totalTradedValue: 1200,
-      },
+      { sessionDate: "2026-09-09", marketRegime: "Accumulation", riskScore: 0.6, aboveMa20Pct: 60, aboveMa50Pct: 50, foreignNetValue: 100, totalTradedValue: 1000 },
+      { sessionDate: "2026-09-10", marketRegime: "Markup", riskScore: 0.7, aboveMa20Pct: 57, aboveMa50Pct: 45, foreignNetValue: -200, totalTradedValue: 1200 },
     ],
   })
-
   assert.equal(changes.sentiment.previous, 55, "future TOPI prediction points must not become the previous session")
   assert.equal(changes.sentiment.delta, 5)
   assert.equal(changes.risk.delta, 0.1)
@@ -82,31 +63,27 @@ test("QEO-183 renders What Changed Today after AI conclusion and before the over
   const ai = dashboard.indexOf("data-market-ai-conclusion")
   const changes = dashboard.indexOf("data-market-session-changes")
   const overview = dashboard.indexOf("data-market-intelligence-overview-row")
-
   assert.ok(changes > ai, "session changes must follow the AI conclusion area")
   assert.ok(changes < overview, "session changes must precede the snapshot overview row")
   assert.match(dashboard, /Thay đổi so với phiên trước/)
-  for (const label of ["Tâm lý", "Rủi ro", "MA20", "MA50", "Thanh khoản", "Chế độ thị trường"]) {
-    assert.ok(dashboard.includes(label), `missing QEO-183 change metric: ${label}`)
-  }
-  assert.match(dataSource, /marketRegime: MarketRegime \| null/)
-  assert.match(dataSource, /select\("session_date,market_regime,sentiment_score,risk_score/)
+  for (const label of ["Tâm lý", "Rủi ro", "MA20", "MA50", "Thanh khoản", "Chế độ thị trường"]) assert.ok(dashboard.includes(label), `missing QEO-183 change metric: ${label}`)
+  assert.match(dataSource, /marketRegime: MarketRegime \\| null/)
+  assert.match(dataSource, /select\\\("session_date,market_regime,sentiment_score,risk_score/)
 })
 '''
-              p.write_text(s)
+          if marker not in s:
+              p.write_text(s + block)
           PY
+      - name: Prove RED
+        run: |
           set +e
           node --test tests/market-insight-ui-performance.test.ts > /tmp/qeo183-red.log 2>&1
           status=$?
           set -e
           cat /tmp/qeo183-red.log
-          if [ "$status" -eq 0 ]; then
-            echo "Expected RED failure but focused suite passed" >&2
-            exit 1
-          fi
+          test "$status" -ne 0
           grep -q "QEO-183 must add a pure session-changes helper" /tmp/qeo183-red.log
-      - name: Commit RED test and self-delete helper
-        shell: bash
+      - name: Commit RED and self delete
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
