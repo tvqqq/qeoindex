@@ -56,9 +56,13 @@ async function login(page: Page): Promise<void> {
 
   await page.goto(`${BASE_URL}/`)
   await page.getByLabel(/email/i).fill(TEST_EMAIL)
-  await page.getByLabel(/mật khẩu/i).fill(TEST_PASSWORD)
+  await page.getByRole("textbox", { name: "Mật khẩu", exact: true }).fill(TEST_PASSWORD)
   await page.getByRole("button", { name: /đăng nhập/i }).click()
   await expect(page.getByText(/đăng nhập qeoindex/i)).toBeHidden()
+  await expect.poll(
+    () => page.evaluate(async () => (await fetch("/api/me", { cache: "no-store" })).status),
+    { timeout: 15_000 },
+  ).toBe(200)
 }
 
 async function getSettings(request: APIRequestContext, ticker: Ticker): Promise<ChartSettingsResponse> {
@@ -179,18 +183,39 @@ async function openObjectManager(page: Page): Promise<void> {
   await expect(page.getByText(/Quản lý đối tượng \(\d+\)/)).toBeVisible()
 }
 
-async function setMaOpacity(page: Page, value: string): Promise<void> {
+function maOpacity(settings: ChartSettingsResponse): number | null {
+  const view = (settings.viewSettings ?? settings.data.viewSettings ?? {}) as Record<string, unknown>
+  const styles = view.indicatorStyles as Record<string, unknown> | undefined
+  const ma = styles?.ma as Record<string, unknown> | undefined
+  const opacity = ma?.opacity
+  return typeof opacity === "number" && Number.isFinite(opacity) ? opacity : null
+}
+
+async function waitForMaOpacityPersisted(
+  request: APIRequestContext,
+  ticker: Ticker,
+  value: number,
+): Promise<void> {
+  await expect.poll(async () => maOpacity(await getSettings(request, ticker)), { timeout: 15_000 }).toBe(value)
+}
+
+async function setMaOpacity(
+  page: Page,
+  request: APIRequestContext,
+  ticker: Ticker,
+  value: string,
+): Promise<void> {
   await page.locator('[title="Chỉ báo kỹ thuật"]').click()
   const input = page.getByLabel("MA (20, 50, 200) opacity")
   await expect(input).toBeVisible()
-  await input.evaluate((node, next) => {
-    const element = node as HTMLInputElement
-    element.value = String(next)
-    element.dispatchEvent(new Event("input", { bubbles: true }))
-    element.dispatchEvent(new Event("change", { bubbles: true }))
-  }, value)
+  await input.focus()
+  await input.press("Home")
+  const target = Number(value)
+  const steps = Math.round((target - 0.1) / 0.05)
+  for (let index = 0; index < steps; index += 1) await input.press("ArrowRight")
+  await expect(input).toHaveValue(value)
   await page.getByLabel("Đóng bảng chỉ báo").click()
-  await waitCloudSaved(page)
+  await waitForMaOpacityPersisted(request, ticker, target)
 }
 
 async function expectMaOpacity(page: Page, value: string): Promise<void> {
@@ -304,7 +329,7 @@ test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ p
     await page.locator('[title="Mở khóa"]').first().click()
 
     // Text editor gives us a real editable-field shortcut guard and edit flow.
-    await page.getByText(/Quản lý đối tượng \(\d+\)/).locator("..").getByRole("button").last().click().catch(() => {})
+    await page.getByText(/Quản lý đối tượng \(\d+\)/).locator("..").locator("..").getByRole("button").click()
     await page.locator('[title="Chèn văn bản (Text)"]').click()
     await page.mouse.click(svgBox.x + svgBox.width * 0.48, svgBox.y + svgBox.height * 0.30)
     const editor = page.getByPlaceholder("Nhập nội dung ghi chú...")
@@ -314,6 +339,7 @@ test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ p
     const vicUrl = page.url()
     await page.keyboard.press("Backquote")
     await expect(page.locator('[title="Thu nhỏ chart"]')).toBeVisible()
+    await page.keyboard.press("Backspace")
     await page.keyboard.press("ArrowDown")
     expect(page.url()).toBe(vicUrl)
     await page.getByRole("button", { name: "Lưu", exact: true }).click()
@@ -327,14 +353,15 @@ test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ p
     await enterFullscreen(page)
     await openObjectManager(page)
     await expect(page.getByText("Đường xu hướng (Trendline)", { exact: true })).toBeVisible()
-    await expect(page.getByText(new RegExp(note.slice(0, 18)))).toBeVisible()
+    await expect(page.getByText(new RegExp(note.slice(0, 18))).first()).toBeVisible()
 
     // Global indicator style + pane layout persist across tickers; drawings do not.
-    await page.getByText(/Quản lý đối tượng \(\d+\)/).locator("..").getByRole("button").last().click().catch(() => {})
-    await setMaOpacity(page, "0.55")
+    await page.getByText(/Quản lý đối tượng \(\d+\)/).locator("..").locator("..").getByRole("button").click()
+    await setMaOpacity(page, request, "VIC", "0.55")
     await page.locator('[title="Thu gọn pane RSI"]').click()
     await expect(page.locator('[title="Mở pane RSI"]')).toBeVisible()
     await waitCloudSaved(page)
+    await waitForMaOpacityPersisted(request, "VCB", 0.55)
 
     await page.goto(`${BASE_URL}/insights/vcb`)
     await expect(page.locator('[data-chart-runtime="lightweight-charts-v5"]')).toBeVisible({ timeout: 20_000 })
