@@ -22,9 +22,16 @@ interface ResearchReportPdfFetchDeps {
   resolveHost?: (hostname: string) => Promise<string[]>
 }
 
+interface ParsedContentRange {
+  start: number
+  end: number
+  total: number
+}
+
 const DEFAULT_MAX_BYTES = 20 * 1024 * 1024
 const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_MAX_REDIRECTS = 3
+const RANGE_CHUNK_BYTES = 256 * 1024
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
 function positiveIntegerEnv(name: string, fallback: number) {
@@ -165,20 +172,48 @@ async function readBoundedBody(response: Response, maxBytes: number) {
   return bytes
 }
 
-export async function fetchResearchReportPdf(
+function parseContentRange(value: string | null): ParsedContentRange | null {
+  if (!value) return null
+  const match = /^bytes (\d+)-(\d+)\/(\d+)$/i.exec(value.trim())
+  if (!match) return null
+  const start = Number(match[1])
+  const end = Number(match[2])
+  const total = Number(match[3])
+  if (![start, end, total].every(Number.isSafeInteger)) return null
+  if (start < 0 || end < start || total <= end) return null
+  return { start, end, total }
+}
+
+function concatenateChunks(chunks: Uint8Array[], totalBytes: number) {
+  const bytes = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  if (offset !== totalBytes) {
+    throw new Error(`Research report PDF range download length mismatch: expected ${totalBytes}, received ${offset}`)
+  }
+  return bytes
+}
+
+async function fetchPdfResponse(
   rawUrl: string,
-  policy = getResearchReportPdfPolicy(),
-  deps: ResearchReportPdfFetchDeps = {},
-): Promise<DownloadedResearchReportPdf> {
-  const fetchImpl = deps.fetchImpl || fetch
-  const resolveHost = deps.resolveHost || defaultResolveHost
+  range: string,
+  policy: ResearchReportPdfPolicy,
+  fetchImpl: typeof fetch,
+  resolveHost: (hostname: string) => Promise<string[]>,
+) {
   let currentUrl = rawUrl
 
   for (let redirectCount = 0; redirectCount <= policy.maxRedirects; redirectCount += 1) {
     const validatedUrl = await validatePdfUrl(currentUrl, policy, resolveHost)
     const response = await fetchImpl(validatedUrl, {
       method: "GET",
-      headers: { accept: "application/pdf" },
+      headers: {
+        accept: "application/pdf",
+        range,
+      },
       redirect: "manual",
       cache: "no-store",
       signal: AbortSignal.timeout(policy.timeoutMs),
@@ -194,22 +229,105 @@ export async function fetchResearchReportPdf(
       continue
     }
 
-    if (!response.ok) throw new Error(`Research report PDF fetch failed (${response.status})`)
-    const bytes = await readBoundedBody(response, policy.maxBytes)
-    const contentType = response.headers.get("content-type")
-    const mime = contentType?.split(";", 1)[0]?.trim().toLowerCase() || null
-    if (mime !== "application/pdf" && !hasPdfSignature(bytes)) {
-      throw new Error(`Research report response is not a PDF (${mime || "unknown content type"})`)
-    }
-
-    return {
-      finalUrl: validatedUrl.toString(),
-      bytes,
-      contentHash: createHash("sha256").update(bytes).digest("hex"),
-      contentType,
-      byteLength: bytes.byteLength,
-    }
+    return { response, finalUrl: validatedUrl.toString() }
   }
 
   throw new Error("Research report PDF redirect loop exceeded policy")
+}
+
+async function readExactRangeBody(response: Response, expectedBytes: number) {
+  const bytes = await readBoundedBody(response, expectedBytes)
+  if (bytes.byteLength !== expectedBytes) {
+    throw new Error(`Research report PDF range chunk length mismatch: expected ${expectedBytes}, received ${bytes.byteLength}`)
+  }
+  return bytes
+}
+
+function validatePdfResult(finalUrl: string, bytes: Uint8Array, contentType: string | null): DownloadedResearchReportPdf {
+  const mime = contentType?.split(";", 1)[0]?.trim().toLowerCase() || null
+  if (mime !== "application/pdf" && !hasPdfSignature(bytes)) {
+    throw new Error(`Research report response is not a PDF (${mime || "unknown content type"})`)
+  }
+
+  return {
+    finalUrl,
+    bytes,
+    contentHash: createHash("sha256").update(bytes).digest("hex"),
+    contentType,
+    byteLength: bytes.byteLength,
+  }
+}
+
+export async function fetchResearchReportPdf(
+  rawUrl: string,
+  policy = getResearchReportPdfPolicy(),
+  deps: ResearchReportPdfFetchDeps = {},
+): Promise<DownloadedResearchReportPdf> {
+  const fetchImpl = deps.fetchImpl || fetch
+  const resolveHost = deps.resolveHost || defaultResolveHost
+  const firstEnd = Math.min(RANGE_CHUNK_BYTES, policy.maxBytes) - 1
+  const firstRange = `bytes=0-${firstEnd}`
+  const first = await fetchPdfResponse(rawUrl, firstRange, policy, fetchImpl, resolveHost)
+  const firstResponse = first.response
+
+  if (firstResponse.status === 200) {
+    const bytes = await readBoundedBody(firstResponse, policy.maxBytes)
+    return validatePdfResult(first.finalUrl, bytes, firstResponse.headers.get("content-type"))
+  }
+  if (firstResponse.status !== 206) {
+    throw new Error(`Research report PDF fetch failed (${firstResponse.status})`)
+  }
+
+  const firstContentRange = parseContentRange(firstResponse.headers.get("content-range"))
+  if (!firstContentRange) throw new Error("Research report PDF partial response has invalid Content-Range")
+  if (firstContentRange.start !== 0) {
+    throw new Error(`Research report PDF first range is not contiguous from byte 0: ${firstContentRange.start}`)
+  }
+  if (firstContentRange.total > policy.maxBytes) {
+    throw new Error(`Research report PDF exceeds maximum size of ${policy.maxBytes} bytes`)
+  }
+
+  const expectedFirstEnd = Math.min(firstEnd, firstContentRange.total - 1)
+  if (firstContentRange.end !== expectedFirstEnd) {
+    throw new Error(`Research report PDF first range mismatch: expected end ${expectedFirstEnd}, received ${firstContentRange.end}`)
+  }
+
+  const chunks: Uint8Array[] = []
+  const firstBytes = await readExactRangeBody(
+    firstResponse,
+    firstContentRange.end - firstContentRange.start + 1,
+  )
+  chunks.push(firstBytes)
+
+  const totalBytes = firstContentRange.total
+  let nextStart = firstContentRange.end + 1
+  let finalUrl = first.finalUrl
+
+  while (nextStart < totalBytes) {
+    const nextEnd = Math.min(nextStart + RANGE_CHUNK_BYTES - 1, totalBytes - 1)
+    const nextRange = `bytes=${nextStart}-${nextEnd}`
+    const next = await fetchPdfResponse(finalUrl, nextRange, policy, fetchImpl, resolveHost)
+    const response = next.response
+    if (response.status !== 206) {
+      throw new Error(`Research report PDF range request expected HTTP 206 but received ${response.status}`)
+    }
+
+    const contentRange = parseContentRange(response.headers.get("content-range"))
+    if (!contentRange) throw new Error("Research report PDF partial response has invalid Content-Range")
+    if (contentRange.total !== totalBytes) {
+      throw new Error(`Research report PDF range total changed from ${totalBytes} to ${contentRange.total}`)
+    }
+    if (contentRange.start !== nextStart || contentRange.end !== nextEnd) {
+      throw new Error(
+        `Research report PDF range is not contiguous: expected ${nextStart}-${nextEnd}, received ${contentRange.start}-${contentRange.end}`,
+      )
+    }
+
+    chunks.push(await readExactRangeBody(response, nextEnd - nextStart + 1))
+    nextStart = nextEnd + 1
+    finalUrl = next.finalUrl
+  }
+
+  const bytes = concatenateChunks(chunks, totalBytes)
+  return validatePdfResult(finalUrl, bytes, firstResponse.headers.get("content-type"))
 }

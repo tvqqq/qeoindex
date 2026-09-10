@@ -111,6 +111,158 @@ test("QEO-81 PDF fetch accepts a valid PDF signature fallback and returns stable
   assert.equal(result.contentHash, createHash("sha256").update(bytes).digest("hex"))
 })
 
+test("QEO-87 PDF fetch assembles contiguous 256 KiB HTTP 206 byte ranges", async () => {
+  const bytes = new Uint8Array(600_000).fill(65)
+  bytes.set(new TextEncoder().encode("%PDF-1.7\n"), 0)
+  const requestedRanges: string[] = []
+
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    const range = new Headers(init?.headers).get("range")
+    assert.ok(range, "range request is required")
+    requestedRanges.push(range)
+    const match = /^bytes=(\d+)-(\d+)$/.exec(range)
+    assert.ok(match, `unexpected Range header: ${range}`)
+    const start = Number(match[1])
+    const requestedEnd = Number(match[2])
+    const end = Math.min(requestedEnd, bytes.byteLength - 1)
+    const chunk = bytes.slice(start, end + 1)
+    return new Response(chunk, {
+      status: 206,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(chunk.byteLength),
+        "content-range": `bytes ${start}-${end}/${bytes.byteLength}`,
+      },
+    })
+  }) as typeof fetch
+
+  const result = await fetchResearchReportPdf("https://cdn02.wigroup.vn/ranged.pdf", {
+    ...policy,
+    maxBytes: 1_000_000,
+  }, { fetchImpl, resolveHost: publicResolver })
+
+  assert.deepEqual(result.bytes, bytes)
+  assert.equal(result.byteLength, bytes.byteLength)
+  assert.deepEqual(requestedRanges, [
+    "bytes=0-262143",
+    "bytes=262144-524287",
+    "bytes=524288-599999",
+  ])
+})
+
+test("QEO-87 PDF fetch falls back safely when the origin ignores Range and returns HTTP 200", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.7\nfull response fallback\n%%EOF")
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    assert.equal(new Headers(init?.headers).get("range"), "bytes=0-262143")
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(bytes.byteLength),
+      },
+    })
+  }) as typeof fetch
+
+  const result = await fetchResearchReportPdf("https://cdn02.wigroup.vn/fallback.pdf", {
+    ...policy,
+    maxBytes: 1_000_000,
+  }, { fetchImpl, resolveHost: publicResolver })
+
+  assert.deepEqual(result.bytes, bytes)
+})
+
+test("QEO-87 PDF fetch rejects HTTP 206 without a valid Content-Range", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.7\npartial")
+  const missingHeader = (async () => new Response(bytes, {
+    status: 206,
+    headers: { "content-type": "application/pdf" },
+  })) as typeof fetch
+  const malformedHeader = (async () => new Response(bytes, {
+    status: 206,
+    headers: {
+      "content-type": "application/pdf",
+      "content-range": "not-a-range",
+    },
+  })) as typeof fetch
+
+  await assert.rejects(
+    () => fetchResearchReportPdf("https://cdn02.wigroup.vn/missing-range.pdf", {
+      ...policy,
+      maxBytes: 1_000_000,
+    }, { fetchImpl: missingHeader, resolveHost: publicResolver }),
+    /content-range/i,
+  )
+  await assert.rejects(
+    () => fetchResearchReportPdf("https://cdn02.wigroup.vn/malformed-range.pdf", {
+      ...policy,
+      maxBytes: 1_000_000,
+    }, { fetchImpl: malformedHeader, resolveHost: publicResolver }),
+    /content-range/i,
+  )
+})
+
+test("QEO-87 PDF fetch rejects a ranged file whose total size exceeds the hard cap", async () => {
+  const firstChunk = new Uint8Array(64).fill(65)
+  firstChunk.set(new TextEncoder().encode("%PDF-"), 0)
+  const fetchImpl = (async () => new Response(firstChunk, {
+    status: 206,
+    headers: {
+      "content-type": "application/pdf",
+      "content-length": "64",
+      "content-range": "bytes 0-63/65",
+    },
+  })) as typeof fetch
+
+  await assert.rejects(
+    () => fetchResearchReportPdf("https://cdn02.wigroup.vn/too-large-ranged.pdf", policy, {
+      fetchImpl,
+      resolveHost: publicResolver,
+    }),
+    /size|large|bytes/i,
+  )
+})
+
+test("QEO-87 PDF fetch rejects interrupted or non-contiguous range chunks", async () => {
+  const totalBytes = 400_000
+  let call = 0
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    call += 1
+    const range = new Headers(init?.headers).get("range")
+    if (call === 1) {
+      assert.equal(range, "bytes=0-262143")
+      const chunk = new Uint8Array(262_144).fill(65)
+      chunk.set(new TextEncoder().encode("%PDF-"), 0)
+      return new Response(chunk, {
+        status: 206,
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(chunk.byteLength),
+          "content-range": `bytes 0-262143/${totalBytes}`,
+        },
+      })
+    }
+
+    assert.equal(range, "bytes=262144-399999")
+    const truncated = new Uint8Array(10).fill(66)
+    return new Response(truncated, {
+      status: 206,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(truncated.byteLength),
+        "content-range": `bytes 262144-399999/${totalBytes}`,
+      },
+    })
+  }) as typeof fetch
+
+  await assert.rejects(
+    () => fetchResearchReportPdf("https://cdn02.wigroup.vn/interrupted.pdf", {
+      ...policy,
+      maxBytes: 1_000_000,
+    }, { fetchImpl, resolveHost: publicResolver }),
+    /range|chunk|length|contiguous/i,
+  )
+})
+
 test("QEO-81 PDF fetch rejects non-PDF content when MIME and signature both disagree", async () => {
   const fetchImpl = (async () => new Response("not a pdf", {
     status: 200,
