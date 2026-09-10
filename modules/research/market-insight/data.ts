@@ -87,6 +87,8 @@ export interface MarketHistoryPoint {
   marketRegime: MarketRegime | null
   sentimentScore: number | null
   riskScore: number | null
+  distributionCount: number | null
+  distributionWindow: string | null
   aboveMa10Pct: number | null
   aboveMa20Pct: number | null
   aboveMa50Pct: number | null
@@ -94,6 +96,7 @@ export interface MarketHistoryPoint {
   foreignNetValue: number | null
   proprietaryNetValue: number | null
   otherFlowNetValue: number | null
+  totalMatchedVolume: number | null
   totalTradedValue: number | null
   vnindexClose: number | null
   vnindexChangePct: number | null
@@ -231,7 +234,7 @@ export async function getMarketCloseInsightData(
       .order("rank", { ascending: true }),
     supabase
       .from("market_insight_daily")
-      .select("session_date,market_regime,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,other_flow_net_value,total_traded_value")
+      .select("session_date,market_regime,sentiment_score,risk_score,distribution_count,distribution_window,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,other_flow_net_value,total_traded_value,total_matched_volume")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(61),
@@ -399,6 +402,8 @@ export async function getMarketCloseInsightData(
       marketRegime: (row.market_regime as MarketRegime) || null,
       sentimentScore: row.sentiment_score != null ? Number(row.sentiment_score) : null,
       riskScore: row.risk_score != null ? Number(row.risk_score) : null,
+      distributionCount: row.distribution_count != null ? Number(row.distribution_count) : null,
+      distributionWindow: (row.distribution_window as string) || null,
       aboveMa10Pct: row.above_ma10_pct != null ? Number(row.above_ma10_pct) : null,
       aboveMa20Pct: row.above_ma20_pct != null ? Number(row.above_ma20_pct) : null,
       aboveMa50Pct: row.above_ma50_pct != null ? Number(row.above_ma50_pct) : null,
@@ -406,6 +411,7 @@ export async function getMarketCloseInsightData(
       foreignNetValue: row.foreign_net_value != null ? Number(row.foreign_net_value) : null,
       proprietaryNetValue: row.proprietary_net_value != null ? Number(row.proprietary_net_value) : null,
       otherFlowNetValue: row.other_flow_net_value != null ? Number(row.other_flow_net_value) : null,
+      totalMatchedVolume: row.total_matched_volume != null ? Number(row.total_matched_volume) : null,
       totalTradedValue: row.total_traded_value != null ? Number(row.total_traded_value) : null,
       vnindexClose: vnindexHistoryByDate.get(String(row.session_date))?.close ?? null,
       vnindexChangePct: vnindexHistoryByDate.get(String(row.session_date))?.changePct ?? null,
