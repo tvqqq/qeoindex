@@ -45,12 +45,12 @@ test("QEO-105 transition persistence freezes exact universe IDs and never delete
 })
 
 test("QEO-105 first rollout establishes a complete baseline instead of treating canonical 200 as newly added", () => {
-  const migration = source("supabase/migrations/20260910164500_qeo105_chart_universe_bootstrap.sql")
+  const hardening = source("supabase/migrations/20260910170000_qeo105_chart_universe_bootstrap_hardening.sql")
 
-  assert.match(migration, /if v_previous_run_id is null then/i)
-  assert.match(migration, /v_added := '\{\}'::text\[\]/i)
-  assert.match(migration, /v_removed := '\{\}'::text\[\]/i)
-  assert.match(migration, /v_unchanged_count/i)
+  assert.match(hardening, /if v_previous_run_id is null then/i)
+  assert.match(hardening, /v_added := '\{\}'::text\[\]/i)
+  assert.match(hardening, /v_removed := '\{\}'::text\[\]/i)
+  assert.match(hardening, /'baseline', v_previous_run_id is null/i)
 })
 
 test("QEO-105 bootstraps only added tickers through canonical Daily and QEO-107 intraday helpers", () => {
@@ -81,16 +81,17 @@ test("QEO-105 keeps failures isolated and transition completion requires both Da
 test("QEO-105 automatically dispatches a dedicated machine-only route after publish without embedding secrets", () => {
   const route = source("app/api/qeoindex/chart-universe-bootstrap/route.ts")
   const migration = source("supabase/migrations/20260910164500_qeo105_chart_universe_bootstrap.sql")
+  const hardening = source("supabase/migrations/20260910170000_qeo105_chart_universe_bootstrap_hardening.sql")
 
   assert.match(route, /chartUniverseBootstrapWorkflow/)
   assert.match(route, /transitionId/)
   assert.match(route, /qeo105-/)
   assert.match(route, /isSchedulerAuthorized/)
   assert.match(migration, /net\.http_post/)
-  assert.match(migration, /qeoindex_app_url/)
-  assert.match(migration, /qeoindex_cron_secret/)
-  assert.match(migration, /\/api\/qeoindex\/chart-universe-bootstrap\?transitionId=/)
-  assert.doesNotMatch(migration, /Bearer\s+[A-Za-z0-9._-]{20,}/)
+  assert.match(hardening, /qeoindex_app_url/)
+  assert.match(hardening, /qeoindex_cron_secret/)
+  assert.match(hardening, /\/api\/qeoindex\/chart-universe-bootstrap\?transitionId=/)
+  assert.doesNotMatch(`${migration}\n${hardening}`, /Bearer\s+[A-Za-z0-9._-]{20,}/)
 })
 
 test("QEO-105 is idempotent: same transition is uniquely keyed and ready stages are skipped", () => {
