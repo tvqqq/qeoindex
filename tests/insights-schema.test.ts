@@ -251,10 +251,10 @@ test("stock detail workstation integrates insights rating tabs and removes metho
   assert.match(tabsPanel, /Bear & Risk Sentinel: Cảnh báo rủi ro & phản biện/)
   assert.match(tabsPanel, /Góc nhìn 5 chuyên gia độc lập Hội đồng AI/)
 
-  // 5. Rating components present
+  // 5. Rating components present; history has moved to the compact header
   assert.match(tabsPanel, /RatingRadar/)
   assert.match(tabsPanel, /AccumulationHeatmap/)
-  assert.match(tabsPanel, /RatingHistoryChart/)
+  assert.doesNotMatch(tabsPanel, /RatingHistoryChart/)
   assert.match(tabsPanel, /TtaiDashboard/)
 
   // 6. Stock detail data fetches rating row and has fallback
@@ -304,4 +304,3 @@ test("stock ai sidebar renders consensus donut chart, consensus with confidence 
   }
   assert.match(aiSidebar, /style=\{\{ width: `\$\{Math\.min\(100, Math\.max\(0, p\.score\)\)\}%` \}\}/)
 })
-

@@ -6,47 +6,47 @@ function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 }
 
-test("QEO-174 keeps factual stock-card presentation without the retired price arena", async () => {
-  const metrics = await import("../../components/stock-detail/revamp/stock-card-metrics.ts")
-  const stat = source("components/stock-detail/revamp/stock-card-stat.tsx")
-
-  assert.equal(metrics.formatCompactNumber(1_250_000), "1,3M")
-  assert.match(stat, /CARD STATS|StockCardStat/)
-  assert.doesNotMatch(stat, /rarity|legendary|power score|attack|defense/i)
-})
-
-test("QEO-174 keeps the strategy-card hero but removes PRICE ARENA", () => {
+test("QEO-177 keeps the stock-detail hero factual while removing the legacy CARD STATS strip", () => {
   const header = source("components/stock-detail/stock-company-header.tsx")
 
   assert.match(header, /data-qeo174-strategy-card/)
-  assert.match(header, /STOCK CARD/)
-  assert.match(header, /CARD STATS/)
-  assert.doesNotMatch(header, /StockPriceArena|PRICE ARENA|stock-price-arena/)
-  assert.match(header, /StockCardStat/)
   assert.match(header, /useReducedMotion/)
   assert.match(header, /rank/)
-  assert.match(header, /P\/E/)
-  assert.match(header, /P\/B/)
-  assert.match(header, /ROE/)
-  assert.match(header, /EPS/)
   assert.match(header, /Bookmark/)
   assert.match(header, /Share2/)
+  assert.doesNotMatch(header, /StockPriceArena|PRICE ARENA|stock-price-arena/)
+  assert.doesNotMatch(header, /CARD STATS/)
+  assert.doesNotMatch(header, /StockCardStat/)
+  assert.doesNotMatch(header, /stock-card-metrics/)
+  assert.doesNotMatch(header, /label="P\/E"|label="P\/B"|label="ROE"|label="EPS"|label="Khối lượng"|label="Vốn hóa"/)
   assert.doesNotMatch(header, /rarity|legendary|power score/i)
 })
 
-test("QEO-174 renders CARD STATS as a compact flat strip", () => {
+test("QEO-177 renders Qeo Composite before the live price and reuses ratingRow data", () => {
   const header = source("components/stock-detail/stock-company-header.tsx")
-  const stat = source("components/stock-detail/revamp/stock-card-stat.tsx")
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
 
-  assert.match(header, /grid grid-cols-3/)
-  assert.match(header, /xl:grid-cols-6/)
-  assert.doesNotMatch(header, /Fundamental \+ market snapshot/)
-  assert.doesNotMatch(header, /VND \/ cp|phiên hiện tại/)
+  assert.match(header, /QeoCompositeTrend/)
+  assert.match(header, /row=\{data\.ratingRow\}/)
+  assert.ok(
+    header.indexOf("<QeoCompositeTrend") < header.indexOf('price.toLocaleString("vi-VN")'),
+    "Qeo Composite must be rendered before the current price",
+  )
 
-  assert.match(stat, /border-l/)
-  assert.match(stat, /py-1\.5/)
-  assert.doesNotMatch(stat, /rounded-2xl|bg-black\/20|group\/stat/)
-  assert.doesNotMatch(stat, /detail\??:|detail,/)
+  assert.match(trend, /data-qeo-composite-trend/)
+  assert.match(trend, /QEO COMPOSITE/)
+  assert.match(trend, /row\.ratingScore/)
+  assert.match(trend, /row\.scoreHistory/)
+  assert.match(trend, /<svg/)
+  assert.doesNotMatch(trend, /fetch\(|\/api\//)
+})
+
+test("QEO-177 removes the duplicate full Qeo Composite history block from the overview tab", () => {
+  const tabs = source("components/stock-detail/stock-tabs-panel.tsx")
+
+  assert.doesNotMatch(tabs, /function RatingHistoryChart/)
+  assert.doesNotMatch(tabs, /<RatingHistoryChart row=\{row\} \/>/)
+  assert.doesNotMatch(tabs, /Xu hướng Qeo composite qua các phiên/)
 })
 
 test("QEO-174 expands the compact mini chart while preserving maximize behavior", () => {
