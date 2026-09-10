@@ -1,4 +1,4 @@
-name: QEO-187 RED
+name: QEO-187 GREEN
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  red:
+  green:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -27,7 +27,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline
-      - name: Append and commit RED contracts
-        run: node scripts/tmp-qeo187-red.mjs
-      - name: Prove RED
+      - name: Apply and commit production patch
+        run: node scripts/tmp-qeo187-green.mjs
+      - name: Prove focused GREEN
         run: node --test tests/market-insight-ui-performance.test.ts
+      - name: TypeScript smoke check
+        run: pnpm typecheck
