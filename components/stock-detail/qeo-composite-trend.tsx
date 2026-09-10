@@ -29,6 +29,12 @@ function rsRingColor(score: number) {
   return "#fb7185"
 }
 
+function formatSessionDate(asOfDate: string) {
+  const day = asOfDate.slice(8, 10)
+  const month = asOfDate.slice(5, 7)
+  return day && month ? `${day}/${month}` : asOfDate
+}
+
 export function QeoCompositeTrend({
   row,
   className,
@@ -37,6 +43,7 @@ export function QeoCompositeTrend({
   className?: string
 }) {
   const [remoteHistory, setRemoteHistory] = useState<CompositeHistoryPoint[] | null>(null)
+  const [hoveredCompositeIndex, setHoveredCompositeIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!row?.ticker) {
@@ -46,6 +53,7 @@ export function QeoCompositeTrend({
 
     const controller = new AbortController()
     setRemoteHistory(null)
+    setHoveredCompositeIndex(null)
 
     fetch(`/api/insights/stock-history?ticker=${encodeURIComponent(row.ticker)}`, {
       signal: controller.signal,
@@ -77,7 +85,7 @@ export function QeoCompositeTrend({
       .sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
   }, [row])
 
-  const history = useMemo(() => {
+  const compositeHistory = useMemo(() => {
     const source = remoteHistory?.some((item) => normalizeScore(item.compositeScore) != null)
       ? remoteHistory
       : fallbackHistory
@@ -85,7 +93,7 @@ export function QeoCompositeTrend({
     return source
       .filter((item) => normalizeScore(item.compositeScore) != null)
       .sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
-      .slice(-20)
+      .slice(-5)
   }, [fallbackHistory, remoteHistory])
 
   const rsHistory = useMemo(() => {
@@ -98,20 +106,20 @@ export function QeoCompositeTrend({
       .slice(-5)
   }, [remoteHistory])
 
-  const latestHistoryScore = history.length
-    ? normalizeScore(history[history.length - 1]?.compositeScore)
+  const latestHistoryScore = compositeHistory.length
+    ? normalizeScore(compositeHistory[compositeHistory.length - 1]?.compositeScore)
     : null
-  const previousHistoryScore = history.length > 1
-    ? normalizeScore(history[history.length - 2]?.compositeScore)
+  const previousHistoryScore = compositeHistory.length > 1
+    ? normalizeScore(compositeHistory[compositeHistory.length - 2]?.compositeScore)
     : null
   const score = latestHistoryScore ?? (row ? normalizeScore(row.ratingScore) : null)
   const delta = score != null && previousHistoryScore != null ? score - previousHistoryScore : null
 
   const chartWidth = 176
   const chartHeight = 48
-  const chartPaddingX = 4
-  const chartPaddingY = 5
-  const values = history.flatMap((item) => {
+  const chartPaddingX = 7
+  const chartPaddingY = 7
+  const values = compositeHistory.flatMap((item) => {
     const value = normalizeScore(item.compositeScore)
     return value == null ? [] : [value]
   })
@@ -121,14 +129,23 @@ export function QeoCompositeTrend({
   const chartMin = Math.max(0, minValue - rawSpread * 0.25)
   const chartMax = Math.min(100, maxValue + rawSpread * 0.25)
   const chartRange = Math.max(1, chartMax - chartMin)
-  const points = history.map((item, index) => {
+  const chartPoints = compositeHistory.map((item, index) => {
     const value = normalizeScore(item.compositeScore) ?? chartMin
-    const x = chartPaddingX + (index * (chartWidth - chartPaddingX * 2)) / Math.max(1, history.length - 1)
+    const x = chartPaddingX + (index * (chartWidth - chartPaddingX * 2)) / Math.max(1, compositeHistory.length - 1)
     const y = chartPaddingY + ((chartMax - value) / chartRange) * (chartHeight - chartPaddingY * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
+    return { x, y }
   })
-  const firstDate = history[0]?.asOfDate?.slice(5) || ""
-  const lastDate = history[history.length - 1]?.asOfDate?.slice(5) || ""
+  const points = chartPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+  const firstDate = compositeHistory[0]?.asOfDate?.slice(5) || ""
+  const lastDate = compositeHistory[compositeHistory.length - 1]?.asOfDate?.slice(5) || ""
+  const hoveredComposite = hoveredCompositeIndex == null ? null : compositeHistory[hoveredCompositeIndex]
+  const hoveredScore = normalizeScore(hoveredComposite?.compositeScore)
+  const hoveredPoint = hoveredCompositeIndex == null ? null : chartPoints[hoveredCompositeIndex]
+  const tooltipAlignment = hoveredCompositeIndex === 0
+    ? "translate-x-0"
+    : hoveredCompositeIndex === compositeHistory.length - 1
+      ? "-translate-x-full"
+      : "-translate-x-1/2"
 
   return (
     <div
@@ -136,7 +153,7 @@ export function QeoCompositeTrend({
       className={cn("flex min-w-0 flex-wrap items-center gap-3", className)}
     >
       <div data-rs-history className="shrink-0">
-        <div className="mb-1.5 text-[8px] font-black uppercase tracking-[0.18em] text-slate-500">
+        <div className="mb-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
           RS · 5 PHIÊN
         </div>
         {rsHistory.length ? (
@@ -144,25 +161,29 @@ export function QeoCompositeTrend({
             {rsHistory.map((point, index) => {
               const isLatest = index === rsHistory.length - 1
               const roundedScore = Math.round(point.stockRs)
+              const ringColor = rsRingColor(point.stockRs)
               return (
                 <div
                   key={`${point.asOfDate}-${index}`}
                   data-rs-ring
                   data-current-rs={isLatest ? "true" : undefined}
                   className={cn(
-                    "grid size-9 shrink-0 place-items-center rounded-full border-2 border-transparent transition-shadow",
-                    isLatest && "border-cyan-100/80 shadow-[0_0_16px_rgba(103,232,249,0.2)]",
+                    "grid size-10 shrink-0 place-items-center rounded-full border-2 border-transparent transition-shadow",
+                    isLatest && "border-cyan-100/90 shadow-[0_0_18px_rgba(103,232,249,0.28)]",
                   )}
                   title={`RS ${point.asOfDate}: ${roundedScore}`}
                   aria-label={`RS ${point.asOfDate}: ${roundedScore}${isLatest ? ", mới nhất" : ""}`}
                 >
                   <div
-                    className="relative grid size-8 place-items-center rounded-full"
+                    className="relative grid size-9 place-items-center rounded-full p-[2px]"
                     style={{
-                      background: `conic-gradient(${rsRingColor(point.stockRs)} ${point.stockRs * 3.6}deg, rgba(51,65,85,0.34) 0deg)`,
+                      background: `conic-gradient(${ringColor} ${point.stockRs * 3.6}deg, rgba(51,65,85,0.5) 0deg)`,
                     }}
                   >
-                    <span className="absolute inset-[3px] grid place-items-center rounded-full bg-[#0a1019] font-mono text-[10px] font-black text-slate-100">
+                    <span
+                      className="grid size-full place-items-center rounded-full font-mono text-[14px] font-black text-slate-950 shadow-inner"
+                      style={{ backgroundColor: rsRingColor(point.stockRs) }}
+                    >
                       {roundedScore}
                     </span>
                   </div>
@@ -171,7 +192,7 @@ export function QeoCompositeTrend({
             })}
           </div>
         ) : (
-          <div className="flex h-9 min-w-[84px] items-center text-[9px] font-semibold text-slate-600">
+          <div className="flex h-10 min-w-[84px] items-center text-[9px] font-semibold text-slate-600">
             {remoteHistory == null ? "Đang tải RS…" : "Chưa có RS"}
           </div>
         )}
@@ -187,7 +208,6 @@ export function QeoCompositeTrend({
               <strong className="font-mono text-2xl font-black leading-none text-violet-100">
                 {score == null ? "—" : Math.round(score)}
               </strong>
-              <span className="font-mono text-[10px] text-slate-500">/100</span>
               {delta != null && Math.abs(delta) >= 0.01 ? (
                 <span
                   className={cn(
@@ -204,8 +224,20 @@ export function QeoCompositeTrend({
             <div className="mt-1 text-[9px] font-semibold text-slate-500">Xu hướng Qeo Composite</div>
           </div>
 
-          {history.length >= 2 ? (
-            <div className="min-w-0 flex-1">
+          {compositeHistory.length >= 2 ? (
+            <div className="relative min-w-0 flex-1">
+              {hoveredComposite && hoveredScore != null && hoveredPoint ? (
+                <div
+                  data-qeo-composite-tooltip
+                  className={cn(
+                    "pointer-events-none absolute top-0 z-10 rounded-md border border-violet-200/20 bg-slate-950/95 px-1.5 py-0.5 font-mono text-[9px] font-black text-violet-100 shadow-lg",
+                    tooltipAlignment,
+                  )}
+                  style={{ left: `${(hoveredPoint.x / chartWidth) * 100}%` }}
+                >
+                  {Math.round(hoveredScore)} · {formatSessionDate(hoveredComposite.asOfDate)}
+                </div>
+              ) : null}
               <svg
                 data-qeo-composite-chart
                 viewBox={`0 0 ${chartWidth} ${chartHeight}`}
@@ -232,23 +264,40 @@ export function QeoCompositeTrend({
                   className="text-violet-300"
                   vectorEffect="non-scaling-stroke"
                 />
-                {points.map((point, index) => {
-                  const [x, y] = point.split(",").map(Number)
-                  const isLatest = index === points.length - 1
+                {chartPoints.map((point, index) => {
+                  const isLatest = index === chartPoints.length - 1
+                  const session = compositeHistory[index]
+                  const sessionScore = normalizeScore(session?.compositeScore)
                   return (
-                    <circle
-                      key={`${history[index]?.asOfDate}-${index}`}
-                      cx={x}
-                      cy={y}
-                      r={isLatest ? 2.8 : 1.45}
-                      className={isLatest ? "fill-emerald-300" : "fill-violet-200/65"}
-                    />
+                    <g key={`${session?.asOfDate}-${index}`}>
+                      <circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={isLatest ? 3.1 : 2.1}
+                        className={isLatest ? "fill-emerald-300" : "fill-violet-200/80"}
+                        pointerEvents="none"
+                      />
+                      <circle
+                        data-qeo-composite-point
+                        cx={point.x}
+                        cy={point.y}
+                        r={8}
+                        fill="transparent"
+                        stroke="transparent"
+                        tabIndex={0}
+                        aria-label={sessionScore == null ? undefined : `Qeo Composite ${formatSessionDate(session.asOfDate)}: ${Math.round(sessionScore)}`}
+                        onMouseEnter={() => setHoveredCompositeIndex(index)}
+                        onMouseLeave={() => setHoveredCompositeIndex(null)}
+                        onFocus={() => setHoveredCompositeIndex(index)}
+                        onBlur={() => setHoveredCompositeIndex(null)}
+                      />
+                    </g>
                   )
                 })}
               </svg>
               <div className="mt-0.5 flex justify-between font-mono text-[8px] text-slate-600">
                 <span>{firstDate}</span>
-                <span>{history.length} phiên</span>
+                <span>{compositeHistory.length} phiên</span>
                 <span>{lastDate}</span>
               </div>
             </div>

@@ -49,12 +49,23 @@ export function SectorIcon({ sector, className }: { sector: string; className?: 
   })
 }
 
+function compactMarketCapNumber(value: number) {
+  const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2
+  return Number(value.toFixed(decimals)).toString()
+}
+
+export function formatCompactMarketCap(marketCapT?: number) {
+  if (typeof marketCapT !== "number" || !Number.isFinite(marketCapT) || marketCapT <= 0) return null
+  if (marketCapT >= 1) return `${compactMarketCapNumber(marketCapT)}k tỷ`
+  return `${Math.round(marketCapT * 1000).toLocaleString("vi-VN")} tỷ`
+}
+
 export function StockIdentity({
   ticker,
   companyName,
   exchange,
   detail,
-  marketCapRank,
+  marketCapT,
   logoSize = 32,
   className,
 }: {
@@ -62,13 +73,13 @@ export function StockIdentity({
   companyName?: string | null
   exchange?: string | null
   detail?: string | null
-  marketCapRank?: number
+  marketCapT?: number
   logoSize?: number
   className?: string
 }) {
   const normTicker = ticker.trim().toUpperCase()
   let displayCompanyName = companyName?.trim() || ""
-  const hasMarketCapRank = typeof marketCapRank === "number" && marketCapRank > 0
+  const compactMarketCap = formatCompactMarketCap(marketCapT)
 
   // Defensive cleanup: never repeat ticker or sector inside companyName
   if (
@@ -102,20 +113,20 @@ export function StockIdentity({
             </span>
           ) : null}
         </div>
-        {exchange || detail || hasMarketCapRank ? (
+        {exchange || detail || compactMarketCap ? (
           <div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-slate-400">
             {exchange ? <span>{exchange}</span> : null}
-            {exchange && (detail || hasMarketCapRank) ? <span className="text-slate-600">·</span> : null}
+            {exchange && (detail || compactMarketCap) ? <span className="text-slate-600">·</span> : null}
             {detail ? (
               <span className="inline-flex items-center gap-1 text-slate-400">
                 <SectorIcon sector={detail} />
                 <span>{detail}</span>
               </span>
             ) : null}
-            {detail && hasMarketCapRank ? <span className="text-slate-600">·</span> : null}
-            {hasMarketCapRank ? (
+            {detail && compactMarketCap ? <span className="text-slate-600">·</span> : null}
+            {compactMarketCap ? (
               <span className="shrink-0 font-mono text-[10px] font-bold text-amber-200/80">
-                Hạng vốn hoá #{marketCapRank}
+                Vốn hoá {compactMarketCap}
               </span>
             ) : null}
           </div>
