@@ -52,8 +52,9 @@ export function buildVnindexContributorsContext<T extends VnindexLeaderImpactInp
   const direction: VnindexContributionDirection = vnindexChange != null && Number.isFinite(vnindexChange) && vnindexChange !== 0
     ? vnindexChange > 0 ? "up" : "down"
     : "unknown"
+  const directionalLeaders = direction === "up" ? pullers : direction === "down" ? draggers : []
 
-  if (direction === "unknown" || vnindexChange == null) {
+  if (direction === "unknown" || vnindexChange == null || directionalLeaders.length === 0) {
     return {
       direction,
       pullers,
@@ -64,7 +65,6 @@ export function buildVnindexContributorsContext<T extends VnindexLeaderImpactInp
     }
   }
 
-  const directionalLeaders = direction === "up" ? pullers : draggers
   const top5ContributionPct = contributionPct(directionalLeaders, 5, vnindexChange)
   const top10ContributionPct = contributionPct(directionalLeaders, 10, vnindexChange)
 
