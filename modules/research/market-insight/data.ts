@@ -356,7 +356,7 @@ export async function getMarketCloseInsightData(
           const status = value.status as RotationState
           if (!value.trading_date || !["leading", "recovering", "weakening", "lagging"].includes(status)) return []
           return [{
-            sessionDate: String(value.trading_date),
+            tradingDate: String(value.trading_date),
             status,
             closePrice: value.close_price != null ? Number(value.close_price) : null,
           }]
