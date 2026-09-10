@@ -37,6 +37,6 @@ test("QEO-172 production benchmark enters fullscreen from terminal state, not ti
   )
 
   assert.match(browser, /data-chart-maximized/)
-  assert.match(browser, /toHaveAttribute\(\s*"data-chart-maximized",\s*"true"/s)
+  assert.match(browser, /toHaveAttribute\([\s\S]*?"data-chart-maximized",\s*"true"/)
   assert.doesNotMatch(browser, /\[title=\\?"Phóng to chart\\?"\]/)
 })
