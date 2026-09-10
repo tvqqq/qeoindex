@@ -28,6 +28,10 @@ test("QEO-171 has an isolated authenticated production browser acceptance harnes
   assert.match(workflow, /qeo171-stock-chart-production\.spec\.ts --project=desktop/)
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_ANON_KEY/)
 
+  // Acceptance source must be committed and reproducible. CI must not rewrite
+  // selectors or behavior immediately before exercising production.
+  assert.doesNotMatch(workflow, /Align acceptance selectors|python - <<'PY'/)
+
   assert.match(spec, /VIC/)
   assert.match(spec, /VCB/)
   assert.match(spec, /\/api\/user\/chart-drawings/)
@@ -40,4 +44,12 @@ test("QEO-171 has an isolated authenticated production browser acceptance harnes
   assert.match(spec, /restore/i)
   assert.match(spec, /1D/)
   assert.match(spec, /1h/)
+
+  // A controlled React range must be changed through a real user interaction,
+  // not by mutating element.value in evaluate(), which can bypass React onChange.
+  assert.doesNotMatch(spec, /input\.evaluate\(\(node, next\)/)
+  assert.match(spec, /setMaOpacity[\s\S]*input\.press\("Home"\)/)
+  assert.match(spec, /waitForMaOpacityPersisted/)
+  assert.match(spec, /indicatorStyles[\s\S]*ma[\s\S]*opacity/)
+  assert.match(spec, /fetch\("\/api\/me"/)
 })
