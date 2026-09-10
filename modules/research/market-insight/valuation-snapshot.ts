@@ -22,7 +22,7 @@ export interface ValuationSnapshotResult {
   interpretation: ValuationInterpretation
 }
 
-const MIN_DISTRIBUTION_SAMPLE = 20
+const MIN_STATISTICAL_SAMPLE = 20
 
 function parseIsoDate(value: string): { year: number; month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -127,10 +127,10 @@ export function buildValuationSnapshot(input: {
   const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / sampleSize
   const standardDeviation = Math.sqrt(variance)
 
-  const percentile = sampleSize >= MIN_DISTRIBUTION_SAMPLE
+  const percentile = sampleSize >= MIN_STATISTICAL_SAMPLE
     ? ((values.filter((value) => value < current).length + 0.5 * values.filter((value) => value === current).length) / sampleSize) * 100
     : null
-  const zScore = sampleSize >= MIN_DISTRIBUTION_SAMPLE && standardDeviation > 0
+  const zScore = sampleSize >= MIN_STATISTICAL_SAMPLE && standardDeviation > 0
     ? (current - mean) / standardDeviation
     : null
 
