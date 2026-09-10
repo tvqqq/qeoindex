@@ -663,6 +663,12 @@ function getSentimentHistoryLabel(score: number) {
   return "Tham lam cực độ"
 }
 
+function getSentimentScoreBadgeClass(score: number) {
+  if (score < 45) return "bg-rose-400"
+  if (score < 56) return "bg-amber-300"
+  return "bg-emerald-400"
+}
+
 function SentimentHistoryTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { tradingDate?: string; value?: number } }> }) {
   const point = payload?.[0]?.payload
   if (!active || !point || point.value == null) return null
@@ -671,7 +677,7 @@ function SentimentHistoryTooltip({ active, payload }: { active?: boolean; payloa
     <div className="rounded-lg border border-white/15 bg-[#08131e] p-2.5 shadow-xl">
       <p className="font-mono text-[11px] text-slate-400">{point.tradingDate}</p>
       <div className="mt-1 flex items-center gap-2">
-        <span className="rounded bg-amber-300 px-1.5 py-0.5 font-mono text-sm font-black text-slate-950">{point.value.toFixed(0)}</span>
+        <span className={`rounded ${getSentimentScoreBadgeClass(point.value)} px-1.5 py-0.5 font-mono text-sm font-black text-slate-950`}>{point.value.toFixed(0)}</span>
         <span className="text-sm font-semibold text-slate-100">{sentimentLabel}</span>
       </div>
     </div>

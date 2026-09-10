@@ -88,6 +88,16 @@ test("QEO-134 sentiment history hover exposes date score and dynamic sentiment l
   assert.match(healthView, /SentimentHistoryTooltip[\s\S]*point\.tradingDate[\s\S]*point\.value/)
 })
 
+test("QEO-134 sentiment history score badge uses three semantic color levels", () => {
+  const healthView = read("components/insights/market-health-view.tsx")
+
+  assert.match(healthView, /function getSentimentScoreBadgeClass\(score: number\)/)
+  assert.match(healthView, /score < 45[\s\S]*bg-rose-400/)
+  assert.match(healthView, /score < 56[\s\S]*bg-amber-300/)
+  assert.match(healthView, /return "bg-emerald-400"/)
+  assert.match(healthView, /getSentimentScoreBadgeClass\(point\.value\)/)
+})
+
 test("QEO-134 market index cards have explicit borders and roomier padding", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
   const indexTile = dashboard.slice(dashboard.indexOf("function IndexTile"), dashboard.indexOf("function ChartPanel"))
