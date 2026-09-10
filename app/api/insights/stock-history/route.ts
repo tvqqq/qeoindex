@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const [daily, quarterly] = await Promise.all([
     auth.context.supabase
       .from("insights_stock_ratings")
-      .select("as_of_date,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_medium,kfsp_stock_rrg_state,kfsp_sector_rrg_state")
+      .select("as_of_date,kfsp_composite_score,kfsp_stock_rs_score,kfsp_sector_rs_score,rs_medium,kfsp_stock_rrg_state,kfsp_sector_rrg_state")
       .eq("ticker", ticker)
       .eq("source", "kfsp")
       .eq("is_published", true)
@@ -47,6 +47,7 @@ export async function GET(request: Request) {
 
   const dailyHistory = (daily.data || []).map((row) => ({
     asOfDate: row.as_of_date,
+    compositeScore: numberOrNull(row.kfsp_composite_score),
     stockRs: numberOrNull(row.kfsp_stock_rs_score),
     sectorRs: numberOrNull(row.kfsp_sector_rs_score),
     rsMedium: numberOrNull(row.rs_medium),
