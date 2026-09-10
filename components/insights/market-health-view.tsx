@@ -332,14 +332,74 @@ interface ValuationPoint {
   pb2StdDown: number | null
 }
 
-interface ValuationChartProps {
-  data: ValuationPoint[]
+type ValuationMetric = "PE" | "PB"
+
+interface ValuationHeaderControlsProps {
+  metric: ValuationMetric
+  onMetricChange: (metric: ValuationMetric) => void
+  show1SD: boolean
+  onShow1SDChange: (show: boolean) => void
+  show2SD: boolean
+  onShow2SDChange: (show: boolean) => void
 }
 
-function ValuationBandChart({ data }: ValuationChartProps) {
-  const [metric, setMetric] = React.useState<"PE" | "PB">("PE")
-  const [show1SD, setShow1SD] = React.useState(true)
-  const [show2SD, setShow2SD] = React.useState(false)
+function ValuationHeaderControls({
+  metric,
+  onMetricChange,
+  show1SD,
+  onShow1SDChange,
+  show2SD,
+  onShow2SDChange,
+}: ValuationHeaderControlsProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+      <div className="relative">
+        <label htmlFor="market-valuation-metric" className="sr-only">Chỉ số định giá</label>
+        <select
+          id="market-valuation-metric"
+          value={metric}
+          onChange={(event) => onMetricChange(event.target.value as ValuationMetric)}
+          className="h-8 appearance-none rounded-md border border-white/10 bg-[#08131e] px-2 pr-7 font-mono text-xs font-bold text-slate-200 outline-none focus:border-teal-400/50"
+        >
+          <option value="PE">P/E</option>
+          <option value="PB">P/B</option>
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+      </div>
+
+      <label htmlFor="market-valuation-1sd" className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-slate-300">
+        <input
+          id="market-valuation-1sd"
+          type="checkbox"
+          checked={show1SD}
+          onChange={(event) => onShow1SDChange(event.target.checked)}
+          className="size-3.5 cursor-pointer rounded border-white/20 bg-white/5 text-teal-400 focus:ring-0"
+        />
+        <span>1 Độ lệch chuẩn</span>
+      </label>
+
+      <label htmlFor="market-valuation-2sd" className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-slate-300">
+        <input
+          id="market-valuation-2sd"
+          type="checkbox"
+          checked={show2SD}
+          onChange={(event) => onShow2SDChange(event.target.checked)}
+          className="size-3.5 cursor-pointer rounded border-white/20 bg-white/5 text-teal-400 focus:ring-0"
+        />
+        <span>2 Độ lệch chuẩn</span>
+      </label>
+    </div>
+  )
+}
+
+interface ValuationChartProps {
+  data: ValuationPoint[]
+  metric: ValuationMetric
+  show1SD: boolean
+  show2SD: boolean
+}
+
+function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartProps) {
 
   if (data.length === 0) {
     return <div className="flex h-[260px] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-500">KFSP chưa trả lịch sử định giá hợp lệ.</div>
@@ -347,54 +407,15 @@ function ValuationBandChart({ data }: ValuationChartProps) {
 
   return (
     <div className="space-y-3">
-      {/* Header Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* P/E vs P/B Select */}
-          <div className="relative">
-            <select
-              value={metric}
-              onChange={(e) => setMetric(e.target.value as "PE" | "PB")}
-              className="appearance-none rounded-lg border border-white/10 bg-[#091622] px-3 py-1.5 pr-8 font-mono text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer"
-            >
-              <option value="PE">P/E</option>
-              <option value="PB">P/B</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
-          </div>
-
-          {/* Standard Deviation Checkboxes */}
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={show1SD}
-              onChange={(e) => setShow1SD(e.target.checked)}
-              className="size-3.5 rounded border-white/20 bg-white/5 text-teal-400 focus:ring-0 cursor-pointer"
-            />
-            <span>1 Độ lệch chuẩn</span>
-          </label>
-
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={show2SD}
-              onChange={(e) => setShow2SD(e.target.checked)}
-              className="size-3.5 rounded border-white/20 bg-white/5 text-teal-400 focus:ring-0 cursor-pointer"
-            />
-            <span>2 Độ lệch chuẩn</span>
-          </label>
+      {/* Legend */}
+      <div className="flex items-center justify-end gap-4 px-1 font-mono text-xs font-bold">
+        <div className="flex items-center gap-1.5 text-lime-400">
+          <span className="size-2 rounded-full bg-lime-400" />
+          <span>{metric === "PE" ? "P/E" : "P/B"}</span>
         </div>
-
-        {/* Legend */}
-        <div className="flex items-center gap-4 font-mono text-xs font-bold">
-          <div className="flex items-center gap-1.5 text-lime-400">
-            <span className="size-2 rounded-full bg-lime-400" />
-            <span>{metric === "PE" ? "P/E" : "P/B"}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-blue-400">
-            <span className="size-2 rounded-full bg-blue-400" />
-            <span>VNINDEX</span>
-          </div>
+        <div className="flex items-center gap-1.5 text-blue-400">
+          <span className="size-2 rounded-full bg-blue-400" />
+          <span>VNINDEX</span>
         </div>
       </div>
 
@@ -537,6 +558,9 @@ function ValuationBandChart({ data }: ValuationChartProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) {
   const currentRisk = data.dailySummary.riskScore
+  const [valuationMetric, setValuationMetric] = React.useState<ValuationMetric>("PE")
+  const [showValuation1SD, setShowValuation1SD] = React.useState(true)
+  const [showValuation2SD, setShowValuation2SD] = React.useState(false)
 
   // Build historical series for Risk Chart from real Supabase market close history
   const riskSeries = React.useMemo(() => {
@@ -591,9 +615,22 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
             : <div className="p-4 sm:p-5"><RiskIndicatorChart data={riskSeries} /></div>}
         </div>
         <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl">
-        <MarketWidgetChildHeader icon={Gauge} title="Định giá thị trường (P/E & P/B)" description="Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index" asOf={data.asOf} quality={data.qualityStatus} />
+        <MarketWidgetChildHeader icon={Gauge}
+          title="Định giá thị trường (P/E & P/B)"
+          description="Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index"
+          asOf={data.asOf}
+          quality={data.qualityStatus}
+          actions={<ValuationHeaderControls
+            metric={valuationMetric}
+            onMetricChange={setValuationMetric}
+            show1SD={showValuation1SD}
+            onShow1SDChange={setShowValuation1SD}
+            show2SD={showValuation2SD}
+            onShow2SDChange={setShowValuation2SD}
+          />}
+        />
 
-        <div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} /></div>
+        <div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>
         </div>
       </div>
     </div>
