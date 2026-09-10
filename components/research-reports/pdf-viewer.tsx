@@ -55,6 +55,7 @@ export function PdfViewer({
   const [currentPage, setCurrentPage] = useState(1)
   const [pageCount, setPageCount] = useState(0)
   const [zoom, setZoom] = useState(1)
+  const [antiGlare, setAntiGlare] = useState(0)
   const [status, setStatus] = useState<ViewerStatus>("loading")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -183,6 +184,10 @@ export function PdfViewer({
     setZoom(clampPdfZoom(value))
   }
 
+  const updateAntiGlare = (value: number) => {
+    setAntiGlare(Math.min(40, Math.max(0, Math.round(value))))
+  }
+
   const renderToolbar = (placement: "top" | "bottom") => (
     <div
       data-pdf-toolbar={placement}
@@ -222,6 +227,22 @@ export function PdfViewer({
       </button>
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
+        {placement === "top" ? (
+          <label className="flex items-center gap-2 rounded-md border border-amber-300/15 bg-amber-300/[0.04] px-2.5 py-1.5 text-xs text-amber-100/80">
+            <span className="font-medium">Chống chói</span>
+            <input
+              type="range"
+              aria-label="Mức chống chói"
+              min={0}
+              max={40}
+              step={5}
+              value={antiGlare}
+              onChange={(event) => updateAntiGlare(Number(event.currentTarget.value))}
+              className="h-1.5 w-20 cursor-pointer accent-amber-300"
+            />
+            <span className="w-8 text-right tabular-nums text-amber-200/70">{antiGlare}%</span>
+          </label>
+        ) : null}
         <button
           type="button"
           aria-label="Zoom out"
@@ -295,11 +316,18 @@ export function PdfViewer({
               ) : null}
             </div>
           ) : null}
-          <canvas
-            ref={canvasRef}
-            aria-label={`Trang PDF ${currentPage}`}
-            className={status === "ready" ? "max-w-none bg-white shadow-xl" : "hidden"}
-          />
+          <div className={status === "ready" ? "relative shrink-0" : "hidden"}>
+            <canvas
+              ref={canvasRef}
+              aria-label={`Trang PDF ${currentPage}`}
+              className="max-w-none bg-white shadow-xl"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-amber-300 mix-blend-multiply"
+              style={{ opacity: antiGlare / 100, backgroundColor: "rgb(252 211 77)" }}
+            />
+          </div>
         </div>
 
         {status === "ready" ? (
