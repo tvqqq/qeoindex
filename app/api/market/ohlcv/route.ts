@@ -5,6 +5,10 @@ import {
   ChartDataUnavailableError,
   type ChartResolution,
 } from "@/modules/market/chart-data/contract"
+import {
+  createChartPerformanceRecorder,
+  type ChartPerfSnapshot,
+} from "@/modules/market/chart-data/performance"
 import { getChartOhlcv } from "@/modules/market/chart-data/timeframe-service"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
@@ -18,14 +22,30 @@ function parseEpoch(value: string | null) {
   return Number(value)
 }
 
-function measuredJson(payload: Record<string, unknown>, startedAt: number, barCount: number) {
+function measuredJson(
+  payload: Record<string, unknown>,
+  startedAt: number,
+  barCount: number,
+  snapshot: ChartPerfSnapshot,
+) {
+  const serializationStartedAt = performance.now()
   const body = JSON.stringify(payload)
+  const serializationMs = Math.max(0, performance.now() - serializationStartedAt)
   const durationMs = Math.max(0, performance.now() - startedAt)
+  const stages = Object.entries(snapshot)
+    .filter(([, measurement]) => measurement.count > 0)
+    .map(([stage, measurement]) => `${stage};dur=${measurement.durationMs.toFixed(1)}`)
+  const serverTiming = [
+    `chart-data;dur=${durationMs.toFixed(1)}`,
+    ...stages,
+    `serialization;dur=${serializationMs.toFixed(1)}`,
+  ].join(", ")
+
   return new NextResponse(body, {
     headers: {
       ...NO_STORE,
       "Content-Type": "application/json; charset=utf-8",
-      "Server-Timing": `chart-data;dur=${durationMs.toFixed(1)}`,
+      "Server-Timing": serverTiming,
       "X-Chart-Bar-Count": String(barCount),
       "X-Chart-Payload-Bytes": String(Buffer.byteLength(body, "utf8")),
     },
@@ -47,9 +67,10 @@ export async function GET(request: Request) {
   const from = parseEpoch(url.searchParams.get("from"))
   const to = parseEpoch(url.searchParams.get("to"))
   const startedAt = performance.now()
+  const recorder = createChartPerformanceRecorder()
 
   try {
-    const result = await getChartOhlcv({ supabase }, { ticker, resolution, from, to })
+    const result = await getChartOhlcv({ supabase, performance: recorder }, { ticker, resolution, from, to })
     return measuredJson({
       ok: true,
       ticker: result.ticker,
@@ -63,7 +84,7 @@ export async function GET(request: Request) {
       errors: result.errors,
       metadata: result.metadata ?? null,
       generatedAt: new Date().toISOString(),
-    }, startedAt, result.bars.length)
+    }, startedAt, result.bars.length, recorder.snapshot())
   } catch (error) {
     if (error instanceof ChartDataRequestError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400, headers: NO_STORE })
