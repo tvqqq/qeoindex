@@ -16,11 +16,14 @@ on:
       - "modules/admin/schedule-policy.ts"
       - "modules/admin/scheduler-reconciliation.ts"
       - "workflows/chart-intraday-maintenance.ts"
+      - "workflows/chart-intraday-maintenance-recovery.ts"
       - "workflows/chart-intraday-hot-continuity.ts"
       - "app/api/qeoindex/eod/route.ts"
+      - "app/api/qeoindex/chart-maintenance-recovery/route.ts"
       - "supabase/migrations/*qeo150*"
       - "supabase/migration-preproduction.json"
       - "tests/qeo-150-intraday-maintenance.cases.ts"
+      - "tests/qeo150/**"
       - "tests/cron-schedule-catalog.test.ts"
       - "tests/cron-timeline-ui.test.ts"
       - "tests/eod-rollout-contract.test.ts"
@@ -39,11 +42,14 @@ on:
       - "modules/admin/schedule-policy.ts"
       - "modules/admin/scheduler-reconciliation.ts"
       - "workflows/chart-intraday-maintenance.ts"
+      - "workflows/chart-intraday-maintenance-recovery.ts"
       - "workflows/chart-intraday-hot-continuity.ts"
       - "app/api/qeoindex/eod/route.ts"
+      - "app/api/qeoindex/chart-maintenance-recovery/route.ts"
       - "supabase/migrations/*qeo150*"
       - "supabase/migration-preproduction.json"
       - "tests/qeo-150-intraday-maintenance.cases.ts"
+      - "tests/qeo150/**"
       - "tests/cron-schedule-catalog.test.ts"
       - "tests/cron-timeline-ui.test.ts"
       - "tests/eod-rollout-contract.test.ts"
@@ -63,4 +69,4 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test tests/qeo-150-intraday-maintenance.cases.ts
+      - run: node --test tests/qeo-150-intraday-maintenance.cases.ts tests/qeo150/recovery.cases.ts
