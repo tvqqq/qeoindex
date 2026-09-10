@@ -1,0 +1,132 @@
+name: QEO-188 bounded patch
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-188-leadership-concentration
+    paths:
+      - .github/workflows/qeo188-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-188-leadership-concentration
+          fetch-depth: 0
+      - name: Apply approved QEO-188 patch
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"{path}: expected exactly one replacement target, found {text.count(old)}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "supabase/functions/kfsp-rating-sync/index.ts",
+              "      volume_1d: numeric(row.kfsp_metrics.liquidity.volume_1d),\n      sync_run_id: syncRunId,",
+              "      volume_1d: numeric(row.kfsp_metrics.liquidity.volume_1d),\n      traded_value_1d_billion: numeric(row.kfsp_metrics.liquidity.traded_value_1d_billion),\n      sync_run_id: syncRunId,",
+          )
+
+          data_path = Path("modules/research/market-insight/data.ts")
+          data = data_path.read_text()
+          replacements = [
+              (
+                  "  leaders: MarketLeaderItem[]\n  observations: MarketObservation[]",
+                  "  leaders: MarketLeaderItem[]\n  leadershipLiquidity?: Array<{ ticker: string; tradedValueBillion: number | null }>\n  observations: MarketObservation[]",
+              ),
+              (
+                  "const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes, sectorHistoryRes] = await Promise.all([",
+                  "const [dailyRes, indexesRes, sectorsRes, leadersRes, historyRes, vnindexHistoryRes, sectorHistoryRes, leadershipLiquidityRes] = await Promise.all([",
+              ),
+              (
+                  "      .order(\"session_date\", { ascending: false })\n      .limit(300),\n  ])",
+                  "      .order(\"session_date\", { ascending: false })\n      .limit(300),\n    supabase\n      .from(\"kfsp_universe_candidate_snapshots\")\n      .select(\"ticker,traded_value_1d_billion\")\n      .eq(\"as_of_date\", targetDate)\n      .eq(\"exchange\", \"HOSE\")\n      .order(\"traded_value_1d_billion\", { ascending: false }),\n  ])",
+              ),
+              (
+                  "  const vnindexHistoryByDate = new Map(",
+                  "  const leadershipLiquidity = leadershipLiquidityRes.error ? [] : (leadershipLiquidityRes.data || []).map((row: Record<string, unknown>) => ({\n    ticker: String(row.ticker || \"\").toUpperCase(),\n    tradedValueBillion: row.traded_value_1d_billion != null ? Number(row.traded_value_1d_billion) : null,\n  }))\n\n  const vnindexHistoryByDate = new Map(",
+              ),
+              (
+                  "    leaders,\n    observations,",
+                  "    leaders,\n    leadershipLiquidity,\n    observations,",
+              ),
+          ]
+          for old, new in replacements:
+              if data.count(old) != 1:
+                  raise SystemExit(f"data.ts: expected one target for {old[:55]!r}, found {data.count(old)}")
+              data = data.replace(old, new, 1)
+          data_path.write_text(data)
+
+          dashboard_path = Path("components/insights/market-close-dashboard.tsx")
+          dashboard = dashboard_path.read_text()
+          replacements = [
+              (
+                  'import { VnindexContributionBadge, VnindexContributorsView } from "@/components/insights/vnindex-contributors-view"',
+                  'import { VnindexContributionBadge, VnindexContributorsView } from "@/components/insights/vnindex-contributors-view"\nimport { LeadershipConcentrationView } from "@/components/insights/leadership-concentration-view"',
+              ),
+              (
+                  'import { buildVnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"',
+                  'import { buildVnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"\nimport { buildLeadershipConcentrationContext } from "@/modules/research/market-insight/leadership-concentration"',
+              ),
+              (
+                  "  const flowPersistence = buildInstitutionalFlowPersistence({",
+                  "  const leadershipConcentration = buildLeadershipConcentrationContext({\n    vnindexTradedValueMillion: vnindex?.tradedValue ?? null,\n    candidates: data.leadershipLiquidity ?? [],\n  })\n  const flowPersistence = buildInstitutionalFlowPersistence({",
+              ),
+              (
+                  "                <VnindexContributorsView context={vnindexContributors} />",
+                  "                <div className=\"space-y-3\">\n                  <VnindexContributorsView context={vnindexContributors} />\n                  <LeadershipConcentrationView context={leadershipConcentration} />\n                </div>",
+              ),
+          ]
+          for old, new in replacements:
+              if dashboard.count(old) != 1:
+                  raise SystemExit(f"dashboard: expected one target for {old[:55]!r}, found {dashboard.count(old)}")
+              dashboard = dashboard.replace(old, new, 1)
+          dashboard_path.write_text(dashboard)
+
+          types_path = Path("modules/shared/supabase/database.types.ts")
+          types = types_path.read_text()
+          match = re.search(
+              r'(?ms)^      kfsp_universe_candidate_snapshots: \{\n.*?(?=^      [A-Za-z0-9_]+: \{\n        Row:|\Z)',
+              types,
+          )
+          if not match:
+              raise SystemExit("database.types.ts: candidate table block not found")
+          block = match.group(0)
+          if "traded_value_1d_billion" in block:
+              raise SystemExit("database.types.ts: traded value already present unexpectedly")
+          if block.count("          volume_1d: number | null\n") != 1:
+              raise SystemExit("database.types.ts: Row volume_1d target mismatch")
+          if block.count("          volume_1d?: number | null\n") != 2:
+              raise SystemExit("database.types.ts: Insert/Update volume_1d targets mismatch")
+          block = block.replace(
+              "          volume_1d: number | null\n",
+              "          traded_value_1d_billion: number | null\n          volume_1d: number | null\n",
+              1,
+          )
+          block = block.replace(
+              "          volume_1d?: number | null\n",
+              "          traded_value_1d_billion?: number | null\n          volume_1d?: number | null\n",
+          )
+          types_path.write_text(types[:match.start()] + block + types[match.end():])
+          PY
+      - name: Commit product implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/functions/kfsp-rating-sync/index.ts \
+            modules/research/market-insight/data.ts \
+            components/insights/market-close-dashboard.tsx \
+            modules/shared/supabase/database.types.ts
+          git diff --cached --check
+          git commit -m "feat(QEO-188): wire exact liquidity concentration"
+          git push origin HEAD:tvq9612/qeo-188-leadership-concentration
