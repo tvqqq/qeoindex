@@ -1079,6 +1079,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     let pingTimer: number | null = null
     let watchdogTimer: number | null = null
     let attempts = 0
+    let connectionGeneration = 0
+    let fallbackLiveTradeSequence = 0
 
     setState("CONNECTING")
     setError("")
@@ -1107,40 +1109,45 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
     const forceReconnect = (reason: string) => {
       if (disposed) return
+      connectionGeneration += 1
       clearConnectionTimers()
-      if (socket && socket.readyState < WebSocket.CLOSING) {
+      const currentSocket = socket
+      socket = null
+      if (currentSocket && currentSocket.readyState < WebSocket.CLOSING) {
         try {
-          socket.close(4000, reason.slice(0, 120))
+          currentSocket.close(4000, reason.slice(0, 120))
         } catch {
-          scheduleReconnect()
+          // Reconnect below even if closing the stale socket throws.
         }
-      } else {
-        scheduleReconnect()
       }
+      scheduleReconnect()
     }
 
     const connect = async () => {
       clearReconnectTimer()
       clearConnectionTimers()
       if (disposed) return
+      const generation = ++connectionGeneration
       setState("CONNECTING")
       lastFrameAt.current = Date.now()
       try {
         const authResponse = await fetch("/api/market/stream-auth", { cache: "no-store", headers: { Accept: "application/json" } })
         const authJson = await authResponse.json()
         if (!authResponse.ok || !authJson.ok || !authJson.url || !authJson.auth) throw new Error(authJson.message ?? `Stream auth ${authResponse.status}`)
-        if (disposed) return
+        if (disposed || generation !== connectionGeneration) return
 
         let lastPongAt = Date.now()
 
-        socket = new WebSocket(authJson.url)
-        socket.onopen = () => {
+        const nextSocket = new WebSocket(authJson.url)
+        socket = nextSocket
+        nextSocket.onopen = () => {
+          if (disposed || generation !== connectionGeneration || socket !== nextSocket) return
           lastFrameAt.current = Date.now()
           lastPongAt = Date.now()
           setState("CONNECTING")
         }
-        socket.onmessage = (event) => {
-          if (disposed || typeof event.data !== "string") return
+        nextSocket.onmessage = (event) => {
+          if (disposed || generation !== connectionGeneration || socket !== nextSocket || typeof event.data !== "string") return
           lastFrameAt.current = Date.now()
           let data: any
           try {
@@ -1156,11 +1163,11 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           }
           if (action === "ping") {
             lastPongAt = Date.now()
-            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data?.timestamp }))
+            if (nextSocket.readyState === WebSocket.OPEN) nextSocket.send(JSON.stringify({ action: "pong", timestamp: data?.timestamp }))
             return
           }
           if (data?.session_id || data?.sid || action === "welcome") {
-            socket?.send(JSON.stringify(authJson.auth))
+            nextSocket.send(JSON.stringify(authJson.auth))
             return
           }
           if (action === "auth_success") {
@@ -1168,7 +1175,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             setError("")
             attempts = 0
             lastPongAt = Date.now()
-            socket?.send(
+            nextSocket.send(
               JSON.stringify({
                 action: "subscribe",
                 channels: [
@@ -1181,7 +1188,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
               }),
             )
             pingTimer = window.setInterval(() => {
-              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
+              if (nextSocket.readyState === WebSocket.OPEN) nextSocket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
             }, 15_000)
             watchdogTimer = window.setInterval(() => {
               if (socket?.readyState === WebSocket.OPEN && Date.now() - lastPongAt > 40_000) {
@@ -1248,8 +1255,14 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             setError("")
             if (price <= 0 || volume <= 0) return
             const time = normalizeTime(data?.time)
+            const providerTradeId = [data?.transId, data?.tradeId, data?.sequence, data?.seqNo, data?.id]
+              .map((value) => String(value ?? "").trim())
+              .find((value) => value && value !== "3220")
+            const tradeId = providerTradeId
+              ? `live-${symbol}-${providerTradeId}`
+              : `live-fallback-${symbol}-${time}-${price}-${volume}-${String(data?.side ?? "")}-${++fallbackLiveTradeSequence}`
             const trade: StreamTrade = {
-              id: `live-${time}-${price}-${volume}-${String(data?.side ?? "")}-${Math.random().toString(36).slice(2, 7)}`,
+              id: tradeId,
               time,
               price,
               volume,
@@ -1346,21 +1359,21 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           }
         }
 
-        socket.onerror = () => {
-          if (!disposed) {
-            setState("ERROR")
-            setError("DNSE WebSocket kết nối lỗi; đang tự kết nối lại.")
-            forceReconnect("orderbook websocket error")
-          }
+        nextSocket.onerror = () => {
+          if (disposed || generation !== connectionGeneration || socket !== nextSocket) return
+          setState("ERROR")
+          setError("DNSE WebSocket kết nối lỗi; đang tự kết nối lại.")
+          forceReconnect("orderbook websocket error")
         }
-        socket.onclose = () => {
+        nextSocket.onclose = () => {
+          if (disposed || generation !== connectionGeneration || socket !== nextSocket) return
+          socket = null
           clearConnectionTimers()
-          if (disposed) return
           setState("CLOSED")
           scheduleReconnect()
         }
       } catch (nextError) {
-        if (disposed) return
+        if (disposed || generation !== connectionGeneration) return
         setState("ERROR")
         setError(nextError instanceof Error ? nextError.message : String(nextError))
         scheduleReconnect()
@@ -1381,11 +1394,14 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     void connect()
     return () => {
       disposed = true
+      connectionGeneration += 1
       clearReconnectTimer()
       clearConnectionTimers()
       document.removeEventListener("visibilitychange", onVisibilityChange)
       window.removeEventListener("online", onOnline)
-      if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "popup closed")
+      const currentSocket = socket
+      socket = null
+      if (currentSocket && currentSocket.readyState < WebSocket.CLOSING) currentSocket.close(1000, "popup closed")
     }
   }, [symbol, reconnectKey])
 
