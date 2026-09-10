@@ -14,10 +14,13 @@ import {
 import {
   classifyQeo150Freshness,
   expectedCompletedVietnamSession,
+  qeo150DailyEvidenceFingerprint,
   qeo150SessionRange,
+  qeo150TerminalSessionReconciled,
   type Qeo150AttemptOutcome,
   type Qeo150DailyEvidence,
   type Qeo150EvidenceCategory,
+  type Qeo150IntradayEvidence,
 } from "./maintenance-policy"
 import {
   ChartOhlcvProviderWaterfallError,
@@ -82,9 +85,14 @@ function dayBounds(sessionDate: string) {
   return { from: new Date(from).toISOString(), to: new Date(to).toISOString() }
 }
 
-async function readLatestQeo150Attempts(supabase: SupabaseClient, tickers: string[]) {
+async function readLatestQeo150Attempts(
+  supabase: SupabaseClient,
+  tickers: string[],
+  expectedSession: string,
+) {
   const latest = new Map<string, { outcome: Qeo150AttemptOutcome; fetchedAt: string | null; dispatchId: string | null }>()
-  if (!tickers.length) return latest
+  const terminalDailyFingerprints = new Map<string, string>()
+  if (!tickers.length) return { latest, terminalDailyFingerprints }
 
   for (let page = 0; page < ATTEMPT_READ_MAX_PAGES; page += 1) {
     const offset = page * ATTEMPT_READ_PAGE_SIZE
@@ -102,10 +110,11 @@ async function readLatestQeo150Attempts(supabase: SupabaseClient, tickers: strin
     const rows = (data || []) as Array<Record<string, unknown>>
     for (const row of rows) {
       const ticker = validTicker(String(row.ticker || ""))
-      if (latest.has(ticker)) continue
       const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail)
         ? row.detail as Record<string, unknown>
         : {}
+      if (nullableString(detail.expectedSession) !== expectedSession) continue
+
       const rawOutcome = String(detail.outcome || "none") as Qeo150AttemptOutcome
       const allowed: Qeo150AttemptOutcome[] = [
         "already_fresh",
@@ -120,15 +129,26 @@ async function readLatestQeo150Attempts(supabase: SupabaseClient, tickers: strin
         "sla_timeout",
         "unknown",
       ]
-      latest.set(ticker, {
-        outcome: allowed.includes(rawOutcome) ? rawOutcome : "none",
-        fetchedAt: nullableString(row.fetched_at),
-        dispatchId: nullableString(detail.dispatchId),
-      })
+      if (!latest.has(ticker)) {
+        latest.set(ticker, {
+          outcome: allowed.includes(rawOutcome) ? rawOutcome : "none",
+          fetchedAt: nullableString(row.fetched_at),
+          dispatchId: nullableString(detail.dispatchId),
+        })
+      }
+
+      const terminalFingerprint = nullableString(detail.terminalDailyFingerprint)
+      if (
+        !terminalDailyFingerprints.has(ticker)
+        && detail.terminalReconciled === true
+        && terminalFingerprint
+      ) {
+        terminalDailyFingerprints.set(ticker, terminalFingerprint)
+      }
     }
-    if (rows.length < ATTEMPT_READ_PAGE_SIZE || latest.size === tickers.length) break
+    if (rows.length < ATTEMPT_READ_PAGE_SIZE) break
   }
-  return latest
+  return { latest, terminalDailyFingerprints }
 }
 
 async function readExpectedDailyEvidence(
@@ -139,7 +159,7 @@ async function readExpectedDailyEvidence(
   const bounds = dayBounds(expectedSession)
   const { data, error } = await supabase
     .from("market_ohlcv_history")
-    .select("ticker,bar_time,volume,provider,provider_detail,source_url")
+    .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
     .in("ticker", tickers)
     .eq("timeframe", "1D")
     .gte("bar_time", bounds.from)
@@ -151,10 +171,18 @@ async function readExpectedDailyEvidence(
   for (const row of (data || []) as Array<Record<string, unknown>>) {
     const ticker = validTicker(String(row.ticker || ""))
     if (byTicker.has(ticker)) continue
+    const open = finiteNumber(row.open)
+    const high = finiteNumber(row.high)
+    const low = finiteNumber(row.low)
+    const close = finiteNumber(row.close)
     const volume = finiteNumber(row.volume)
-    if (volume == null || volume < 0) continue
+    if ([open, high, low, close, volume].some((value) => value == null) || volume! < 0) continue
     byTicker.set(ticker, {
-      volume,
+      open,
+      high,
+      low,
+      close,
+      volume: volume!,
       provider: nullableString(row.provider),
       providerDetail: nullableString(row.provider_detail),
       sourceUrl: nullableString(row.source_url),
@@ -181,6 +209,30 @@ async function readActualHotSessions(
   return byTicker
 }
 
+function summarizeIntradayEvidence(bars: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>): Qeo150IntradayEvidence {
+  const first = bars[0]
+  const last = bars.at(-1)
+  if (!first || !last) throw new Error("QEO-150 terminal evidence requires at least one canonical bar")
+  let high = first.high
+  let low = first.low
+  let volume = 0
+  for (const bar of bars) {
+    high = Math.max(high, bar.high)
+    low = Math.min(low, bar.low)
+    volume += bar.volume
+  }
+  return {
+    rowCount: bars.length,
+    firstBarAt: new Date(first.time * 1000).toISOString(),
+    lastBarAt: new Date(last.time * 1000).toISOString(),
+    open: first.open,
+    high,
+    low,
+    close: last.close,
+    volume,
+  }
+}
+
 export async function readChartIntradayMaintenanceReport(
   supabase: SupabaseClient,
   input: {
@@ -195,22 +247,26 @@ export async function readChartIntradayMaintenanceReport(
   if (!tickers.length) return []
   const referenceAt = input.referenceAt ?? new Date()
   const expectedSession = input.expectedSession ?? expectedCompletedVietnamSession(referenceAt)
-  const [actualByTicker, dailyByTicker, attemptsByTicker] = await Promise.all([
+  const [actualByTicker, dailyByTicker, attemptEvidence] = await Promise.all([
     readActualHotSessions(supabase, tickers, referenceAt),
     readExpectedDailyEvidence(supabase, tickers, expectedSession),
-    readLatestQeo150Attempts(supabase, tickers),
+    readLatestQeo150Attempts(supabase, tickers, expectedSession),
   ])
 
   return tickers.map((ticker) => {
     const actualSession = actualByTicker.get(ticker) ?? null
     const dailyEvidence = dailyByTicker.get(ticker) ?? null
-    const persistedAttempt = attemptsByTicker.get(ticker)
+    const persistedAttempt = attemptEvidence.latest.get(ticker)
     const override = input.outcomeOverrides?.get(ticker)
     const lastAttemptOutcome = override ?? persistedAttempt?.outcome ?? "none"
+    const currentDailyFingerprint = qeo150DailyEvidenceFingerprint(dailyEvidence)
+    const terminalReconciled = currentDailyFingerprint != null
+      && attemptEvidence.terminalDailyFingerprints.get(ticker) === currentDailyFingerprint
     const classification = classifyQeo150Freshness({
       expectedSession,
       actualSession,
       dailyEvidence,
+      terminalReconciled,
       lastAttemptOutcome,
     })
     const derivedOutcome: Qeo150AttemptOutcome = classification.current && lastAttemptOutcome === "none"
@@ -300,6 +356,7 @@ export async function ingestClosedIntradayRange(
   const referenceAt = input.referenceAt ?? new Date()
   const range = qeo150SessionRange(input.expectedSession)
   const provider = input.provider ?? createPrimaryChartOhlcvProvider()
+  const dailyEvidence = (await readExpectedDailyEvidence(supabase, [ticker], input.expectedSession)).get(ticker) ?? null
   const coordinator = {
     claim: (claimInput: Parameters<typeof claimChartIntradayRange>[1]) => claimChartIntradayRange(supabase, claimInput),
     complete: (completionInput: Parameters<typeof completeChartIntradayRange>[1]) => completeChartIntradayRange(supabase, completionInput),
@@ -312,7 +369,7 @@ export async function ingestClosedIntradayRange(
       sourceKey: CHART_PROVIDER_SOURCE_KEY,
       from: range.from,
       to: range.to,
-      revalidate: false,
+      revalidate: true,
       maxClaimAttempts: 3,
     }, coordinator, async () => {
       let providerResult
@@ -339,6 +396,16 @@ export async function ingestClosedIntradayRange(
         )
       }
 
+      const intradayEvidence = summarizeIntradayEvidence(bars)
+      const terminalDailyFingerprint = qeo150DailyEvidenceFingerprint(dailyEvidence)
+      if (!terminalDailyFingerprint || !qeo150TerminalSessionReconciled(dailyEvidence, intradayEvidence)) {
+        throw new Qeo150ProviderError(
+          `${providerResult.provider} closed-range 1m OHLCV does not reconcile with canonical Daily for ${input.expectedSession}`,
+          "provider_gap",
+          [`${providerResult.provider}:DAILY_RECONCILIATION_MISMATCH`],
+        )
+      }
+
       const persisted = await upsertHotIntradayBars(supabase, {
         ticker,
         bars,
@@ -352,6 +419,14 @@ export async function ingestClosedIntradayRange(
           requestedFrom: range.from,
           requestedTo: range.to,
           liveTail: false,
+          terminalReconciled: true,
+          terminalDailyFingerprint,
+          terminalDailyClose: dailyEvidence?.close ?? null,
+          terminalDailyVolume: dailyEvidence?.volume ?? null,
+          terminalIntradayClose: intradayEvidence.close,
+          terminalIntradayVolume: intradayEvidence.volume,
+          terminalFirstBarAt: intradayEvidence.firstBarAt,
+          terminalLastBarAt: intradayEvidence.lastBarAt,
         },
       })
       if (!persisted.batchId || persisted.rowCount !== bars.length) {
