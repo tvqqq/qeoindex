@@ -27,8 +27,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline
-      - name: Apply and commit production patch
-        run: node scripts/tmp-qeo187-green.mjs
+      - name: Apply accessibility fix
+        run: node scripts/tmp-qeo187-a11y.mjs
       - name: Prove focused GREEN
         run: node --test tests/market-insight-ui-performance.test.ts
       - name: TypeScript smoke check
