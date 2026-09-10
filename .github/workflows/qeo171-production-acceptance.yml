@@ -30,7 +30,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: QEO-171 acceptance harness contract
-        run: node --test tests/qeo171/production-chart-acceptance-contract.test.ts
+        run: node --test tests/qeo171/*.test.ts
 
   production-browser:
     needs: contract
