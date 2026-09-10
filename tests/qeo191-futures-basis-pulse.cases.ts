@@ -100,21 +100,23 @@ test("QEO-191 leaves open interest explicitly unavailable until an automated sou
   assert.match(result.openInterestMessage, /nguồn.*chưa.*xác minh/i)
 })
 
-test("QEO-191 loads DNSE F1M daily history plus persisted VN30 spot and wires a compact non-positioning pulse into Market Insights", () => {
+test("QEO-191 loads DNSE F1M daily history plus persisted VN30 spot and decorates only the Insights page snapshot", () => {
   const loader = read("modules/research/market-insight/futures-basis-loader.ts")
-  const insightsData = read("modules/research/insights/data.ts")
-  const insightsDashboard = read("components/insights/insights-dashboard.tsx")
+  const insightsPage = read("app/insights/page.tsx")
   const closeDashboard = read("components/insights/market-close-dashboard.tsx")
   const pulseView = read("components/insights/vn30-futures-basis-pulse.tsx")
-  const surface = `${loader}\n${insightsData}\n${insightsDashboard}\n${closeDashboard}\n${pulseView}`
+  const canonicalMarketData = read("modules/research/market-insight/data.ts")
+  const surface = `${loader}\n${insightsPage}\n${closeDashboard}\n${pulseView}`
 
   assert.match(loader, /fetchDnseIndexCandleHistory\([\s\S]*"VN30F1M"[\s\S]*"1D"/)
   assert.match(loader, /market_insight_indexes/)
   assert.match(loader, /index_code[\s\S]*VN30/)
   assert.match(loader, /session_date/)
-  assert.match(insightsData, /futuresBasisPulse/)
-  assert.match(insightsDashboard, /futuresBasisPulse=\{data\.futuresBasisPulse\}/)
-  assert.match(closeDashboard, /<Vn30FuturesBasisPulse[\s\S]*pulse=\{futuresBasisPulse\}/)
+  assert.match(insightsPage, /loadVn30FuturesBasisPulse/)
+  assert.match(insightsPage, /Object\.assign\([\s\S]*data\.marketClose[\s\S]*futuresBasisPulse/)
+  assert.match(closeDashboard, /data\.futuresBasisPulse/)
+  assert.match(closeDashboard, /<Vn30FuturesBasisPulse[\s\S]*pulse=\{data\.futuresBasisPulse/)
+  assert.doesNotMatch(canonicalMarketData, /futuresBasisPulse/, "QEO-191 must stay outside the canonical EOD MarketCloseDashboardData contract")
   assert.match(pulseView, /data-vn30-futures-basis-pulse/)
   assert.match(surface, /VN30F1M/)
   assert.match(surface, /Basis/)
