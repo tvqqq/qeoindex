@@ -89,11 +89,13 @@ jobs:
           source = source.replace(selector_before, selector_after, 1)
 
           auth_before = 'await expect(page.getByText(/đăng nhập qeoindex/i)).toBeHidden()'
-          auth_after = '''await expect(page.getByText(/đăng nhập qeoindex/i)).toBeHidden()
-  await expect.poll(
-    () => page.evaluate(async () => (await fetch("/api/me", { cache: "no-store" })).status),
-    { timeout: 15_000 },
-  ).toBe(200)'''
+          auth_after = (
+              auth_before
+              + '\n  await expect.poll('
+              + '\n    () => page.evaluate(async () => (await fetch("/api/me", { cache: "no-store" })).status),'
+              + '\n    { timeout: 15_000 },'
+              + '\n  ).toBe(200)'
+          )
           if auth_before not in source:
               raise SystemExit("QEO-171 server-session wait patch target not found")
           source = source.replace(auth_before, auth_after, 1)
