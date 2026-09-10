@@ -102,6 +102,7 @@ type ChartSeries = {
   macd: LightweightSeriesApi
   macdSignal: LightweightSeriesApi
   macdHistogram: LightweightSeriesApi
+  macdZero: LightweightSeriesApi
   rsiUpper: LightweightSeriesApi
   rsiLower: LightweightSeriesApi
 }
@@ -452,6 +453,7 @@ function AlignedIndicatorCanvas({
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-[2]"
       data-chart-indicator-overlay="aligned"
+      data-chart-price-axis-gutter={priceAxisGutter}
     />
   )
 }
@@ -577,6 +579,7 @@ export function StockTradingViewChart({
     macd: lineData(macd?.macd ?? [], barTimes),
     macdSignal: lineData(macd?.signal ?? [], barTimes),
     macdHistogram: histogramData(macd?.histogram ?? [], barTimes, viewSettings.indicatorStyles.macd.opacity),
+    macdZero: constantLineData(0, barTimes),
   }), [
     allTimes,
     barTimes,
@@ -970,6 +973,12 @@ export function StockTradingViewChart({
             priceLineVisible: false,
             lastValueVisible: true,
           }, 3),
+          macdZero: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#64748b", 1),
+            priceScaleId: "right",
+            lineStyle: 2,
+            title: "MACD 0",
+          }, 3),
         }
         chartRef.current = chart
         seriesRef.current = series
@@ -1062,6 +1071,7 @@ export function StockTradingViewChart({
     applyIndicatorStyle(series.macd, styles.macd, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdSignal, { ...styles.macd, color: "#f97316" }, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdHistogram, styles.macd, isMaximized && effectiveIndicators.showMacd)
+    applyIndicatorStyle(series.macdZero, { ...styles.macd, color: "#64748b", width: 1, opacity: 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showMacd)
 
     const previous = renderedRef.current
     const latest = displayBars.at(-1)
@@ -1102,6 +1112,7 @@ export function StockTradingViewChart({
     series.macd.setData(renderPayload.macd)
     series.macdSignal.setData(renderPayload.macdSignal)
     series.macdHistogram.setData(renderPayload.macdHistogram)
+    series.macdZero.setData(renderPayload.macdZero)
 
     if (displayBars.length > 0 && !previous) {
       setLatestVisibleRange()
@@ -1351,7 +1362,12 @@ export function StockTradingViewChart({
         className={cn("relative min-h-0 flex-1 overflow-hidden bg-[#080b10]", isMaximized ? "min-h-0" : "min-h-[300px]")}
         data-chart-plot="lightweight"
       >
-        <div ref={chartHostRef} className="absolute inset-0" data-chart-runtime="lightweight-charts-v5" />
+        <div
+          ref={chartHostRef}
+          className="absolute inset-0"
+          data-chart-runtime="lightweight-charts-v5"
+          data-chart-macd-zero-baseline={isMaximized && effectiveIndicators.showMacd ? "0" : ""}
+        />
 
         <AlignedIndicatorCanvas
           width={overlayWidth}
@@ -1371,7 +1387,12 @@ export function StockTradingViewChart({
         />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-2">
-          <div data-chart-ohlcv-overlay className="max-w-[min(86%,920px)] rounded border border-white/[0.08] bg-[#080d13]/95 px-2.5 py-1.5 font-mono text-[11px] leading-5 text-slate-400 shadow-sm">
+          <div
+            data-chart-ohlcv-overlay
+            data-chart-legend-time={legendTime ?? ""}
+            data-chart-active-bar-time={activeBar?.time ?? ""}
+            className="max-w-[min(86%,920px)] rounded border border-white/[0.08] bg-[#080d13]/95 px-2.5 py-1.5 font-mono text-[11px] leading-5 text-slate-400 shadow-sm"
+          >
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
               <span className="text-slate-500">{activeBar ? formatCrosshairTime(activeBar.time, timeframe) : isHovering ? "Khoảng trống" : "—"}</span>
               <span>O <b className="text-slate-200">{activeBar ? activeBar.open.toFixed(2) : "—"}</b></span>

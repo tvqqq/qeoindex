@@ -224,6 +224,160 @@ async function expectMaOpacity(page: Page, value: string): Promise<void> {
   await page.getByLabel("Đóng bảng chỉ báo").click()
 }
 
+
+function parseMetric(text: string, label: string): number | null {
+  const match = new RegExp(`^${label}\\s+(-?\\d+(?:\\.\\d+)?)$`).exec(text.trim())
+  if (!match) return null
+  const value = Number(match[1])
+  return Number.isFinite(value) ? value : null
+}
+
+async function assertMacdPresentation(page: Page): Promise<void> {
+  const overlay = page.locator("[data-chart-ohlcv-overlay]")
+  const histogram = overlay.locator("span").filter({ hasText: /^HIST / }).first()
+  await expect(histogram).toBeVisible()
+  const text = (await histogram.textContent()) ?? ""
+  const value = parseMetric(text, "HIST")
+  expect(value, `MACD histogram must be numeric: ${text}`).not.toBeNull()
+  if (value == null) throw new Error(`MACD histogram is not numeric: ${text}`)
+  const className = (await histogram.getAttribute("class")) ?? ""
+  expect(className).toContain(value >= 0 ? "text-emerald-300" : "text-rose-300")
+  await expect(page.locator('[data-chart-runtime="lightweight-charts-v5"]'))
+    .toHaveAttribute("data-chart-macd-zero-baseline", "0")
+}
+
+async function assertVolumeProfileAxisClearance(page: Page): Promise<void> {
+  const canvas = page.locator('canvas[data-chart-indicator-overlay="aligned"]')
+  await expect(canvas).toBeVisible()
+  const sample = await canvas.evaluate((node) => {
+    const element = node as HTMLCanvasElement
+    const gutterCss = Number(element.dataset.chartPriceAxisGutter)
+    const rect = element.getBoundingClientRect()
+    const context = element.getContext("2d")
+    if (!context || !Number.isFinite(gutterCss) || gutterCss <= 0 || rect.width <= 0) {
+      return { gutterCss, amberPixelsInAxis: -1 }
+    }
+    const scaleX = element.width / rect.width
+    const seamPaddingCss = 2
+    const startX = Math.max(0, Math.min(
+      element.width - 1,
+      Math.round((rect.width - gutterCss + seamPaddingCss) * scaleX),
+    ))
+    const width = Math.max(1, element.width - startX)
+    const pixels = context.getImageData(startX, 0, width, element.height).data
+    let amberPixelsInAxis = 0
+    for (let index = 0; index < pixels.length; index += 4) {
+      const red = pixels[index]
+      const green = pixels[index + 1]
+      const blue = pixels[index + 2]
+      const alpha = pixels[index + 3]
+      if (alpha > 24 && red > 180 && green > 90 && green < 240 && blue < 210) {
+        amberPixelsInAxis += 1
+      }
+    }
+    return { gutterCss, amberPixelsInAxis }
+  })
+  expect(sample.gutterCss).toBeGreaterThan(20)
+  expect(sample.amberPixelsInAxis, "VPVR/POC must not paint inside the right price-axis gutter").toBe(0)
+}
+
+async function assertCrosshairTimestampConsistency(
+  page: Page,
+  request: APIRequestContext,
+  ticker: Ticker,
+  resolution: "1D" | "1h",
+): Promise<void> {
+  await selectQuickTimeframe(page, resolution)
+  const now = Math.floor(Date.now() / 1000)
+  const from = now - (resolution === "1D" ? 420 : 45) * 86_400
+  const response = await request.get(
+    `${BASE_URL}/api/market/ohlcv?ticker=${ticker}&resolution=${resolution}&from=${from}&to=${now}`,
+  )
+  expect(response.status(), `crosshair OHLCV ${ticker} ${resolution}`).toBe(200)
+  const body = (await response.json()) as OhlcvResponse
+  expect(body.ok).toBe(true)
+  expect(body.bars.length).toBeGreaterThan(30)
+
+  const host = page.locator('[data-chart-runtime="lightweight-charts-v5"]')
+  const box = await host.boundingBox()
+  expect(box).not.toBeNull()
+  if (!box) throw new Error("chart host has no bounding box")
+  const overlay = page.locator("[data-chart-ohlcv-overlay]")
+  const latestTime = body.bars.at(-1)?.time
+  let active: OhlcvBar | undefined
+  for (const fraction of [0.68, 0.74, 0.80, 0.86, 0.90]) {
+    await page.mouse.move(box.x + box.width * fraction, box.y + box.height * 0.28)
+    await page.waitForTimeout(100)
+    const raw = await overlay.getAttribute("data-chart-active-bar-time")
+    const activeTime = raw ? Number(raw) : NaN
+    active = body.bars.find((bar) => bar.time === activeTime && bar.time !== latestTime)
+    if (active) break
+  }
+  expect(active, `${ticker} ${resolution} crosshair must resolve a non-latest canonical candle`).toBeTruthy()
+  if (!active) throw new Error(`${ticker} ${resolution} crosshair did not resolve a canonical candle`)
+
+  const legendTime = Number(await overlay.getAttribute("data-chart-legend-time"))
+  const activeBarTime = Number(await overlay.getAttribute("data-chart-active-bar-time"))
+  expect(legendTime).toBe(active.time)
+  expect(activeBarTime).toBe(active.time)
+  await expect(overlay).toContainText(`O ${active.open.toFixed(2)}`)
+  await expect(overlay).toContainText(`H ${active.high.toFixed(2)}`)
+  await expect(overlay).toContainText(`L ${active.low.toFixed(2)}`)
+  await expect(overlay).toContainText(`C ${active.close.toFixed(2)}`)
+  for (const label of ["RSI", "MACD", "SIG", "HIST"]) {
+    await expect(overlay.locator("span").filter({ hasText: new RegExp(`^${label} `) }).first()).not.toContainText("—")
+  }
+}
+
+async function assertDrawingSurvivesViewportChanges(
+  page: Page,
+  request: APIRequestContext,
+  ticker: Ticker,
+  drawingId: string,
+): Promise<void> {
+  const readAnchors = async () => {
+    const settings = await getSettings(request, ticker)
+    return JSON.stringify(settings.data.drawings.find((drawing) => drawing.id === drawingId)?.anchors ?? null)
+  }
+  const before = await readAnchors()
+  expect(before).not.toBe("null")
+
+  await page.locator('[title="Con trỏ (Crosshair)"]').click()
+  const host = page.locator('[data-chart-runtime="lightweight-charts-v5"]')
+  const box = await host.boundingBox()
+  expect(box).not.toBeNull()
+  if (!box) throw new Error("chart host has no bounding box")
+
+  // Native Lightweight Charts zoom + pan must only transform projection.
+  await page.mouse.move(box.x + box.width * 0.86, box.y + box.height * 0.22)
+  await page.mouse.wheel(0, -600)
+  await page.waitForTimeout(180)
+  await page.mouse.move(box.x + box.width * 0.88, box.y + box.height * 0.24)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.70, box.y + box.height * 0.24, { steps: 8 })
+  await page.mouse.up()
+  await expect.poll(readAnchors).toBe(before)
+
+  const originalViewport = page.viewportSize()
+  expect(originalViewport).not.toBeNull()
+  if (!originalViewport) throw new Error("desktop viewport is unavailable")
+  await page.setViewportSize({
+    width: Math.max(1100, originalViewport.width - 180),
+    height: Math.max(720, originalViewport.height - 90),
+  })
+  await page.waitForTimeout(180)
+  await expect.poll(readAnchors).toBe(before)
+  await page.setViewportSize(originalViewport)
+
+  // Re-hydrate a different bar family then return to Daily; market anchors
+  // must remain identical and project back into two editable handles.
+  await selectQuickTimeframe(page, "1h")
+  await selectQuickTimeframe(page, "1D")
+  await expect.poll(readAnchors).toBe(before)
+  const drawingSvg = page.locator('svg[data-drawing-gesture]')
+  await expect(drawingSvg.locator("circle.cursor-nwse-resize")).toHaveCount(2)
+}
+
 test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ page }) => {
   test.setTimeout(180_000)
   const request = page.context().request
@@ -267,6 +421,9 @@ test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ p
     await expect(overlay).toContainText("HIST ")
     await expect(overlay).toContainText("POC ")
     await expect(page.getByText("VPVR xấp xỉ OHLCV", { exact: true })).toBeVisible()
+    await assertMacdPresentation(page)
+    await assertVolumeProfileAxisClearance(page)
+    await assertCrosshairTimestampConsistency(page, request, "VIC", "1D")
 
     // Create a canonical two-anchor drawing.
     await page.locator('[title="Đường xu hướng (Trendline)"]').click()
@@ -316,6 +473,7 @@ test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ p
       const updated = await getSettings(request, "VIC")
       return JSON.stringify(updated.data.drawings.find((drawing) => drawing.id === trendline.id)?.anchors)
     }).not.toBe(anchorsBeforeBodyMove)
+    await assertDrawingSurvivesViewportChanges(page, request, "VIC", trendline.id)
 
     // Object-manager lock/hide state is persisted, not just painted locally.
     await openObjectManager(page)
@@ -372,6 +530,7 @@ test("QEO-171 authenticated production acceptance reconciles QEO-90", async ({ p
     expect(vcbSettings.data.drawings).toHaveLength(0)
 
     await assertVisibleLatestCandleMatchesApi(page, request, "VCB", "1h")
+    await assertCrosshairTimestampConsistency(page, request, "VCB", "1h")
 
     // Fullscreen watchlist navigation preserves timeframe; editable fields were
     // already proven to suppress these shortcuts above.
