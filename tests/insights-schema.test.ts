@@ -284,7 +284,7 @@ test("stock detail workstation pins sidebars and allows center column scrolling 
   assert.match(watchlist, /overflow-y-auto/)
 })
 
-test("stock ai sidebar renders consensus donut chart, consensus with confidence badge, and 5 pillars progress bars", () => {
+test("stock ai sidebar renders consensus donut chart, separate consensus/confidence metrics, and 5 pillars progress bars", () => {
   const aiSidebar = readFileSync("components/stock-detail/stock-ai-sidebar.tsx", "utf8")
 
   // 1. Donut Ring with Recommendation in center
@@ -293,9 +293,14 @@ test("stock ai sidebar renders consensus donut chart, consensus with confidence 
   assert.match(aiSidebar, /filter="url\(#consensus-ring-glow\)"/)
   assert.match(aiSidebar, /\{signalLines\.map/)
 
-  // 2. Consensus badge with confidence tier and percentage
-  assert.match(aiSidebar, /\{consensus\}% đồng thuận với độ tin cậy/)
+  // 2. Consensus and confidence are separate stat cards
+  assert.match(aiSidebar, /data-ai-council-metrics/)
+  assert.match(aiSidebar, /ĐỒNG THUẬN/)
+  assert.match(aiSidebar, /ĐỘ TIN CẬY/)
+  assert.match(aiSidebar, /\{consensus\}%/)
+  assert.match(aiSidebar, /\{confidence\}%/)
   assert.match(aiSidebar, /activeTier\.label/)
+  assert.doesNotMatch(aiSidebar, /\{consensus\}% đồng thuận với độ tin cậy/)
 
   // 3. 5 Pillars as progress bars with updated title
   assert.match(aiSidebar, /5 Trụ cột đánh giá từ AI Council/)
