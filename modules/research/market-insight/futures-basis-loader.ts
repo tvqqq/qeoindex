@@ -63,3 +63,17 @@ export async function loadVn30FuturesBasisPulse(
     spotSource: "Market Insights VN30 · persisted EOD",
   })
 }
+
+export async function loadVn30FuturesBasisPulseLatest(
+  supabase: SupabaseClient,
+): Promise<FuturesBasisPulse | null> {
+  const latest = await supabase
+    .from("market_insight_daily")
+    .select("session_date")
+    .order("session_date", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (latest.error || !latest.data?.session_date) return null
+  return loadVn30FuturesBasisPulse(supabase, String(latest.data.session_date))
+}
