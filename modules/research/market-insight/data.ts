@@ -232,7 +232,7 @@ export async function getMarketCloseInsightData(
       .select("session_date,market_regime,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,total_traded_value")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
-      .limit(20),
+      .limit(61),
     supabase
       .from("market_insight_indexes")
       .select("session_date,value,change_pct")

@@ -14,6 +14,7 @@ import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import type { MarketAiConclusionView } from "@/modules/research/market-insight/ai-conclusion-loader"
 import { cn } from "@/modules/shared/ui/cn"
 import { buildMarketSessionChanges, type MarketSessionChanges } from "@/modules/research/market-insight/session-changes"
+import { buildLiquidityContext, type LiquidityContext } from "@/modules/research/market-insight/liquidity-context"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
@@ -154,6 +155,11 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
   const { dailySummary, indexes, history, marketRegime } = data
   const distributionGuidance = getDistributionDayGuidance(dailySummary.distributionCount)
   const sessionChanges = buildMarketSessionChanges(data)
+  const liquidityContext = buildLiquidityContext({
+    sessionDate: data.sessionDate,
+    currentValue: dailySummary.totalTradedValue,
+    history,
+  })
 
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
@@ -191,7 +197,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
             </div>
           )}
 
-          <div data-market-session-changes><MarketSessionChangesStrip changes={sessionChanges} /></div>
+          <div data-market-session-changes><MarketSessionChangesStrip changes={sessionChanges} liquidityContext={liquidityContext} /></div>
 
           <div data-market-intelligence-overview-row className="mt-4 grid gap-4 xl:grid-cols-3 xl:items-stretch">
             <div data-market-summary-column className="flex h-full items-center rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
@@ -237,7 +243,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
 }
 
 
-function MarketSessionChangesStrip({ changes }: { changes: MarketSessionChanges }) {
+function MarketSessionChangesStrip({ changes, liquidityContext }: { changes: MarketSessionChanges; liquidityContext: LiquidityContext }) {
   const reversalLabel = changes.foreignFlowReversal === "to_outflow"
     ? "Khối ngoại đảo sang bán ròng"
     : changes.foreignFlowReversal === "to_inflow"
@@ -285,11 +291,7 @@ function MarketSessionChangesStrip({ changes }: { changes: MarketSessionChanges 
           detail={formatSessionDelta(changes.ma50Breadth.delta, 1, " điểm %")}
           tone={deltaTone(changes.ma50Breadth.delta)}
         />
-        <SessionChangeMetric
-          label="Thanh khoản"
-          value={formatNumber(changes.liquidity.current, 0)}
-          detail={changes.liquidity.deltaPct == null ? "Chưa đủ dữ liệu" : `${formatSigned(changes.liquidity.deltaPct, 1, "%")} vs phiên trước`}
-        />
+        <LiquidityContextMetric liquidityContext={liquidityContext} />
         <SessionChangeMetric
           label="Chế độ thị trường"
           value={changes.regime.current || "—"}
@@ -299,6 +301,40 @@ function MarketSessionChangesStrip({ changes }: { changes: MarketSessionChanges 
           tone={changes.regime.changed ? "warning" : undefined}
         />
       </div>
+    </div>
+  )
+}
+
+function LiquidityContextMetric({ liquidityContext }: { liquidityContext: LiquidityContext }) {
+  const hasMinimumHistory = liquidityContext.current != null && liquidityContext.historyCount >= 20
+  const stateLabel = liquidityContext.state === "confirmed"
+    ? "Xác nhận"
+    : liquidityContext.state === "weak"
+      ? "Yếu"
+      : hasMinimumHistory
+        ? "Trung tính"
+        : "Chưa đủ dữ liệu"
+  const stateTone = liquidityContext.state === "confirmed" ? "up" : liquidityContext.state === "weak" ? "down" : undefined
+
+  return (
+    <div data-market-liquidity-context className="min-w-0 rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold text-slate-400">Thanh khoản</span>
+        <span className={cn(
+          "shrink-0 rounded-full border border-white/[0.08] px-1.5 py-0.5 text-[9px] font-bold text-slate-400",
+          stateTone === "up" && "border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-300",
+          stateTone === "down" && "border-rose-300/20 bg-rose-300/[0.08] text-rose-300",
+        )}>Tín hiệu · {stateLabel}</span>
+      </div>
+      <strong className="mt-0.5 block truncate font-mono text-sm font-black text-white">{formatNumber(liquidityContext.current, 0)}</strong>
+      <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-400">
+        {liquidityContext.vsMa20Pct == null ? "MA20 thanh khoản: chưa đủ dữ liệu" : `${formatSigned(liquidityContext.vsMa20Pct, 1, "%")} vs MA20 thanh khoản`}
+      </span>
+      <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
+        {liquidityContext.percentile60 == null
+          ? `Percentile 60 phiên: chưa đủ dữ liệu (${liquidityContext.historyCount}/20 tối thiểu)`
+          : `Percentile 60 phiên: P${formatNumber(liquidityContext.percentile60, 0)}`}
+      </span>
     </div>
   )
 }
