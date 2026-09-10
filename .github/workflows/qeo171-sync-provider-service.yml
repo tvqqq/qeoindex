@@ -24,13 +24,13 @@ jobs:
           path = Path("modules/market/chart-data/service.ts")
           source = path.read_text()
           before = '''  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
-            ? normalized.bars.length === 0
-              ? [closedRequestedRange]
-              : missingTradingProviderRanges(closedRequestedRange, coveredRanges)
-            : []'''.replace("            ", "")
+    ? normalized.bars.length === 0
+      ? [closedRequestedRange]
+      : missingTradingProviderRanges(closedRequestedRange, coveredRanges)
+    : []'''
           after = '''  const closedUncoveredRanges = closedRequestedRange && closedRequestedRange.to > closedRequestedRange.from
-            ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)
-            : []'''.replace("            ", "")
+    ? missingTradingProviderRanges(closedRequestedRange, coveredRanges)
+    : []'''
           if before not in source:
               raise SystemExit("QEO-171 zero-storage recovery target not found")
           path.write_text(source.replace(before, after, 1))
