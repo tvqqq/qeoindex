@@ -44,6 +44,19 @@ test("QEO-134 sentiment and index surfaces do not expose provider names", () => 
   assert.doesNotMatch(healthView, /KFSP chưa trả chỉ báo tâm lý|TOPI/i)
 })
 
+test("QEO-134 market sentiment adapter uses the verified VN-Index endpoints without KFSP fallback", () => {
+  const provider = read("modules/research/market-insight/topi-sentiment.ts")
+  const insightsData = read("modules/research/insights/data.ts")
+
+  assert.match(provider, /https:\/\/apiclient\.topi\.vn\/api-web/)
+  assert.match(provider, /TOPI_TARGET_VNINDEX = 0/)
+  assert.match(provider, /postTopi\("GetFGIndex", \{ Target: TOPI_TARGET_VNINDEX \}/)
+  assert.match(provider, /postTopi\("GetFGChart", \{ Target: TOPI_TARGET_VNINDEX, Days: 0 \}/)
+  assert.match(insightsData, /fetchTopiMarketSentiment\(\)/)
+  assert.match(insightsData, /sentimentScore: sentiment\?\.score \?\? null/)
+  assert.match(insightsData, /sentimentHistory: sentiment\?\.history \?\? \[\]/)
+})
+
 test("KFSP distribution-day guidance replaces foreign flow without breaking equal stat rows", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
 
@@ -110,8 +123,8 @@ test("gray supporting text in the refined market workspace is larger and higher 
   const dashboard = read("components/insights/market-close-dashboard.tsx")
 
   assert.match(dashboard, /PulseStat[\s\S]*text-xs font-medium text-slate-300/)
+  assert.match(dashboard, /IndexTile[\s\S]*font-mono text-xs font-black text-slate-200/)
   assert.match(dashboard, /text-\[10px\] text-slate-400/)
-  assert.match(dashboard, /text-\[11px\] font-mono text-slate-400/)
   assert.match(dashboard, /text-sm[^"\n]*text-slate-300/)
   assert.doesNotMatch(dashboard, /text-\[8px\] text-slate-600/, "index metadata must no longer use tiny low-contrast gray text")
 })
