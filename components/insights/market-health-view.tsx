@@ -16,7 +16,14 @@ import {
 import { BarChart3, ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
 import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/modules/research/market-insight/data"
+import {
+  buildValuationSnapshot,
+  filterValuationHistoryByRange,
+  type ValuationMetric,
+  type ValuationRangeYears,
+} from "@/modules/research/market-insight/valuation-snapshot"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
+import { ValuationSnapshot } from "@/components/insights/valuation-snapshot"
 
 interface MarketHealthViewProps {
   data: MarketCloseDashboardData
@@ -332,11 +339,18 @@ interface ValuationPoint {
   pb2StdDown: number | null
 }
 
-type ValuationMetric = "PE" | "PB"
+const VALUATION_HISTORY_RANGES = [
+  { label: "1Y", years: 1 },
+  { label: "3Y", years: 3 },
+  { label: "5Y", years: 5 },
+  { label: "Tất cả", years: 0 },
+] as const
 
 interface ValuationHeaderControlsProps {
   metric: ValuationMetric
   onMetricChange: (metric: ValuationMetric) => void
+  rangeYears: ValuationRangeYears
+  onRangeYearsChange: (rangeYears: ValuationRangeYears) => void
   show1SD: boolean
   onShow1SDChange: (show: boolean) => void
   show2SD: boolean
@@ -346,6 +360,8 @@ interface ValuationHeaderControlsProps {
 function ValuationHeaderControls({
   metric,
   onMetricChange,
+  rangeYears,
+  onRangeYearsChange,
   show1SD,
   onShow1SDChange,
   show2SD,
@@ -353,6 +369,19 @@ function ValuationHeaderControls({
 }: ValuationHeaderControlsProps) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+      <div className="relative">
+        <label htmlFor="market-valuation-range" className="sr-only">Khoảng lịch sử định giá</label>
+        <select
+          id="market-valuation-range"
+          value={rangeYears}
+          onChange={(event) => onRangeYearsChange(Number(event.target.value) as ValuationRangeYears)}
+          className="h-8 appearance-none rounded-md border border-white/10 bg-[#08131e] px-2 pr-7 font-mono text-xs font-bold text-slate-200 outline-none focus:border-teal-400/50"
+        >
+          {VALUATION_HISTORY_RANGES.map((range) => <option key={range.years} value={range.years}>{range.label}</option>)}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+      </div>
+
       <div className="relative">
         <label htmlFor="market-valuation-metric" className="sr-only">Chỉ số định giá</label>
         <select
@@ -559,6 +588,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
 export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) {
   const currentRisk = data.dailySummary.riskScore
   const [valuationMetric, setValuationMetric] = React.useState<ValuationMetric>("PE")
+  const [valuationRangeYears, setValuationRangeYears] = React.useState<ValuationRangeYears>(0)
   const [showValuation1SD, setShowValuation1SD] = React.useState(true)
   const [showValuation2SD, setShowValuation2SD] = React.useState(false)
 
@@ -581,9 +611,14 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
     })
   }, [data.dailySummary.riskHistory, history])
 
-  // Build Valuation Series (P/E, P/B, VNINDEX, 1SD, 2SD) from real VN-Index and market P/E
-  const valuationSeries: ValuationPoint[] = React.useMemo(() => {
-    return data.dailySummary.valuationHistory.flatMap((item) => {
+  const visibleValuationHistory = React.useMemo(
+    () => filterValuationHistoryByRange(data.dailySummary.valuationHistory, valuationRangeYears),
+    [data.dailySummary.valuationHistory, valuationRangeYears],
+  )
+
+  // Build Valuation Series (P/E, P/B, VNINDEX, 1SD, 2SD) from the selected history window.
+  const visibleValuationSeries: ValuationPoint[] = React.useMemo(() => {
+    return visibleValuationHistory.flatMap((item) => {
       if (item.price == null || item.pe == null || item.pb == null) return []
       const parts = item.tradingDate.split("-")
       return [{
@@ -601,7 +636,13 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
         pb2StdDown: item.pb2StdDown,
       }]
     })
-  }, [data.dailySummary.valuationHistory])
+  }, [visibleValuationHistory])
+
+  const valuationSnapshot = React.useMemo(() => buildValuationSnapshot({
+    metric: valuationMetric,
+    history: data.dailySummary.valuationHistory,
+    rangeYears: valuationRangeYears,
+  }), [data.dailySummary.valuationHistory, valuationMetric, valuationRangeYears])
 
   return (
     <div className="space-y-4 pt-1">
@@ -623,6 +664,8 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
           actions={<ValuationHeaderControls
             metric={valuationMetric}
             onMetricChange={setValuationMetric}
+            rangeYears={valuationRangeYears}
+            onRangeYearsChange={setValuationRangeYears}
             show1SD={showValuation1SD}
             onShow1SDChange={setShowValuation1SD}
             show2SD={showValuation2SD}
@@ -630,7 +673,10 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
           />}
         />
 
-        <div className="px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>
+        <div className="px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3">
+          <ValuationSnapshot snapshot={valuationSnapshot} />
+          <ValuationBandChart data={visibleValuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} />
+        </div>
         </div>
       </div>
     </div>
