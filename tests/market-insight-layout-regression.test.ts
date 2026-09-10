@@ -5,35 +5,43 @@ import path from "node:path"
 
 const read = (relativePath: string) => fs.readFileSync(path.resolve(relativePath), "utf8")
 
-test("market index cards live inside the market-intelligence panel as a compact 2x2 grid", () => {
+test("QEO-134 market index cards move below the Bubbles heading as one desktop row", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
-  const intelligenceHeading = dashboard.indexOf("Nhịp đập thị trường & Sức khoẻ thị trường")
+  const bubblesHeading = dashboard.indexOf("Bubbles · Bản đồ giao dịch thị trường")
   const indexStrip = dashboard.indexOf("data-market-index-strip")
+  const marketBubbles = dashboard.indexOf("<MarketBubbles")
   const intelligencePanel = dashboard.indexOf("function MarketIntelligencePanel")
-  const topLevelPanelCall = dashboard.indexOf("<MarketIntelligencePanel")
 
-  assert.ok(intelligenceHeading >= 0, "market-intelligence heading must exist")
-  assert.ok(indexStrip > intelligenceHeading, "compact index grid must render below the market-intelligence heading")
-  assert.ok(indexStrip > intelligencePanel, "index grid must be owned by MarketIntelligencePanel")
-  assert.doesNotMatch(
-    dashboard.slice(0, topLevelPanelCall),
-    /indexes\.map\(\(item\) => <IndexTile/,
-    "major indexes must no longer render above the market-intelligence panel",
-  )
-  assert.match(dashboard, /data-market-index-strip[^>]*className="[^"]*grid-cols-2/)
-  assert.doesNotMatch(dashboard, /data-market-index-strip[^>]*xl:grid-cols-4/, "right-side index workspace must remain a 2x2 grid")
+  assert.ok(bubblesHeading >= 0, "Bubbles heading must exist")
+  assert.ok(indexStrip > bubblesHeading, "market index strip must render after the Bubbles heading")
+  assert.ok(indexStrip < marketBubbles, "market index strip must render before the bubbles visualization")
+  assert.ok(indexStrip < intelligencePanel, "market index strip must no longer be owned by MarketIntelligencePanel")
+  assert.match(dashboard, /data-market-index-strip[^>]*className="[^"]*xl:grid-cols-4/)
+  assert.doesNotMatch(dashboard, /data-market-index-column/, "the old market-intelligence index column must be removed")
 })
 
-test("market intelligence uses one equal-height three-column overview row", () => {
+test("QEO-134 market intelligence replaces the old index column with sentiment history", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
 
   assert.match(dashboard, /data-market-intelligence-overview-row[^>]*className="[^"]*xl:grid-cols-3[^"]*xl:items-stretch/)
   assert.match(dashboard, /data-market-summary-column[^>]*className="[^"]*h-full/)
   assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
-  assert.match(dashboard, /data-market-index-column[^>]*className="[^"]*h-full/)
+  assert.match(dashboard, /data-market-sentiment-history-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
   assert.match(dashboard, /data-market-sentiment-column[\s\S]*<MarketSentimentCard data=\{data\}/)
-  assert.match(dashboard, /data-market-index-column[\s\S]*grid-cols-2[\s\S]*indexes\.map\(\(item\) => <IndexTile/)
-  assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must be removed")
+  assert.match(dashboard, /data-market-sentiment-history-column[\s\S]*<MarketSentimentHistoryCard data=\{data\}/)
+  assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must remain removed")
+})
+
+test("QEO-134 sentiment and index surfaces do not expose provider names", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+  const healthView = read("components/insights/market-health-view.tsx")
+  const bubblesStart = dashboard.indexOf("Bubbles · Bản đồ giao dịch thị trường")
+  const intelligenceStart = dashboard.indexOf("Nhịp đập thị trường & Sức khoẻ thị trường")
+  const sectorsStart = dashboard.indexOf("id=\"market-sectors-title\"")
+  const relevantDashboard = dashboard.slice(Math.min(bubblesStart, intelligenceStart), sectorsStart)
+
+  assert.doesNotMatch(relevantDashboard, /nguồn KFSP|TOPI/i)
+  assert.doesNotMatch(healthView, /KFSP chưa trả chỉ báo tâm lý|TOPI/i)
 })
 
 test("KFSP distribution-day guidance replaces foreign flow without breaking equal stat rows", () => {
