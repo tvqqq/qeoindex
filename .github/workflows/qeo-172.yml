@@ -1,0 +1,37 @@
+name: QEO-172
+
+on:
+  pull_request:
+    paths:
+      - "modules/market/chart-data/**"
+      - "app/api/market/ohlcv/**"
+      - "components/stock-detail/**"
+      - "tests/qeo172/**"
+      - "tests/browser/qeo172-chart-performance-production.spec.ts"
+      - ".github/workflows/qeo-172.yml"
+  workflow_dispatch:
+    inputs:
+      benchmark_mode:
+        description: baseline or acceptance
+        required: true
+        default: baseline
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-172 performance contract
+        run: pnpm exec tsx --test tests/qeo172/chart-performance-contract.test.ts
