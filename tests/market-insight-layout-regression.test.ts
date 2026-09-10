@@ -332,3 +332,54 @@ test("QEO-183 renders What Changed Today after AI conclusion and before the over
   assert.match(dataSource, /marketRegime: MarketRegime \| null/)
   assert.match(dataSource, /select\("session_date,market_regime,sentiment_score,risk_score/)
 })
+
+test("QEO-184 derives MA20 and 60-session liquidity percentile from prior sessions only", async () => {
+  const modulePath = path.resolve("modules/research/market-insight/liquidity-context.ts")
+  assert.ok(fs.existsSync(modulePath), "QEO-184 must add a pure liquidity-context helper")
+  const { buildLiquidityContext } = await import(modulePath)
+  const history = Array.from({ length: 60 }, (_, index) => ({
+    sessionDate: `2026-06-${String(index + 1).padStart(2, "0")}`,
+    totalTradedValue: index + 1,
+  }))
+  const context = buildLiquidityContext({
+    sessionDate: "2026-09-10",
+    currentValue: 61,
+    history: [
+      ...history,
+      { sessionDate: "2026-09-10", totalTradedValue: 9999 },
+      { sessionDate: "2026-09-11", totalTradedValue: 9999 },
+    ],
+  })
+  assert.equal(context.historyCount, 60)
+  assert.equal(context.ma20, 50.5)
+  assert.equal(context.vsMa20Pct, 20.792079)
+  assert.equal(context.percentile60, 100)
+  assert.equal(context.state, "confirmed")
+})
+
+test("QEO-184 stays unknown when fewer than 20 valid prior liquidity sessions exist", async () => {
+  const modulePath = path.resolve("modules/research/market-insight/liquidity-context.ts")
+  assert.ok(fs.existsSync(modulePath), "QEO-184 must add a pure liquidity-context helper")
+  const { buildLiquidityContext } = await import(modulePath)
+  const context = buildLiquidityContext({
+    sessionDate: "2026-09-10",
+    currentValue: 100,
+    history: Array.from({ length: 19 }, (_, index) => ({
+      sessionDate: `2026-08-${String(index + 1).padStart(2, "0")}`,
+      totalTradedValue: 80 + index,
+    })),
+  })
+  assert.equal(context.ma20, null)
+  assert.equal(context.vsMa20Pct, null)
+  assert.equal(context.state, "unknown")
+})
+
+test("QEO-184 enriches the existing liquidity tile without adding a redundant chart", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+  const dataSource = read("modules/research/market-insight/data.ts")
+  assert.match(dashboard, /MA20 thanh khoản/)
+  assert.match(dashboard, /Percentile 60 phiên/)
+  assert.match(dashboard, /liquidityContext\.state/)
+  assert.match(dataSource, /\.limit\(61\)/)
+  assert.doesNotMatch(dashboard, /LiquidityContextChart|Thanh khoản lịch sử/)
+})
