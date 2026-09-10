@@ -1,0 +1,44 @@
+name: QEO-105
+
+on:
+  pull_request:
+    paths:
+      - "modules/market/chart-data/universe-bootstrap*.ts"
+      - "modules/market/chart-data/bootstrap*.ts"
+      - "modules/market/history/*.ts"
+      - "workflows/chart-universe-bootstrap.ts"
+      - "app/api/qeoindex/chart-universe-bootstrap/route.ts"
+      - "supabase/migrations/*qeo105*"
+      - "supabase/migration-preproduction.json"
+      - "tests/qeo-105-universe-bootstrap.cases.ts"
+      - ".github/workflows/qeo-105.yml"
+  push:
+    branches: [main]
+    paths:
+      - "modules/market/chart-data/universe-bootstrap*.ts"
+      - "modules/market/chart-data/bootstrap*.ts"
+      - "modules/market/history/*.ts"
+      - "workflows/chart-universe-bootstrap.ts"
+      - "app/api/qeoindex/chart-universe-bootstrap/route.ts"
+      - "supabase/migrations/*qeo105*"
+      - "supabase/migration-preproduction.json"
+      - "tests/qeo-105-universe-bootstrap.cases.ts"
+      - ".github/workflows/qeo-105.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeo-105-universe-bootstrap.cases.ts
