@@ -1,6 +1,18 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowRight, BookOpenText, CalendarDays, Search } from "lucide-react"
+import {
+  ArrowRight,
+  BookOpenText,
+  Building2,
+  CalendarDays,
+  Compass,
+  Factory,
+  FileText,
+  Landmark,
+  Lightbulb,
+  Search,
+  Sparkles,
+} from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { TopNav } from "@/components/top-nav"
@@ -42,6 +54,13 @@ function categoryLabel(category: ResearchReportCatalogItem["category"]) {
   return "Khác"
 }
 
+function categoryIcon(category: ResearchReportCatalogItem["category"]) {
+  if (category === "macro") return <Landmark className="size-5" aria-hidden="true" />
+  if (category === "strategy") return <Compass className="size-5" aria-hidden="true" />
+  if (category === "sector") return <Factory className="size-5" aria-hidden="true" />
+  return <FileText className="size-5" aria-hidden="true" />
+}
+
 function dateLabel(value: string) {
   const parsed = new Date(`${value}T00:00:00+07:00`)
   if (Number.isNaN(parsed.getTime())) return value
@@ -67,19 +86,21 @@ function syncLabel(value: string | null) {
   }).format(parsed)
 }
 
-function targetPriceLabel(value: number | null) {
-  if (value === null) return null
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+function statusView(item: ResearchReportCatalogItem) {
+  if (item.ingestionStatus === "needs_ocr") return { label: "Cần OCR", className: "border-amber-400/30 bg-amber-400/[0.09] text-amber-200" }
+  if (item.ingestionStatus === "unsupported") return { label: "Không hỗ trợ", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
+  if (item.ingestionStatus === "failed") return { label: "Đọc PDF lỗi", className: "border-rose-400/30 bg-rose-400/[0.09] text-rose-200" }
+  if (item.analysisStatus === "ready") return { label: "Đã phân tích", className: "border-emerald-400/30 bg-emerald-400/[0.09] text-emerald-200" }
+  if (item.analysisStatus === "processing") return { label: "Đang xử lý", className: "border-cyan-400/30 bg-cyan-400/[0.09] text-cyan-200" }
+  if (item.analysisStatus === "failed") return { label: "Phân tích lỗi", className: "border-red-400/30 bg-red-400/[0.09] text-red-200" }
+  return { label: "Chưa phân tích", className: "border-violet-400/25 bg-violet-400/[0.07] text-violet-200" }
 }
 
-function statusView(item: ResearchReportCatalogItem) {
-  if (item.ingestionStatus === "needs_ocr") return { label: "Cần OCR", className: "border-amber-400/25 bg-amber-400/10 text-amber-200" }
-  if (item.ingestionStatus === "unsupported") return { label: "Không hỗ trợ", className: "border-slate-400/20 bg-slate-400/10 text-slate-300" }
-  if (item.ingestionStatus === "failed") return { label: "Đọc PDF lỗi", className: "border-rose-400/25 bg-rose-400/10 text-rose-200" }
-  if (item.analysisStatus === "ready") return { label: "Đã phân tích", className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" }
-  if (item.analysisStatus === "processing") return { label: "Đang xử lý", className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-200" }
-  if (item.analysisStatus === "failed") return { label: "Phân tích lỗi", className: "border-rose-400/25 bg-rose-400/10 text-rose-200" }
-  return { label: "Chưa phân tích", className: "border-white/10 bg-white/[0.04] text-slate-300" }
+function descriptionView(item: ResearchReportCatalogItem) {
+  if (item.description) return item.description
+  if (item.analysisStatus === "ready") return "Chưa có mô tả tóm tắt cho phiên bản phân tích hiện tại."
+  if (item.analysisStatus === "processing") return "Mô tả sẽ hiển thị sau khi AI hoàn tất phân tích báo cáo."
+  return "Mô tả sẽ được trích xuất khi báo cáo hoàn tất quy trình phân tích."
 }
 
 function catalogHref(query: ResearchReportCatalogQuery, patch: Partial<ResearchReportCatalogQuery>) {
@@ -228,37 +249,73 @@ export default async function ResearchReportsCatalogPage({
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {catalog.items.map((item) => {
                 const status = statusView(item)
-                const target = targetPriceLabel(item.targetPrice)
                 return (
-                  <article key={item.id} className="group flex min-w-0 flex-col rounded-2xl border border-white/[0.075] bg-panel/60 p-4 transition-colors hover:border-emerald-300/20 hover:bg-panel/80 sm:p-5">
-                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                      <span className="rounded-full border border-white/[0.08] bg-black/15 px-2 py-1 font-bold text-slate-300">{categoryLabel(item.category)}</span>
-                      <span className={`rounded-full border px-2 py-1 font-bold ${status.className}`}>{status.label}</span>
-                      {item.code ? <span className="rounded-full border border-cyan-400/15 bg-cyan-400/[0.05] px-2 py-1 font-black text-cyan-200">{item.code}</span> : null}
-                    </div>
-
-                    <h2 className="mt-3 text-base font-black leading-6 text-white sm:text-lg">{item.title}</h2>
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                      <span className="font-semibold text-slate-300">{item.sourceName}</span>
-                      <span>{dateLabel(item.publishDate)}</span>
-                      {item.sectorName ? <span>{item.sectorName}</span> : null}
-                    </div>
-
-                    {(item.recommendation || target) ? (
-                      <div className="mt-4 flex flex-wrap gap-2 rounded-xl border border-amber-300/10 bg-amber-300/[0.025] p-3 text-xs">
-                        <span className="font-bold text-amber-200/80">Ý kiến nguồn</span>
-                        {item.recommendation ? <span className="text-slate-300">Khuyến nghị: <strong>{item.recommendation}</strong></span> : null}
-                        {target ? <span className="text-slate-300">Giá mục tiêu: <strong>{target}</strong></span> : null}
+                  <Link
+                    key={item.id}
+                    href={`/research/reports/${item.id}`}
+                    prefetch={false}
+                    aria-label={`Xem chi tiết báo cáo: ${item.title}`}
+                    className="group block h-full rounded-[28px] outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    <article className="relative flex min-h-[410px] min-w-0 flex-col overflow-hidden rounded-[28px] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(25,28,31,0.94),rgba(10,14,17,0.98))] p-5 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)] transition-colors group-hover:border-emerald-300/25 sm:p-6">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-emerald-300/30 bg-emerald-400/[0.08] text-emerald-300 shadow-[inset_0_0_18px_rgba(52,211,153,0.06)]">
+                            {categoryIcon(item.category)}
+                          </span>
+                          <span className="truncate rounded-full border border-white/[0.1] bg-black/20 px-3 py-1.5 text-xs font-bold text-slate-200">
+                            {categoryLabel(item.category)}
+                          </span>
+                        </div>
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-white/[0.09] bg-white/[0.035] text-slate-400 transition-colors group-hover:border-emerald-300/20 group-hover:text-emerald-200">
+                          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                        </span>
                       </div>
-                    ) : null}
 
-                    <div className="mt-auto pt-4">
-                      <Link href={`/research/reports/${item.id}`} prefetch={false} className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-300 hover:text-emerald-200">
-                        Mở báo cáo
-                        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                      </Link>
-                    </div>
-                  </article>
+                      <h2 className="mt-5 line-clamp-3 text-lg font-black leading-7 tracking-tight text-white sm:text-xl">
+                        {item.title}
+                      </h2>
+                      <p className="mt-3 line-clamp-3 min-h-[60px] text-sm leading-5 text-slate-400">
+                        {descriptionView(item)}
+                      </p>
+
+                      <div className="mt-5 grid grid-cols-2 gap-2.5">
+                        <div className={`min-w-0 rounded-2xl border p-3.5 ${status.className}`}>
+                          <div className="text-[10px] font-black uppercase tracking-[0.16em] opacity-75">TRẠNG THÁI AI</div>
+                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
+                            <Sparkles className="size-4 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{status.label}</span>
+                          </div>
+                        </div>
+                        <div className="min-w-0 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] p-3.5 text-amber-100">
+                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200/70">KHUYẾN NGHỊ</div>
+                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
+                            <Lightbulb className="size-4 shrink-0 text-amber-300" aria-hidden="true" />
+                            <span className="truncate">{item.recommendation ?? "Chưa có"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-auto pt-5">
+                        <div className="border-t border-white/[0.075] pt-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.035] px-2.5 py-1.5 text-[11px] font-bold text-slate-300">
+                              <Building2 className="size-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                              <span className="truncate">{item.sourceName}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.035] px-2.5 py-1.5 text-[11px] font-bold tabular-nums text-slate-300">
+                              <CalendarDays className="size-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                              {dateLabel(item.publishDate)}
+                            </span>
+                          </div>
+                          <div className="mt-3 flex items-center justify-end gap-1.5 text-[11px] font-semibold text-slate-500 transition-colors group-hover:text-emerald-300/80">
+                            Nhấn để xem chi tiết
+                            <ArrowRight className="size-3.5" aria-hidden="true" />
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  </Link>
                 )
               })}
             </div>
