@@ -27,7 +27,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline
-      - name: Apply accessibility fix
+      - name: Apply final accessibility fallback
         run: node scripts/tmp-qeo187-a11y.mjs
       - name: Prove focused GREEN
         run: node --test tests/market-insight-ui-performance.test.ts
