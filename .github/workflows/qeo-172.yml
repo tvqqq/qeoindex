@@ -34,4 +34,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: QEO-172 performance contract
-        run: pnpm exec tsx --test tests/qeo172/chart-performance-contract.test.ts
+        run: node --test tests/qeo172/chart-performance-contract.test.ts
