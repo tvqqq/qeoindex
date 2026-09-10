@@ -3,8 +3,8 @@ import { Activity, BarChart3, BrainCircuit, CircleDollarSign, CircleDot, Gauge, 
 
 import {
   IndexBreadthChart, IndexPerformanceChart, InstitutionalFlowChart,
-  MaBreadthChart,
 } from "@/components/insights/market-close-charts"
+import { BreadthDivergenceBadge, MaBreadthChart } from "@/components/insights/market-breadth-divergence-chart"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView, MarketSentimentCard, MarketSentimentHistoryCard } from "@/components/insights/market-health-view"
@@ -15,6 +15,7 @@ import type { MarketAiConclusionView } from "@/modules/research/market-insight/a
 import { cn } from "@/modules/shared/ui/cn"
 import { buildMarketSessionChanges, type MarketSessionChanges } from "@/modules/research/market-insight/session-changes"
 import { buildLiquidityContext, type LiquidityContext } from "@/modules/research/market-insight/liquidity-context"
+import { buildBreadthDivergenceContext } from "@/modules/research/market-insight/breadth-divergence"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
@@ -160,6 +161,10 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
     currentValue: dailySummary.totalTradedValue,
     history,
   })
+  const breadthDivergence = buildBreadthDivergenceContext({
+    sessionDate: data.sessionDate,
+    history,
+  })
 
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
@@ -233,7 +238,14 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
           <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4" data-market-close-chart-grid>
             <ChartPanel icon={LineChart} title="Hiệu suất chỉ số" description="Biến động và giá trị giao dịch"><IndexPerformanceChart indexes={indexes} /></ChartPanel>
             <ChartPanel icon={BarChart3} title="Độ rộng thị trường" description="Mã tăng, đứng giá và giảm"><IndexBreadthChart indexes={indexes} /></ChartPanel>
-            <ChartPanel icon={Gauge} title="Sức khỏe xu hướng" description="Tỷ lệ cổ phiếu trên các đường MA"><MaBreadthChart daily={dailySummary} /></ChartPanel>
+            <ChartPanel
+              icon={Gauge}
+              title="Sức khỏe xu hướng"
+              description="VNINDEX so với độ rộng MA"
+              actions={<BreadthDivergenceBadge state={breadthDivergence.state} />}
+            >
+              <MaBreadthChart daily={dailySummary} context={breadthDivergence} />
+            </ChartPanel>
             <ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
           </div>
         </CardContent>
@@ -408,6 +420,18 @@ function IndexTile({ item }: { item: MarketCloseDashboardData["indexes"][number]
   )
 }
 
-function ChartPanel({ icon, title, description, children }: { icon: React.ComponentType<{ className?: string }>; title: string; description: string; children: React.ReactNode }) {
-  return <Card className={cn(surface, "py-0")}><MarketWidgetChildHeader icon={icon} title={title} description={description} /><CardContent className="p-3">{children}</CardContent></Card>
+function ChartPanel({
+  icon,
+  title,
+  description,
+  actions,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description: string
+  actions?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return <Card className={cn(surface, "py-0")}><MarketWidgetChildHeader icon={icon} title={title} description={description} actions={actions} /><CardContent className="p-3">{children}</CardContent></Card>
 }
