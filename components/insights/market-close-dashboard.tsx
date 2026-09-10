@@ -13,6 +13,7 @@ import type { MarketCloseDashboardData } from "@/modules/research/market-insight
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import type { MarketAiConclusionView } from "@/modules/research/market-insight/ai-conclusion-loader"
 import { cn } from "@/modules/shared/ui/cn"
+import { buildMarketSessionChanges, type MarketSessionChanges } from "@/modules/research/market-insight/session-changes"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
@@ -152,6 +153,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
 function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketCloseDashboardData; marketAiConclusion?: MarketAiConclusionView }) {
   const { dailySummary, indexes, history, marketRegime } = data
   const distributionGuidance = getDistributionDayGuidance(dailySummary.distributionCount)
+  const sessionChanges = buildMarketSessionChanges(data)
 
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
@@ -188,6 +190,8 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
               </div>
             </div>
           )}
+
+          <div data-market-session-changes><MarketSessionChangesStrip changes={sessionChanges} /></div>
 
           <div data-market-intelligence-overview-row className="mt-4 grid gap-4 xl:grid-cols-3 xl:items-stretch">
             <div data-market-summary-column className="flex h-full items-center rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
@@ -229,6 +233,107 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
         </CardContent>
       </Card>
     </section>
+  )
+}
+
+
+function MarketSessionChangesStrip({ changes }: { changes: MarketSessionChanges }) {
+  const reversalLabel = changes.foreignFlowReversal === "to_outflow"
+    ? "Khối ngoại đảo sang bán ròng"
+    : changes.foreignFlowReversal === "to_inflow"
+      ? "Khối ngoại đảo sang mua ròng"
+      : null
+
+  return (
+    <div className="mt-4 rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.035] p-3.5 sm:p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Session change</p>
+          <h3 className="mt-0.5 text-sm font-bold text-white sm:text-base">Thay đổi so với phiên trước</h3>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {changes.previousSessionDate ? `So với snapshot ${changes.previousSessionDate}` : "Chưa đủ dữ liệu phiên trước"}
+          </p>
+        </div>
+        {reversalLabel ? (
+          <span className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-2.5 py-1 text-[11px] font-bold text-amber-300">
+            {reversalLabel}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-6">
+        <SessionChangeMetric
+          label="Tâm lý"
+          value={formatNumber(changes.sentiment.current, 0)}
+          detail={formatSessionDelta(changes.sentiment.delta, 0, " điểm")}
+        />
+        <SessionChangeMetric
+          label="Rủi ro"
+          value={formatNumber(changes.risk.current, 2)}
+          detail={formatSessionDelta(changes.risk.delta, 2)}
+          tone={changes.risk.delta == null ? undefined : changes.risk.delta > 0 ? "down" : changes.risk.delta < 0 ? "up" : undefined}
+        />
+        <SessionChangeMetric
+          label="MA20"
+          value={changes.ma20Breadth.current == null ? "—" : `${formatNumber(changes.ma20Breadth.current, 1)}%`}
+          detail={formatSessionDelta(changes.ma20Breadth.delta, 1, " điểm %")}
+          tone={deltaTone(changes.ma20Breadth.delta)}
+        />
+        <SessionChangeMetric
+          label="MA50"
+          value={changes.ma50Breadth.current == null ? "—" : `${formatNumber(changes.ma50Breadth.current, 1)}%`}
+          detail={formatSessionDelta(changes.ma50Breadth.delta, 1, " điểm %")}
+          tone={deltaTone(changes.ma50Breadth.delta)}
+        />
+        <SessionChangeMetric
+          label="Thanh khoản"
+          value={formatNumber(changes.liquidity.current, 0)}
+          detail={changes.liquidity.deltaPct == null ? "Chưa đủ dữ liệu" : `${formatSigned(changes.liquidity.deltaPct, 1, "%")} vs phiên trước`}
+        />
+        <SessionChangeMetric
+          label="Chế độ thị trường"
+          value={changes.regime.current || "—"}
+          detail={changes.regime.changed && changes.regime.previous
+            ? `${changes.regime.previous} → ${changes.regime.current}`
+            : changes.regime.previous ? "Không đổi" : "Chưa đủ dữ liệu"}
+          tone={changes.regime.changed ? "warning" : undefined}
+        />
+      </div>
+    </div>
+  )
+}
+
+function formatSessionDelta(delta: number | null, decimals: number, suffix = "") {
+  return delta == null ? "Chưa đủ dữ liệu" : `${formatSigned(delta, decimals, suffix)} vs phiên trước`
+}
+
+function deltaTone(delta: number | null | undefined): PulseTone | undefined {
+  if (delta == null || delta === 0) return undefined
+  return delta > 0 ? "up" : "down"
+}
+
+function SessionChangeMetric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string
+  value: string
+  detail: string
+  tone?: PulseTone
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
+      <span className="block text-[11px] font-semibold text-slate-400">{label}</span>
+      <strong className="mt-0.5 block truncate font-mono text-sm font-black text-white">{value}</strong>
+      <span className={cn(
+        "mt-0.5 block truncate text-[10px] font-semibold text-slate-500",
+        tone === "up" && "text-emerald-300",
+        tone === "warning" && "text-amber-300",
+        tone === "down" && "text-rose-300",
+      )}>{detail}</span>
+    </div>
   )
 }
 

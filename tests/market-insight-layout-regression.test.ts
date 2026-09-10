@@ -281,3 +281,54 @@ test("QEO-151 cards keep the existing header metrics while adding an explicit ho
   assert.match(sectorPanel, /GTGD:/)
   assert.match(sectorPanel, /hover:border-(?:cyan|teal)-400\/60/)
 })
+
+test("QEO-183 derives session deltas without mixing sentiment sources", async () => {
+  const modulePath = path.resolve("modules/research/market-insight/session-changes.ts")
+  assert.ok(fs.existsSync(modulePath), "QEO-183 must add a pure session-changes helper")
+  const { buildMarketSessionChanges } = await import(modulePath)
+  const changes = buildMarketSessionChanges({
+    sessionDate: "2026-09-10",
+    marketRegime: "Markup",
+    dailySummary: {
+      sentimentScore: 60,
+      sentimentHistory: [
+        { tradingDate: "2026-09-08", value: 50 },
+        { tradingDate: "2026-09-09", value: 55 },
+        { tradingDate: "2026-09-14", value: 80 },
+      ],
+      riskScore: 0.7,
+      aboveMa20Pct: 57,
+      aboveMa50Pct: 45,
+      foreignNetValue: -200,
+      totalTradedValue: 1200,
+    },
+    history: [
+      { sessionDate: "2026-09-09", marketRegime: "Accumulation", riskScore: 0.6, aboveMa20Pct: 60, aboveMa50Pct: 50, foreignNetValue: 100, totalTradedValue: 1000 },
+      { sessionDate: "2026-09-10", marketRegime: "Markup", riskScore: 0.7, aboveMa20Pct: 57, aboveMa50Pct: 45, foreignNetValue: -200, totalTradedValue: 1200 },
+    ],
+  })
+  assert.equal(changes.sentiment.previous, 55, "future TOPI prediction points must not become the previous session")
+  assert.equal(changes.sentiment.delta, 5)
+  assert.equal(changes.risk.delta, 0.1)
+  assert.equal(changes.ma20Breadth.delta, -3)
+  assert.equal(changes.ma50Breadth.delta, -5)
+  assert.equal(changes.liquidity.deltaPct, 20)
+  assert.deepEqual(changes.regime, { current: "Markup", previous: "Accumulation", changed: true })
+  assert.equal(changes.foreignFlowReversal, "to_outflow")
+})
+
+test("QEO-183 renders What Changed Today after AI conclusion and before the overview row", () => {
+  const dashboard = read("components/insights/market-close-dashboard.tsx")
+  const dataSource = read("modules/research/market-insight/data.ts")
+  const ai = dashboard.indexOf("data-market-ai-conclusion")
+  const changes = dashboard.indexOf("data-market-session-changes")
+  const overview = dashboard.indexOf("data-market-intelligence-overview-row")
+  assert.ok(changes > ai, "session changes must follow the AI conclusion area")
+  assert.ok(changes < overview, "session changes must precede the snapshot overview row")
+  assert.match(dashboard, /Thay đổi so với phiên trước/)
+  for (const label of ["Tâm lý", "Rủi ro", "MA20", "MA50", "Thanh khoản", "Chế độ thị trường"]) {
+    assert.ok(dashboard.includes(label), `missing QEO-183 change metric: ${label}`)
+  }
+  assert.match(dataSource, /marketRegime: MarketRegime \| null/)
+  assert.match(dataSource, /select\("session_date,market_regime,sentiment_score,risk_score/)
+})

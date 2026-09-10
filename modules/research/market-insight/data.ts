@@ -84,6 +84,7 @@ export interface MarketLeaderItem {
 
 export interface MarketHistoryPoint {
   sessionDate: string
+  marketRegime: MarketRegime | null
   sentimentScore: number | null
   riskScore: number | null
   aboveMa10Pct: number | null
@@ -228,7 +229,7 @@ export async function getMarketCloseInsightData(
       .order("rank", { ascending: true }),
     supabase
       .from("market_insight_daily")
-      .select("session_date,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,total_traded_value")
+      .select("session_date,market_regime,sentiment_score,risk_score,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,total_traded_value")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(20),
@@ -382,6 +383,7 @@ export async function getMarketCloseInsightData(
   const history: MarketHistoryPoint[] = (historyRes.data || [])
     .map((row: Record<string, unknown>) => ({
       sessionDate: String(row.session_date),
+      marketRegime: (row.market_regime as MarketRegime) || null,
       sentimentScore: row.sentiment_score != null ? Number(row.sentiment_score) : null,
       riskScore: row.risk_score != null ? Number(row.risk_score) : null,
       aboveMa10Pct: row.above_ma10_pct != null ? Number(row.above_ma10_pct) : null,
