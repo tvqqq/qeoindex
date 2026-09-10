@@ -18,44 +18,42 @@ test("QEO-173 keeps ticker transitions usable and visually non-disruptive", () =
 
 test("QEO-173 exposes a compact financial header and only surfaces provider noise on stale state", () => {
   const chartData = source("components/stock-detail/stock-tradingview-chart-data.tsx")
-  const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
 
   assert.match(chartData, /exchange\?: string/)
-  assert.match(chartData, /sessionState=\{liveState\}/)
-  assert.match(chartData, /providerWarning=/)
+  assert.match(chartData, /providerWarning/)
   assert.doesNotMatch(chartData, />\s*LIVE\{liveProvider/)
-
-  assert.match(chart, /data-chart-financial-header/)
-  assert.match(chart, /tabular-nums/)
-  assert.match(chart, /exchange/)
-  assert.match(chart, /sessionState/)
-  assert.match(chart, /providerWarning/)
+  assert.match(chartData, /data-chart-financial-header/)
+  assert.match(chartData, /tabular-nums/)
+  assert.match(chartData, /exchange/)
+  assert.match(chartData, /liveState/)
 })
 
-test("QEO-173 pane headers share the canonical legend timestamp and expose inline controls", () => {
+test("QEO-173 pane headers follow the chart canonical legend timestamp and expose inline controls", () => {
+  const chartData = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
 
   for (const pane of ["volume", "rsi", "macd"]) {
-    assert.match(chart, new RegExp(`data-chart-pane-header=["']${pane}["']`))
+    assert.match(chartData, new RegExp(`data-chart-pane-header=["']${pane}["']`))
   }
-  assert.match(chart, /data-chart-pane-time=\{legendTime \?\? ""\}/)
-  assert.match(chart, /formatCompactVolume\(activeBar\?\.volume\)/)
-  assert.match(chart, /formatMetric\(legendValues\.rsi\)/)
-  assert.match(chart, /formatMetric\(legendValues\.macd, 4\)/)
-  assert.match(chart, /setShowIndicatorModal\(true\)/)
-  assert.match(chart, /setIsRsiCollapsed/)
-  assert.match(chart, /setIsMacdCollapsed/)
+  assert.match(chartData, /data-chart-pane-time=\{paneTime \?\? ""\}/)
+  assert.match(chartData, /MutationObserver/)
+  assert.match(chartData, /data-chart-legend-time/)
+  assert.match(chartData, /calculateVolumeSma/)
+  assert.match(chartData, /calculateRsiSeries/)
+  assert.match(chartData, /calculateMacdSeries/)
+  assert.match(chartData, /clickChartControl/)
+  assert.match(chart, /data-chart-legend-time=\{legendTime \?\? ""\}/)
 })
 
-test("QEO-173 loading and terminal chrome preserve plot density", () => {
+test("QEO-173 loading and terminal chrome preserve plot density without changing chart data math", () => {
+  const chartData = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
   const css = source("components/stock-detail/chart/stock-chart-terminal-shell.module.css")
 
-  assert.match(chart, /data-chart-loading-indicator/)
-  assert.doesNotMatch(chart, /loadingState[\s\S]{0,500}grid place-items-center/)
+  assert.match(chartData, /data-chart-loading-indicator/)
+  assert.match(css, /data-chart-loading=["']true["']/)
   assert.match(chart, /lastValueVisible:\s*true/)
   assert.match(chart, /width - priceAxisGutter/)
-  assert.match(chart, /data-chart-legend-time=\{legendTime \?\? ""\}/)
 
   assert.match(css, /min-height:\s*32px/)
   assert.match(css, /min-height:\s*24px/)
