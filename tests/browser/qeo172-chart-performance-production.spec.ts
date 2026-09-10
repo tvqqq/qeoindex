@@ -68,6 +68,11 @@ function parseServerTiming(value: string | undefined): TimingMap {
   return result
 }
 
+function writeBenchmarkArtifact(artifact: unknown) {
+  mkdirSync("test-results", { recursive: true })
+  writeFileSync("test-results/qeo172-performance.json", `${JSON.stringify(artifact, null, 2)}\n`)
+}
+
 function rangeFor(timeframe: MatrixTimeframe, now: number) {
   const day = 86_400
   if (timeframe === "1D") return { from: 1, to: now }
@@ -331,8 +336,7 @@ test("QEO-172 authenticated production performance benchmark", async ({ page }) 
     }
   }
 
-  const adjacent = await measureAdjacentTickerSwitches(page)
-  const artifact = {
+  const artifactBase = {
     schemaVersion: 1,
     benchmarkMode: BENCHMARK_MODE,
     workflowSha: WORKFLOW_SHA,
@@ -342,14 +346,38 @@ test("QEO-172 authenticated production performance benchmark", async ({ page }) 
     matrix: MATRIX,
     api: apiResults,
     ui: uiResults,
+  }
+
+  writeBenchmarkArtifact({
+    ...artifactBase,
+    complete: false,
+    adjacent: null,
+  })
+
+  let adjacent: Awaited<ReturnType<typeof measureAdjacentTickerSwitches>>
+  try {
+    adjacent = await measureAdjacentTickerSwitches(page)
+  } catch (cause) {
+    writeBenchmarkArtifact({
+      ...artifactBase,
+      complete: false,
+      adjacent: null,
+      failure: {
+        stage: "adjacent-navigation",
+        message: cause instanceof Error ? cause.message : String(cause),
+      },
+    })
+    throw cause
+  }
+
+  writeBenchmarkArtifact({
+    ...artifactBase,
+    complete: true,
     adjacent: {
       ...adjacent,
       summary: summarize(adjacent.samples.map((sample) => sample.interactionMs)),
     },
-  }
-
-  mkdirSync("test-results", { recursive: true })
-  writeFileSync("test-results/qeo172-performance.json", `${JSON.stringify(artifact, null, 2)}\n`)
+  })
 
   // The instrumentation baseline is evidence only. Acceptance mode will use
   // the exact same benchmark script after behavior changes and can enforce the
