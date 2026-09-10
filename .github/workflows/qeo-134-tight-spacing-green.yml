@@ -1,0 +1,55 @@
+name: QEO-134 tight spacing GREEN helper
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-134-tighten-health-chart-spacing
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-134-tighten-health-chart-spacing
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tighten chart spacing
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('components/insights/market-health-view.tsx')
+          s = p.read_text()
+          replacements = [
+              ('<div className="h-[210px] w-full">\n        <ResponsiveContainer width="100%" height="100%">\n          <AreaChart data={data} margin={{ top: 18, right: 16, left: -20, bottom: 0 }}>', '<div className="h-[260px] w-full">\n        <ResponsiveContainer width="100%" height="100%">\n          <AreaChart data={data} margin={{ top: 6, right: 16, left: -20, bottom: 0 }}>'),
+              ('return (\n    <div className="space-y-3">\n      {/* Legend */}', 'return (\n    <div className="space-y-1">\n      {/* Legend */}'),
+              ('<ComposedChart data={data} margin={{ top: 12, right: 28, left: 10, bottom: 0 }}>', '<ComposedChart data={data} margin={{ top: 4, right: 28, left: 10, bottom: 0 }}>'),
+              ('<div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl flex flex-col justify-between">', '<div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl flex flex-col">'),
+              (': <div className="p-4 sm:p-5"><RiskIndicatorChart data={riskSeries} /></div>}', ': <div className="px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3"><RiskIndicatorChart data={riskSeries} /></div>}'),
+              ('<div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>', '<div className="px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>'),
+          ]
+          for old, new in replacements:
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, got {count}: {old[:80]}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Confirm GREEN regression
+        shell: bash
+        run: node --test tests/market-insight-layout-regression.test.ts
+      - name: Remove helper and commit production patch
+        shell: bash
+        run: |
+          rm .github/workflows/qeo-134-tight-spacing-green.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/market-health-view.tsx .github/workflows/qeo-134-tight-spacing-green.yml
+          git commit -m "fix(QEO-134): tighten health chart top spacing"
+          git push
