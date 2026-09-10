@@ -1,0 +1,56 @@
+@property --home-card-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.card {
+  --home-card-border-angle: 0deg;
+  isolation: isolate;
+  contain: paint;
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: 0.78;
+  background: conic-gradient(
+    from var(--home-card-border-angle),
+    transparent 0deg 262deg,
+    color-mix(in srgb, var(--home-card-accent) 18%, transparent) 284deg,
+    var(--home-card-accent) 315deg,
+    color-mix(in srgb, var(--home-card-accent) 45%, transparent) 334deg,
+    transparent 352deg 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: home-card-border-orbit 4.8s linear infinite;
+  transition: opacity 220ms ease, filter 220ms ease;
+}
+
+.card:hover::after,
+.card:focus-visible::after {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--home-card-accent) 55%, transparent));
+}
+
+@keyframes home-card-border-orbit {
+  to {
+    --home-card-border-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card::after {
+    animation: none;
+    opacity: 0.48;
+  }
+}

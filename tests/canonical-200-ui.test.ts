@@ -109,3 +109,37 @@ test("QEO-163 pulse uses the current Vietnam date and an open stock finder reser
   assert.match(heroCss, /prefers-reduced-motion/, "clearance motion should respect reduced-motion")
   assert.doesNotMatch(`${hero}\n${heroCss}\n${stockSearch}`, /transition-all|backdrop-blur|backdrop-filter/)
 })
+
+test("homepage workspace cards orbit their own accent color and Top 200 logos marquee into ticker insights", () => {
+  const home = source("app/page.tsx")
+  const cardCss = source("components/home/workspace-card.module.css")
+  const marquee = source("components/home/top-stocks-marquee.tsx")
+  const marqueeCss = source("components/home/top-stocks-marquee.module.css")
+
+  assert.match(home, /TopStocksMarquee/, "homepage should mount the logo marquee below the four workspace cards")
+  assert.match(home, /<TopStocksMarquee stocks=\{universe\.stocks\} \/>/, "marquee must reuse the already-loaded canonical universe")
+  assert.match(home, /"--home-card-accent": item\.borderAccentColor/, "each card should pass its own accent into the perimeter animation")
+  for (const accent of ["#b7f64d", "#c084fc", "#67e8f9", "#fbbf24"]) {
+    assert.match(home, new RegExp(accent.replace("#", "\\#")), `workspace card accent ${accent} should remain explicit`)
+  }
+
+  assert.match(cardCss, /@property --home-card-border-angle/, "card border angle should be animatable without rotating the card itself")
+  assert.match(cardCss, /conic-gradient/, "card perimeter should use a bounded conic highlight")
+  assert.match(cardCss, /home-card-border-orbit/, "card perimeter should continuously orbit")
+  assert.match(cardCss, /prefers-reduced-motion/, "card motion should respect reduced-motion")
+
+  assert.match(marquee, /Top 200 cổ phiếu được chọn lọc/i)
+  assert.match(marquee, /href=\{`\/insights\/\$\{stock\.ticker\}`\}/, "every logo should route directly to ticker insights")
+  assert.match(marquee, /prefetch=\{false\}/, "200 ticker links must not trigger an eager Next.js prefetch storm")
+  assert.doesNotMatch(marquee, /StockLogo/, "duplicated Top 200 rows should not hydrate hundreds of StockLogo client instances")
+  assert.match(marquee, /stockLogoUrl/, "server markup should reuse the canonical stock logo URL builder")
+  assert.match(marquee, /loading="lazy"/, "marquee images should remain lazy-loaded")
+  assert.match(marquee, /decoding="async"/, "marquee logo decoding should stay off the critical rendering path")
+  assert.match(marquee, /<LogoGroup stocks=\{stocks\} \/>[\s\S]*<LogoGroup stocks=\{stocks\} duplicate \/>/, "marquee should render two equal groups for a seamless loop")
+
+  assert.match(marqueeCss, /translate3d\(-50%, 0, 0\)/, "loop should advance exactly one duplicated group")
+  assert.match(marqueeCss, /\.shell:hover \.track[\s\S]*animation-play-state:\s*paused/, "hovering the marquee should pause it")
+  assert.match(marqueeCss, /\.shell:focus-within \.track[\s\S]*animation-play-state:\s*paused/, "keyboard focus should pause it too")
+  assert.match(marqueeCss, /prefers-reduced-motion/, "marquee should provide a non-animated manual-scroll fallback")
+  assert.doesNotMatch(`${home}\n${marquee}\n${cardCss}\n${marqueeCss}`, /transition-all|backdrop-blur|backdrop-filter/)
+})

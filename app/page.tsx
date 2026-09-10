@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react"
 import Link from "next/link"
 import {
   Activity,
@@ -17,6 +18,8 @@ import {
 
 import { LandingLogin } from "@/components/auth/landing-login"
 import { HomeHero } from "@/components/home/home-hero"
+import { TopStocksMarquee } from "@/components/home/top-stocks-marquee"
+import workspaceCardStyles from "@/components/home/workspace-card.module.css"
 import { WorkspaceDivider } from "@/components/home/workspace-divider"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/modules/auth/server"
@@ -31,6 +34,7 @@ type HomeMenuItem = {
   description: string
   icon: LucideIcon
   miniIcons: readonly [LucideIcon, LucideIcon, LucideIcon]
+  borderAccentColor: string
   borderClassName: string
   glowClassName: string
   miniIconAccentClassName: string
@@ -46,6 +50,7 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Theo dõi giá, thanh khoản, sổ lệnh và diễn biến realtime của Top Stocks 200.",
     icon: LayoutDashboard,
     miniIcons: [BarChart3, LineChart, Activity],
+    borderAccentColor: "#b7f64d",
     borderClassName: "hover:border-emerald-400/35",
     glowClassName: "from-emerald-400/12 via-cyan-400/5 to-transparent",
     miniIconAccentClassName: "text-[#b7f64d]",
@@ -59,6 +64,7 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Quản lý danh mục, kế hoạch giao dịch, hiệu suất và kỷ luật rủi ro trong một workspace.",
     icon: Briefcase,
     miniIcons: [TrendingUp, CandlestickChart, BarChart3],
+    borderAccentColor: "#c084fc",
     borderClassName: "hover:border-violet-400/35",
     glowClassName: "from-violet-400/12 via-fuchsia-400/5 to-transparent",
     miniIconAccentClassName: "text-[#c084fc]",
@@ -72,6 +78,7 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Đọc VNINDEX, Qeo Rating, dòng tiền, Wyckoff và AI Council từ cùng một góc nhìn thị trường.",
     icon: Sparkles,
     miniIcons: [CandlestickChart, Radar, TrendingUp],
+    borderAccentColor: "#67e8f9",
     borderClassName: "hover:border-cyan-400/35",
     glowClassName: "from-cyan-400/12 via-emerald-400/5 to-transparent",
     miniIconAccentClassName: "text-[#67e8f9]",
@@ -85,6 +92,7 @@ const HOME_MENU_ITEMS: HomeMenuItem[] = [
     description: "Tra cứu báo cáo vĩ mô, chiến lược và ngành cùng trạng thái ingest, phân tích AI và bằng chứng nguồn.",
     icon: FileText,
     miniIcons: [BookOpenText, SearchCheck, BarChart3],
+    borderAccentColor: "#fbbf24",
     borderClassName: "hover:border-amber-400/35",
     glowClassName: "from-amber-400/12 via-emerald-400/5 to-transparent",
     miniIconAccentClassName: "text-[#fbbf24]",
@@ -105,7 +113,9 @@ function MenuCard({ item }: { item: HomeMenuItem }) {
     <Link
       href={item.href}
       prefetch={false}
+      style={{ "--home-card-accent": item.borderAccentColor } as CSSProperties}
       className={[
+        workspaceCardStyles.card,
         "group/card relative min-h-[250px] overflow-hidden rounded-3xl border border-white/[0.09] bg-panel/60 p-6 shadow-[0_22px_55px_-38px_rgba(0,0,0,0.95)]",
         "transition-[border-color,background-color,transform,opacity,filter] duration-300 ease-out group-hover/home:blur-[2px] group-hover/home:opacity-40 hover:!blur-none hover:!opacity-100 hover:-translate-y-1 hover:bg-panel/80 focus-visible:!blur-none focus-visible:!opacity-100 motion-reduce:transform-none motion-reduce:transition-none",
         item.borderClassName,
@@ -194,6 +204,8 @@ export default async function HomePage() {
           <section className="group/home grid gap-4 md:grid-cols-2" aria-label="Các khu vực chính">
             {HOME_MENU_ITEMS.map((item) => <MenuCard key={item.href} item={item} />)}
           </section>
+
+          <TopStocksMarquee stocks={universe.stocks} />
         </section>
       </main>
     </div>
