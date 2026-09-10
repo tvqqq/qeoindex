@@ -11,6 +11,7 @@ import { getSignalUiData } from "@/modules/signals/data"
 import { buildRecommendationPerformance } from "@/modules/signals/performance"
 import { fetchTradingViewIndexes, type MarketIndexQuote } from "@/modules/market/providers/tradingview/index"
 import { getMarketCloseInsightData, type MarketCloseDashboardData } from "@/modules/research/market-insight/data"
+import { fetchTopiMarketSentiment, type TopiMarketSentimentData } from "@/modules/research/market-insight/topi-sentiment"
 import { loadMarketAiConclusion, type MarketAiConclusionView } from "@/modules/research/market-insight/ai-conclusion-loader"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import type { RatingModelSnapshot } from "@/modules/research/insights/rating-model"
@@ -412,6 +413,22 @@ function settledValue<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null
 }
 
+function withCurrentMarketSentiment(
+  data: MarketCloseDashboardData | null,
+  sentiment: TopiMarketSentimentData | null,
+): MarketCloseDashboardData | null {
+  if (!data) return null
+  return {
+    ...data,
+    dailySummary: {
+      ...data.dailySummary,
+      sentimentScore: sentiment?.score ?? null,
+      sentimentLabel: sentiment?.label ?? null,
+      sentimentHistory: sentiment?.history ?? [],
+    },
+  }
+}
+
 export async function getInsightsDashboardData(supabase: SupabaseClient): Promise<InsightsDashboardData> {
   const settled = await Promise.allSettled([
     fetchTradingViewIndexes(),
@@ -421,6 +438,7 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
     getSignalUiData(),
     getResearchOverviewData(),
     getMarketCloseInsightData(supabase),
+    fetchTopiMarketSentiment(),
   ] as const)
 
   const indexes = settledValue(settled[0])
@@ -429,8 +447,10 @@ export async function getInsightsDashboardData(supabase: SupabaseClient): Promis
   const scanner = settledValue(settled[3])
   const signals = settledValue(settled[4])
   const research = settledValue(settled[5])
-  const marketClose = settledValue(settled[6])
-  const marketAiConclusion = await loadMarketAiConclusion(getSupabaseServerClient(), marketClose)
+  const persistedMarketClose = settledValue(settled[6])
+  const currentMarketSentiment = settledValue(settled[7])
+  const marketClose = withCurrentMarketSentiment(persistedMarketClose, currentMarketSentiment)
+  const marketAiConclusion = await loadMarketAiConclusion(getSupabaseServerClient(), persistedMarketClose)
   const vnindex = indexes?.VNINDEX ?? null
   const ratings = ratingResult?.rows ?? []
   const bubbleStocks = ratingResult?.bubbleStocks ?? []
