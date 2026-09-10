@@ -234,7 +234,7 @@ export async function getMarketCloseInsightData(
       .order("rank", { ascending: true }),
     supabase
       .from("market_insight_daily")
-      .select("session_date,market_regime,sentiment_score,risk_score,distribution_count,distribution_window,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,other_flow_net_value,total_matched_volume,total_traded_value")
+      .select("session_date,market_regime,sentiment_score,risk_score,distribution_count,distribution_window,above_ma10_pct,above_ma20_pct,above_ma50_pct,above_ma200_pct,foreign_net_value,proprietary_net_value,other_flow_net_value,total_traded_value,total_matched_volume")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
       .limit(61),
@@ -244,7 +244,7 @@ export async function getMarketCloseInsightData(
       .eq("index_code", "VNINDEX")
       .lte("session_date", targetDate)
       .order("session_date", { ascending: false })
-      .limit(61),
+      .limit(20),
     supabase
       .from("market_insight_sectors")
       .select("session_date,sector_key,display_name,rotation_state,average_change_pct,rs_score,effort_pct,result_pct,traded_value,close_price")
@@ -356,7 +356,7 @@ export async function getMarketCloseInsightData(
           const status = value.status as RotationState
           if (!value.trading_date || !["leading", "recovering", "weakening", "lagging"].includes(status)) return []
           return [{
-            tradingDate: String(value.trading_date),
+            sessionDate: String(value.trading_date),
             status,
             closePrice: value.close_price != null ? Number(value.close_price) : null,
           }]
