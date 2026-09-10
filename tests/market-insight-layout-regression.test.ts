@@ -96,6 +96,20 @@ test("QEO-134 market index cards have explicit borders and roomier padding", () 
   assert.match(indexTile, /CardContent className="p-4 sm:p-5"/)
 })
 
+test("QEO-134 risk and valuation charts avoid excess top whitespace", () => {
+  const healthView = read("components/insights/market-health-view.tsx")
+  const riskChart = healthView.slice(healthView.indexOf("function RiskIndicatorChart"), healthView.indexOf("// 3. Valuation Multi-Band Chart"))
+  const valuationChart = healthView.slice(healthView.indexOf("function ValuationBandChart"), healthView.indexOf("// 4. Main Market Health View"))
+  const marketHealth = healthView.slice(healthView.indexOf("export function MarketHealthView"), healthView.indexOf("export function MarketSentimentCard"))
+
+  assert.match(riskChart, /h-\[260px\]/)
+  assert.match(riskChart, /AreaChart data=\{data\} margin=\{\{ top: 6, right: 16, left: -20, bottom: 0 \}\}/)
+  assert.match(valuationChart, /<div className="space-y-1">/)
+  assert.match(valuationChart, /ComposedChart data=\{data\} margin=\{\{ top: 4, right: 28, left: 10, bottom: 0 \}\}/)
+  assert.doesNotMatch(marketHealth, /shadow-xl flex flex-col justify-between/)
+  assert.ok((marketHealth.match(/px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3/g) || []).length >= 2, "both chart bodies should use compact top padding")
+})
+
 test("QEO-134 valuation controls live in the widget header without duplicate body controls", () => {
   const healthView = read("components/insights/market-health-view.tsx")
   const childHeader = read("components/insights/market-widget-child-header.tsx")
