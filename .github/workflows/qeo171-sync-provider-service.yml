@@ -1,0 +1,49 @@
+name: QEO-171 Provider Session Fix Sync
+
+on:
+  push:
+    branches:
+      - test/qeo-171-production-chart-acceptance-v2
+    paths:
+      - .github/workflows/qeo171-sync-provider-service.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test/qeo-171-production-chart-acceptance-v2
+      - name: Route closed recovery through trading-session coverage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("modules/market/chart-data/service.ts")
+          source = path.read_text()
+          before_import = '''  mergeProviderRanges,
+            missingProviderRanges,
+            uncoveredProviderRanges,'''.replace("            ", "")
+          after_import = '''  mergeProviderRanges,
+            missingTradingProviderRanges,
+            uncoveredProviderRanges,'''.replace("            ", "")
+          if before_import not in source:
+              raise SystemExit("QEO-171 provider coverage import target not found")
+          source = source.replace(before_import, after_import, 1)
+          before_call = ': missingProviderRanges(closedRequestedRange, coveredRanges)'
+          after_call = ': missingTradingProviderRanges(closedRequestedRange, coveredRanges)'
+          if before_call not in source:
+              raise SystemExit("QEO-171 closed recovery target not found")
+          source = source.replace(before_call, after_call, 1)
+          path.write_text(source)
+          PY
+      - name: Commit production fix
+        run: |
+          git config user.name "qeoindex-ci"
+          git config user.email "qeoindex-ci@users.noreply.github.com"
+          git add modules/market/chart-data/service.ts
+          git diff --cached --check
+          git commit -m "fix(QEO-171): skip non-trading provider recovery"
+          git push origin HEAD:test/qeo-171-production-chart-acceptance-v2
