@@ -1,0 +1,84 @@
+name: QEO-173
+
+on:
+  pull_request:
+    paths:
+      - "components/stock-detail/**"
+      - "tests/qeo173/**"
+      - "tests/browser/qeo173-chart-ui-production.spec.ts"
+      - ".github/workflows/qeo-173.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo173-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-173 UI contract
+        run: node --test tests/qeo173/chart-ui-polish-contract.test.ts
+
+  production-browser:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QEO173_BASE_URL: https://qeoindex.qeoqeo.com
+      QEO171_TEST_EMAIL: ${{ secrets.QEO171_TEST_EMAIL }}
+      QEO171_TEST_PASSWORD: ${{ secrets.QEO171_TEST_PASSWORD }}
+    steps:
+      - name: Check encrypted QA credentials
+        id: auth
+        shell: bash
+        run: |
+          if [[ -n "$QEO171_TEST_EMAIL" && -n "$QEO171_TEST_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::QEO-173 production visual review skipped: encrypted QA credentials are not provisioned"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.auth.outputs.available == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.auth.outputs.available == 'true'
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        if: steps.auth.outputs.available == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.auth.outputs.available == 'true'
+      - name: Install Chromium
+        if: steps.auth.outputs.available == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run authenticated production visual review
+        if: steps.auth.outputs.available == 'true'
+        run: pnpm exec playwright test tests/browser/qeo173-chart-ui-production.spec.ts --project=desktop
+      - name: Upload visual evidence
+        if: always() && steps.auth.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo173-production-ui
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 3
