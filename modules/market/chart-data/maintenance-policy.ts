@@ -121,7 +121,11 @@ export function isQeo150RecoverableCompletedSession(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return false
   if (!isVietnamSecuritiesTradingDateKey(sessionDate)) return false
   try {
-    return sessionDate <= expectedCompletedVietnamSession(referenceAt)
+    const sessions = [expectedCompletedVietnamSession(referenceAt)]
+    while (sessions.length < QEO180_HOT_CONTINUITY_SESSIONS) {
+      sessions.unshift(previousVietnamSecuritiesTradingDateKey(sessions[0]))
+    }
+    return sessions.includes(sessionDate)
   } catch {
     return false
   }
