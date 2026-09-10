@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import * as providerCoverage from "../../modules/market/chart-data/provider-coverage.ts"
@@ -49,4 +50,11 @@ test("QEO-171 provider recovery ignores overnight/lunch/after-close holes", () =
     [],
     "weekend-only requests must not hit a provider",
   )
+})
+
+test("QEO-171 canonical intraday service never bypasses session-aware recovery", () => {
+  const source = readFileSync(new URL("../../modules/market/chart-data/service.ts", import.meta.url), "utf8")
+  const section = source.match(/const closedUncoveredRanges[\s\S]*?const closedStorageGapRanges/)?.[0] ?? ""
+  assert.match(section, /missingTradingProviderRanges\(closedRequestedRange, coveredRanges\)/)
+  assert.doesNotMatch(section, /normalized\.bars\.length === 0[\s\S]*?\[closedRequestedRange\]/)
 })
