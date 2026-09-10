@@ -327,6 +327,22 @@ Deno.serve(async (req: Request) => {
       throw new Error("VALIDATION_FAILED: KFSP getliveindex missing or invalid for 4 required indexes")
     }
 
+    const contributorCandidateRes = await supabase
+      .from("kfsp_universe_candidate_snapshots")
+      .select("ticker,exchange,market_cap_billion,price_change_pct,price")
+      .eq("as_of_date", sessionDate)
+      .eq("exchange", "HOSE")
+    if (contributorCandidateRes.error) {
+      throw new Error(`CONTRIBUTOR_CANDIDATE_READ_FAILED: ${contributorCandidateRes.error.message}`)
+    }
+    const contributorCandidates = (contributorCandidateRes.data || []).map((row) => ({
+      ticker: String(row.ticker || "").trim().toUpperCase(),
+      exchange: row.exchange != null ? String(row.exchange) : null,
+      marketCapBillion: parseNumeric(row.market_cap_billion),
+      changePct: parseNumeric(row.price_change_pct),
+      price: parseNumeric(row.price),
+    }))
+
     const normalized = parseVerifiedMarketClosePayloads({
       sessionDate,
       asOfIso,
@@ -353,6 +369,7 @@ Deno.serve(async (req: Request) => {
       topVolatilityTickers: topTickers,
       getLivePayload: socketData.getLive,
       getLiveOk: Boolean(socketData.getLive),
+      contributorCandidates,
       providerIndexes,
     })
 

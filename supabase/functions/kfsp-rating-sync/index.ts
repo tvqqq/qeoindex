@@ -307,6 +307,8 @@ Deno.serve(async (req: Request) => {
       exchange: row.exchange,
       sector: row.sector,
       market_cap_billion: row.market_cap_billion,
+      price: row.price,
+      price_change_pct: row.price_change_pct,
       average_volume_50_sessions: row.average_volume_50_sessions,
       volume_1d: numeric(row.kfsp_metrics.liquidity.volume_1d),
       sync_run_id: syncRunId,

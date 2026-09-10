@@ -1173,6 +1173,16 @@
         "fast",
         "ui-contracts"
       ]
+    },
+    {
+      "path": "tests/qeo186-contributor-producer.test.ts",
+      "owner": "market",
+      "invariant": "QEO-186 persists full-feed KFSP return inputs and derives fail-closed Qeo VNINDEX contributor estimates for Market Insights.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
     }
   ]
 }
