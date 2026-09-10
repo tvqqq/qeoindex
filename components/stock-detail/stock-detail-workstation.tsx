@@ -11,7 +11,6 @@ import { StockWatchlistSidebar } from "./stock-watchlist-sidebar"
 import type { ChartTimeframe } from "./chart/stock-chart-types"
 import type { StockDetailData } from "./types"
 import type { ChartTimeframeNavigationRequest } from "./stock-tradingview-chart-data"
-import { AiLoader } from "@/components/smoothui/ai-loader"
 import { TopNav } from "@/components/top-nav"
 import { cn } from "@/modules/shared/ui/cn"
 
@@ -165,41 +164,36 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
           )}
         >
           {!isChartMaximized && (
-            <aside
-              className={cn(
-                "w-full transition-opacity duration-200 ease-out lg:h-full lg:overflow-y-auto no-scrollbar",
-                isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
-              )}
-            >
+            <aside className="w-full lg:h-full lg:overflow-y-auto no-scrollbar">
               <StockAiSidebar data={currentData} />
             </aside>
           )}
 
           <section
             ref={centerColumnRef}
+            aria-busy={isTransitioning}
             className={cn(
-              "relative min-w-0 transition-opacity duration-200 ease-out",
+              "relative min-w-0",
               isChartMaximized
                 ? "flex flex-col overflow-hidden pb-0 pr-0 lg:h-full"
                 : "space-y-2.5 lg:h-full lg:overflow-y-auto pr-1 pb-10",
-              isTransitioning ? "opacity-35 pointer-events-none" : "opacity-100",
             )}
           >
-            <div
-              className={cn(
-                "pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-50 transition-all duration-300",
-                isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none hidden",
-              )}
-            >
-              <div className="rounded-xl border border-white/15 bg-[#0b1017]/95 px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md">
-                <AiLoader label={`Hội đồng AI đang cập nhật dữ liệu ${activeTicker}...`} />
+            {isTransitioning && (
+              <div
+                data-qeo173-transition-indicator
+                className="pointer-events-none absolute right-2 top-2 z-50 flex items-center gap-1.5 rounded border border-white/[0.08] bg-[#0b1017]/90 px-2 py-1 font-mono text-[10px] tabular-nums text-slate-400"
+              >
+                <span className="size-1.5 animate-pulse rounded-full bg-cyan-300/80" />
+                Đang tải {activeTicker}
               </div>
-            </div>
+            )}
 
             {!isChartMaximized && <StockCompanyHeader data={currentData} />}
 
             <StockTradingViewChartData
               ticker={currentData.ticker}
+              exchange={currentData.exchange}
               seedDailyBars={currentData.bars}
               isMaximized={isChartMaximized}
               onToggleMaximize={() => setIsChartMaximized((prev) => !prev)}
