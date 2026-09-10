@@ -11,7 +11,7 @@ test("QEO-177 keeps the stock-detail hero factual while removing the legacy CARD
 
   assert.match(header, /data-qeo174-strategy-card/)
   assert.match(header, /useReducedMotion/)
-  assert.match(header, /rank/)
+  assert.match(header, /marketCapT/)
   assert.match(header, /Bookmark/)
   assert.match(header, /Share2/)
   assert.doesNotMatch(header, /StockPriceArena|PRICE ARENA|stock-price-arena/)
@@ -65,15 +65,17 @@ test("QEO-178 Qeo Composite is chart-first and consumes real stock-history compo
   assert.match(trend, /Xu hướng Qeo Composite/)
 })
 
-test("QEO-179 moves market-cap rank into the identity metadata row", () => {
+test("QEO-181 replaces market-cap rank metadata with compact actual market cap", () => {
   const header = source("components/stock-detail/stock-company-header.tsx")
   const identity = source("components/stock-identity.tsx")
 
-  assert.match(header, /marketCapRank=\{rank\}/)
-  assert.doesNotMatch(header, /<Trophy|Trophy className|>\s*#\{rank\}/)
-  assert.match(identity, /marketCapRank\?: number/)
-  assert.match(identity, /Hạng vốn hoá/)
-  assert.match(identity, /#\{marketCapRank\}/)
+  assert.match(header, /marketCapT=\{marketCapT\}/)
+  assert.doesNotMatch(header, /marketCapRank=\{rank\}/)
+  assert.match(identity, /marketCapT\?: number/)
+  assert.match(identity, /formatCompactMarketCap/)
+  assert.match(identity, /Vốn hoá/)
+  assert.match(identity, /k tỷ/)
+  assert.doesNotMatch(identity, /Hạng vốn hoá|marketCapRank/)
 })
 
 test("QEO-179 shows the last five stock RS values as ordered progress rings before Qeo Composite", () => {
@@ -96,6 +98,28 @@ test("QEO-179 shows the last five stock RS values as ordered progress rings befo
     1,
     "RS and Qeo Composite must share one stock-history request",
   )
+})
+
+test("QEO-181 uses five Qeo Composite sessions with interactive point values and no /100 suffix", () => {
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+
+  assert.match(trend, /const compositeHistory/)
+  assert.match(trend, /compositeHistory[\s\S]*?slice\(-5\)/)
+  assert.match(trend, /hoveredCompositeIndex/)
+  assert.match(trend, /onMouseEnter|onPointerEnter/)
+  assert.match(trend, /onFocus/)
+  assert.match(trend, /data-qeo-composite-tooltip/)
+  assert.doesNotMatch(trend, /\/100/)
+})
+
+test("QEO-181 makes RS circles larger, filled, and keeps the latest outline", () => {
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+
+  assert.match(trend, /size-10/)
+  assert.match(trend, /text-\[14px\]/)
+  assert.match(trend, /backgroundColor:\s*rsRingColor/)
+  assert.match(trend, /data-current-rs/)
+  assert.doesNotMatch(trend, /bg-\[#0a1019\]/)
 })
 
 test("QEO-177 removes the duplicate full Qeo Composite history block from the overview tab", () => {
