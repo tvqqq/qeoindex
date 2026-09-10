@@ -25,6 +25,9 @@ on:
       - "tests/qeo-105-universe-bootstrap.cases.ts"
       - ".github/workflows/qeo-105.yml"
 
+permissions:
+  contents: read
+
 jobs:
   contract:
     runs-on: ubuntu-latest
