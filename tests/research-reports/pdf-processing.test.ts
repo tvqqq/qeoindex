@@ -150,6 +150,84 @@ test("QEO-87 PDF fetch assembles contiguous 256 KiB HTTP 206 byte ranges", async
   ])
 })
 
+test("QEO-87 range downloader fetches subsequent chunks concurrently", async () => {
+  const bytes = new Uint8Array(900_000).fill(65)
+  bytes.set(new TextEncoder().encode("%PDF-1.7\n"), 0)
+  let active = 0
+  let maxActive = 0
+
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    const range = new Headers(init?.headers).get("range")
+    assert.ok(range)
+    const match = /^bytes=(\d+)-(\d+)$/.exec(range)
+    assert.ok(match)
+    const start = Number(match[1])
+    const end = Math.min(Number(match[2]), bytes.byteLength - 1)
+    if (start > 0) {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 15))
+      active -= 1
+    }
+    const chunk = bytes.slice(start, end + 1)
+    return new Response(chunk, {
+      status: 206,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(chunk.byteLength),
+        "content-range": `bytes ${start}-${end}/${bytes.byteLength}`,
+      },
+    })
+  }) as typeof fetch
+
+  const result = await fetchResearchReportPdf("https://cdn02.wigroup.vn/concurrent.pdf", {
+    ...policy,
+    maxBytes: 1_000_000,
+  }, { fetchImpl, resolveHost: publicResolver })
+
+  assert.deepEqual(result.bytes, bytes)
+  assert.ok(maxActive >= 2, `expected concurrent range requests, observed maxActive=${maxActive}`)
+})
+
+test("QEO-87 range downloader retries only a transient failed chunk without restarting completed chunks", async () => {
+  const bytes = new Uint8Array(600_000).fill(65)
+  bytes.set(new TextEncoder().encode("%PDF-1.7\n"), 0)
+  const attempts = new Map<string, number>()
+
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    const range = new Headers(init?.headers).get("range")
+    assert.ok(range)
+    const attempt = (attempts.get(range) ?? 0) + 1
+    attempts.set(range, attempt)
+    if (range === "bytes=262144-524287" && attempt === 1) {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError")
+    }
+    const match = /^bytes=(\d+)-(\d+)$/.exec(range)
+    assert.ok(match)
+    const start = Number(match[1])
+    const end = Math.min(Number(match[2]), bytes.byteLength - 1)
+    const chunk = bytes.slice(start, end + 1)
+    return new Response(chunk, {
+      status: 206,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(chunk.byteLength),
+        "content-range": `bytes ${start}-${end}/${bytes.byteLength}`,
+      },
+    })
+  }) as typeof fetch
+
+  const result = await fetchResearchReportPdf("https://cdn02.wigroup.vn/retry-range.pdf", {
+    ...policy,
+    maxBytes: 1_000_000,
+  }, { fetchImpl, resolveHost: publicResolver })
+
+  assert.deepEqual(result.bytes, bytes)
+  assert.equal(attempts.get("bytes=0-262143"), 1)
+  assert.equal(attempts.get("bytes=262144-524287"), 2)
+  assert.equal(attempts.get("bytes=524288-599999"), 1)
+})
+
 test("QEO-87 PDF fetch falls back safely when the origin ignores Range and returns HTTP 200", async () => {
   const bytes = new TextEncoder().encode("%PDF-1.7\nfull response fallback\n%%EOF")
   const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
