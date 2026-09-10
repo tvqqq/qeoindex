@@ -18,6 +18,7 @@ import { buildMarketSessionChanges, type MarketSessionChanges } from "@/modules/
 import { buildLiquidityContext, type LiquidityContext } from "@/modules/research/market-insight/liquidity-context"
 import { buildBreadthDivergenceContext } from "@/modules/research/market-insight/breadth-divergence"
 import { buildVnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"
+import { buildInstitutionalFlowPersistence } from "@/modules/research/market-insight/institutional-flow-persistence"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
@@ -172,6 +173,10 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
     vnindexChange: vnindex?.change ?? null,
     leaders: data.leaders,
   })
+  const flowPersistence = buildInstitutionalFlowPersistence({
+    sessionDate: data.sessionDate,
+    history,
+  })
 
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
@@ -269,7 +274,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
             >
               <MaBreadthChart daily={dailySummary} context={breadthDivergence} />
             </ChartPanel>
-            <ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Mua bán ròng theo nhóm nhà đầu tư"><InstitutionalFlowChart daily={dailySummary} /></ChartPanel>
+            <ChartPanel icon={CircleDollarSign} title="Dòng tiền tổ chức" description="Persistence dòng tiền · Today / 5D / 20D"><InstitutionalFlowChart context={flowPersistence} /></ChartPanel>
           </div>
         </CardContent>
       </Card>
