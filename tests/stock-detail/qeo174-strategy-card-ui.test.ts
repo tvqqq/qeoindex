@@ -122,6 +122,16 @@ test("QEO-181 makes RS circles larger, filled, and keeps the latest outline", ()
   assert.doesNotMatch(trend, /bg-\[#0a1019\]/)
 })
 
+test("QEO-193 removes RS outer borders and keeps the Qeo tooltip single-line and larger", () => {
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+
+  assert.match(trend, /data-current-rs/)
+  assert.doesNotMatch(trend, /border-2 border-transparent/)
+  assert.doesNotMatch(trend, /border-cyan-100\/90/)
+  assert.match(trend, /data-qeo-composite-tooltip[\s\S]*?whitespace-nowrap/)
+  assert.match(trend, /data-qeo-composite-tooltip[\s\S]*?text-\[11px\]/)
+})
+
 test("QEO-177 removes the duplicate full Qeo Composite history block from the overview tab", () => {
   const tabs = source("components/stock-detail/stock-tabs-panel.tsx")
 
