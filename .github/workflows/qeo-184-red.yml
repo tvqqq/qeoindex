@@ -1,0 +1,92 @@
+name: QEO 184 RED
+"on":
+  push:
+    branches:
+      - tvq9612/qeo-184-liquidity-context
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-184-liquidity-context
+          fetch-depth: 0
+      - name: Add failing QEO-184 contracts
+        shell: bash
+        run: |
+          cat >> tests/market-insight-layout-regression.test.ts <<'EOF'
+
+          test("QEO-184 derives MA20 and 60-session liquidity percentile from prior sessions only", async () => {
+            const modulePath = path.resolve("modules/research/market-insight/liquidity-context.ts")
+            assert.ok(fs.existsSync(modulePath), "QEO-184 must add a pure liquidity-context helper")
+            const { buildLiquidityContext } = await import(modulePath)
+            const history = Array.from({ length: 60 }, (_, index) => ({
+              sessionDate: `2026-06-${String(index + 1).padStart(2, "0")}`,
+              totalTradedValue: index + 1,
+            }))
+            const context = buildLiquidityContext({
+              sessionDate: "2026-09-10",
+              currentValue: 61,
+              history: [
+                ...history,
+                { sessionDate: "2026-09-10", totalTradedValue: 9999 },
+                { sessionDate: "2026-09-11", totalTradedValue: 9999 },
+              ],
+            })
+            assert.equal(context.historyCount, 60)
+            assert.equal(context.ma20, 50.5)
+            assert.equal(context.vsMa20Pct, 20.792079)
+            assert.equal(context.percentile60, 100)
+            assert.equal(context.state, "confirmed")
+          })
+
+          test("QEO-184 stays unknown when fewer than 20 valid prior liquidity sessions exist", async () => {
+            const modulePath = path.resolve("modules/research/market-insight/liquidity-context.ts")
+            assert.ok(fs.existsSync(modulePath), "QEO-184 must add a pure liquidity-context helper")
+            const { buildLiquidityContext } = await import(modulePath)
+            const context = buildLiquidityContext({
+              sessionDate: "2026-09-10",
+              currentValue: 100,
+              history: Array.from({ length: 19 }, (_, index) => ({
+                sessionDate: `2026-08-${String(index + 1).padStart(2, "0")}`,
+                totalTradedValue: 80 + index,
+              })),
+            })
+            assert.equal(context.ma20, null)
+            assert.equal(context.vsMa20Pct, null)
+            assert.equal(context.state, "unknown")
+          })
+
+          test("QEO-184 enriches the existing liquidity tile without adding a redundant chart", () => {
+            const dashboard = read("components/insights/market-close-dashboard.tsx")
+            const dataSource = read("modules/research/market-insight/data.ts")
+            assert.match(dashboard, /MA20 thanh khoản/)
+            assert.match(dashboard, /Percentile 60 phiên/)
+            assert.match(dashboard, /liquidityContext\.state/)
+            assert.match(dataSource, /\.limit\(61\)/)
+            assert.doesNotMatch(dashboard, /LiquidityContextChart|Thanh khoản lịch sử/)
+          })
+          EOF
+      - name: Verify RED
+        shell: bash
+        run: |
+          set +e
+          node --test tests/market-insight-ui-performance.test.ts
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "QEO-184 RED unexpectedly passed"
+            exit 1
+          fi
+          echo "QEO-184 RED failed as expected"
+      - name: Commit RED contract and self-delete
+        shell: bash
+        run: |
+          rm .github/workflows/qeo-184-red.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/market-insight-layout-regression.test.ts .github/workflows/qeo-184-red.yml
+          git commit -m "test(QEO-184): add liquidity context regression"
+          git push origin HEAD:tvq9612/qeo-184-liquidity-context
