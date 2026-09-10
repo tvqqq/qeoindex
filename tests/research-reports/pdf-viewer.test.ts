@@ -87,7 +87,7 @@ test("Research Reports catalog uses one, two, then three columns as viewport wid
 test("Research Reports catalog card is a whole-card detail link with report type icon, status panels, and source/date tags", () => {
   const code = source("app/reports/page.tsx")
 
-  assert.match(code, /<Link[\s\S]{0,500}href=\{`\/research\/reports\/\$\{item\.id\}`\}[\s\S]{0,500}<article/)
+  assert.match(code, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
   assert.doesNotMatch(code, />\s*Mở báo cáo\s*</)
   assert.match(code, /categoryIcon\(item\.category\)/)
   assert.match(code, /TRẠNG THÁI AI/)
@@ -107,4 +107,58 @@ test("Research Reports catalog description comes only from the current analyzed 
   assert.match(service, /report_id/)
   assert.doesNotMatch(service, /market_research_report_chunks/)
   assert.match(page, /item\.description/)
+})
+
+test("Research report cards use neutral failed states, equal-height structure, category colors, and clickable source filters", () => {
+  const code = source("app/reports/page.tsx")
+
+  assert.match(code, /ingestionStatus === ["']failed["'][\s\S]{0,180}slate/)
+  assert.match(code, /analysisStatus === ["']failed["'][\s\S]{0,180}slate/)
+  assert.doesNotMatch(code, /analysisStatus === ["']failed["'][\s\S]{0,180}(rose|red)-/)
+  assert.match(code, /macro[\s\S]{0,220}emerald/)
+  assert.match(code, /strategy[\s\S]{0,220}cyan/)
+  assert.match(code, /sector[\s\S]{0,220}amber/)
+  assert.match(code, /(other|return)[\s\S]{0,220}violet/)
+  assert.match(code, /h-full/)
+  assert.match(code, /\/reports\?source=/)
+  assert.match(code, /encodeURIComponent\(item\.sourceName\)/)
+  assert.doesNotMatch(code, /Nhấn để xem chi tiết/)
+})
+
+test("Research report recommendation panel identifies buy or sell ticker and shows target price only when present", () => {
+  const code = source("app/reports/page.tsx")
+
+  assert.match(code, /function recommendationView/)
+  assert.match(code, /MUA\|BÁN/)
+  assert.match(code, /item\.code/)
+  assert.match(code, /item\.targetPrice/)
+  assert.match(code, /Mục tiêu/)
+})
+
+test("PDF viewer provides adjustable amber anti-glare overlay without changing PDF pixels", () => {
+  const code = source("components/research-reports/pdf-viewer.tsx")
+
+  assert.match(code, /antiGlare/)
+  assert.match(code, /type=["']range["']/)
+  assert.match(code, /aria-label=["']Mức chống chói["']/)
+  assert.match(code, /max=\{?40\}?/)
+  assert.match(code, /pointer-events-none/)
+  assert.match(code, /(amber|rgba\(|backgroundColor)/)
+})
+
+test("Report detail can hide PDF on desktop and expand analysis typography while keeping mobile tabs intact", () => {
+  const shell = source("components/research-reports/report-detail-shell.tsx")
+  const analysis = source("components/research-reports/analysis-panel.tsx")
+  const chat = source("components/research-reports/report-chat.tsx")
+
+  assert.match(shell, /pdfHidden/)
+  assert.match(shell, /Ẩn PDF/)
+  assert.match(shell, /Hiện PDF/)
+  assert.match(shell, /lg:hidden/)
+  assert.match(shell, /expanded=\{pdfHidden\}/)
+  assert.match(analysis, /expanded/)
+  assert.match(analysis, /text-base/)
+  assert.match(chat, /expanded/)
+  assert.match(shell, /lg:grid/)
+  assert.match(shell, /role=["']tablist["']/)
 })
