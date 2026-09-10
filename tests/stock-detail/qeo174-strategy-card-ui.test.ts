@@ -65,6 +65,39 @@ test("QEO-178 Qeo Composite is chart-first and consumes real stock-history compo
   assert.match(trend, /Xu hướng Qeo Composite/)
 })
 
+test("QEO-179 moves market-cap rank into the identity metadata row", () => {
+  const header = source("components/stock-detail/stock-company-header.tsx")
+  const identity = source("components/stock-identity.tsx")
+
+  assert.match(header, /marketCapRank=\{rank\}/)
+  assert.doesNotMatch(header, /<Trophy|Trophy className|>\s*#\{rank\}/)
+  assert.match(identity, /marketCapRank\?: number/)
+  assert.match(identity, /Hạng vốn hoá/)
+  assert.match(identity, /#\{marketCapRank\}/)
+})
+
+test("QEO-179 shows the last five stock RS values as ordered progress rings before Qeo Composite", () => {
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const historyRoute = source("app/api/insights/stock-history/route.ts")
+
+  assert.match(historyRoute, /stockRs:\s*numberOrNull\(row\.kfsp_stock_rs_score\)/)
+  assert.match(trend, /stockRs/)
+  assert.match(trend, /slice\(-5\)/)
+  assert.match(trend, /data-rs-history/)
+  assert.match(trend, /data-rs-ring/)
+  assert.match(trend, /data-current-rs/)
+  assert.match(trend, /conic-gradient/)
+  assert.ok(
+    trend.indexOf("data-rs-history") < trend.indexOf("QEO COMPOSITE"),
+    "RS history must render to the left of Qeo Composite",
+  )
+  assert.equal(
+    (trend.match(/\/api\/insights\/stock-history\?ticker=/g) || []).length,
+    1,
+    "RS and Qeo Composite must share one stock-history request",
+  )
+})
+
 test("QEO-177 removes the duplicate full Qeo Composite history block from the overview tab", () => {
   const tabs = source("components/stock-detail/stock-tabs-panel.tsx")
 

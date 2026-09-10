@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Bookmark, Check, Share2, TrendingDown, TrendingUp, Trophy } from "lucide-react"
+import { Bookmark, Check, Share2, TrendingDown, TrendingUp } from "lucide-react"
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react"
 
 import { StockIdentity } from "@/components/stock-identity"
@@ -76,23 +76,17 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
         />
 
         <div className="relative p-3 sm:p-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)_auto] lg:items-center">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(420px,560px)_auto] lg:items-center">
+            <div className="min-w-0">
               <StockIdentity
                 ticker={ticker}
                 companyName={companyName}
                 exchange={exchange}
                 detail={sector}
+                marketCapRank={rank}
                 logoSize={42}
-                className="min-w-0 flex-1"
+                className="min-w-0"
               />
-
-              {typeof rank === "number" && rank > 0 ? (
-                <div className="hidden shrink-0 items-center gap-1 rounded-full border border-amber-300/20 bg-amber-300/[0.06] px-2 py-1 font-mono text-[9px] font-black text-amber-200 sm:inline-flex">
-                  <Trophy className="size-3" />
-                  #{rank}
-                </div>
-              ) : null}
             </div>
 
             <QeoCompositeTrend row={data.ratingRow} />
