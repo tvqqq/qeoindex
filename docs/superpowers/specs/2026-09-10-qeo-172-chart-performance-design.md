@@ -20,15 +20,15 @@ The current implementation still has four material gaps:
 3. `useChartHistory()` resets non-1D bars to `[]` when ticker/timeframe changes. The chart can blank while the replacement dataset is loading.
 4. `StockDetailWorkstation` caches only stock-detail payloads that have already been selected. It does not prefetch the previous/next visible watchlist ticker or its current chart timeframe.
 
-Production evidence from the final QEO-171 run also showed every observed `/api/market/ohlcv` server request as a Vercel cache MISS. That is not a p50/p95 benchmark, but it confirms there is no reusable HTTP cache layer today.
+Production evidence from the final QEO-171 run also showed every observed `/api/market/ohlcv` server request as a Vercel cache MISS. That is not a p50/p95 benchmark, but it confirms there is no reusable HTTP response cache layer today.
 
 ## Goals
 
 1. Measure before optimizing: capture API total, canonical PostgreSQL/HOT, derived cache, COLD object, provider fetch, aggregation, serialization and browser render/hydration latency.
-2. Split stable prior-session history from the mutable current trading-session tail for intraday/hourly timeframes.
-3. Reuse only validated closed ranges through the existing per-tab cache plus safe private browser HTTP caching.
-4. Keep the current chart visible until a replacement ticker/timeframe dataset is ready, then swap atomically.
-5. Prefetch only the immediately adjacent previous/next ticker in the current visible watchlist order and only the active timeframe.
+2. Split stable prior-session history from the mutable current trading-date tail for intraday/hourly timeframes.
+3. Reuse only validated stable closed ranges through the existing per-tab cache plus safe private browser HTTP caching.
+4. Keep the current chart visible until the full replacement ticker/timeframe dataset is ready, then swap ticker/timeframe label + data atomically.
+5. Prefetch only the immediately adjacent previous/next ticker in the current visible watchlist order and only the active timeframe's stable closed slice.
 6. Preserve all QEO-147/QEO-148/QEO-149/QEO-150 correctness and readiness rules.
 7. Capture before/after p50/p95 on VIC + VCB for 1D, 4h, 1h and 15m.
 
@@ -38,7 +38,7 @@ Production evidence from the final QEO-171 run also showed every observed `/api/
 - No new persistent storage platform.
 - No canonical data cache that bypasses RAW 1m or canonical Daily.
 - No full-universe prefetch.
-- No caching of the current minute/current trading-session tail as immutable data.
+- No caching of the current trading date's intraday/hourly tail as immutable data.
 - No weakening of gap, correction, integrity, provider-error or QEO-147 readiness checks.
 - No UI-polish scope from QEO-173 beyond the loading behavior needed to avoid a blank chart.
 
@@ -93,51 +93,65 @@ The recorder is observational only. It must not alter error handling, source sel
 
 The browser chart runtime exposes a deterministic rendered-dataset key after Lightweight Charts has applied the new series data. Production Playwright measures interaction-to-render-ready time without relying on animation timing or screenshots.
 
-### 2. Stable closed history vs current-session tail
+### 2. Stable closed history vs current trading-date tail
 
-For `1m/15m/30m/1h/2h/4h`, client history planning is split by Vietnam market phase:
+For `1m/15m/30m/1h/2h/4h`, client history planning uses a conservative trading-date boundary:
 
-- During `PRE_MARKET`, `MORNING`, `LUNCH_BREAK` or `AFTERNOON` on a trading day, the stable closed slice ends at `08:59:59 ICT` of the current trading date.
-- The current-session tail begins at `09:00:00 ICT` and ends at request `to`. It is always fetched through the fresh/no-store path.
-- During `EOD_CLOSED` or a non-trading day, the whole bounded request is a closed slice and there is no mutable tail.
-- `>=1D` remains completed Daily and does not gain a live tail.
+- On **any Vietnam trading date**, regardless of whether phase is `PRE_MARKET`, `MORNING`, `LUNCH_BREAK`, `AFTERNOON` or `EOD_CLOSED`, the stable closed slice ends at `08:59:59 ICT` of that date.
+- The current-date tail begins at `09:00:00 ICT` and ends at request `to`. It is always fetched through the fresh/no-store path for the rest of that trading date, including after market close.
+- On a **non-trading date**, the whole bounded request may be treated as closed and there is no mutable current-date tail.
+- `>=1D` remains completed Daily and does not gain an intraday live tail.
+
+This deliberately keeps the just-finished trading date outside immutable caches until a later calendar date. The extra fresh range is small, and the rule avoids hiding same-day late corrections or terminal reconciliation behind a 10-minute acceleration cache.
 
 The split is a client transport optimization only. Canonical aggregation and provider/storage behavior remain server authoritative.
 
-The initial current-session tail request may contain all bars from 09:00 to now so the active 15m/30m/1h/2h/4h bucket can be reconstructed deterministically. Subsequent 5-second refreshes may keep using the bounded current-session tail; the server's existing live-tail/provider logic decides what external work is required.
+The initial current-date tail request may contain all bars from 09:00 to `to` so the active 15m/30m/1h/2h/4h bucket can be reconstructed deterministically. Subsequent refreshes use the same current-date boundary rather than a 12-hour wall-clock lookback, avoiding overnight/lunch work while preserving session-aware aggregation.
 
 ### 3. Closed-range cache layers
 
-Keep QEO-97's module-level cache as L0 and make its rules stricter/easier to reuse:
+Keep QEO-97's module-level cache as L0 and make admission depend on both result integrity and the stable-date boundary:
 
-- only a response with `coverage.complete=true`, `metadata.sessionState=CLOSED`, no gaps, no integrity issues and no errors is admitted;
+- response must have `coverage.complete=true`, `metadata.sessionState=CLOSED`, no gaps, no integrity issues and no errors;
+- requested range must be wholly stable according to the rule above and must not extend into the future;
 - cache keys remain ticker + resolution + exact range;
 - maximum 24 entries, TTL 10 minutes;
 - in-flight request dedupe stays separate from response caching;
-- expose a read-only synchronous `peekClosedChartRange()` so an already-prefetched dataset can seed a chart before React starts the replacement request.
+- expose a read-only synchronous `peekClosedChartRange()` so a prefetched stable slice can seed preparation without another request.
 
-For safe closed responses, `/api/market/ohlcv` returns `Cache-Control: private, max-age=600` and `Vary: Cookie`. The route may emit this only when:
+For a safe stable response, `/api/market/ohlcv` returns `Cache-Control: private, max-age=600` and `Vary: Cookie`. The route may emit this only when both the response admission rule and the stable-date/future-range rule pass. Every other success response and every error remains `Cache-Control: no-store`.
 
-- the response satisfies the same COMPLETE/no-error admission rule; and
-- the requested range is definitely outside the mutable current trading session, or the market is EOD-closed/non-trading.
+`requestFreshChartRange()` always uses `cache: "no-store"`; stable closed requests use the browser default cache mode.
 
-All other responses remain `Cache-Control: no-store`. `requestFreshChartRange()` always uses `cache: "no-store"`; closed requests use the browser default cache mode.
+This browser-private cache has the same bounded staleness envelope already accepted for the existing 10-minute in-memory cache. It is not canonical and cannot make a PARTIAL/error response sticky.
 
-This browser-private cache has the same bounded staleness envelope already accepted for the existing 10-minute in-memory cache. It is not a canonical cache and cannot make a PARTIAL/error response sticky.
+### 4. Prepared initial dataset and atomic timeframe transitions
 
-### 4. Atomic timeframe transitions
+Introduce one transport object:
+
+```ts
+type PreparedChartHistory = {
+  ticker: string
+  timeframe: ChartTimeframe
+  range: { from: number; to: number }
+  result: ChartHistoryResponse
+}
+```
+
+`prepareInitialChartHistory()` requests the stable closed slice through `requestChartRange()` and the current-date tail, when present, through `requestFreshChartRange()`. It merges both into one complete initial result using the existing timestamp merge semantics. A prepared result is a one-shot handoff, not a second permanent cache.
 
 `StockTradingViewChartData` owns `requestedTimeframe` separately from `committedTimeframe`.
 
 When the user requests a new timeframe:
 
-1. compute its initial history slices;
-2. prefetch the closed slice;
-3. keep the currently committed chart rendered while the replacement closed dataset loads;
-4. commit the new timeframe only after the replacement has a usable closed dataset or a completed Daily seed;
-5. after commit, fetch/merge the mutable current-session tail through the fresh path.
+1. call `prepareInitialChartHistory()` for the target timeframe;
+2. keep the currently committed chart rendered while both required target slices are loading;
+3. if preparation succeeds and is still the latest intent, commit the new timeframe and pass the prepared result into `useChartHistory` as the initial handoff;
+4. the committed chart consumes that prepared result without re-fetching the exact initial dataset, then continues normal current-date refreshes.
 
-If prefetch fails, keep the current chart visible and surface the existing loading/error affordance. Do not relabel old bars as the new timeframe.
+For `1D`, usable `seedDailyBars` may satisfy preparation immediately.
+
+If preparation fails, keep the old chart visible and surface the existing loading/error affordance. Do not relabel old bars as the requested timeframe.
 
 ### 5. Bounded adjacent ticker prefetch and atomic ticker transitions
 
@@ -149,30 +163,34 @@ If prefetch fails, keep the current chart visible and surface the existing loadi
 For each adjacent symbol, prefetch in parallel:
 
 - `/api/insights/stock-detail?ticker=...` into the existing workstation cache;
-- the active chart timeframe's stable closed history into the chart L0/browser cache.
+- **only the active timeframe's stable closed slice** into the existing chart L0/browser cache.
+
+Do not prefetch the current trading-date tail in the background. That tail is fetched fresh only when the user actually navigates to the target.
 
 No drawing or user-settings payload is copied. Drawings remain ticker-scoped and are loaded by the normal authenticated settings path after the ticker changes.
 
-On navigation, the workstation keeps `currentData` and the current chart visible until the target stock-detail payload and target closed chart slice are ready. It then swaps the ticker dataset atomically. A failed target prefetch/navigation leaves the old chart visible and reports the existing transition error path rather than showing a blank chart.
+On actual navigation, the workstation calls `prepareInitialChartHistory()` for the target. The prefetched stable slice is reused, the target current-date tail is fetched fresh, and `currentData` + target chart are committed only when the full prepared dataset is ready. A failed target preparation leaves the old committed ticker/chart visible and reports the transition error rather than showing a blank or mislabeled chart.
 
 Use `requestIdleCallback` when available with a bounded timeout fallback. Abort obsolete prefetch when active ticker/timeframe/watchlist intent changes.
 
 ### 6. In-flight reuse
 
-The existing exact request-key promise map remains authoritative for duplicate client requests. Closed prefetch, normal load and fast repeated navigation must all call the same request function so they coalesce automatically.
+The existing exact request-key promise map remains authoritative for duplicate client requests. Stable prefetch, preparation and normal history loading must all call the same request functions so they coalesce automatically.
 
 Do not add a second prefetch-only data cache.
 
 ## Correctness rules
 
 1. Cache admission is fail-closed. PARTIAL, gap, integrity warning/error, storage error or provider error means no closed cache write.
-2. A cache hit cannot suppress a current-session fresh request.
-3. QEO-147 derived-hourly readiness remains mandatory before using derived 1h cache as complete old history.
-4. COLD/HOT overlap normalization and QEO-149 correction-safe writes remain unchanged.
-5. QEO-150 historical recovery/corrections can make a browser cache stale for at most the existing 10-minute acceleration TTL; a fresh request after TTL re-reads canonical storage.
-6. No synthetic OHLCV.
-7. Adjacent ticker prefetch never copies chart drawings, absolute price ranges or ticker-scoped objects.
-8. A pending ticker/timeframe transition may visually keep the previous chart, but the app must not label previous bars as the target ticker/timeframe. The atomic swap changes label + data together.
+2. A cache hit cannot suppress a current trading-date fresh request.
+3. Same-day intraday/hourly data stays outside immutable acceleration caches even after EOD; it becomes stable no earlier than a later non-trading/trading date boundary.
+4. Future-ending ranges are never cacheable.
+5. QEO-147 derived-hourly readiness remains mandatory before using derived 1h cache as complete old history.
+6. COLD/HOT overlap normalization and QEO-149 correction-safe writes remain unchanged.
+7. QEO-150 historical recovery/corrections cannot be hidden by a same-day immutable cache under this design.
+8. No synthetic OHLCV.
+9. Adjacent ticker prefetch never copies chart drawings, absolute price ranges or ticker-scoped objects.
+10. A pending ticker/timeframe transition may visually keep the previous chart, but the app must not label previous bars as the target ticker/timeframe. The atomic swap changes label + full prepared data together.
 
 ## Performance budgets
 
@@ -188,10 +206,10 @@ QEO-172 adds these production targets, measured after one warm-up round:
 
 | Interaction | p50 | p95 |
 | --- | ---: | ---: |
-| Warm closed timeframe switch on same ticker | <= 150 ms | <= 500 ms |
-| Prefetched adjacent ticker switch at same timeframe | <= 300 ms | <= 800 ms |
-| Browser render/hydration after replacement dataset is available | <= 75 ms | <= 200 ms |
-| Current-session tail refresh | <= 750 ms | <= 2.0 s |
+| Warm stable-closed timeframe switch on same ticker | <= 150 ms | <= 500 ms |
+| Prefetched adjacent ticker switch at same timeframe, including fresh current-date tail | <= 300 ms | <= 800 ms |
+| Browser render/hydration after full prepared dataset is available | <= 75 ms | <= 200 ms |
+| Current-date tail refresh | <= 750 ms | <= 2.0 s |
 
 If the instrumentation-only baseline proves one target structurally impossible on the current hosting/runtime, the target may be revised only before optimization code begins, with the baseline evidence and reason recorded in QEO-172. Targets must not be loosened after seeing the optimized result.
 
@@ -208,16 +226,16 @@ The QEO-172 production benchmark runs against `https://qeoindex.qeoqeo.com` and 
 - p50/p95 for API total and browser interaction-to-render-ready;
 - parsed `Server-Timing` stage values for direct API samples;
 - resource payload bytes/bar counts;
-- closed-cache hit/miss/network counts;
-- provider-request count observed during repeat closed-range scenarios.
+- L0/browser closed-cache hit/miss/network counts;
+- provider-request count observed during repeat stable-closed scenarios.
 
 The same benchmark code is run before and after behavioral optimization. Do not compare different scripts or different ticker/timeframe matrices.
 
 ## Rollout sequence
 
 1. **Instrumentation-only PR:** request-scoped server timings, chart render-ready semantic, production benchmark workflow/spec. Deploy and capture baseline. No caching/navigation behavior change.
-2. **Closed/live split PR:** safe range planner, private closed response cache policy, current-session fresh tail, L0 synchronous peek. Re-run correctness and benchmark.
-3. **Navigation PR:** atomic timeframe swap, adjacent stock/detail + chart prefetch, atomic ticker swap. Re-run benchmark and full QEO-171 chart interaction regression.
+2. **Closed/current-date split PR:** conservative stable-date planner, private closed-response cache policy, current-date fresh tail, L0 synchronous peek and prepared initial dataset. Re-run correctness and benchmark.
+3. **Navigation PR:** atomic timeframe swap, adjacent stock/detail + stable chart prefetch, full target preparation and atomic ticker swap. Re-run benchmark and full QEO-171 chart interaction regression.
 4. **Acceptance:** compare before/after p50/p95, inspect production errors/provider activity, update `docs/chart-performance-budget.md`, QEO-172 and QEO-168. QEO-173 remains blocked until QEO-172 acceptance is complete.
 
 ## Files expected to change
@@ -225,12 +243,13 @@ The same benchmark code is run before and after behavioral optimization. Do not 
 - `modules/market/chart-data/performance.ts` — request-scoped timing recorder.
 - `modules/market/chart-data/service.ts` — stage timing around Daily/HOT/COLD/provider work.
 - `modules/market/chart-data/timeframe-service.ts` — stage timing around derived cache and aggregation.
+- `modules/market/chart-data/http-cache-policy.ts` — pure stable-range HTTP cache decision.
 - `app/api/market/ohlcv/route.ts` — serialization/total timing and safe closed response cache headers.
-- `components/stock-detail/chart/chart-history.ts` — range slicing, L0 peek/prefetch, closed-vs-fresh request transport.
-- `components/stock-detail/chart/use-chart-history.ts` — merge closed slice + mutable current-session tail.
+- `components/stock-detail/chart/chart-history.ts` — stable/current-date slicing, prepared initial data, L0 peek/prefetch and transport.
+- `components/stock-detail/chart/use-chart-history.ts` — consume prepared initial handoff and independently refresh current-date tail.
 - `components/stock-detail/stock-tradingview-chart.tsx` — deterministic render-ready semantic only.
-- `components/stock-detail/stock-tradingview-chart-data.tsx` — staged timeframe commit.
-- `components/stock-detail/stock-detail-workstation.tsx` — bounded adjacent prefetch and atomic ticker commit.
+- `components/stock-detail/stock-tradingview-chart-data.tsx` — staged timeframe preparation/commit.
+- `components/stock-detail/stock-detail-workstation.tsx` — bounded adjacent stable prefetch and atomic ticker preparation/commit.
 - `tests/qeo172/chart-performance-contract.test.ts` — pure/cache/instrumentation/navigation contracts.
 - `tests/browser/qeo172-chart-performance-production.spec.ts` — before/after authenticated production benchmark.
 - `.github/workflows/qeo-172.yml` — focused contract + production benchmark workflow.
