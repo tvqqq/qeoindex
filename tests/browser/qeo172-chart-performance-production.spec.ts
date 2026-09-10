@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs"
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Page, type Response as PlaywrightResponse } from "@playwright/test"
 
 const BASE_URL = process.env.QEO172_BASE_URL ?? "https://qeoindex.qeoqeo.com"
 const TEST_EMAIL = process.env.QEO171_TEST_EMAIL
@@ -17,6 +17,7 @@ const MATRIX = [
   ["VCB", "1h"],
   ["VCB", "15m"],
 ] as const
+const QUICK_TIMEFRAMES = new Set<MatrixTimeframe>(["15m", "1h", "1D"])
 
 type MatrixTicker = (typeof MATRIX)[number][0]
 type MatrixTimeframe = (typeof MATRIX)[number][1]
@@ -33,6 +34,12 @@ type UiSample = {
   interactionMs: number
   renderAfterNetworkMs: number | null
   networkRequests: number
+}
+
+type AdjacentIntent = {
+  target: string
+  forwardKey: "ArrowDown" | "ArrowUp"
+  reverseKey: "ArrowUp" | "ArrowDown"
 }
 
 function percentile(values: number[], p: number) {
@@ -106,9 +113,18 @@ async function waitRendered(page: Page, ticker: string, timeframe: string, timeo
   )
 }
 
+async function clickTimeframe(page: Page, timeframe: MatrixTimeframe) {
+  if (QUICK_TIMEFRAMES.has(timeframe)) {
+    await page.getByRole("button", { name: timeframe, exact: true }).click()
+    return
+  }
+  await page.getByRole("button", { name: "Chọn khung thời gian", exact: true }).click()
+  await page.getByText(timeframe, { exact: true }).last().click()
+}
+
 async function selectTimeframe(page: Page, ticker: string, timeframe: MatrixTimeframe) {
   await enterFullscreen(page)
-  await page.getByRole("button", { name: timeframe, exact: true }).click()
+  await clickTimeframe(page, timeframe)
   await waitRendered(page, ticker, timeframe)
 }
 
@@ -151,7 +167,7 @@ async function measureTimeframeInteraction(
 
   let networkRequests = 0
   let lastNetworkFinishedAt = 0
-  const onResponse = (response: { url(): string; finished(): Promise<null | Error> }) => {
+  const onResponse = (response: PlaywrightResponse) => {
     if (!response.url().includes("/api/market/ohlcv")) return
     networkRequests += 1
     void response.finished().then(() => { lastNetworkFinishedAt = Date.now() })
@@ -159,7 +175,7 @@ async function measureTimeframeInteraction(
   page.on("response", onResponse)
 
   const startedAt = Date.now()
-  await page.getByRole("button", { name: target, exact: true }).click()
+  await clickTimeframe(page, target)
   await waitRendered(page, ticker, target)
   const endedAt = Date.now()
   page.off("response", onResponse)
@@ -171,16 +187,37 @@ async function measureTimeframeInteraction(
   }
 }
 
-async function visibleAdjacentHref(page: Page, currentTicker: string): Promise<string> {
+async function adjacentIntent(page: Page, currentTicker: string): Promise<AdjacentIntent> {
   const hrefs = await page.locator('aside a[href^="/insights/"]').evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href")).filter((href): href is string => Boolean(href)),
   )
   const current = `/insights/${currentTicker.toLowerCase()}`
   const index = hrefs.indexOf(current)
   if (index < 0) throw new Error(`Current ticker ${currentTicker} is not present in visible watchlist links`)
-  const candidate = hrefs[index + 1] ?? hrefs[index - 1]
-  if (!candidate) throw new Error(`No adjacent visible watchlist ticker for ${currentTicker}`)
-  return candidate
+  const next = hrefs[index + 1]
+  if (next) {
+    return {
+      target: next.split("/").filter(Boolean).at(-1)?.toUpperCase() ?? "",
+      forwardKey: "ArrowDown",
+      reverseKey: "ArrowUp",
+    }
+  }
+  const previous = hrefs[index - 1]
+  if (previous) {
+    return {
+      target: previous.split("/").filter(Boolean).at(-1)?.toUpperCase() ?? "",
+      forwardKey: "ArrowUp",
+      reverseKey: "ArrowDown",
+    }
+  }
+  throw new Error(`No adjacent visible watchlist ticker for ${currentTicker}`)
+}
+
+async function waitTickerPath(page: Page, ticker: string) {
+  await expect.poll(
+    () => new URL(page.url()).pathname.toLowerCase(),
+    { timeout: 15_000 },
+  ).toBe(`/insights/${ticker.toLowerCase()}`)
 }
 
 async function measureAdjacentTickerSwitches(page: Page): Promise<{
@@ -193,43 +230,47 @@ async function measureAdjacentTickerSwitches(page: Page): Promise<{
   await page.goto(`${BASE_URL}/insights/vic`)
   await enterFullscreen(page)
   await selectTimeframe(page, "VIC", timeframe)
-  const targetHref = await visibleAdjacentHref(page, "VIC")
-  const target = targetHref.split("/").filter(Boolean).at(-1)?.toUpperCase()
-  if (!target) throw new Error("Unable to resolve adjacent ticker")
+  const intent = await adjacentIntent(page, "VIC")
+  if (!intent.target) throw new Error("Unable to resolve adjacent ticker")
+
+  // Warm-up both directions using the exact keyboard flow that preserves the
+  // active timeframe in StockDetailWorkstation.
+  await page.keyboard.press(intent.forwardKey)
+  await waitTickerPath(page, intent.target)
+  await waitRendered(page, intent.target, timeframe)
+  await page.keyboard.press(intent.reverseKey)
+  await waitTickerPath(page, "VIC")
+  await waitRendered(page, "VIC", timeframe)
 
   const samples: UiSample[] = []
-  for (let index = 0; index < SAMPLES + 1; index += 1) {
-    // Return to VIC before each measured adjacent switch. After the first
-    // round both directions use the app's normal in-memory stock-detail cache.
-    if (!page.url().toLowerCase().endsWith("/insights/vic")) {
-      await page.locator('a[href="/insights/vic"]').first().click()
-      await waitRendered(page, "VIC", timeframe)
-    }
-
+  for (let index = 0; index < SAMPLES; index += 1) {
     let networkRequests = 0
     let lastNetworkFinishedAt = 0
-    const onResponse = (response: { url(): string; finished(): Promise<null | Error> }) => {
+    const onResponse = (response: PlaywrightResponse) => {
       if (!response.url().includes("/api/market/ohlcv") && !response.url().includes("/api/insights/stock-detail")) return
       networkRequests += 1
       void response.finished().then(() => { lastNetworkFinishedAt = Date.now() })
     }
     page.on("response", onResponse)
     const startedAt = Date.now()
-    await page.locator(`a[href="${targetHref}"]`).first().click()
-    await waitRendered(page, target, timeframe)
+    await page.keyboard.press(intent.forwardKey)
+    await waitTickerPath(page, intent.target)
+    await waitRendered(page, intent.target, timeframe)
     const endedAt = Date.now()
     page.off("response", onResponse)
 
-    if (index > 0) {
-      samples.push({
-        interactionMs: endedAt - startedAt,
-        renderAfterNetworkMs: lastNetworkFinishedAt >= startedAt ? Math.max(0, endedAt - lastNetworkFinishedAt) : null,
-        networkRequests,
-      })
-    }
+    samples.push({
+      interactionMs: endedAt - startedAt,
+      renderAfterNetworkMs: lastNetworkFinishedAt >= startedAt ? Math.max(0, endedAt - lastNetworkFinishedAt) : null,
+      networkRequests,
+    })
+
+    await page.keyboard.press(intent.reverseKey)
+    await waitTickerPath(page, "VIC")
+    await waitRendered(page, "VIC", timeframe)
   }
 
-  return { source: "VIC", target, timeframe, samples }
+  return { source: "VIC", target: intent.target, timeframe, samples }
 }
 
 test("QEO-172 authenticated production performance benchmark", async ({ page }) => {
