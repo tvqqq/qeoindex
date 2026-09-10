@@ -98,10 +98,12 @@ async function login(page: Page) {
 }
 
 async function enterFullscreen(page: Page) {
-  if (await page.locator('[title="Phóng to chart"]').isVisible().catch(() => false)) {
+  const terminal = page.locator('[data-chart-terminal="true"]')
+  await expect(terminal).toBeVisible({ timeout: 15_000 })
+  if (await terminal.getAttribute("data-chart-maximized") !== "true") {
     await page.keyboard.press("Backquote")
   }
-  await expect(page.locator('[title="Thu nhỏ chart"]')).toBeVisible({ timeout: 15_000 })
+  await expect(terminal).toHaveAttribute("data-chart-maximized", "true", { timeout: 15_000 })
 }
 
 async function waitRendered(page: Page, ticker: string, timeframe: string, timeout = 30_000) {
