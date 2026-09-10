@@ -16,6 +16,13 @@ const STAGES: ChartPerfStage[] = [
   "aggregation",
 ]
 
+function browserBenchmarkSource() {
+  return readFileSync(
+    new URL("../browser/qeo172-chart-performance-production.spec.ts", import.meta.url),
+    "utf8",
+  )
+}
+
 test("QEO-172 recorder accumulates duration and count per stage", async () => {
   let now = 0
   const recorder = createChartPerformanceRecorder(() => now)
@@ -31,12 +38,22 @@ test("QEO-172 recorder accumulates duration and count per stage", async () => {
 })
 
 test("QEO-172 production benchmark enters fullscreen from terminal state, not title metadata", () => {
-  const browser = readFileSync(
-    new URL("../browser/qeo172-chart-performance-production.spec.ts", import.meta.url),
-    "utf8",
-  )
+  const browser = browserBenchmarkSource()
 
   assert.match(browser, /data-chart-maximized/)
   assert.match(browser, /toHaveAttribute\([\s\S]*?"data-chart-maximized",\s*"true"/)
   assert.doesNotMatch(browser, /\[title=\\?"Phóng to chart\\?"\]/)
+})
+
+test("QEO-172 production benchmark persists matrix evidence before adjacent navigation", () => {
+  const browser = browserBenchmarkSource()
+  const partialWrite = browser.indexOf("complete: false")
+  const adjacentMeasure = browser.indexOf("await measureAdjacentTickerSwitches(page)")
+  const completeWrite = browser.indexOf("complete: true")
+
+  assert.ok(partialWrite >= 0, "benchmark must persist an incomplete baseline artifact")
+  assert.ok(adjacentMeasure >= 0, "benchmark must measure adjacent ticker navigation")
+  assert.ok(completeWrite >= 0, "benchmark must persist a completed artifact after adjacent navigation")
+  assert.ok(partialWrite < adjacentMeasure, "matrix artifact must exist before adjacent navigation can fail")
+  assert.ok(adjacentMeasure < completeWrite, "completed marker must only be written after adjacent navigation succeeds")
 })
