@@ -15,6 +15,7 @@ import { StockTradingViewChart } from "./stock-tradingview-chart"
 
 interface StockTradingViewChartDataProps {
   ticker: string
+  exchange?: string
   seedDailyBars: OhlcvBar[]
   isMaximized?: boolean
   onToggleMaximize?: () => void
@@ -38,6 +39,7 @@ const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h",
 
 function HistoryBoundChart({
   ticker,
+  exchange,
   timeframe,
   seedDailyBars,
   isMaximized,
@@ -97,9 +99,11 @@ function HistoryBoundChart({
     ticker: ticker.trim().toUpperCase(),
     bars: resolvedBars,
   }
-  const showLiveState = LIVE_TIMEFRAMES.has(timeframe) && !loading
   const liveTimestamp = lastUpdatedAt
     ? new Date(lastUpdatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null
+  const providerWarning = LIVE_TIMEFRAMES.has(timeframe) && liveState === "stale"
+    ? `STALE${liveProvider ? ` · ${liveProvider}` : ""}${liveTimestamp ? ` · ${liveTimestamp}` : ""}`
     : null
 
   // QEO-172: publish render readiness conservatively after the replacement
@@ -134,6 +138,7 @@ function HistoryBoundChart({
       data-chart-terminal="true"
       data-chart-maximized={isMaximized ? "true" : "false"}
       data-chart-live-state={liveState}
+      data-chart-loading={loading ? "true" : "false"}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMoveCapture={handleMouseMoveCapture}
       onMouseUpCapture={() => { dragStartXRef.current = null }}
@@ -145,6 +150,7 @@ function HistoryBoundChart({
       <CanonicalMinuteBarsContext.Provider value={canonicalMinuteOverride}>
         <StockTradingViewChart
           ticker={ticker}
+          exchange={exchange}
           bars={resolvedBars}
           hourlyBars={resolvedBars}
           isLoading={loading}
@@ -152,47 +158,35 @@ function HistoryBoundChart({
           onToggleMaximize={onToggleMaximize}
           currentPrice={currentPrice}
           changePct={changePct}
+          sessionState={liveState}
+          providerWarning={providerWarning}
           navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
         />
       </CanonicalMinuteBarsContext.Provider>
 
       {loadingOlder && (
-        <div className="pointer-events-none absolute right-3 top-12 z-30 rounded border border-white/10 bg-[#0c131c]/95 px-2 py-1 font-mono text-[10px] font-medium text-slate-400 shadow-lg">
+        <div className="pointer-events-none absolute right-2 top-9 z-30 rounded border border-white/[0.08] bg-[#0c131c]/92 px-2 py-1 font-mono text-[10px] font-medium text-slate-400">
           Đang tải thêm lịch sử…
         </div>
       )}
 
-      {showLiveState && liveState === "live" && (
-        <div
-          className="pointer-events-none absolute right-3 top-12 z-30 rounded border border-emerald-300/20 bg-[#0b1712]/95 px-2 py-1 font-mono text-[10px] font-medium text-emerald-200/80"
-          title={`Raw price basis${liveProvider ? ` · ${liveProvider}` : ""}${liveTimestamp ? ` · ${liveTimestamp}` : ""}`}
-        >
-          LIVE{liveProvider ? ` · ${liveProvider}` : ""}
-        </div>
-      )}
-
-      {showLiveState && liveState === "stale" && (
-        <div
-          className="pointer-events-none absolute right-3 top-12 z-30 max-w-[70%] rounded border border-amber-300/20 bg-[#17130b]/95 px-2 py-1 font-mono text-[10px] font-medium text-amber-200/80"
-          title={liveError ?? "Realtime provider unavailable"}
-        >
-          REALTIME STALE{liveProvider ? ` · last ${liveProvider}` : ""}{liveTimestamp ? ` · ${liveTimestamp}` : ""}
-        </div>
-      )}
-
       {!loading && coverage?.state === "PARTIAL" && liveState !== "stale" && (
-        <div className="pointer-events-none absolute left-12 top-12 z-30 rounded border border-amber-300/20 bg-[#17130b]/95 px-2 py-1 font-mono text-[10px] font-medium text-amber-200/80">
+        <div className="pointer-events-none absolute left-10 top-9 z-30 rounded border border-amber-300/20 bg-[#17130b]/92 px-2 py-1 font-mono text-[10px] font-medium text-amber-200/80">
           Dữ liệu chưa đầy đủ
         </div>
       )}
 
       {!loading && error && resolvedBars.length > 0 && (
         <div className={cn(
-          "pointer-events-none absolute bottom-9 left-12 z-30 max-w-[70%] rounded border border-rose-300/20",
-          "bg-[#180d11]/95 px-2 py-1 font-mono text-[10px] text-rose-200/80",
+          "pointer-events-none absolute bottom-8 left-10 z-30 max-w-[70%] rounded border border-rose-300/20",
+          "bg-[#180d11]/92 px-2 py-1 font-mono text-[10px] text-rose-200/80",
         )}>
           Không thể tải thêm lịch sử: {error}
         </div>
+      )}
+
+      {!loading && liveError && liveState === "stale" && (
+        <span className="sr-only" data-chart-live-error>{liveError}</span>
       )}
     </div>
   )
