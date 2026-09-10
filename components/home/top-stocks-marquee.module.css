@@ -75,6 +75,14 @@
   transition: opacity 180ms ease, filter 180ms ease, transform 180ms ease;
 }
 
+.logo {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  object-fit: contain;
+  user-select: none;
+}
+
 .logoLink:hover,
 .logoLink:focus-visible {
   opacity: 1;
@@ -119,6 +127,11 @@
   .group {
     gap: 1.6rem;
     padding-inline: 1rem;
+  }
+
+  .logo {
+    width: 2.6rem;
+    height: 2.6rem;
   }
 }
 

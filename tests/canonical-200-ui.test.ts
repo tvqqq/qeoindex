@@ -131,7 +131,10 @@ test("homepage workspace cards orbit their own accent color and Top 200 logos ma
   assert.match(marquee, /Top 200 cổ phiếu được chọn lọc/i)
   assert.match(marquee, /href=\{`\/insights\/\$\{stock\.ticker\}`\}/, "every logo should route directly to ticker insights")
   assert.match(marquee, /prefetch=\{false\}/, "200 ticker links must not trigger an eager Next.js prefetch storm")
-  assert.match(marquee, /StockLogo/, "marquee should reuse canonical stock logo handling")
+  assert.doesNotMatch(marquee, /StockLogo/, "duplicated Top 200 rows should not hydrate hundreds of StockLogo client instances")
+  assert.match(marquee, /stockLogoUrl/, "server markup should reuse the canonical stock logo URL builder")
+  assert.match(marquee, /loading="lazy"/, "marquee images should remain lazy-loaded")
+  assert.match(marquee, /decoding="async"/, "marquee logo decoding should stay off the critical rendering path")
   assert.match(marquee, /<LogoGroup stocks=\{stocks\} \/>[\s\S]*<LogoGroup stocks=\{stocks\} duplicate \/>/, "marquee should render two equal groups for a seamless loop")
 
   assert.match(marqueeCss, /translate3d\(-50%, 0, 0\)/, "loop should advance exactly one duplicated group")

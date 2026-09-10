@@ -1,7 +1,7 @@
 import Link from "next/link"
 
-import { StockLogo } from "@/components/stock-logo"
 import styles from "@/components/home/top-stocks-marquee.module.css"
+import { stockLogoUrl } from "@/modules/market/stock-logo-url"
 
 export interface TopStocksMarqueeStock {
   ticker: string
@@ -33,12 +33,14 @@ function LogoGroup({
             aria-label={duplicate ? undefined : `Mở phân tích ${label}`}
             title={label}
           >
-            <StockLogo
-              symbol={stock.ticker}
-              logoPath={stock.logoPath}
-              size={48}
-              alt={label}
-              className="!rounded-none !border-transparent !bg-transparent !p-0 !shadow-none"
+            <img
+              src={stockLogoUrl(stock.logoPath || stock.ticker)}
+              alt={duplicate ? "" : label}
+              width={48}
+              height={48}
+              loading="lazy"
+              decoding="async"
+              className={styles.logo}
             />
           </Link>
         )
