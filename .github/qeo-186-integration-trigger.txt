@@ -1,0 +1,1 @@
+trigger QEO-186 one-shot normalizer integration fix
