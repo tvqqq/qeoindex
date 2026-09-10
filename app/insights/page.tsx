@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { LandingLogin } from "@/components/auth/landing-login"
 import { InsightsDashboard } from "@/components/insights/insights-dashboard"
 import { getServerAuthContext } from "@/modules/auth/server"
+import { loadVn30FuturesBasisPulse } from "@/modules/research/market-insight/futures-basis-loader"
 import { getInsightsDashboardData } from "@/modules/research/insights/data"
 import { normalizeInsightsDashboardSectors } from "@/modules/research/insights/sector-normalization"
 
@@ -24,5 +25,9 @@ export default async function InsightsPage({
   const query = searchParams ? await searchParams : {}
   const requestedTicker = (Array.isArray(query.ticker) ? query.ticker[0] : query.ticker || (Array.isArray(query.rating) ? query.rating[0] : query.rating) || "").trim().toUpperCase()
   const data = normalizeInsightsDashboardSectors(await getInsightsDashboardData(auth.supabase))
+  if (data.marketClose) {
+    const futuresBasisPulse = await loadVn30FuturesBasisPulse(auth.supabase, data.marketClose.sessionDate).catch(() => null)
+    Object.assign(data.marketClose, { futuresBasisPulse })
+  }
   return <InsightsDashboard data={data} initialTicker={requestedTicker} />
 }
