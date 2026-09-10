@@ -1,9 +1,11 @@
 import type { ResearchReportCategory } from "./types.ts"
 
 const REPORT_TABLE = "market_research_reports"
+const ANALYSIS_TABLE = "market_research_report_analyses"
 const MAX_ERROR_CHARS = 500
 const MAX_SEARCH_CHARS = 100
 const MAX_SOURCE_CHARS = 80
+const MAX_DESCRIPTION_CHARS = 280
 
 export const RESEARCH_REPORT_CATALOG_PAGE_SIZE = 24
 export const RESEARCH_REPORT_CATALOG_CATEGORIES = ["macro", "strategy", "sector"] as const
@@ -22,6 +24,7 @@ export interface ResearchReportCatalogQuery {
 export interface ResearchReportCatalogItem {
   id: string
   title: string
+  description: string | null
   sourceName: string
   publishDate: string
   category: ResearchReportCategory
@@ -57,6 +60,7 @@ interface CatalogSingleResult {
 interface CatalogQueryBuilder extends PromiseLike<CatalogQueryResult> {
   select(columns: string, options?: { count?: "exact" }): CatalogQueryBuilder
   eq(column: string, value: unknown): CatalogQueryBuilder
+  in(column: string, values: unknown[]): CatalogQueryBuilder
   gte(column: string, value: unknown): CatalogQueryBuilder
   lte(column: string, value: unknown): CatalogQueryBuilder
   or(filters: string): CatalogQueryBuilder
@@ -150,6 +154,12 @@ function nonEmptyString(value: unknown): string | null {
   return normalized ? normalized : null
 }
 
+function catalogDescription(value: unknown): string | null {
+  const summary = nonEmptyString(value)
+  if (!summary) return null
+  return normalizedText(summary, MAX_DESCRIPTION_CHARS)
+}
+
 function finiteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string" && value.trim()) {
@@ -175,6 +185,7 @@ function toCatalogItem(row: Record<string, unknown>): ResearchReportCatalogItem 
   return {
     id,
     title,
+    description: null,
     sourceName,
     publishDate,
     category: reportCategory(row.category),
@@ -196,7 +207,7 @@ export async function getResearchReportCatalog(
 
   let builder = (client.from(REPORT_TABLE) as CatalogQueryBuilder)
     .select(
-      "id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,ingestion_status,analysis_status",
+      "id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,ingestion_status,analysis_status,content_hash",
       { count: "exact" },
     )
 
@@ -223,9 +234,47 @@ export async function getResearchReportCatalog(
     .maybeSingle()
   if (syncResult.error) throw supabaseError("Research report catalog sync lookup failed", syncResult.error)
 
-  const items = (result.data ?? [])
-    .map(toCatalogItem)
-    .filter((item): item is ResearchReportCatalogItem => item !== null)
+  const reportEntries = (result.data ?? [])
+    .map((row) => {
+      const item = toCatalogItem(row)
+      if (!item) return null
+      return { item, contentHash: nonEmptyString(row.content_hash) }
+    })
+    .filter((entry): entry is { item: ResearchReportCatalogItem; contentHash: string | null } => entry !== null)
+
+  const currentContentHashes = new Map(
+    reportEntries
+      .filter((entry): entry is { item: ResearchReportCatalogItem; contentHash: string } => Boolean(entry.contentHash))
+      .map((entry) => [entry.item.id, entry.contentHash]),
+  )
+  const analyzedReportIds = reportEntries
+    .filter((entry) => entry.item.analysisStatus === "ready" && entry.contentHash)
+    .map((entry) => entry.item.id)
+  const descriptions = new Map<string, string>()
+
+  if (analyzedReportIds.length > 0) {
+    const analysisResult = await (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
+      .select("report_id,content_hash,executive_summary,processed_at,created_at")
+      .in("report_id", analyzedReportIds)
+      .order("processed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+
+    if (!analysisResult.error) {
+      for (const row of analysisResult.data ?? []) {
+        const reportId = nonEmptyString(row.report_id)
+        const contentHash = nonEmptyString(row.content_hash)
+        const description = catalogDescription(row.executive_summary)
+        if (!reportId || !contentHash || !description || descriptions.has(reportId)) continue
+        if (currentContentHashes.get(reportId) !== contentHash) continue
+        descriptions.set(reportId, description)
+      }
+    }
+  }
+
+  const items = reportEntries.map(({ item }) => ({
+    ...item,
+    description: descriptions.get(item.id) ?? null,
+  }))
   const total = Math.max(0, result.count ?? items.length)
   const lastSuccessfulSyncAt = nonEmptyString(syncResult.data?.updated_at)
 
