@@ -114,6 +114,19 @@ export function expectedCompletedVietnamSession(
   return previousVietnamSecuritiesTradingDateKey(today)
 }
 
+export function isQeo150RecoverableCompletedSession(
+  sessionDate: string,
+  referenceAt: Date = new Date(),
+) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return false
+  if (!isVietnamSecuritiesTradingDateKey(sessionDate)) return false
+  try {
+    return sessionDate <= expectedCompletedVietnamSession(referenceAt)
+  } catch {
+    return false
+  }
+}
+
 export function qeo180ExpectedHotSessions(referenceAt: Date = new Date()) {
   const sessions = [expectedCompletedVietnamSession(referenceAt)]
   while (sessions.length < QEO180_HOT_CONTINUITY_SESSIONS) {
