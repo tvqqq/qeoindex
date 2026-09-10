@@ -7,7 +7,7 @@ import {
 } from "@/components/insights/market-close-charts"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
-import { MarketHealthView, MarketSentimentCard } from "@/components/insights/market-health-view"
+import { MarketHealthView, MarketSentimentCard, MarketSentimentHistoryCard } from "@/components/insights/market-health-view"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
@@ -36,12 +36,6 @@ function formatNumber(value: number | null | undefined, decimals = 2) {
 function formatSigned(value: number | null | undefined, decimals = 2, suffix = "") {
   if (value == null || !Number.isFinite(value)) return "—"
   return `${value > 0 ? "+" : ""}${formatNumber(value, decimals)}${suffix}`
-}
-
-function formatTime(iso: string) {
-  try {
-    return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso))
-  } catch { return iso }
 }
 
 function getDistributionDayGuidance(value: number | null | undefined): { message: string; tone?: PulseTone } {
@@ -122,6 +116,9 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 min-h-[650px]">
+            <div data-market-index-strip className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+              {data.indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}
+            </div>
             <MarketBubbles
               stocks={bubbleStocks}
               onOpenStockDetail={onOpenStockDetail}
@@ -211,11 +208,8 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
               <MarketSentimentCard data={data} />
             </div>
 
-            <div data-market-index-column className="flex h-full flex-col rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
-              <div data-market-index-strip className="grid flex-1 grid-cols-2 gap-2">
-                {indexes.map((item) => <IndexTile key={item.indexCode} item={item} />)}
-              </div>
-              <p className="mt-2 px-1 text-[11px] font-mono text-slate-400">Phiên {data.sessionDate} · cập nhật {formatTime(data.asOf)} · nguồn KFSP Ngành</p>
+            <div data-market-sentiment-history-column className="h-full [&>*]:h-full">
+              <MarketSentimentHistoryCard data={data}/>
             </div>
           </div>
 
