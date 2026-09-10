@@ -2,9 +2,10 @@ import * as React from "react"
 import { Activity, BarChart3, BrainCircuit, CircleDollarSign, CircleDot, Gauge, LineChart } from "lucide-react"
 
 import {
-  IndexBreadthChart, IndexPerformanceChart, InstitutionalFlowChart,
+  IndexBreadthChart, IndexImpactChart, IndexPerformanceChart, InstitutionalFlowChart,
 } from "@/components/insights/market-close-charts"
 import { BreadthDivergenceBadge, MaBreadthChart } from "@/components/insights/market-breadth-divergence-chart"
+import { VnindexContributionBadge, VnindexContributorsView } from "@/components/insights/vnindex-contributors-view"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView, MarketSentimentCard, MarketSentimentHistoryCard } from "@/components/insights/market-health-view"
@@ -16,6 +17,7 @@ import { cn } from "@/modules/shared/ui/cn"
 import { buildMarketSessionChanges, type MarketSessionChanges } from "@/modules/research/market-insight/session-changes"
 import { buildLiquidityContext, type LiquidityContext } from "@/modules/research/market-insight/liquidity-context"
 import { buildBreadthDivergenceContext } from "@/modules/research/market-insight/breadth-divergence"
+import { buildVnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
 
 export type { MarketBubbleStock }
@@ -165,6 +167,11 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
     sessionDate: data.sessionDate,
     history,
   })
+  const vnindex = indexes.find((item) => item.indexCode === "VNINDEX")
+  const vnindexContributors = buildVnindexContributorsContext({
+    vnindexChange: vnindex?.change ?? null,
+    leaders: data.leaders,
+  })
 
   return (
     <section aria-labelledby="market-intelligence-title" data-market-intelligence-panel>
@@ -230,6 +237,22 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
 
           <div data-market-health-embedded className="mt-5 border-t border-white/[0.07] pt-5">
             <MarketHealthView data={data} history={history} />
+          </div>
+
+          <div data-vnindex-contributors aria-label="Đóng góp VNINDEX · Top 5 / Top 10" className="mt-5">
+            <ChartPanel
+              icon={BarChart3}
+              title="Đóng góp VNINDEX"
+              description="Top mã kéo tăng/giảm và mức độ tập trung đóng góp"
+              actions={<VnindexContributionBadge context={vnindexContributors} />}
+            >
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+                <div className="min-w-0">
+                  <IndexImpactChart leaders={[...vnindexContributors.pullers.slice(0, 5), ...vnindexContributors.draggers.slice(0, 5)]} />
+                </div>
+                <VnindexContributorsView context={vnindexContributors} />
+              </div>
+            </ChartPanel>
           </div>
 
           <div id="market-charts-title" className="mt-5">
