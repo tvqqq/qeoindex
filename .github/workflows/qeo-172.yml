@@ -9,6 +9,11 @@ on:
       - "tests/qeo172/**"
       - "tests/browser/qeo172-chart-performance-production.spec.ts"
       - ".github/workflows/qeo-172.yml"
+  push:
+    branches:
+      - "ops/qeo-172-baseline-once"
+    paths:
+      - ".github/workflows/qeo-172.yml"
   workflow_dispatch:
     inputs:
       benchmark_mode:
@@ -41,13 +46,13 @@ jobs:
         run: node --test tests/qeo172/chart-performance-contract.test.ts
 
   production-browser:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/ops/qeo-172-baseline-once')
     needs: contract
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       QEO172_BASE_URL: https://qeoindex.qeoqeo.com
-      QEO172_BENCHMARK_MODE: ${{ inputs.benchmark_mode }}
+      QEO172_BENCHMARK_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_mode || 'baseline' }}
       QEO172_WORKFLOW_SHA: ${{ github.sha }}
       QEO171_TEST_EMAIL: ${{ secrets.QEO171_TEST_EMAIL }}
       QEO171_TEST_PASSWORD: ${{ secrets.QEO171_TEST_PASSWORD }}
@@ -93,10 +98,7 @@ jobs:
         if: always() && steps.auth.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: qeo172-production-performance-${{ inputs.benchmark_mode }}
-          path: |
-            test-results/qeo172-performance.json
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
+          name: qeo172-production-performance-${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_mode || 'baseline' }}
+          path: test-results/qeo172-performance.json
+          if-no-files-found: warn
           retention-days: 1
