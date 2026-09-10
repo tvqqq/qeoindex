@@ -168,8 +168,8 @@ export function QeoCompositeTrend({
                   data-rs-ring
                   data-current-rs={isLatest ? "true" : undefined}
                   className={cn(
-                    "grid size-10 shrink-0 place-items-center rounded-full border-2 border-transparent transition-shadow",
-                    isLatest && "border-cyan-100/90 shadow-[0_0_18px_rgba(103,232,249,0.28)]",
+                    "grid size-10 shrink-0 place-items-center rounded-full transition-shadow",
+                    isLatest && "shadow-[0_0_18px_rgba(103,232,249,0.28)]",
                   )}
                   title={`RS ${point.asOfDate}: ${roundedScore}`}
                   aria-label={`RS ${point.asOfDate}: ${roundedScore}${isLatest ? ", mới nhất" : ""}`}
@@ -230,7 +230,7 @@ export function QeoCompositeTrend({
                 <div
                   data-qeo-composite-tooltip
                   className={cn(
-                    "pointer-events-none absolute top-0 z-10 rounded-md border border-violet-200/20 bg-slate-950/95 px-1.5 py-0.5 font-mono text-[9px] font-black text-violet-100 shadow-lg",
+                    "pointer-events-none absolute top-0 z-10 whitespace-nowrap rounded-md border border-violet-200/20 bg-slate-950/95 px-1.5 py-0.5 font-mono text-[11px] font-black text-violet-100 shadow-lg",
                     tooltipAlignment,
                   )}
                   style={{ left: `${(hoveredPoint.x / chartWidth) * 100}%` }}
