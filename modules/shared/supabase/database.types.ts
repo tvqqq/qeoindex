@@ -977,6 +977,134 @@ export type Database = {
         }
         Relationships: []
       }
+      chart_universe_bootstrap_tickers: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          daily_last_bar_time: string | null
+          daily_rows: number
+          daily_status: string
+          intraday_hot_sessions: number
+          intraday_status: string
+          last_error: string | null
+          status: string
+          ticker: string
+          transition_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          daily_last_bar_time?: string | null
+          daily_rows?: number
+          daily_status?: string
+          intraday_hot_sessions?: number
+          intraday_status?: string
+          last_error?: string | null
+          status?: string
+          ticker: string
+          transition_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          daily_last_bar_time?: string | null
+          daily_rows?: number
+          daily_status?: string
+          intraday_hot_sessions?: number
+          intraday_status?: string
+          last_error?: string | null
+          status?: string
+          ticker?: string
+          transition_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_universe_bootstrap_tickers_transition_id_fkey"
+            columns: ["transition_id"]
+            isOneToOne: false
+            referencedRelation: "chart_universe_bootstrap_transitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chart_universe_bootstrap_transitions: {
+        Row: {
+          added_tickers: string[]
+          attempt_count: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          last_dispatch_id: string | null
+          last_dispatch_request_id: number | null
+          last_dispatched_at: string | null
+          last_error: string | null
+          new_run_id: string
+          previous_run_id: string | null
+          removed_tickers: string[]
+          started_at: string | null
+          status: string
+          unchanged_count: number
+          universe_key: string
+          updated_at: string
+        }
+        Insert: {
+          added_tickers?: string[]
+          attempt_count?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_dispatch_id?: string | null
+          last_dispatch_request_id?: number | null
+          last_dispatched_at?: string | null
+          last_error?: string | null
+          new_run_id: string
+          previous_run_id?: string | null
+          removed_tickers?: string[]
+          started_at?: string | null
+          status?: string
+          unchanged_count?: number
+          universe_key: string
+          updated_at?: string
+        }
+        Update: {
+          added_tickers?: string[]
+          attempt_count?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_dispatch_id?: string | null
+          last_dispatch_request_id?: number | null
+          last_dispatched_at?: string | null
+          last_error?: string | null
+          new_run_id?: string
+          previous_run_id?: string | null
+          removed_tickers?: string[]
+          started_at?: string | null
+          status?: string
+          unchanged_count?: number
+          universe_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_universe_bootstrap_transitions_new_run_id_fkey"
+            columns: ["new_run_id"]
+            isOneToOne: true
+            referencedRelation: "market_universe_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chart_universe_bootstrap_transitions_previous_run_id_fkey"
+            columns: ["previous_run_id"]
+            isOneToOne: false
+            referencedRelation: "market_universe_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       corporate_action_source_evidence: {
         Row: {
           amendment_type: string | null
@@ -4842,6 +4970,10 @@ export type Database = {
         Returns: number
       }
       qeo_chart_storage_capacity: { Args: never; Returns: Json }
+      qeo_claim_chart_universe_bootstrap_transition: {
+        Args: { p_dispatch_id: string; p_transition_id: string }
+        Returns: Json
+      }
       qeo_create_portfolio_money_management_plan: {
         Args: { p_payload: Json; p_portfolio_id: string }
         Returns: {
@@ -4883,6 +5015,10 @@ export type Database = {
         Args: { p_universe_key?: string }
         Returns: Json
       }
+      qeo_dispatch_chart_universe_bootstrap_transition: {
+        Args: { p_transition_id: string }
+        Returns: number
+      }
       qeo_dispatch_kfsp_job: {
         Args: {
           p_actor_user_id?: string
@@ -4918,6 +5054,10 @@ export type Database = {
           p_success: boolean
           p_summary?: Json
         }
+        Returns: Json
+      }
+      qeo_finish_chart_universe_bootstrap_transition: {
+        Args: { p_error?: string; p_transition_id: string }
         Returns: Json
       }
       qeo_get_kfsp_credentials: { Args: never; Returns: Json }
@@ -5028,6 +5168,10 @@ export type Database = {
           canonical_selected: boolean
           evidence_id: string
         }[]
+      }
+      qeo_prepare_chart_universe_bootstrap_transition: {
+        Args: { p_new_run_id: string }
+        Returns: Json
       }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
