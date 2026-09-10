@@ -239,7 +239,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
             <MarketHealthView data={data} history={history} />
           </div>
 
-          <div data-vnindex-contributors className="mt-5">
+          <div data-vnindex-contributors aria-label="Đóng góp VNINDEX · Top 5 / Top 10" className="mt-5">
             <ChartPanel
               icon={BarChart3}
               title="Đóng góp VNINDEX"
