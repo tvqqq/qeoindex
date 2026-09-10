@@ -83,3 +83,28 @@ test("Research Reports catalog uses one, two, then three columns as viewport wid
   const code = source("app/reports/page.tsx")
   assert.match(code, /className=["'][^"']*grid[^"']*md:grid-cols-2[^"']*xl:grid-cols-3[^"']*["']/)
 })
+
+test("Research Reports catalog card is a whole-card detail link with report type icon, status panels, and source/date tags", () => {
+  const code = source("app/reports/page.tsx")
+
+  assert.match(code, /<Link[\s\S]{0,500}href=\{`\/research\/reports\/\$\{item\.id\}`\}[\s\S]{0,500}<article/)
+  assert.doesNotMatch(code, />\s*Mở báo cáo\s*</)
+  assert.match(code, /categoryIcon\(item\.category\)/)
+  assert.match(code, /TRẠNG THÁI AI/)
+  assert.match(code, /KHUYẾN NGHỊ/)
+  assert.match(code, /item\.sourceName/)
+  assert.match(code, /dateLabel\(item\.publishDate\)/)
+})
+
+test("Research Reports catalog description comes only from the current analyzed report summary, never raw chunks", () => {
+  const service = source("modules/research-reports/catalog.ts")
+  const page = source("app/reports/page.tsx")
+
+  assert.match(service, /description:\s*string\s*\|\s*null/)
+  assert.match(service, /content_hash/)
+  assert.match(service, /market_research_report_analyses/)
+  assert.match(service, /executive_summary/)
+  assert.match(service, /report_id/)
+  assert.doesNotMatch(service, /market_research_report_chunks/)
+  assert.match(page, /item\.description/)
+})
