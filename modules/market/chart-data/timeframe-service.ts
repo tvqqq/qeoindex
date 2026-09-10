@@ -78,6 +78,10 @@ function mergeHourlyBars(oldBars: CanonicalOhlcvBar[], recentBars: CanonicalOhlc
   return [...byTime.values()].sort((a, b) => a.time - b.time)
 }
 
+function aggregateHourlyResolution(request: ChartOhlcvRequest, mergedHourly: CanonicalOhlcvBar[]) {
+  return request.resolution === "1h" ? mergedHourly : aggregateChartTimeframe(mergedHourly, request.resolution)
+}
+
 function uniqueErrors(results: CanonicalChartOhlcvResult[]): ChartDataError[] {
   return [...new Map(results.flatMap((result) => result.errors).map((error) => [error.code, error])).values()]
 }
@@ -211,7 +215,7 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const mergedHourly = mergeHourlyBars(oldHourly, recentHourly)
   const aggregated = request.resolution === "1h"
     ? mergedHourly
-    : measuredSync(deps, "aggregation", () => aggregateChartTimeframe(mergedHourly, request.resolution))
+    : measuredSync(deps, "aggregation", () => aggregateHourlyResolution(request, mergedHourly))
   const bars = aggregated.filter((bar) => bar.time >= sourceRange.from && bar.time <= request.to)
 
   const gaps = uniqueGaps(recentResults)
