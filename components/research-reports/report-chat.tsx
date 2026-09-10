@@ -65,10 +65,12 @@ export function ReportChat({
   reportId,
   analysisStatus,
   onNavigateCitation,
+  expanded = false,
 }: {
   reportId: string
   analysisStatus: ResearchReportDetailStatus
   onNavigateCitation: (page: number) => void
+  expanded?: boolean
 }) {
   const [draft, setDraft] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -120,7 +122,7 @@ export function ReportChat({
   return (
     <section aria-labelledby="report-chat-heading" className="rounded-xl border border-white/10 bg-zinc-950/40 p-4">
       <div>
-        <h2 id="report-chat-heading" className="text-base font-semibold text-zinc-100">Hỏi báo cáo</h2>
+        <h2 id="report-chat-heading" className={`${expanded ? "text-lg" : "text-base"} font-semibold text-zinc-100`}>Hỏi báo cáo</h2>
         <p className="mt-1 text-xs leading-5 text-zinc-500">
           Câu trả lời chỉ dựa trên bằng chứng đã trích xuất từ báo cáo hiện tại và không được lưu thành lịch sử lâu dài.
         </p>
@@ -128,17 +130,17 @@ export function ReportChat({
 
       <div className="mt-4 space-y-3" aria-live="polite">
         {messages.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-sm text-zinc-500">
+          <p className={`rounded-lg border border-dashed border-white/10 px-3 py-4 text-zinc-500 ${expanded ? "text-base leading-7" : "text-sm"}`}>
             Đặt câu hỏi về số liệu, nhận định, rủi ro hoặc cổ phiếu được đề cập trong báo cáo.
           </p>
         ) : messages.map((message, index) => (
           <article
             key={`${message.role}-${index}`}
             className={message.role === "user"
-              ? "ml-8 rounded-xl bg-white/[0.06] p-3 text-sm text-zinc-200"
-              : "mr-8 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-zinc-300"}
+              ? `ml-8 rounded-xl bg-white/[0.06] p-3 text-zinc-200 ${expanded ? "text-base" : "text-sm"}`
+              : `mr-8 rounded-xl border border-white/10 bg-black/20 p-3 text-zinc-300 ${expanded ? "text-base" : "text-sm"}`}
           >
-            <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+            <p className={expanded ? "whitespace-pre-wrap leading-7" : "whitespace-pre-wrap leading-6"}>{message.content}</p>
             {message.citations.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2" aria-label="Nguồn dẫn câu trả lời">
                 {message.citations.map((citation, citationIndex) => (
