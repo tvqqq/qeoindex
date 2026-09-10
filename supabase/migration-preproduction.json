@@ -11,18 +11,18 @@
     {
       "logicalName": "qeo105_chart_universe_bootstrap",
       "repositoryVersion": "20260910164500",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-105 TDD transition/orchestration contract and production baseline audit",
-      "rationale": "Reviewed pre-production migration for exact Top-200 transition state, added-only bootstrap orchestration, isolated per-ticker outcomes and post-publish async handoff. Production promotion remains pending until PR gates and safe baseline acceptance complete."
+      "productionVersion": "20260910101657",
+      "state": "MAPPED",
+      "evidence": "QEO-105 final-head gates, Vercel READY on merge SHA 3e5d232c94f3f13b2c22ff1867272adf157d5569, production migration promotion, and baseline durable-state readback",
+      "rationale": "Exact Top-200 transition state and added-only bootstrap orchestration were promoted after focused QEO-105, full Verify/build, zero-to-latest DB replay, generated types, current DB contracts, and QEO-108/149/147/148 rehearsals passed. Production version 20260910101657 was assigned by Supabase; first production prepare was safely baseline-only with added=0, removed=0, unchanged=200 and no dispatch."
     },
     {
       "logicalName": "qeo105_chart_universe_bootstrap_hardening",
       "repositoryVersion": "20260910170000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-105 first-rollout no-op and dedicated-route hardening contract",
-      "rationale": "Reviewed follow-up hardening ensures the first observed published universe becomes a no-op baseline rather than a false 200-ticker transition and isolates dispatch to the QEO-105 machine route. Production promotion remains pending."
+      "productionVersion": "20260910101723",
+      "state": "MAPPED",
+      "evidence": "QEO-105 first-rollout no-op and dedicated-route hardening promoted immediately after the base migration; production baseline and route/deployment readback passed",
+      "rationale": "Supabase production version 20260910101723 hardens first rollout as a no-op baseline and routes future transition dispatches only to /api/qeoindex/chart-universe-bootstrap. Production readback showed complete baseline state, zero per-ticker rows, zero attempts and no dispatch request for the existing canonical 200."
     }
   ]
 }
