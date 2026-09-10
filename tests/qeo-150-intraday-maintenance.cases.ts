@@ -21,7 +21,7 @@ test("QEO-150 expected completed session respects configured close, holidays, we
   assert.equal(expectedCompletedVietnamSession(new Date("2026-09-09T06:00:01.000Z"), { closeSeconds: 13 * 3600 }), "2026-09-09")
 })
 
-test("QEO-150 freshness requires exact expected-session identity; five old HOT sessions are stale", () => {
+test("QEO-150 freshness requires exact expected-session identity and positive terminal proof", () => {
   const stale = classifyQeo150Freshness({
     expectedSession: "2026-09-08",
     actualSession: "2026-09-04",
@@ -31,14 +31,14 @@ test("QEO-150 freshness requires exact expected-session identity; five old HOT s
   assert.equal(stale.current, false)
   assert.equal(stale.evidenceCategory, "provider_gap")
 
-  const current = classifyQeo150Freshness({
+  const sameDateOnly = classifyQeo150Freshness({
     expectedSession: "2026-09-08",
     actualSession: "2026-09-08",
     dailyEvidence: { volume: 1_250_000, provider: "VCI", providerDetail: null, sourceUrl: null },
     lastAttemptOutcome: "none",
   })
-  assert.equal(current.current, true)
-  assert.equal(current.evidenceCategory, "traded")
+  assert.equal(sameDateOnly.current, false)
+  assert.equal(sameDateOnly.evidenceCategory, "provider_gap")
 })
 
 test("QEO-150 same-session HOT requires terminal Daily reconciliation, not merely a matching date", () => {
@@ -66,7 +66,7 @@ test("QEO-150 same-session HOT requires terminal Daily reconciliation, not merel
       volume: 3_051_500,
     },
     lastAttemptOutcome: "none",
-  } as never)
+  })
   assert.equal(partialSameSession.current, false)
   assert.equal(partialSameSession.evidenceCategory, "provider_gap")
 
@@ -94,7 +94,7 @@ test("QEO-150 same-session HOT requires terminal Daily reconciliation, not merel
       volume: 8_700,
     },
     lastAttemptOutcome: "none",
-  } as never)
+  })
   assert.equal(thinButReconciled.current, true)
   assert.equal(thinButReconciled.evidenceCategory, "traded")
 })
