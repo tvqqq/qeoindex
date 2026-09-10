@@ -16,12 +16,12 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
     companyName,
     exchange,
     sector,
-    rank,
     price,
     change,
     changePct,
     ceilingPrice,
     floorPrice,
+    marketCapT,
   } = data
 
   const [isBookmarked, setIsBookmarked] = useState(false)
@@ -83,7 +83,7 @@ export function StockCompanyHeader({ data }: { data: StockDetailData }) {
                 companyName={companyName}
                 exchange={exchange}
                 detail={sector}
-                marketCapRank={rank}
+                marketCapT={marketCapT}
                 logoSize={42}
                 className="min-w-0"
               />
