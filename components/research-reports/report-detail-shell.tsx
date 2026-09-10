@@ -48,9 +48,11 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
     activeTab: "pdf",
     requestedPage: null,
   })
+  const [pdfHidden, setPdfHidden] = useState(false)
   const viewerRegionRef = useRef<HTMLElement | null>(null)
 
   const navigateToCitation = (page: number) => {
+    setPdfHidden(false)
     setNavigation((current) => nextCitationNavigationState(current, page))
   }
 
@@ -67,9 +69,9 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
   }
 
   useEffect(() => {
-    if (navigation.activeTab !== "pdf" || navigation.requestedPage === null) return
+    if (navigation.activeTab !== "pdf" || navigation.requestedPage === null || pdfHidden) return
     viewerRegionRef.current?.focus({ preventScroll: false })
-  }, [navigation.activeTab, navigation.requestedPage])
+  }, [navigation.activeTab, navigation.requestedPage, pdfHidden])
 
   return (
     <main className="mx-auto max-w-[1800px] space-y-5 p-4 lg:p-6">
@@ -85,6 +87,14 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={pdfHidden}
+              onClick={() => setPdfHidden((hidden) => !hidden)}
+              className="hidden rounded-lg border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2 text-sm font-medium text-amber-100/80 transition hover:bg-amber-300/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/30 lg:inline-flex"
+            >
+              {pdfHidden ? "Hiện PDF" : "Ẩn PDF"}
+            </button>
             {report.originalPdfUrl ? (
               <a
                 href={report.originalPdfUrl}
@@ -168,7 +178,10 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
         </div>
       </div>
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] lg:items-start lg:gap-5">
+      <div className={pdfHidden
+        ? "lg:grid lg:grid-cols-1 lg:items-start lg:gap-5"
+        : "lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] lg:items-start lg:gap-5"}
+      >
         <section
           id="report-panel-pdf"
           data-report-panel="pdf"
@@ -176,7 +189,7 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
           aria-labelledby="report-tab-pdf"
           ref={viewerRegionRef}
           tabIndex={-1}
-          className={`${navigation.activeTab === "pdf" ? "block" : "hidden"} outline-none lg:block`}
+          className={`${navigation.activeTab === "pdf" ? "block" : "hidden"} outline-none ${pdfHidden ? "lg:hidden" : "lg:block"}`}
         >
           <PdfViewer
             reportId={report.id}
@@ -192,7 +205,7 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
           />
         </section>
 
-        <div className="space-y-5 lg:block">
+        <div className={pdfHidden ? "space-y-5 lg:col-span-full lg:block" : "space-y-5 lg:block"}>
           <section
             id="report-panel-analysis"
             data-report-panel="analysis"
@@ -204,6 +217,7 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
               analysisStatus={report.analysisStatus}
               analysis={report.analysis}
               onNavigateCitation={navigateToCitation}
+              expanded={pdfHidden}
             />
           </section>
 
@@ -218,6 +232,7 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
               reportId={report.id}
               analysisStatus={report.analysisStatus}
               onNavigateCitation={navigateToCitation}
+              expanded={pdfHidden}
             />
           </section>
         </div>
