@@ -216,9 +216,9 @@ interface RiskChartProps {
 function RiskIndicatorChart({ data }: RiskChartProps) {
   return (
     <div className="w-full">
-      <div className="h-[210px] w-full">
+      <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 18, right: 16, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 6, right: 16, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.88} />
@@ -406,7 +406,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1">
       {/* Legend */}
       <div className="flex items-center justify-end gap-4 px-1 font-mono text-xs font-bold">
         <div className="flex items-center gap-1.5 text-lime-400">
@@ -422,7 +422,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
       {/* Dual Axis Composed Chart */}
       <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 12, right: 28, left: 10, bottom: 0 }}>
+          <ComposedChart data={data} margin={{ top: 4, right: 28, left: 10, bottom: 0 }}>
             <CartesianGrid stroke={GRID_COLOR} vertical={false} strokeDasharray="3 3" />
 
             <XAxis
@@ -607,12 +607,12 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
     <div className="space-y-4 pt-1">
       {/* Risk and valuation form the second responsive market-health row. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl flex flex-col justify-between">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl flex flex-col">
           <MarketWidgetChildHeader icon={ShieldAlert} title="Chỉ báo rủi ro" description="Mức độ rủi ro phân phối ngắn hạn" asOf={data.asOf} quality={data.qualityStatus} actions={<span className="font-mono text-xs text-slate-400">Hiện tại: <strong className="font-bold text-rose-400">{currentRisk == null ? "—" : currentRisk.toFixed(2)}</strong></span>} />
 
           {riskSeries.length === 0
             ? <div className="flex h-[210px] items-center justify-center p-4 text-sm text-slate-500">KFSP chưa trả lịch sử rủi ro.</div>
-            : <div className="p-4 sm:p-5"><RiskIndicatorChart data={riskSeries} /></div>}
+            : <div className="px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3"><RiskIndicatorChart data={riskSeries} /></div>}
         </div>
         <div className="rounded-2xl border border-white/[0.08] bg-[#07131d]/90 shadow-xl">
         <MarketWidgetChildHeader icon={Gauge}
@@ -630,7 +630,7 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
           />}
         />
 
-        <div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>
+        <div className="px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>
         </div>
       </div>
     </div>
