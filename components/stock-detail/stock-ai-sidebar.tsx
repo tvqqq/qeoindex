@@ -414,23 +414,34 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-2 px-1 text-center">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(0,0,0,0.4)]",
-                activeTier.badgeColor,
-              )}
-            >
-              <span className={cn("size-1.5 rounded-full", activeTier.dotColor)} />
-              {consensus}% đồng thuận với độ tin cậy {activeTier.label} ({confidence}%)
-            </span>
+          <div data-ai-council-metrics className="grid grid-cols-2 gap-2 px-1">
+            <div className="flex min-h-[72px] flex-col justify-center rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                ĐỒNG THUẬN
+              </span>
+              <strong className="mt-1 font-mono text-2xl font-black leading-none text-cyan-100">
+                {consensus}%
+              </strong>
+            </div>
 
-            <p className="text-center text-[11.5px] leading-relaxed text-slate-300">
-              {aiStock?.whatChangesDecision?.[0] ||
-                (scan?.confirmation ? `Tăng conviction khi: ${scan.confirmation}` : null) ||
-                thesis?.baseCase ||
-                "Áp lực bán cạn kiệt quanh hỗ trợ trung hạn. Smart Money có dấu hiệu hấp thụ chủ động, phù hợp giải ngân từng phần."}
-            </p>
+            <div className="flex min-h-[72px] flex-col justify-center rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                ĐỘ TIN CẬY
+              </span>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <strong className={cn("font-mono text-2xl font-black leading-none", activeTier.textColor)}>
+                  {confidence}%
+                </strong>
+                <span
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em]",
+                    activeTier.badgeColor,
+                  )}
+                >
+                  {activeTier.label}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

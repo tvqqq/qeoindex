@@ -19,12 +19,19 @@ test("StockAiSidebar donut chart formats recommendation cleanly without clutter"
   assert.match(code, /signalLines\.map\(\(line, idx\)/)
 })
 
-test("StockAiSidebar positions consensus badge with merged confidence and conviction description below donut", () => {
+test("QEO-195 separates consensus and confidence into two stat cards and removes conviction copy", () => {
   const code = source("components/stock-detail/stock-ai-sidebar.tsx")
 
-  // Below donut, consensus badge displays consensus with confidence tier and percentage
-  assert.match(code, /\{consensus\}% đồng thuận với độ tin cậy \{activeTier\.label\} \(\{confidence\}%\)/)
-  assert.match(code, /Tăng conviction khi/)
+  assert.match(code, /data-ai-council-metrics/)
+  assert.match(code, /grid-cols-2/)
+  assert.match(code, /ĐỒNG THUẬN/)
+  assert.match(code, /ĐỘ TIN CẬY/)
+  assert.match(code, /\{consensus\}%/)
+  assert.match(code, /\{confidence\}%/)
+  assert.match(code, /\{activeTier\.label\}/)
+  assert.doesNotMatch(code, /\{consensus\}% đồng thuận với độ tin cậy \{activeTier\.label\} \(\{confidence\}%\)/)
+  assert.doesNotMatch(code, /Tăng conviction khi/)
+  assert.doesNotMatch(code, /aiStock\?\.whatChangesDecision\?\.\[0\]/)
 })
 
 test("StockAiSidebar updates 5 pillars title, applies confidence neon glow ring, and removes standalone slider", () => {
