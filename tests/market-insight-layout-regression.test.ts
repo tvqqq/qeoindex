@@ -25,8 +25,8 @@ test("QEO-134 market intelligence replaces the old index column with sentiment h
 
   assert.match(dashboard, /data-market-intelligence-overview-row[^>]*className="[^"]*xl:grid-cols-3[^"]*xl:items-stretch/)
   assert.match(dashboard, /data-market-summary-column[^>]*className="[^"]*h-full/)
-  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
-  assert.match(dashboard, /data-market-sentiment-history-column[^>]*className="[^"]*h-full[^"]*\[&>\*\]:h-full/)
+  assert.match(dashboard, /data-market-sentiment-column[^>]*className="[^"]*h-full[^\"]*\[&>\*\]:h-full/)
+  assert.match(dashboard, /data-market-sentiment-history-column[^>]*className="[^"]*h-full[^\"]*\[&>\*\]:h-full/)
   assert.match(dashboard, /data-market-sentiment-column[\s\S]*<MarketSentimentCard data=\{data\}/)
   assert.match(dashboard, /data-market-sentiment-history-column[\s\S]*<MarketSentimentHistoryCard data=\{data\}/)
   assert.doesNotMatch(dashboard, /xl:grid-cols-\[35fr_65fr\]/, "the previous two-column pulse/index row must remain removed")
@@ -94,6 +94,18 @@ test("QEO-134 market index cards have explicit borders and roomier padding", () 
 
   assert.match(indexTile, /Card className=\{cn\(surface, "[^"]*border border-white\/\[0\.12\][^"]*"\)\}/)
   assert.match(indexTile, /CardContent className="p-4 sm:p-5"/)
+})
+
+test("QEO-134 valuation controls live in the widget header without duplicate body controls", () => {
+  const healthView = read("components/insights/market-health-view.tsx")
+  const childHeader = read("components/insights/market-widget-child-header.tsx")
+  const valuationChart = healthView.slice(healthView.indexOf("function ValuationBandChart"), healthView.indexOf("// 4. Main Market Health View"))
+
+  assert.match(healthView, /function ValuationHeaderControls\(/)
+  assert.match(healthView, /<MarketWidgetChildHeader icon=\{Gauge\}[\s\S]*actions=\{<ValuationHeaderControls/)
+  assert.match(healthView, /id="market-valuation-metric"[\s\S]*id="market-valuation-1sd"[\s\S]*id="market-valuation-2sd"/)
+  assert.doesNotMatch(valuationChart, /<select|type="checkbox"/, "valuation chart body must not own the header filters")
+  assert.match(childHeader, /flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between/)
 })
 
 test("KFSP distribution-day guidance replaces foreign flow without breaking equal stat rows", () => {
