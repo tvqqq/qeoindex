@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
+import { BarChart3, ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
 import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/modules/research/market-insight/data"
 import { MarketWidgetChildHeader } from "@/components/insights/market-widget-child-header"
