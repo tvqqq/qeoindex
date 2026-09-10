@@ -1,0 +1,52 @@
+name: QEO-186 RED
+
+on:
+  push:
+    branches:
+      - 'tvq9612/qeo-186-market-insightsp0-vnindex-contributors-top-pullers-draggers'
+    paths:
+      - '.github/workflows/qeo186-red.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-186-market-insightsp0-vnindex-contributors-top-pullers-draggers
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Add QEO-186 regression contracts
+        run: node .github/qeo186-red.mjs
+      - name: Commit test-only RED state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/market-insight-ui-performance.test.ts
+          git commit -m "test(QEO-186): guard VNINDEX contributor concentration"
+          git push
+      - name: Confirm RED failure
+        run: |
+          set +e
+          node --test tests/market-insight-ui-performance.test.ts > /tmp/qeo186-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/qeo186-red.log
+          if [ "$status" -eq 0 ]; then
+            echo "Expected QEO-186 contracts to fail before implementation"
+            exit 1
+          fi
+          grep -q "QEO-186" /tmp/qeo186-red.log
+      - name: Remove temporary helper files
+        if: always()
+        run: |
+          git rm -f .github/qeo186-red.mjs .github/workflows/qeo186-red.yml
+          git commit -m "chore(QEO-186): remove RED helper"
+          git push
