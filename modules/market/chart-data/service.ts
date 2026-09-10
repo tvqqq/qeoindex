@@ -30,6 +30,7 @@ import {
 } from "./hot-store"
 import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
 import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
+import type { ChartPerformanceRecorder, ChartPerfStage } from "./performance"
 import {
   createPrimaryChartOhlcvProvider,
   normalizeChartProviderResult,
@@ -58,6 +59,11 @@ export interface ChartDataServiceDeps {
   coldStorage?: ColdOhlcvStorage
   provider?: ChartOhlcvProvider
   now?: Date
+  performance?: ChartPerformanceRecorder
+}
+
+async function measured<T>(deps: ChartDataServiceDeps, stage: ChartPerfStage, work: () => Promise<T>) {
+  return deps.performance ? deps.performance.measure(stage, work) : work()
 }
 
 interface ClosedProviderValue {
@@ -174,7 +180,7 @@ async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOh
 }
 
 async function loadDaily(deps: ChartDataServiceDeps, request: CanonicalChartOhlcvRequest, now = new Date()): Promise<CanonicalChartOhlcvResult> {
-  const hotRows = await loadDailyRows(deps.supabase, request)
+  const hotRows = await measured(deps, "daily-db", () => loadDailyRows(deps.supabase, request))
   const errors: ChartDataError[] = []
   const usableHotRows = hotRows.filter(isCanonicalDailyHotRowUsable)
   if (usableHotRows.length !== hotRows.length) errors.push({ code: "INTEGRITY_WARNING" })
@@ -251,7 +257,7 @@ async function persistClosedProviderValue(
   value: Awaited<ReturnType<typeof fetchClosedProviderValue>>,
 ) {
   try {
-    const persisted = await upsertHotIntradayBars(deps.supabase, {
+    const persisted = await measured(deps, "hot-db", () => upsertHotIntradayBars(deps.supabase, {
       ticker: request.ticker,
       bars: value.bars,
       provider: value.provider,
@@ -263,7 +269,7 @@ async function persistClosedProviderValue(
         liveTail: false,
         workflow: "QEO-148",
       },
-    })
+    }))
     if (!persisted.batchId || persisted.rowCount !== value.bars.length) {
       throw new Error("Closed-range persistence is missing exact provenance evidence")
     }
@@ -282,13 +288,13 @@ async function runClosedProviderRange(
 ): Promise<ClosedRangeIngestionResult<ClosedProviderValue>> {
   const provider = deps.provider ?? createPrimaryChartOhlcvProvider()
   const coordinator = {
-    claim: (input: Parameters<typeof claimChartIntradayRange>[1]) => claimChartIntradayRange(deps.supabase, input),
-    complete: (input: Parameters<typeof completeChartIntradayRange>[1]) => completeChartIntradayRange(deps.supabase, input),
-    abandon: (input: Parameters<typeof abandonChartIntradayRange>[1]) => abandonChartIntradayRange(deps.supabase, input),
+    claim: (input: Parameters<typeof claimChartIntradayRange>[1]) => measured(deps, "hot-db", () => claimChartIntradayRange(deps.supabase, input)),
+    complete: (input: Parameters<typeof completeChartIntradayRange>[1]) => measured(deps, "hot-db", () => completeChartIntradayRange(deps.supabase, input)),
+    abandon: (input: Parameters<typeof abandonChartIntradayRange>[1]) => measured(deps, "hot-db", () => abandonChartIntradayRange(deps.supabase, input)),
   }
 
   const work = async (claim: Extract<Awaited<ReturnType<typeof claimChartIntradayRange>>, { status: "claimed" }>) => {
-    const fetched = await fetchClosedProviderValue(provider, request, range)
+    const fetched = await measured(deps, "provider-fetch", () => fetchClosedProviderValue(provider, request, range))
     if (revalidate && claim.previousContentId === fetched.contentId && claim.previousProvenanceBatchId) {
       return {
         value: { provider: fetched.provider, bars: fetched.bars, persisted: false, changed: false },
@@ -326,7 +332,7 @@ async function runClosedProviderRange(
     // Pending-schema compatibility: never infer success from legacy provenance.
     // Until the QEO-148 migration is explicitly promoted, preserve chart
     // availability with the old uncoordinated write path and no success reuse.
-    const fetched = await fetchClosedProviderValue(provider, request, range)
+    const fetched = await measured(deps, "provider-fetch", () => fetchClosedProviderValue(provider, request, range))
     const persisted = await persistClosedProviderValue(deps, request, range, now, fetched)
     return {
       status: "completed",
@@ -359,9 +365,9 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   const session = getMarketSessionStatus(now)
 
   const [hotRead, coldRead, coverageRead] = await Promise.allSettled([
-    readHotIntradayRange(deps.supabase, request.ticker, request.from, request.to),
-    coldStorage.readIntersectingRange({ ticker: request.ticker, from: request.from, to: request.to }),
-    readProviderRequestCoverage(deps.supabase, request.ticker, request.from, request.to),
+    measured(deps, "hot-db", () => readHotIntradayRange(deps.supabase, request.ticker, request.from, request.to)),
+    measured(deps, "cold-object", () => coldStorage.readIntersectingRange({ ticker: request.ticker, from: request.from, to: request.to })),
+    measured(deps, "hot-db", () => readProviderRequestCoverage(deps.supabase, request.ticker, request.from, request.to)),
   ])
 
   const tagged: SourceTaggedBar[] = []
@@ -425,7 +431,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
         normalized = normalizeCanonicalBars(tagged)
       } else if (result.status === "reused") {
         try {
-          const refreshed = await readHotIntradayRange(deps.supabase, request.ticker, range.from, range.to)
+          const refreshed = await measured(deps, "hot-db", () => readHotIntradayRange(deps.supabase, request.ticker, range.from, range.to))
           tagged.push(...refreshed.map((bar) => ({ source: "hot" as const, bar })))
           durablePersistedThrough = laterTime(durablePersistedThrough, refreshed)
           normalized = normalizeCanonicalBars(tagged)
@@ -441,12 +447,12 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   if (liveTailRange && liveTailRange.from < liveTailRange.to) {
     try {
       const providerResult = normalizeChartProviderResult(
-        await provider.fetch({
+        await measured(deps, "provider-fetch", () => provider.fetch({
           ...request,
           from: liveTailRange.from,
           to: liveTailRange.to,
           includeCurrent: true,
-        }),
+        })),
         "CUSTOM",
       )
       const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, true)
@@ -457,7 +463,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
 
       if (partition.completedBars.length) {
         try {
-          await upsertHotIntradayBars(deps.supabase, {
+          await measured(deps, "hot-db", () => upsertHotIntradayBars(deps.supabase, {
             ticker: request.ticker,
             bars: partition.completedBars,
             provider: providerResult.provider,
@@ -468,7 +474,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
               requestedTo: Math.min(liveTailRange.to, currentMinuteStart - 1),
               liveTail: true,
             },
-          })
+          }))
           durablePersistedThrough = laterTime(durablePersistedThrough, partition.completedBars)
         } catch {
           errors.push({ code: "STORAGE_UNAVAILABLE" })

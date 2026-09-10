@@ -1,0 +1,102 @@
+name: QEO-172
+
+on:
+  pull_request:
+    paths:
+      - "modules/market/chart-data/**"
+      - "app/api/market/ohlcv/**"
+      - "components/stock-detail/**"
+      - "tests/qeo172/**"
+      - "tests/browser/qeo172-chart-performance-production.spec.ts"
+      - ".github/workflows/qeo-172.yml"
+  workflow_dispatch:
+    inputs:
+      benchmark_mode:
+        description: baseline or acceptance
+        required: true
+        default: baseline
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo172-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: QEO-172 performance contract
+        run: node --test tests/qeo172/chart-performance-contract.test.ts
+
+  production-browser:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QEO172_BASE_URL: https://qeoindex.qeoqeo.com
+      QEO172_BENCHMARK_MODE: ${{ inputs.benchmark_mode }}
+      QEO172_WORKFLOW_SHA: ${{ github.sha }}
+      QEO171_TEST_EMAIL: ${{ secrets.QEO171_TEST_EMAIL }}
+      QEO171_TEST_PASSWORD: ${{ secrets.QEO171_TEST_PASSWORD }}
+    steps:
+      - name: Check encrypted QA credentials
+        id: auth
+        shell: bash
+        run: |
+          if [[ -n "$QEO171_TEST_EMAIL" && -n "$QEO171_TEST_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::QEO-172 benchmark skipped: encrypted QA credentials are not provisioned"
+          fi
+
+      - name: Record skipped benchmark
+        if: steps.auth.outputs.available != 'true'
+        run: |
+          echo "## QEO-172 production benchmark" >> "$GITHUB_STEP_SUMMARY"
+          echo "QEO172_BENCHMARK_EXECUTED=false" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reason: encrypted QA credentials are not provisioned." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+        if: steps.auth.outputs.available == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.auth.outputs.available == 'true'
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        if: steps.auth.outputs.available == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.auth.outputs.available == 'true'
+      - name: Install Chromium
+        if: steps.auth.outputs.available == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run authenticated production benchmark
+        if: steps.auth.outputs.available == 'true'
+        run: pnpm exec playwright test tests/browser/qeo172-chart-performance-production.spec.ts --project=desktop
+      - name: Upload benchmark evidence
+        if: always() && steps.auth.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeo172-production-performance-${{ inputs.benchmark_mode }}
+          path: |
+            test-results/qeo172-performance.json
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 1
