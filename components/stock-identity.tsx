@@ -54,6 +54,7 @@ export function StockIdentity({
   companyName,
   exchange,
   detail,
+  marketCapRank,
   logoSize = 32,
   className,
 }: {
@@ -61,11 +62,13 @@ export function StockIdentity({
   companyName?: string | null
   exchange?: string | null
   detail?: string | null
+  marketCapRank?: number
   logoSize?: number
   className?: string
 }) {
   const normTicker = ticker.trim().toUpperCase()
   let displayCompanyName = companyName?.trim() || ""
+  const hasMarketCapRank = typeof marketCapRank === "number" && marketCapRank > 0
 
   // Defensive cleanup: never repeat ticker or sector inside companyName
   if (
@@ -99,14 +102,20 @@ export function StockIdentity({
             </span>
           ) : null}
         </div>
-        {exchange || detail ? (
+        {exchange || detail || hasMarketCapRank ? (
           <div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-slate-400">
             {exchange ? <span>{exchange}</span> : null}
-            {exchange && detail ? <span className="text-slate-600">·</span> : null}
+            {exchange && (detail || hasMarketCapRank) ? <span className="text-slate-600">·</span> : null}
             {detail ? (
               <span className="inline-flex items-center gap-1 text-slate-400">
                 <SectorIcon sector={detail} />
                 <span>{detail}</span>
+              </span>
+            ) : null}
+            {detail && hasMarketCapRank ? <span className="text-slate-600">·</span> : null}
+            {hasMarketCapRank ? (
+              <span className="shrink-0 font-mono text-[10px] font-bold text-amber-200/80">
+                Hạng vốn hoá #{marketCapRank}
               </span>
             ) : null}
           </div>
