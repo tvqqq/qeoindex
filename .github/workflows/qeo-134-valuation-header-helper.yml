@@ -1,0 +1,172 @@
+name: QEO-134 valuation header helper
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-134-valuation-header-controls
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-134-valuation-header-controls
+      - name: Move valuation controls into header
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('components/insights/market-health-view.tsx')
+          source = path.read_text()
+
+          old_prefix = '''interface ValuationChartProps {
+            data: ValuationPoint[]
+          }
+
+          function ValuationBandChart({ data }: ValuationChartProps) {
+            const [metric, setMetric] = React.useState<"PE" | "PB">("PE")
+            const [show1SD, setShow1SD] = React.useState(true)
+            const [show2SD, setShow2SD] = React.useState(false)
+          '''
+          new_prefix = '''type ValuationMetric = "PE" | "PB"
+
+          interface ValuationHeaderControlsProps {
+            metric: ValuationMetric
+            onMetricChange: (metric: ValuationMetric) => void
+            show1SD: boolean
+            onShow1SDChange: (show: boolean) => void
+            show2SD: boolean
+            onShow2SDChange: (show: boolean) => void
+          }
+
+          function ValuationHeaderControls({
+            metric,
+            onMetricChange,
+            show1SD,
+            onShow1SDChange,
+            show2SD,
+            onShow2SDChange,
+          }: ValuationHeaderControlsProps) {
+            return (
+              <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                <div className="relative">
+                  <label htmlFor="market-valuation-metric" className="sr-only">Chỉ số định giá</label>
+                  <select
+                    id="market-valuation-metric"
+                    value={metric}
+                    onChange={(event) => onMetricChange(event.target.value as ValuationMetric)}
+                    className="h-8 appearance-none rounded-md border border-white/10 bg-[#08131e] px-2 pr-7 font-mono text-xs font-bold text-slate-200 outline-none focus:border-teal-400/50"
+                  >
+                    <option value="PE">P/E</option>
+                    <option value="PB">P/B</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+                </div>
+
+                <label htmlFor="market-valuation-1sd" className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-slate-300">
+                  <input
+                    id="market-valuation-1sd"
+                    type="checkbox"
+                    checked={show1SD}
+                    onChange={(event) => onShow1SDChange(event.target.checked)}
+                    className="size-3.5 cursor-pointer rounded border-white/20 bg-white/5 text-teal-400 focus:ring-0"
+                  />
+                  <span>1 Độ lệch chuẩn</span>
+                </label>
+
+                <label htmlFor="market-valuation-2sd" className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-slate-300">
+                  <input
+                    id="market-valuation-2sd"
+                    type="checkbox"
+                    checked={show2SD}
+                    onChange={(event) => onShow2SDChange(event.target.checked)}
+                    className="size-3.5 cursor-pointer rounded border-white/20 bg-white/5 text-teal-400 focus:ring-0"
+                  />
+                  <span>2 Độ lệch chuẩn</span>
+                </label>
+              </div>
+            )
+          }
+
+          interface ValuationChartProps {
+            data: ValuationPoint[]
+            metric: ValuationMetric
+            show1SD: boolean
+            show2SD: boolean
+          }
+
+          function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartProps) {
+          '''
+          if source.count(old_prefix) != 1:
+            raise SystemExit('valuation chart prefix anchor mismatch')
+          source = source.replace(old_prefix, new_prefix, 1)
+
+          start_marker = '      {/* Header Controls */}'
+          end_marker = '      {/* Dual Axis Composed Chart */}'
+          start = source.index(start_marker)
+          end = source.index(end_marker, start)
+          legend = '''      {/* Legend */}
+                <div className="flex items-center justify-end gap-4 px-1 font-mono text-xs font-bold">
+                  <div className="flex items-center gap-1.5 text-lime-400">
+                    <span className="size-2 rounded-full bg-lime-400" />
+                    <span>{metric === "PE" ? "P/E" : "P/B"}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-blue-400">
+                    <span className="size-2 rounded-full bg-blue-400" />
+                    <span>VNINDEX</span>
+                  </div>
+                </div>
+
+          '''
+          source = source[:start] + legend + source[end:]
+
+          risk_anchor = '  const currentRisk = data.dailySummary.riskScore\n'
+          state_block = '''  const currentRisk = data.dailySummary.riskScore
+            const [valuationMetric, setValuationMetric] = React.useState<ValuationMetric>("PE")
+            const [showValuation1SD, setShowValuation1SD] = React.useState(true)
+            const [showValuation2SD, setShowValuation2SD] = React.useState(false)
+          '''
+          if source.count(risk_anchor) != 1:
+            raise SystemExit('market health state anchor mismatch')
+          source = source.replace(risk_anchor, state_block, 1)
+
+          old_card = '''        <MarketWidgetChildHeader icon={Gauge} title="Định giá thị trường (P/E & P/B)" description="Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index" asOf={data.asOf} quality={data.qualityStatus} />
+
+                  <div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} /></div>
+          '''
+          new_card = '''        <MarketWidgetChildHeader icon={Gauge}
+                    title="Định giá thị trường (P/E & P/B)"
+                    description="Đa dải độ lệch chuẩn P/E, P/B so với chỉ số VN-Index"
+                    asOf={data.asOf}
+                    quality={data.qualityStatus}
+                    actions={<ValuationHeaderControls
+                      metric={valuationMetric}
+                      onMetricChange={setValuationMetric}
+                      show1SD={showValuation1SD}
+                      onShow1SDChange={setShowValuation1SD}
+                      show2SD={showValuation2SD}
+                      onShow2SDChange={setShowValuation2SD}
+                    />}
+                  />
+
+                  <div className="p-4 sm:p-5"><ValuationBandChart data={valuationSeries} metric={valuationMetric} show1SD={showValuation1SD} show2SD={showValuation2SD} /></div>
+          '''
+          if source.count(old_card) != 1:
+            raise SystemExit('valuation card anchor mismatch')
+          source = source.replace(old_card, new_card, 1)
+
+          path.write_text(source)
+          PY
+      - name: Remove helper and commit production patch
+        run: |
+          git rm .github/workflows/qeo-134-valuation-header-helper.yml
+          git add components/insights/market-health-view.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(QEO-134): move valuation controls to header"
+          git push origin HEAD:tvq9612/qeo-134-valuation-header-controls
