@@ -1,0 +1,27 @@
+name: QEO 184 GREEN 2
+"on":
+  push:
+    branches:
+      - tvq9612/qeo-184-liquidity-context
+jobs:
+  green:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-184-liquidity-context
+          fetch-depth: 0
+      - name: Apply patch
+        run: python scripts/qeo-184-green.py
+      - name: Focused tests
+        run: node --test tests/market-insight-ui-performance.test.ts
+      - name: Commit and cleanup
+        run: |
+          rm scripts/qeo-184-green.py .github/workflows/qeo-184-green2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/insights/market-close-dashboard.tsx modules/research/market-insight/data.ts scripts/qeo-184-green.py .github/workflows/qeo-184-green2.yml
+          git commit -m "feat(QEO-184): add liquidity MA20 and percentile context"
+          git push origin HEAD:tvq9612/qeo-184-liquidity-context
