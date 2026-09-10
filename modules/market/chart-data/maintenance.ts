@@ -8,6 +8,7 @@ import {
   canonicalProviderRangeContentId,
   claimChartIntradayRange,
   completeChartIntradayRange,
+  readHotIntradayRange,
   recordChartProviderAttempt,
   upsertHotIntradayBars,
 } from "./hot-store"
@@ -301,10 +302,22 @@ export async function recordQeo150OutcomeEvidence(
     failureCodes?: string[]
     provider?: string | null
     rowCount?: number
+    terminalDailyFingerprint?: string | null
+    terminalIntradayEvidence?: Qeo150IntradayEvidence | null
   },
 ) {
   const ticker = validTicker(input.ticker)
   const range = qeo150SessionRange(input.expectedSession)
+  const terminalEvidence = input.terminalDailyFingerprint && input.terminalIntradayEvidence
+    ? {
+        terminalReconciled: true,
+        terminalDailyFingerprint: input.terminalDailyFingerprint,
+        terminalIntradayClose: input.terminalIntradayEvidence.close,
+        terminalIntradayVolume: input.terminalIntradayEvidence.volume,
+        terminalFirstBarAt: input.terminalIntradayEvidence.firstBarAt,
+        terminalLastBarAt: input.terminalIntradayEvidence.lastBarAt,
+      }
+    : {}
   await recordChartProviderAttempt(supabase, {
     ticker,
     provider: input.provider?.trim() || "QEO150_MAINTENANCE",
@@ -318,6 +331,7 @@ export async function recordQeo150OutcomeEvidence(
       error: (input.error ?? "").slice(0, 240),
       failureCodes: input.failureCodes ?? [],
       observedRowCount: input.rowCount ?? 0,
+      ...terminalEvidence,
     },
   })
 }
@@ -396,9 +410,9 @@ export async function ingestClosedIntradayRange(
         )
       }
 
-      const intradayEvidence = summarizeIntradayEvidence(bars)
+      const providerEvidence = summarizeIntradayEvidence(bars)
       const terminalDailyFingerprint = qeo150DailyEvidenceFingerprint(dailyEvidence)
-      if (!terminalDailyFingerprint || !qeo150TerminalSessionReconciled(dailyEvidence, intradayEvidence)) {
+      if (!terminalDailyFingerprint || !qeo150TerminalSessionReconciled(dailyEvidence, providerEvidence)) {
         throw new Qeo150ProviderError(
           `${providerResult.provider} closed-range 1m OHLCV does not reconcile with canonical Daily for ${input.expectedSession}`,
           "provider_gap",
@@ -419,19 +433,32 @@ export async function ingestClosedIntradayRange(
           requestedFrom: range.from,
           requestedTo: range.to,
           liveTail: false,
-          terminalReconciled: true,
-          terminalDailyFingerprint,
-          terminalDailyClose: dailyEvidence?.close ?? null,
-          terminalDailyVolume: dailyEvidence?.volume ?? null,
-          terminalIntradayClose: intradayEvidence.close,
-          terminalIntradayVolume: intradayEvidence.volume,
-          terminalFirstBarAt: intradayEvidence.firstBarAt,
-          terminalLastBarAt: intradayEvidence.lastBarAt,
         },
       })
       if (!persisted.batchId || persisted.rowCount !== bars.length) {
         throw new Error("QEO-150 canonical persistence is missing exact provenance evidence")
       }
+
+      const persistedBars = await readHotIntradayRange(supabase, ticker, range.from, range.to)
+      const persistedEvidence = summarizeIntradayEvidence(persistedBars)
+      if (!qeo150TerminalSessionReconciled(dailyEvidence, persistedEvidence)) {
+        throw new Qeo150ProviderError(
+          `Canonical HOT 1m readback does not reconcile with Daily for ${input.expectedSession}`,
+          "provider_gap",
+          ["QEO-150:PERSISTED_DAILY_RECONCILIATION_MISMATCH"],
+        )
+      }
+
+      await recordQeo150OutcomeEvidence(supabase, {
+        ticker,
+        expectedSession: input.expectedSession,
+        dispatchId: input.dispatchId,
+        outcome: "ingested",
+        provider: providerResult.provider,
+        rowCount: persistedEvidence.rowCount,
+        terminalDailyFingerprint,
+        terminalIntradayEvidence: persistedEvidence,
+      })
 
       return {
         value: {
