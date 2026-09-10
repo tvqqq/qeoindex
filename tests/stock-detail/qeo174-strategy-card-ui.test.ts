@@ -78,7 +78,7 @@ test("QEO-181 replaces market-cap rank metadata with compact actual market cap",
   assert.doesNotMatch(identity, /Hạng vốn hoá|marketCapRank/)
 })
 
-test("QEO-179 shows the last five stock RS values as ordered progress rings before Qeo Composite", () => {
+test("QEO-194 shows the last five stock RS values as filled circles without a percentage ring", () => {
   const trend = source("components/stock-detail/qeo-composite-trend.tsx")
   const historyRoute = source("app/api/insights/stock-history/route.ts")
 
@@ -88,7 +88,7 @@ test("QEO-179 shows the last five stock RS values as ordered progress rings befo
   assert.match(trend, /data-rs-history/)
   assert.match(trend, /data-rs-ring/)
   assert.match(trend, /data-current-rs/)
-  assert.match(trend, /conic-gradient/)
+  assert.doesNotMatch(trend, /conic-gradient/)
   assert.ok(
     trend.indexOf("data-rs-history") < trend.indexOf("QEO COMPOSITE"),
     "RS history must render to the left of Qeo Composite",
@@ -112,7 +112,7 @@ test("QEO-181 uses five Qeo Composite sessions with interactive point values and
   assert.doesNotMatch(trend, /\/100/)
 })
 
-test("QEO-181 makes RS circles larger, filled, and keeps the latest outline", () => {
+test("QEO-181 makes RS circles larger, filled, and keeps the latest marker", () => {
   const trend = source("components/stock-detail/qeo-composite-trend.tsx")
 
   assert.match(trend, /size-10/)
