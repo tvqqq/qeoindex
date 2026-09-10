@@ -1,0 +1,68 @@
+name: QEO-134 tight spacing RED helper
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-134-tighten-health-chart-spacing
+
+permissions:
+  contents: write
+
+jobs:
+  red:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-134-tighten-health-chart-spacing
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Add RED regression contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/market-insight-layout-regression.test.ts')
+          s = p.read_text()
+          anchor = 'test("QEO-134 valuation controls live in the widget header without duplicate body controls", () => {'
+          test = '''test("QEO-134 risk and valuation charts avoid excess top whitespace", () => {
+            const healthView = read("components/insights/market-health-view.tsx")
+            const riskChart = healthView.slice(healthView.indexOf("function RiskIndicatorChart"), healthView.indexOf("// 3. Valuation Multi-Band Chart"))
+            const valuationChart = healthView.slice(healthView.indexOf("function ValuationBandChart"), healthView.indexOf("// 4. Main Market Health View"))
+            const marketHealth = healthView.slice(healthView.indexOf("export function MarketHealthView"), healthView.indexOf("export function MarketSentimentCard"))
+
+            assert.match(riskChart, /h-\\[260px\\]/)
+            assert.match(riskChart, /AreaChart data=\\{data\\} margin=\\{\\{ top: 6, right: 16, left: -20, bottom: 0 \\}\\}/)
+            assert.match(valuationChart, /<div className="space-y-1">/)
+            assert.match(valuationChart, /ComposedChart data=\\{data\\} margin=\\{\\{ top: 4, right: 28, left: 10, bottom: 0 \\}\\}/)
+            assert.doesNotMatch(marketHealth, /shadow-xl flex flex-col justify-between/)
+            assert.ok((marketHealth.match(/px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3/g) || []).length >= 2, "both chart bodies should use compact top padding")
+          })
+
+          '''
+          if test.strip() in s:
+              raise SystemExit('regression test already present')
+          if anchor not in s:
+              raise SystemExit('anchor not found')
+          p.write_text(s.replace(anchor, test + anchor, 1))
+          PY
+      - name: Confirm RED failure
+        shell: bash
+        run: |
+          if node --test tests/market-insight-layout-regression.test.ts; then
+            echo "Expected spacing regression test to fail before production patch"
+            exit 1
+          else
+            echo "RED confirmed: spacing contract fails on current production code"
+          fi
+      - name: Remove helper and commit test
+        shell: bash
+        run: |
+          rm .github/workflows/qeo-134-tight-spacing-red.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/market-insight-layout-regression.test.ts .github/workflows/qeo-134-tight-spacing-red.yml
+          git commit -m "test(QEO-134): guard compact health chart spacing"
+          git push
