@@ -140,3 +140,32 @@ test("QEO-150 exposes authenticated maintenance/report modes and a bounded post-
   assert.match(migration, /mode=chart-maintenance/)
   assert.doesNotMatch(migration, /chart-bootstrap/)
 })
+
+test("QEO-180 finds missing sessions inside a fresh latest-five HOT window", async () => {
+  const policy = await import("../modules/market/chart-data/maintenance-policy.ts")
+  const expectedHotSessions = Reflect.get(policy, "qeo180ExpectedHotSessions") as undefined | ((referenceAt: Date) => string[])
+  const missingHotSessions = Reflect.get(policy, "qeo180MissingHotSessions") as undefined | ((expected: string[], present: string[]) => string[])
+
+  assert.equal(typeof expectedHotSessions, "function")
+  assert.equal(typeof missingHotSessions, "function")
+
+  const expected = expectedHotSessions!(new Date("2026-09-10T07:50:00.000Z"))
+  assert.deepEqual(expected, ["2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10"])
+  assert.deepEqual(
+    missingHotSessions!(expected, ["2026-09-04", "2026-09-10"]),
+    ["2026-09-07", "2026-09-08", "2026-09-09"],
+  )
+})
+
+test("QEO-180 maintenance catches up exact missing sessions without invoking full bootstrap", () => {
+  const maintenance = source("modules/market/chart-data/maintenance.ts")
+  const steps = source("modules/market/chart-data/maintenance-workflow-steps.ts")
+  const workflow = source("workflows/chart-intraday-maintenance.ts")
+
+  assert.match(maintenance, /readQeo180MissingHotSessions/)
+  assert.match(steps, /runChartIntradayContinuityCatchupStep/)
+  assert.match(workflow, /runChartIntradayContinuityCatchupStep/)
+  assert.match(workflow, /missingHotSessions/)
+  assert.match(maintenance, /workflow:\s*"QEO-180"/)
+  assert.doesNotMatch(workflow, /chartIntradayBootstrapWorkflow|bootstrapChartIntradayChunk/)
+})
