@@ -1,4 +1,3 @@
-import { IndexImpactChart } from "@/components/insights/market-close-charts"
 import type { MarketLeaderItem } from "@/modules/research/market-insight/data"
 import type { VnindexContributorsContext } from "@/modules/research/market-insight/vnindex-contributors"
 
@@ -42,35 +41,29 @@ function ContributorList({ title, items }: { title: string; items: MarketLeaderI
 }
 
 export function VnindexContributorsView({ context }: { context: VnindexContributorsContext<MarketLeaderItem> }) {
-  const chartLeaders = [...context.pullers.slice(0, 5), ...context.draggers.slice(0, 5)]
   const directionLabel = context.direction === "up" ? "Theo chiều tăng VNINDEX" : context.direction === "down" ? "Theo chiều giảm VNINDEX" : "Chưa có net move hợp lệ"
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-      <div className="min-w-0">
-        <IndexImpactChart leaders={chartLeaders} />
-      </div>
-      <div className="min-w-0 space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
-            <span className="block text-[11px] font-semibold text-slate-400">Top 5</span>
-            <strong className="mt-0.5 block font-mono text-base font-black text-white">{formatRatio(context.top5ContributionPct)}</strong>
-            <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">{directionLabel}</span>
-          </div>
-          <div className="rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
-            <span className="block text-[11px] font-semibold text-slate-400">Top 10</span>
-            <strong className="mt-0.5 block font-mono text-base font-black text-white">{formatRatio(context.top10ContributionPct)}</strong>
-            <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">so với net index move</span>
-          </div>
+    <div className="min-w-0 space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
+          <span className="block text-[11px] font-semibold text-slate-400">Top 5</span>
+          <strong className="mt-0.5 block font-mono text-base font-black text-white">{formatRatio(context.top5ContributionPct)}</strong>
+          <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">{directionLabel}</span>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <ContributorList title="Top 5 kéo tăng" items={context.pullers} />
-          <ContributorList title="Top 5 kéo giảm" items={context.draggers} />
+        <div className="rounded-xl border border-white/[0.06] bg-[#07131d]/70 px-3 py-2.5">
+          <span className="block text-[11px] font-semibold text-slate-400">Top 10</span>
+          <strong className="mt-0.5 block font-mono text-base font-black text-white">{formatRatio(context.top10ContributionPct)}</strong>
+          <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">so với net index move</span>
         </div>
-        <p className="text-[10px] leading-4 text-slate-500">
-          Tỷ lệ là tổng đóng góp cùng chiều so với biến động ròng VNINDEX; có thể vượt 100% khi lực kéo và lực cản bù trừ nhau.
-        </p>
       </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <ContributorList title="Top 5 kéo tăng" items={context.pullers} />
+        <ContributorList title="Top 5 kéo giảm" items={context.draggers} />
+      </div>
+      <p className="text-[10px] leading-4 text-slate-500">
+        Tỷ lệ là tổng đóng góp cùng chiều so với biến động ròng VNINDEX; có thể vượt 100% khi lực kéo và lực cản bù trừ nhau.
+      </p>
     </div>
   )
 }
