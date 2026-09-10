@@ -715,13 +715,13 @@ export function parseVerifiedMarketClosePayloads(params: {
     if (leaders.length > 0) coverage.get_live = true
   }
 
-  const vnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")
+  const contributorVnindex = providerIndexes.find((index) => index.index_code === "VNINDEX")
   const contributorEstimate = estimateVnindexContributors({
-    vnindexValue: vnindex?.value ?? null,
-    vnindexChange: vnindex?.change ?? null,
-    advances: vnindex?.advances ?? 0,
-    declines: vnindex?.declines ?? 0,
-    unchanged: vnindex?.unchanged ?? 0,
+    vnindexValue: contributorVnindex?.value ?? null,
+    vnindexChange: contributorVnindex?.change ?? null,
+    advances: contributorVnindex?.advances ?? 0,
+    declines: contributorVnindex?.declines ?? 0,
+    unchanged: contributorVnindex?.unchanged ?? 0,
     candidates: contributorCandidates,
   })
 
