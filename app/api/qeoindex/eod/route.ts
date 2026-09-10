@@ -12,6 +12,7 @@ import { readChartIntradayMaintenanceReport } from "@/modules/market/chart-data/
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { chartIntradayBootstrapWorkflow } from "@/workflows/chart-intraday-bootstrap"
+import { chartIntradayHotContinuityWorkflow } from "@/workflows/chart-intraday-hot-continuity"
 import { chartIntradayMaintenanceWorkflow } from "@/workflows/chart-intraday-maintenance"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
@@ -177,13 +178,32 @@ async function trigger(request: NextRequest) {
     try {
       const startedAt = new Date().toISOString()
       const dispatchId = `qeo150-${randomUUID()}`
+      const hotContinuityDispatchId = `qeo180-${randomUUID()}`
       const run = await start(chartIntradayMaintenanceWorkflow, [startedAt, dispatchId])
+      let hotContinuityWorkflowRunId: string | null = null
+      let hotContinuityDispatchError: string | null = null
+      try {
+        const continuityRun = await start(chartIntradayHotContinuityWorkflow, [startedAt, hotContinuityDispatchId])
+        hotContinuityWorkflowRunId = continuityRun.runId
+      } catch (error) {
+        hotContinuityDispatchError = error instanceof Error ? error.message : String(error)
+        await notifyOpsError({
+          source: "qeo180-chart-hot-continuity",
+          message: hotContinuityDispatchError,
+          path: request.nextUrl.pathname,
+          method: request.method,
+          status: 500,
+        })
+      }
       return NextResponse.json({
         ok: true,
         mode,
         scope: "canonical_200",
         dispatchId,
         workflowRunId: run.runId,
+        hotContinuityDispatchId,
+        hotContinuityWorkflowRunId,
+        hotContinuityDispatchError,
         startedAt,
       }, { status: 202 })
     } catch (error) {

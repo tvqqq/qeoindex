@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - "modules/market/chart-data/maintenance*.ts"
+      - "modules/market/chart-data/hot-continuity*.ts"
       - "modules/market/chart-data/service.ts"
       - "modules/market/chart-data/storage-capacity.ts"
       - "modules/market/calendar.ts"
@@ -15,6 +16,7 @@ on:
       - "modules/admin/schedule-policy.ts"
       - "modules/admin/scheduler-reconciliation.ts"
       - "workflows/chart-intraday-maintenance.ts"
+      - "workflows/chart-intraday-hot-continuity.ts"
       - "app/api/qeoindex/eod/route.ts"
       - "supabase/migrations/*qeo150*"
       - "supabase/migration-preproduction.json"
@@ -28,6 +30,7 @@ on:
     branches: [main]
     paths:
       - "modules/market/chart-data/maintenance*.ts"
+      - "modules/market/chart-data/hot-continuity*.ts"
       - "modules/market/chart-data/service.ts"
       - "modules/market/chart-data/storage-capacity.ts"
       - "modules/market/calendar.ts"
@@ -36,6 +39,7 @@ on:
       - "modules/admin/schedule-policy.ts"
       - "modules/admin/scheduler-reconciliation.ts"
       - "workflows/chart-intraday-maintenance.ts"
+      - "workflows/chart-intraday-hot-continuity.ts"
       - "app/api/qeoindex/eod/route.ts"
       - "supabase/migrations/*qeo150*"
       - "supabase/migration-preproduction.json"

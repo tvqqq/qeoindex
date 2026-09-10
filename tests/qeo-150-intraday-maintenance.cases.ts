@@ -140,3 +140,29 @@ test("QEO-150 exposes authenticated maintenance/report modes and a bounded post-
   assert.match(migration, /mode=chart-maintenance/)
   assert.doesNotMatch(migration, /chart-bootstrap/)
 })
+
+test("QEO-180 finds missing sessions inside a fresh latest-five HOT window", async () => {
+  const policy = await import("../modules/market/chart-data/maintenance-policy.ts")
+  const expectedHotSessions = Reflect.get(policy, "qeo180ExpectedHotSessions") as undefined | ((referenceAt: Date) => string[])
+  const missingHotSessions = Reflect.get(policy, "qeo180MissingHotSessions") as undefined | ((expected: string[], present: string[]) => string[])
+
+  assert.equal(typeof expectedHotSessions, "function")
+  assert.equal(typeof missingHotSessions, "function")
+
+  const expected = expectedHotSessions!(new Date("2026-09-10T07:50:00.000Z"))
+  assert.deepEqual(expected, ["2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10"])
+  assert.deepEqual(
+    missingHotSessions!(expected, ["2026-09-04", "2026-09-10"]),
+    ["2026-09-07", "2026-09-08", "2026-09-09"],
+  )
+})
+
+test("QEO-180 is dispatched beside QEO-150 while QEO-150 keeps exclusive current-session ownership", () => {
+  const route = source("app/api/qeoindex/eod/route.ts")
+  const qeo150Workflow = source("workflows/chart-intraday-maintenance.ts")
+
+  assert.match(route, /chartIntradayHotContinuityWorkflow/)
+  assert.match(route, /hotContinuityWorkflowRunId/)
+  assert.match(route, /qeo180-/)
+  assert.doesNotMatch(qeo150Workflow, /chartIntradayBootstrapWorkflow|bootstrapChartIntradayChunk/)
+})
