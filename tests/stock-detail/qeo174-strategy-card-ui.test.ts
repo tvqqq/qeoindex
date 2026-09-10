@@ -38,7 +38,31 @@ test("QEO-177 renders Qeo Composite before the live price and reuses ratingRow d
   assert.match(trend, /row\.ratingScore/)
   assert.match(trend, /row\.scoreHistory/)
   assert.match(trend, /<svg/)
-  assert.doesNotMatch(trend, /fetch\(|\/api\//)
+})
+
+test("QEO-178 restores the legacy Stock Detail hero visual skin without restoring CARD STATS", () => {
+  const header = source("components/stock-detail/stock-company-header.tsx")
+
+  assert.match(header, /rounded-\[28px\]/)
+  assert.match(header, /border-indigo-300\/\[0\.16\]/)
+  assert.match(header, /shadow-\[0_22px_70px_rgba\(0,0,0,0\.34\)\]/)
+  assert.match(header, /-right-20 -top-24 size-56 rounded-full border border-cyan-300\/10/)
+  assert.match(header, /shadow-\[0_0_80px_rgba\(34,211,238,0\.08\)\]/)
+  assert.doesNotMatch(header, /CARD STATS|StockCardStat|stock-card-metrics/)
+})
+
+test("QEO-178 Qeo Composite is chart-first and consumes real stock-history composite data", () => {
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const historyRoute = source("app/api/insights/stock-history/route.ts")
+
+  assert.match(historyRoute, /kfsp_composite_score/)
+  assert.match(historyRoute, /compositeScore:\s*numberOrNull\(row\.kfsp_composite_score\)/)
+  assert.match(trend, /\/api\/insights\/stock-history\?ticker=/)
+  assert.match(trend, /compositeScore/)
+  assert.match(trend, /data-qeo-composite-chart/)
+  assert.match(trend, /polyline/)
+  assert.match(trend, /circle/)
+  assert.match(trend, /Xu hướng Qeo Composite/)
 })
 
 test("QEO-177 removes the duplicate full Qeo Composite history block from the overview tab", () => {

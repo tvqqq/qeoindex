@@ -1,7 +1,20 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
 import { TrendingDown, TrendingUp } from "lucide-react"
 
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import { cn } from "@/modules/shared/ui/cn"
+
+type CompositeHistoryPoint = {
+  asOfDate: string
+  compositeScore: number | null
+}
+
+type StockHistoryPayload = {
+  ok?: boolean
+  dailyHistory?: CompositeHistoryPoint[]
+}
 
 function normalizeScore(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return null
@@ -15,50 +28,104 @@ export function QeoCompositeTrend({
   row?: InsightsRatingRow | null
   className?: string
 }) {
-  const score = row ? normalizeScore(row.ratingScore) : null
-  const history = row
-    ? [...(row.scoreHistory || [])]
-        .filter((item) => normalizeScore(item.ratingScore) != null)
-        .sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
-        .slice(-12)
-    : []
+  const [remoteHistory, setRemoteHistory] = useState<CompositeHistoryPoint[] | null>(null)
+
+  useEffect(() => {
+    if (!row?.ticker) {
+      setRemoteHistory([])
+      return
+    }
+
+    const controller = new AbortController()
+    setRemoteHistory(null)
+
+    fetch(`/api/insights/stock-history?ticker=${encodeURIComponent(row.ticker)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null) as StockHistoryPayload | null
+        if (!response.ok || !payload?.ok || !Array.isArray(payload.dailyHistory)) {
+          throw new Error("Không tải được lịch sử Qeo Composite.")
+        }
+        setRemoteHistory(payload.dailyHistory)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return
+        setRemoteHistory([])
+      })
+
+    return () => controller.abort()
+  }, [row?.ticker])
+
+  const fallbackHistory = useMemo<CompositeHistoryPoint[]>(() => {
+    if (!row) return []
+    return [...(row.scoreHistory || [])]
+      .map((item) => ({
+        asOfDate: item.asOfDate,
+        compositeScore: normalizeScore(item.ratingScore),
+      }))
+      .filter((item) => item.compositeScore != null)
+      .sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
+  }, [row])
+
+  const history = useMemo(() => {
+    const source = remoteHistory?.some((item) => normalizeScore(item.compositeScore) != null)
+      ? remoteHistory
+      : fallbackHistory
+
+    return source
+      .filter((item) => normalizeScore(item.compositeScore) != null)
+      .sort((a, b) => a.asOfDate.localeCompare(b.asOfDate))
+      .slice(-20)
+  }, [fallbackHistory, remoteHistory])
 
   const latestHistoryScore = history.length
-    ? normalizeScore(history[history.length - 1]?.ratingScore)
+    ? normalizeScore(history[history.length - 1]?.compositeScore)
     : null
   const previousHistoryScore = history.length > 1
-    ? normalizeScore(history[history.length - 2]?.ratingScore)
+    ? normalizeScore(history[history.length - 2]?.compositeScore)
     : null
-  const baseline =
-    score != null && latestHistoryScore != null && Math.abs(score - latestHistoryScore) < 0.001
-      ? previousHistoryScore
-      : latestHistoryScore
-  const delta = score != null && baseline != null ? score - baseline : null
+  const score = latestHistoryScore ?? (row ? normalizeScore(row.ratingScore) : null)
+  const delta = score != null && previousHistoryScore != null ? score - previousHistoryScore : null
 
-  const chartWidth = 132
-  const chartHeight = 38
-  const chartPadding = 3
+  const chartWidth = 176
+  const chartHeight = 48
+  const chartPaddingX = 4
+  const chartPaddingY = 5
+  const values = history.flatMap((item) => {
+    const value = normalizeScore(item.compositeScore)
+    return value == null ? [] : [value]
+  })
+  const minValue = values.length ? Math.min(...values) : 0
+  const maxValue = values.length ? Math.max(...values) : 100
+  const rawSpread = Math.max(4, maxValue - minValue)
+  const chartMin = Math.max(0, minValue - rawSpread * 0.25)
+  const chartMax = Math.min(100, maxValue + rawSpread * 0.25)
+  const chartRange = Math.max(1, chartMax - chartMin)
   const points = history.map((item, index) => {
-    const value = normalizeScore(item.ratingScore) ?? 0
-    const x = chartPadding + (index * (chartWidth - chartPadding * 2)) / Math.max(1, history.length - 1)
-    const y = chartPadding + ((100 - value) / 100) * (chartHeight - chartPadding * 2)
+    const value = normalizeScore(item.compositeScore) ?? chartMin
+    const x = chartPaddingX + (index * (chartWidth - chartPaddingX * 2)) / Math.max(1, history.length - 1)
+    const y = chartPaddingY + ((chartMax - value) / chartRange) * (chartHeight - chartPaddingY * 2)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
+  const firstDate = history[0]?.asOfDate?.slice(5) || ""
+  const lastDate = history[history.length - 1]?.asOfDate?.slice(5) || ""
 
   return (
     <div
       data-qeo-composite-trend
       className={cn(
-        "min-w-0 rounded-2xl border border-violet-300/[0.12] bg-violet-300/[0.04] px-3 py-2.5",
+        "min-w-0 overflow-hidden rounded-2xl border border-violet-300/[0.14] bg-[linear-gradient(145deg,rgba(139,92,246,0.09),rgba(15,23,42,0.28))] px-3 py-2.5",
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 shrink-0">
-          <div className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-200/75">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 shrink-0 pt-0.5">
+          <div className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-200/80">
             QEO COMPOSITE
           </div>
-          <div className="mt-0.5 flex items-baseline gap-1.5">
+          <div className="mt-1 flex items-baseline gap-1.5">
             <strong className="font-mono text-2xl font-black leading-none text-violet-100">
               {score == null ? "—" : Math.round(score)}
             </strong>
@@ -69,41 +136,67 @@ export function QeoCompositeTrend({
                   "inline-flex items-center gap-0.5 font-mono text-[10px] font-black",
                   delta > 0 ? "text-up" : "text-down",
                 )}
-                title="Thay đổi so với snapshot trước"
+                title="Thay đổi so với phiên rating trước"
               >
                 {delta > 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
                 {delta > 0 ? "+" : ""}{delta.toFixed(0)}
               </span>
             ) : null}
           </div>
+          <div className="mt-1 text-[9px] font-semibold text-slate-500">Xu hướng Qeo Composite</div>
         </div>
 
         {history.length >= 2 ? (
-          <svg
-            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-            className="h-9 min-w-0 flex-1"
-            preserveAspectRatio="none"
-            role="img"
-            aria-label={`Xu hướng Qeo Composite ${row?.ticker || ""}`.trim()}
-          >
-            <polyline
-              points={points.join(" ")}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              className="text-violet-300"
-              vectorEffect="non-scaling-stroke"
-            />
-            {points.length ? (() => {
-              const [x, y] = points[points.length - 1].split(",").map(Number)
-              return <circle cx={x} cy={y} r="2.5" className="fill-emerald-300" />
-            })() : null}
-          </svg>
+          <div className="min-w-0 flex-1">
+            <svg
+              data-qeo-composite-chart
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+              className="h-12 w-full min-w-[112px]"
+              preserveAspectRatio="none"
+              role="img"
+              aria-label={`Xu hướng Qeo Composite ${row?.ticker || ""}`.trim()}
+            >
+              <line
+                x1={chartPaddingX}
+                x2={chartWidth - chartPaddingX}
+                y1={chartHeight - chartPaddingY}
+                y2={chartHeight - chartPaddingY}
+                stroke="rgba(148,163,184,0.12)"
+                vectorEffect="non-scaling-stroke"
+              />
+              <polyline
+                points={points.join(" ")}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                className="text-violet-300"
+                vectorEffect="non-scaling-stroke"
+              />
+              {points.map((point, index) => {
+                const [x, y] = point.split(",").map(Number)
+                const isLatest = index === points.length - 1
+                return (
+                  <circle
+                    key={`${history[index]?.asOfDate}-${index}`}
+                    cx={x}
+                    cy={y}
+                    r={isLatest ? 2.8 : 1.45}
+                    className={isLatest ? "fill-emerald-300" : "fill-violet-200/65"}
+                  />
+                )
+              })}
+            </svg>
+            <div className="mt-0.5 flex justify-between font-mono text-[8px] text-slate-600">
+              <span>{firstDate}</span>
+              <span>{history.length} phiên</span>
+              <span>{lastDate}</span>
+            </div>
+          </div>
         ) : (
-          <span className="max-w-24 text-right text-[9px] leading-tight text-slate-500">
-            Chưa đủ lịch sử
+          <span className="max-w-28 self-center text-right text-[9px] leading-tight text-slate-500">
+            {remoteHistory == null ? "Đang tải lịch sử…" : "Chưa đủ dữ liệu chart"}
           </span>
         )}
       </div>
