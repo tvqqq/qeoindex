@@ -61,6 +61,7 @@ function HistoryBoundChart({
   } = useChartHistory({ ticker, timeframe, seedDailyBars })
 
   const dragStartXRef = useRef<number | null>(null)
+  const terminalRef = useRef<HTMLDivElement>(null)
   const requestOlder = useCallback(() => {
     if (!loading && !loadingOlder && hasMore) void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder])
@@ -101,8 +102,34 @@ function HistoryBoundChart({
     ? new Date(lastUpdatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : null
 
+  // QEO-172: publish render readiness conservatively after the replacement
+  // dataset has propagated through child effects and two animation frames. The
+  // marker is observational only; it never drives chart behavior.
+  useEffect(() => {
+    const terminal = terminalRef.current
+    terminal?.removeAttribute("data-chart-rendered-key")
+    if (loading || resolvedBars.length === 0) return
+
+    let secondFrame = 0
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const latestTime = resolvedBars.at(-1)?.time ?? 0
+        terminalRef.current?.setAttribute(
+          "data-chart-rendered-key",
+          `${ticker.trim().toUpperCase()}:${timeframe}:${resolvedBars.length}:${latestTime}`,
+        )
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (secondFrame) window.cancelAnimationFrame(secondFrame)
+    }
+  }, [loading, resolvedBars, ticker, timeframe])
+
   return (
     <div
+      ref={terminalRef}
       className={cn("relative min-w-0", styles.terminalSurface, isMaximized && styles.maximized)}
       data-chart-terminal="true"
       data-chart-maximized={isMaximized ? "true" : "false"}
