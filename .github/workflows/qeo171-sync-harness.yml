@@ -1,0 +1,140 @@
+name: QEO-171 Harness Sync
+
+on:
+  push:
+    branches:
+      - test/qeo-171-production-chart-acceptance-v2
+    paths:
+      - .github/workflows/qeo171-sync-harness.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test/qeo-171-production-chart-acceptance-v2
+      - name: Apply QEO-171 harness corrections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          spec_path = Path("tests/browser/qeo171-stock-chart-production.spec.ts")
+          spec = spec_path.read_text()
+
+          replacements = [
+              (
+                  'await page.getByLabel(/mật khẩu/i).fill(TEST_PASSWORD)',
+                  'await page.getByRole("textbox", { name: "Mật khẩu", exact: true }).fill(TEST_PASSWORD)',
+              ),
+              (
+                  'await expect(page.getByText(/đăng nhập qeoindex/i)).toBeHidden()',
+                  'await expect(page.getByText(/đăng nhập qeoindex/i)).toBeHidden()\n  await expect.poll(\n    () => page.evaluate(async () => (await fetch("/api/me", { cache: "no-store" })).status),\n    { timeout: 15_000 },\n  ).toBe(200)',
+              ),
+              (
+                  'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").getByRole("button").last().click().catch(() => {})',
+                  'await page.getByText(/Quản lý đối tượng \\(\\d+\\)/).locator("..").locator("..").getByRole("button").click()',
+              ),
+              (
+                  'await expect(page.locator(\'[title="Thu nhỏ chart"]\')).toBeVisible()\n    await page.keyboard.press("ArrowDown")',
+                  'await expect(page.locator(\'[title="Thu nhỏ chart"]\')).toBeVisible()\n    await page.keyboard.press("Backspace")\n    await page.keyboard.press("ArrowDown")',
+              ),
+              (
+                  'await expect(page.getByText(new RegExp(note.slice(0, 18)))).toBeVisible()',
+                  'await expect(page.getByText(new RegExp(note.slice(0, 18))).first()).toBeVisible()',
+              ),
+          ]
+          for before, after in replacements:
+              if before not in spec:
+                  raise SystemExit(f"QEO-171 spec patch target not found: {before[:80]}")
+              spec = spec.replace(before, after)
+
+          old_helper = '''async function setMaOpacity(page: Page, value: string): Promise<void> {
+            await page.locator('[title="Chỉ báo kỹ thuật"]').click()
+            const input = page.getByLabel("MA (20, 50, 200) opacity")
+            await expect(input).toBeVisible()
+            await input.evaluate((node, next) => {
+              const element = node as HTMLInputElement
+              element.value = String(next)
+              element.dispatchEvent(new Event("input", { bubbles: true }))
+              element.dispatchEvent(new Event("change", { bubbles: true }))
+            }, value)
+            await page.getByLabel("Đóng bảng chỉ báo").click()
+            await waitCloudSaved(page)
+          }'''.replace("          ", "")
+
+          new_helper = '''function maOpacity(settings: ChartSettingsResponse): number | null {
+            const view = (settings.viewSettings ?? settings.data.viewSettings ?? {}) as Record<string, unknown>
+            const styles = view.indicatorStyles as Record<string, unknown> | undefined
+            const ma = styles?.ma as Record<string, unknown> | undefined
+            const opacity = ma?.opacity
+            return typeof opacity === "number" && Number.isFinite(opacity) ? opacity : null
+          }
+
+          async function waitForMaOpacityPersisted(
+            request: APIRequestContext,
+            ticker: Ticker,
+            value: number,
+          ): Promise<void> {
+            await expect.poll(async () => maOpacity(await getSettings(request, ticker)), { timeout: 15_000 }).toBe(value)
+          }
+
+          async function setMaOpacity(
+            page: Page,
+            request: APIRequestContext,
+            ticker: Ticker,
+            value: string,
+          ): Promise<void> {
+            await page.locator('[title="Chỉ báo kỹ thuật"]').click()
+            const input = page.getByLabel("MA (20, 50, 200) opacity")
+            await expect(input).toBeVisible()
+            await input.focus()
+            await input.press("Home")
+            const target = Number(value)
+            const steps = Math.round((target - 0.1) / 0.05)
+            for (let index = 0; index < steps; index += 1) await input.press("ArrowRight")
+            await expect(input).toHaveValue(value)
+            await page.getByLabel("Đóng bảng chỉ báo").click()
+            await waitForMaOpacityPersisted(request, ticker, target)
+          }'''.replace("          ", "")
+
+          if old_helper not in spec:
+              raise SystemExit("QEO-171 setMaOpacity helper target not found")
+          spec = spec.replace(old_helper, new_helper, 1)
+
+          old_call = 'await setMaOpacity(page, "0.55")'
+          if old_call not in spec:
+              raise SystemExit("QEO-171 setMaOpacity call target not found")
+          spec = spec.replace(old_call, 'await setMaOpacity(page, request, "VIC", "0.55")', 1)
+
+          cross_ticker_anchor = 'await waitCloudSaved(page)\n\n    await page.goto(`${BASE_URL}/insights/vcb`)'
+          if cross_ticker_anchor not in spec:
+              raise SystemExit("QEO-171 cross-ticker persistence anchor not found")
+          spec = spec.replace(
+              cross_ticker_anchor,
+              'await waitCloudSaved(page)\n    await waitForMaOpacityPersisted(request, "VCB", 0.55)\n\n    await page.goto(`${BASE_URL}/insights/vcb`)',
+              1,
+          )
+          spec_path.write_text(spec)
+
+          workflow_path = Path(".github/workflows/qeo171-production-acceptance.yml")
+          workflow = workflow_path.read_text().replace("node-version: 22", "node-version: 24")
+          start = workflow.find("      - name: Align acceptance selectors with current production auth gate\n")
+          end = workflow.find("      - name: Install Chromium\n", start)
+          if start < 0 or end < 0:
+              raise SystemExit("QEO-171 runtime patch block not found")
+          workflow = workflow[:start] + workflow[end:]
+          workflow_path.write_text(workflow)
+          PY
+
+      - name: Commit reviewed harness source
+        run: |
+          git config user.name "qeoindex-ci"
+          git config user.email "qeoindex-ci@users.noreply.github.com"
+          git add tests/browser/qeo171-stock-chart-production.spec.ts .github/workflows/qeo171-production-acceptance.yml
+          git diff --cached --check
+          git commit -m "test(QEO-171): make production acceptance interaction-real"
+          git push origin HEAD:test/qeo-171-production-chart-acceptance-v2
