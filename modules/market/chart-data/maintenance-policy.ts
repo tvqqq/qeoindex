@@ -5,6 +5,7 @@ import {
 
 export const QEO150_CONFIGURED_CLOSE_SECONDS = 14 * 3600 + 46 * 60
 export const QEO150_CONFIGURED_OPEN_SECONDS = 9 * 3600
+export const QEO180_HOT_CONTINUITY_SESSIONS = 5
 
 export type Qeo150EvidenceCategory =
   | "traded"
@@ -94,6 +95,19 @@ export function expectedCompletedVietnamSession(
   const today = vietnamDateKey(referenceAt)
   if (isVietnamSecuritiesTradingDateKey(today) && vietnamSecondsOfDay(referenceAt) >= closeSeconds) return today
   return previousVietnamSecuritiesTradingDateKey(today)
+}
+
+export function qeo180ExpectedHotSessions(referenceAt: Date = new Date()) {
+  const sessions = [expectedCompletedVietnamSession(referenceAt)]
+  while (sessions.length < QEO180_HOT_CONTINUITY_SESSIONS) {
+    sessions.unshift(previousVietnamSecuritiesTradingDateKey(sessions[0]))
+  }
+  return sessions
+}
+
+export function qeo180MissingHotSessions(expectedSessions: string[], presentSessions: string[]) {
+  const present = new Set(presentSessions)
+  return [...new Set(expectedSessions)].filter((sessionDate) => !present.has(sessionDate))
 }
 
 export function qeo150SessionRange(
