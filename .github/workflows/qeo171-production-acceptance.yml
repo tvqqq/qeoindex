@@ -1,6 +1,7 @@
 name: QEO-171 Production Chart Acceptance
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "tests/qeo171/**"
