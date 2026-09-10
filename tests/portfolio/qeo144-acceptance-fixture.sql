@@ -178,7 +178,7 @@ begin
   -- Raw fills remain canonical accounting evidence and link to exactly one Trade.
   insert into public.portfolio_transactions (
     id, portfolio_id, user_id, ticker, action, quantity, price, fee,
-    transaction_date, note, tags, stop_loss, trade_id,
+    transaction_date, note, tags, stop_loss_1, trade_id,
     record_origin, legacy_migration_status, created_at, updated_at
   ) values
     ('14410000-0000-0000-0000-000000000001', v_portfolio_id, v_user_id, 'HPG', 'buy', 1000, 25, 10, '2026-08-03', 'QEO-144 HPG entry', array['qeo144_fixture'], 22, '14401000-0000-0000-0000-000000000002', 'native', 'not_applicable', '2026-08-03T02:00:00Z', '2026-08-03T02:00:00Z'),
