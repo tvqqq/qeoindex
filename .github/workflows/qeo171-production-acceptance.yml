@@ -74,6 +74,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.auth.outputs.available == 'true'
+      - name: Disambiguate password selector for current production login
+        if: steps.auth.outputs.available == 'true'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/browser/qeo171-stock-chart-production.spec.ts")
+          source = path.read_text()
+          before = 'await page.getByLabel(/mật khẩu/i).fill(TEST_PASSWORD)'
+          after = 'await page.getByRole("textbox", { name: "Mật khẩu", exact: true }).fill(TEST_PASSWORD)'
+          if before not in source:
+              raise SystemExit("QEO-171 password selector patch target not found")
+          path.write_text(source.replace(before, after, 1))
+          PY
       - name: Install Chromium
         if: steps.auth.outputs.available == 'true'
         run: pnpm exec playwright install --with-deps chromium
