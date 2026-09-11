@@ -10,9 +10,6 @@ begin
   if to_regprocedure('public.qeo_chart_intraday_session_lock_key(date)') is null then
     raise exception 'QEO-172 requires qeo_chart_intraday_session_lock_key(date)';
   end if;
-  if to_regprocedure('public.qeo_validate_chart_derived_hourly_manifests(uuid[])') is null then
-    raise exception 'QEO-172 requires QEO-147 derived-hourly readiness validator';
-  end if;
 end;
 $function$;
 
@@ -138,8 +135,9 @@ begin
     raise exception 'QEO-172 prune archive proof mismatch: %', p_manifest_id;
   end if;
 
-  -- Preserve QEO-147 authority. The validator itself takes the canonical
-  -- manifest advisory lock and proves exact generation/source/content identity.
+  -- Preserve QEO-147 runtime authority. Repository zero-to-latest replay can
+  -- legitimately omit the quarantined QEO-147 schema, but prune execution must
+  -- still fail closed unless that authority exists and returns positive READY.
   if not exists (
     select 1
     from public.qeo_validate_chart_derived_hourly_manifests(array[p_manifest_id]) v
@@ -236,6 +234,6 @@ grant execute on function public.qeo_prune_verified_chart_intraday_partition(uui
   to service_role;
 
 comment on function public.qeo_prune_verified_chart_intraday_partition(uuid, text, integer, text, bigint, text[]) is
-  'QEO-172 corrective QEO-149/QEO-147 prune: locks candidate plus supplied newer Vietnam dates ascending in qeo108-chart-session namespace, validates positive derived readiness, then revalidates exact HOT content/version before deletion.';
+  'QEO-172 corrective QEO-149/QEO-147 prune: locks candidate plus supplied newer Vietnam dates ascending in qeo108-chart-session namespace, validates positive derived readiness at runtime, then revalidates exact HOT content/version before deletion.';
 
 commit;
