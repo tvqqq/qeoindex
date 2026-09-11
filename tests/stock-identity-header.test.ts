@@ -41,13 +41,13 @@ test("StockIdentity cleans up redundant companyName", () => {
   assert.match(code, /displayCompanyName\.toUpperCase\(\)\.startsWith\(`\$\{normTicker\} ·`\)/)
 })
 
-test("StockDetailWorkstation avoids top gap in middle column by positioning loader absolutely", () => {
+test("StockDetailWorkstation keeps transition status absolute without creating a middle-column gap", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
-  // Floating loader must use absolute positioning and hidden when inactive
-  assert.match(workstation, /pointer-events-none absolute top-3 left-1\/2 -translate-x-1\/2 z-50/)
-  assert.match(workstation, /hidden/)
+  assert.match(workstation, /data-qeo173-transition-indicator/)
+  assert.match(workstation, /pointer-events-none absolute right-2 top-2 z-50/)
+  assert.doesNotMatch(workstation, /opacity-35 pointer-events-none/)
 
-  // Header directly follows the section container
+  // Header remains in normal document flow directly inside the section.
   assert.match(workstation, /<StockCompanyHeader data=\{currentData\} \/>/)
 })
