@@ -4,6 +4,7 @@ import { fetchMinuteOhlcvRange } from "@/modules/market/providers/dnse/history"
 import { fetchVciMinuteOhlcvRange } from "@/modules/market/providers/vci/history"
 import { createSsiIboardProbeProvider } from "@/modules/market/provider-benchmark/providers/ssi-iboard"
 import type { CanonicalChartOhlcvRequest, CanonicalOhlcvBar } from "./contract"
+import { closedProviderBarsAreComplete } from "./provider-response-coverage"
 
 export interface ChartOhlcvProviderResult {
   provider: string
@@ -15,7 +16,7 @@ export interface ChartOhlcvProvider {
 }
 
 type RuntimeProvider = "VCI" | "DNSE" | "SSI_IBOARD"
-export type ChartProviderFailureCode = "AUTH" | "RATE_LIMIT" | "TIMEOUT" | "NETWORK" | "EMPTY_COVERAGE" | "INVALID_REQUEST" | "ERROR"
+export type ChartProviderFailureCode = "AUTH" | "RATE_LIMIT" | "TIMEOUT" | "NETWORK" | "EMPTY_COVERAGE" | "PARTIAL_COVERAGE" | "INVALID_REQUEST" | "ERROR"
 
 export interface ChartProviderFailure {
   provider: RuntimeProvider
@@ -32,7 +33,7 @@ export class ChartOhlcvProviderWaterfallError extends Error {
     this.name = "ChartOhlcvProviderWaterfallError"
     this.failures = failures
     this.retryable = failures.some((failure) => isTransientFailure(failure.code))
-    this.terminalCoverageGap = failures.length > 0 && failures.every((failure) => failure.code === "EMPTY_COVERAGE")
+    this.terminalCoverageGap = failures.length > 0 && failures.every((failure) => failure.code === "EMPTY_COVERAGE" || failure.code === "PARTIAL_COVERAGE")
   }
 }
 
@@ -123,10 +124,15 @@ export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
           try {
             const bars = await fetchFromProvider(provider, input, ssi)
             if (bars.length) {
-              logProviderEvent(input, provider, "success", { rowCount: bars.length, attempt })
-              return { provider, bars }
+              const closedCoverageComplete = input.includeCurrent === true || closedProviderBarsAreComplete(bars)
+              if (closedCoverageComplete) {
+                logProviderEvent(input, provider, "success", { rowCount: bars.length, attempt })
+                return { provider, bars }
+              }
+              lastFailure = "PARTIAL_COVERAGE"
+            } else {
+              lastFailure = "EMPTY_COVERAGE"
             }
-            lastFailure = "EMPTY_COVERAGE"
           } catch (error) {
             lastFailure = providerFailureCode(error)
           }
