@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { chartHistoryFloor } from "@/modules/market/chart-data/history-policy"
 import { vietnamDateKey } from "@/modules/market/calendar"
@@ -83,7 +83,11 @@ export function useChartHistory({
     barsRef.current = bars
   }, [bars])
 
-  useEffect(() => {
+  // A prepared ticker/timeframe swap is already validated before its parent
+  // commits. Synchronize the hook's render state in the layout phase so React
+  // cannot paint the new ticker/timeframe with bars left from the previous
+  // committed dataset. Initial network work remains asynchronous below.
+  useLayoutEffect(() => {
     const generation = ++generationRef.current
     const controller = new AbortController()
     const prepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
