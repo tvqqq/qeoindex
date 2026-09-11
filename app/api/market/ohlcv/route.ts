@@ -5,6 +5,7 @@ import {
   ChartDataUnavailableError,
   type ChartResolution,
 } from "@/modules/market/chart-data/contract"
+import { chartHttpCachePolicy, type ChartHttpCachePolicy } from "@/modules/market/chart-data/http-cache-policy"
 import {
   createChartPerformanceRecorder,
   type ChartPerfSnapshot,
@@ -27,6 +28,7 @@ function measuredJson(
   startedAt: number,
   barCount: number,
   snapshot: ChartPerfSnapshot,
+  cachePolicy: ChartHttpCachePolicy,
 ) {
   const serializationStartedAt = performance.now()
   const body = JSON.stringify(payload)
@@ -43,7 +45,8 @@ function measuredJson(
 
   return new NextResponse(body, {
     headers: {
-      ...NO_STORE,
+      "Cache-Control": cachePolicy.cacheControl,
+      ...(cachePolicy.cacheControl === "private, max-age=600" ? { Vary: cachePolicy.vary } : {}),
       "Content-Type": "application/json; charset=utf-8",
       "Server-Timing": serverTiming,
       "X-Chart-Bar-Count": String(barCount),
@@ -71,6 +74,12 @@ export async function GET(request: Request) {
 
   try {
     const result = await getChartOhlcv({ supabase, performance: recorder }, { ticker, resolution, from, to })
+    const cachePolicy = chartHttpCachePolicy({
+      ticker: result.ticker,
+      timeframe: result.resolution,
+      from: result.from,
+      to: result.to,
+    }, result, new Date())
     return measuredJson({
       ok: true,
       ticker: result.ticker,
@@ -84,7 +93,7 @@ export async function GET(request: Request) {
       errors: result.errors,
       metadata: result.metadata ?? null,
       generatedAt: new Date().toISOString(),
-    }, startedAt, result.bars.length, recorder.snapshot())
+    }, startedAt, result.bars.length, recorder.snapshot(), cachePolicy)
   } catch (error) {
     if (error instanceof ChartDataRequestError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400, headers: NO_STORE })
