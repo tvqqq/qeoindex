@@ -5205,6 +5205,24 @@ export type Database = {
         }
         Returns: Json
       }
+      qeo_publish_chart_derived_hourly_generation: {
+        Args: {
+          p_aggregation_version: string
+          p_bars: Json
+          p_expected_canonical_content_digest: string
+          p_expected_canonical_content_version: number
+          p_expected_format_version: number
+          p_expected_range_end: string
+          p_expected_range_start: string
+          p_expected_raw_row_count: number
+          p_expected_sha256: string
+          p_generated_at: string
+          p_generation_id: string
+          p_manifest_id: string
+          p_ticker: string
+        }
+        Returns: Json
+      }
       qeo_publish_market_universe_run: {
         Args: { p_run_id: string }
         Returns: Json

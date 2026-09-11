@@ -1,6 +1,6 @@
 import "server-only"
 
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { hasVietnamSecuritiesTradingCalendarCoverage, isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../calendar"
 import { listVerifiedColdManifests, type VerifiedColdManifest } from "./cold-store"
@@ -36,32 +36,6 @@ type StoredDerivedRow = {
   low?: unknown
   close?: unknown
   volume?: unknown
-  source_manifest_id?: unknown
-  source_sha256?: unknown
-  source_range_start?: unknown
-  source_range_end?: unknown
-  source_raw_row_count?: unknown
-  source_format_version?: unknown
-  source_canonical_content_digest?: unknown
-  source_canonical_content_version?: unknown
-  aggregation_version?: unknown
-  generation_id?: unknown
-  content_digest?: unknown
-}
-
-interface DerivedGenerationRow {
-  bar: CanonicalOhlcvBar
-  sourceManifestId: string
-  sourceSha256: string
-  sourceRangeStart: number
-  sourceRangeEnd: number
-  sourceRawRowCount: number
-  sourceFormatVersion: number
-  sourceCanonicalContentDigest: string | null
-  sourceCanonicalContentVersion: number | null
-  aggregationVersion: string
-  generationId: string
-  contentDigest: string
 }
 
 function finite(value: unknown) {
@@ -74,16 +48,6 @@ function epoch(value: unknown) {
   return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null
 }
 
-function nullableString(value: unknown) {
-  return value == null || value === "" ? null : String(value)
-}
-
-function nullablePositiveInteger(value: unknown) {
-  if (value == null || value === "") return null
-  const number = Number(value)
-  return Number.isSafeInteger(number) && number > 0 ? number : null
-}
-
 function storedRowToBar(row: StoredDerivedRow): CanonicalOhlcvBar | null {
   const time = epoch(row.bar_time)
   const open = finite(row.open)
@@ -93,72 +57,6 @@ function storedRowToBar(row: StoredDerivedRow): CanonicalOhlcvBar | null {
   const volume = finite(row.volume)
   if (time == null || open == null || high == null || low == null || close == null || volume == null) return null
   return { time, open, high, low, close, volume }
-}
-
-function storedRowToGeneration(row: StoredDerivedRow): DerivedGenerationRow | null {
-  const bar = storedRowToBar(row)
-  const sourceManifestId = String(row.source_manifest_id || "")
-  const sourceSha256 = String(row.source_sha256 || "")
-  const sourceRangeStart = epoch(row.source_range_start)
-  const sourceRangeEnd = epoch(row.source_range_end)
-  const sourceRawRowCount = nullablePositiveInteger(row.source_raw_row_count)
-  const sourceFormatVersion = nullablePositiveInteger(row.source_format_version)
-  const sourceCanonicalContentDigest = nullableString(row.source_canonical_content_digest)
-  const sourceCanonicalContentVersion = nullablePositiveInteger(row.source_canonical_content_version)
-  const aggregationVersion = String(row.aggregation_version || "")
-  const generationId = String(row.generation_id || "")
-  const contentDigest = String(row.content_digest || "")
-  if (!bar || !sourceManifestId || !/^[a-f0-9]{64}$/.test(sourceSha256) || sourceRangeStart == null || sourceRangeEnd == null) return null
-  if (sourceRawRowCount == null || sourceFormatVersion == null || aggregationVersion !== DERIVED_HOURLY_AGGREGATION_VERSION) return null
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(generationId)) return null
-  if (!/^[a-f0-9]{64}$/.test(contentDigest)) return null
-  if (sourceCanonicalContentDigest != null && !/^[a-f0-9]{64}$/.test(sourceCanonicalContentDigest)) return null
-  return {
-    bar,
-    sourceManifestId,
-    sourceSha256,
-    sourceRangeStart,
-    sourceRangeEnd,
-    sourceRawRowCount,
-    sourceFormatVersion,
-    sourceCanonicalContentDigest,
-    sourceCanonicalContentVersion,
-    aggregationVersion,
-    generationId,
-    contentDigest,
-  }
-}
-
-function sameBars(left: CanonicalOhlcvBar[], right: CanonicalOhlcvBar[]) {
-  if (left.length !== right.length) return false
-  return left.every((bar, index) => {
-    const other = right[index]
-    return other
-      && bar.time === other.time
-      && bar.open === other.open
-      && bar.high === other.high
-      && bar.low === other.low
-      && bar.close === other.close
-      && bar.volume === other.volume
-  })
-}
-
-function sameSource(row: DerivedGenerationRow, input: DerivedHourlySourceProof) {
-  return row.sourceManifestId === input.sourceManifestId
-    && row.sourceSha256 === input.sourceSha256
-    && row.sourceRangeStart === input.sourceRangeStart
-    && row.sourceRangeEnd === input.sourceRangeEnd
-    && row.sourceRawRowCount === input.sourceRawRowCount
-    && row.sourceFormatVersion === input.sourceFormatVersion
-    && row.sourceCanonicalContentDigest === (input.sourceCanonicalContentDigest ?? null)
-    && row.sourceCanonicalContentVersion === (input.sourceCanonicalContentVersion ?? null)
-    && row.aggregationVersion === DERIVED_HOURLY_AGGREGATION_VERSION
-}
-
-function aggregateContentDigest(rows: DerivedGenerationRow[]) {
-  if (!rows.length) throw new Error("Cannot prove an empty derived hourly generation")
-  const sorted = [...rows].sort((left, right) => left.bar.time - right.bar.time)
-  return createHash("sha256").update(sorted.map((row) => row.contentDigest).join(""), "utf8").digest("hex")
 }
 
 function vietnamSessionStart(dateKey: string, hour: number, minute = 0) {
@@ -254,20 +152,6 @@ export async function readDerivedHourlyByManifest(
   return ((data || []) as StoredDerivedRow[]).map(storedRowToBar).filter((bar): bar is CanonicalOhlcvBar => Boolean(bar))
 }
 
-async function readDerivedHourlyGenerationByManifest(
-  supabase: SupabaseClient,
-  manifestId: string,
-): Promise<DerivedGenerationRow[]> {
-  const { data, error } = await supabase.from("chart_ohlcv_derived_hourly")
-    .select("bar_time,open,high,low,close,volume,source_manifest_id,source_sha256,source_range_start,source_range_end,source_raw_row_count,source_format_version,source_canonical_content_digest,source_canonical_content_version,aggregation_version,generation_id,content_digest")
-    .eq("source_manifest_id", manifestId).eq("resolution", "1h")
-    .order("bar_time", { ascending: true })
-  if (error) throw new Error(`Chart derived hourly generation read failed: ${error.message}`)
-  const rows = ((data || []) as StoredDerivedRow[]).map(storedRowToGeneration)
-  if (rows.some((row) => row == null)) throw new Error(`Chart derived hourly generation contains unknown proof rows: ${manifestId}`)
-  return rows.filter((row): row is DerivedGenerationRow => Boolean(row))
-}
-
 export async function derivedHourlyColdCoverageComplete(
   supabase: SupabaseClient,
   input: { ticker: string; from: number; to: number },
@@ -290,6 +174,11 @@ export async function derivedHourlyColdCoverageComplete(
   return manifests.every((manifest) => readiness.get(manifest.id)?.ready === true)
 }
 
+/**
+ * Legacy low-level writer retained for mixed-version tooling and isolated tests.
+ * Complete generation publication must use persistVerifiedDerivedHourlyGeneration,
+ * which owns replacement + proof + readiness in one database transaction.
+ */
 export async function upsertDerivedHourlyBars(
   supabase: SupabaseClient,
   input: DerivedHourlySourceProof & {
@@ -347,18 +236,10 @@ export async function persistVerifiedDerivedHourlyGeneration(
   const generationId = randomUUID()
   const generatedAt = input.generatedAt ?? new Date().toISOString()
   const expectedBars = [...input.bars].sort((a, b) => a.time - b.time)
-  await upsertDerivedHourlyBars(supabase, { ...input, bars: expectedBars, generationId, generatedAt })
 
-  const persisted = await readDerivedHourlyGenerationByManifest(supabase, input.sourceManifestId)
-  if (persisted.length !== expectedBars.length
-    || !sameBars(persisted.map((row) => row.bar), expectedBars)
-    || persisted.some((row) => row.generationId !== generationId || !sameSource(row, input))) {
-    throw new Error(`Chart derived hourly generation readback mismatch: ${input.sourceManifestId}`)
-  }
-  const derivedContentDigest = aggregateContentDigest(persisted)
-
-  const { data, error } = await supabase.rpc("qeo_publish_chart_derived_hourly_readiness", {
+  const { data, error } = await supabase.rpc("qeo_publish_chart_derived_hourly_generation", {
     p_manifest_id: input.sourceManifestId,
+    p_ticker: input.ticker,
     p_expected_sha256: input.sourceSha256,
     p_expected_range_start: new Date(input.sourceRangeStart * 1000).toISOString(),
     p_expected_range_end: new Date(input.sourceRangeEnd * 1000).toISOString(),
@@ -368,16 +249,19 @@ export async function persistVerifiedDerivedHourlyGeneration(
     p_expected_canonical_content_version: input.sourceCanonicalContentVersion ?? null,
     p_aggregation_version: DERIVED_HOURLY_AGGREGATION_VERSION,
     p_generation_id: generationId,
-    p_expected_derived_row_count: expectedBars.length,
-    p_expected_derived_content_digest: derivedContentDigest,
+    p_generated_at: generatedAt,
+    p_bars: expectedBars,
   })
-  if (error) throw new Error(`Chart derived hourly readiness publication failed: ${error.message}`)
+  if (error) throw new Error(`Chart derived hourly atomic publication failed: ${error.message}`)
+
   const raw = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {}
-  if (raw.status !== "ready" || String(raw.generationId || "") !== generationId || Number(raw.derivedRowCount) !== expectedBars.length) {
-    throw new Error(`Chart derived hourly readiness publication returned invalid proof: ${input.sourceManifestId}`)
+  const derivedContentDigest = String(raw.derivedContentDigest || "")
+  if (raw.status !== "ready"
+    || String(raw.generationId || "") !== generationId
+    || Number(raw.derivedRowCount) !== expectedBars.length
+    || !/^[a-f0-9]{64}$/.test(derivedContentDigest)) {
+    throw new Error(`Chart derived hourly atomic publication returned invalid proof: ${input.sourceManifestId}`)
   }
 
-  const readiness = await validateDerivedHourlyManifestReadiness(supabase, [input.sourceManifestId])
-  if (readiness.get(input.sourceManifestId)?.ready !== true) throw new Error(`Chart derived hourly readiness post-check failed: ${input.sourceManifestId}`)
   return { rowCount: expectedBars.length, generationId, derivedContentDigest }
 }
