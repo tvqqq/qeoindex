@@ -206,8 +206,10 @@ test("QEO-90 archive guard runs before archive and verified prune", () => {
 
 test("QEO-146 hourly reads compose protected older HOT without dropping partial-hour COLD", () => {
   const service = source("modules/market/chart-data/timeframe-service.ts")
-  assert.match(service, /readDerivedHourlyRange/)
-  assert.match(service, /derivedHourlyColdCoverageComplete/)
+  const readyRange = source("modules/market/chart-data/derived-hourly-ready-range.ts")
+  assert.match(service, /readReadyDerivedHourlyRange/)
+  assert.match(service, /derivedHourlyExistingManifestsReady/)
+  assert.match(readyRange, /validateDerivedHourlyManifestReadiness/)
   assert.match(service, /readIntersectingRange/)
   assert.match(service, /VERIFIED_COLD_1M_RECOVERY/)
   assert.match(service, /readHotIntradayRange/)
