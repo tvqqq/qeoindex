@@ -115,7 +115,10 @@ test("QEO-192 loads macro sources in parallel at the Insights page boundary and 
   const surface = `${loader}\n${insightsPage}\n${closeDashboard}\n${pulseView}`
 
   assert.match(loader, /portal\.vietcombank\.com\.vn[\s\S]*pXML\.aspx\?b=10/)
-  assert.match(loader, /revalidate:\s*300/)
+  assert.match(loader, /readThroughUiCache/)
+  assert.match(loader, /ttlSeconds:\s*300/)
+  assert.match(loader, /namespace:\s*["']market-macro-vcb["']/)
+  assert.doesNotMatch(loader, /next:\s*\{\s*revalidate:\s*300\s*\}/, "force-dynamic Insights must not rely on per-fetch revalidate for the VCB cadence guard")
   assert.match(loader, /scanner\.tradingview\.com\/global\/scan/)
   assert.match(loader, /TVC:DXY/)
   assert.match(loader, /NYMEX:CL1!/)
