@@ -13,9 +13,9 @@ import type {
 import { ChartDataRequestError, isChartResolution } from "./contract"
 import { createSupabaseColdOhlcvStorage } from "./cold-store"
 import {
-  derivedHourlyColdCoverageComplete,
-  readDerivedHourlyRange,
-} from "./derived-hourly-store"
+  derivedHourlyExistingManifestsReady,
+  readReadyDerivedHourlyRange,
+} from "./derived-hourly-ready-range"
 import { verifiedHourlySourceCoverageComplete } from "./derived-hourly-source-coverage"
 import { chartHotSessionRetentionCutoff, clampChartHistoryRange } from "./history-policy"
 import { readHotIntradayRange } from "./hot-store"
@@ -104,8 +104,8 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
   const referenceAt = deps.now ?? new Date()
   const hotCutoff = chartHotSessionRetentionCutoff(referenceAt)
   const sourceRange = sourceRangeForResolution(request.resolution, request.from, request.to)
-  const loadDerived: DerivedHourlyLoader = deps.derivedHourlyLoader ?? ((input) => readDerivedHourlyRange(deps.supabase, input.ticker, input.from, input.to))
-  const derivedCoverage: DerivedCoverageLoader = deps.derivedCoverageLoader ?? ((input) => derivedHourlyColdCoverageComplete(deps.supabase, input))
+  const loadDerived: DerivedHourlyLoader = deps.derivedHourlyLoader ?? ((input) => readReadyDerivedHourlyRange(deps.supabase, input.ticker, input.from, input.to))
+  const derivedCoverage: DerivedCoverageLoader = deps.derivedCoverageLoader ?? ((input) => derivedHourlyExistingManifestsReady(deps.supabase, input))
   const sourceCoverage: DerivedCoverageLoader = deps.sourceCoverageLoader
     ?? (deps.derivedCoverageLoader ? deps.derivedCoverageLoader : (input) => verifiedHourlySourceCoverageComplete(deps.supabase, input))
   const loadHot: HotLoader = deps.hotLoader ?? ((input) => readHotIntradayRange(deps.supabase, input.ticker, input.from, input.to))
@@ -124,6 +124,16 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
     try {
       oldHot = await measured(deps, "hot-db", () => loadHot({ ticker: request.ticker, from: oldFrom, to: oldTo }))
     } catch {
+      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
+    }
+
+    // Freeze full requested-session source coverage before taking the partial
+    // derived-cache snapshot. If history is missing now, this request remains
+    // truthfully PARTIAL even if a concurrent archive fills the gap later.
+    try {
+      oldSourceCoverageComplete = await measured(deps, "derived-cache", () => sourceCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo }))
+    } catch {
+      oldSourceCoverageComplete = false
       oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
     }
 
@@ -194,12 +204,6 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
       }
     }
 
-    try {
-      oldSourceCoverageComplete = await measured(deps, "derived-cache", () => sourceCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo }))
-    } catch {
-      oldSourceCoverageComplete = false
-      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-    }
     if (!oldHourly.length) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
   }
 
