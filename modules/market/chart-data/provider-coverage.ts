@@ -126,3 +126,18 @@ export function uncoveredProviderRanges(
     ranges.flatMap((range) => missingProviderRanges(range, coveredRanges)),
   )
 }
+
+/**
+ * A detected physical 1m hole is non-blocking only when durable successful
+ * provider coverage proves that the provider itself returned the surrounding
+ * range without those timestamps. Any uncovered portion remains a real gap.
+ */
+export function isProviderConfirmedSparseGap(
+  gap: { fromTime: number; toTime: number },
+  coveredRanges: ProviderCoverageRange[],
+) {
+  return uncoveredProviderRanges(
+    [{ from: gap.fromTime, to: gap.toTime }],
+    coveredRanges,
+  ).length === 0
+}
