@@ -76,6 +76,7 @@ test("QEO-149 real two-session rehearsal is wired after QEO-108", () => {
 
 test("QEO-147 routing and recovery require the same durable complete-generation validator", () => {
   const store = readFileSync(new URL("../modules/market/chart-data/derived-hourly-store.ts", import.meta.url), "utf8")
+  const readyRange = readFileSync(new URL("../modules/market/chart-data/derived-hourly-ready-range.ts", import.meta.url), "utf8")
   const recovery = readFileSync(new URL("../modules/market/chart-data/derived-hourly-recovery.ts", import.meta.url), "utf8")
   const timeframe = readFileSync(new URL("../modules/market/chart-data/timeframe-service.ts", import.meta.url), "utf8")
   assert.match(store, /validateDerivedHourlyManifestReadiness/)
@@ -83,7 +84,11 @@ test("QEO-147 routing and recovery require the same durable complete-generation 
   assert.doesNotMatch(store, /manifestIds\.every\(\(id\) => covered\.has\(id\)\)/)
   assert.match(recovery, /validateDerivedHourlyManifestReadiness/)
   assert.doesNotMatch(recovery, /derivedManifestIds/)
-  assert.match(timeframe, /derivedHourlyColdCoverageComplete/)
+  assert.match(readyRange, /validateDerivedHourlyManifestReadiness/)
+  assert.match(readyRange, /derivedHourlyExistingManifestsReady/)
+  assert.match(readyRange, /readReadyDerivedHourlyRange/)
+  assert.match(readyRange, /postRead[\s\S]*?ready !== true/)
+  assert.match(timeframe, /derivedHourlyExistingManifestsReady/)
   assert.match(timeframe, /if \(cacheReady\)/)
   assert.match(timeframe, /if \(!cacheReady\)[\s\S]*?readIntersectingRange/)
 })
