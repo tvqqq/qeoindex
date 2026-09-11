@@ -1,16 +1,21 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { SlidersHorizontal } from "lucide-react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { cn } from "@/modules/shared/ui/cn"
+import {
+  prepareInitialChartHistory,
+  type PreparedChartHistory,
+} from "./chart/chart-history"
 import {
   calculateMacdSeries,
   calculateRsiSeries,
   calculateVolumeSma,
 } from "./chart/stock-chart-indicators"
 import { CanonicalMinuteBarsContext } from "./chart/use-canonical-minute-bars"
-import type { ChartTimeframe } from "./chart/stock-chart-types"
+import { ALL_TIMEFRAMES, type ChartTimeframe } from "./chart/stock-chart-types"
 import { useChartHistory } from "./chart/use-chart-history"
 import {
   CHART_TIMEFRAME_EVENT,
@@ -28,6 +33,7 @@ interface StockTradingViewChartDataProps {
   currentPrice?: number
   changePct?: number
   navigationTimeframe?: ChartTimeframeNavigationRequest | null
+  preparedInitial?: PreparedChartHistory | null
   onTimeframeChange?: (timeframe: ChartTimeframe) => void
 }
 
@@ -42,6 +48,7 @@ interface TimeframeEventDetail {
 }
 
 const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h", "4h"])
+const SUPPORTED_TIMEFRAMES = new Set<ChartTimeframe>(ALL_TIMEFRAMES.map(({ id }) => id))
 
 function formatMetric(value: number | null | undefined, digits = 2) {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—"
@@ -55,6 +62,15 @@ function formatCompactVolume(volume: number | null | undefined) {
   return Math.round(volume).toLocaleString("vi-VN")
 }
 
+function timeframeFromButton(button: HTMLButtonElement) {
+  const firstSpan = button.querySelector("span")?.textContent?.trim()
+  const exact = button.textContent?.trim()
+  const candidate = firstSpan && SUPPORTED_TIMEFRAMES.has(firstSpan as ChartTimeframe)
+    ? firstSpan
+    : exact && SUPPORTED_TIMEFRAMES.has(exact as ChartTimeframe) ? exact : null
+  return candidate as ChartTimeframe | null
+}
+
 function HistoryBoundChart({
   ticker,
   exchange,
@@ -65,7 +81,14 @@ function HistoryBoundChart({
   currentPrice,
   changePct,
   navigationTimeframe,
-}: StockTradingViewChartDataProps & { timeframe: ChartTimeframe }) {
+  preparedInitial,
+  onTimeframeClickCapture,
+  preparingTimeframe,
+}: StockTradingViewChartDataProps & {
+  timeframe: ChartTimeframe
+  onTimeframeClickCapture: (event: React.MouseEvent<HTMLDivElement>) => void
+  preparingTimeframe: ChartTimeframe | null
+}) {
   const {
     bars,
     loading,
@@ -78,7 +101,7 @@ function HistoryBoundChart({
     liveError,
     liveProvider,
     lastUpdatedAt,
-  } = useChartHistory({ ticker, timeframe, seedDailyBars })
+  } = useChartHistory({ ticker, timeframe, seedDailyBars, preparedInitial })
 
   const dragStartXRef = useRef<number | null>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
@@ -87,17 +110,11 @@ function HistoryBoundChart({
     if (!loading && !loadingOlder && hasMore) void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder])
 
-  // QEO-100 P0: raw 1m has a bounded 31-day product horizon. Hydrate it
-  // progressively after the fast initial window so completeness does not
-  // depend on mouse/trackpad gesture direction. Stop automatic progression on
-  // a transport failure; a reload can retry instead of creating a retry loop.
   useEffect(() => {
     if (timeframe !== "1m" || loading || loadingOlder || !hasMore || error) return
     void loadOlder()
   }, [error, hasMore, loadOlder, loading, loadingOlder, timeframe])
 
-  // Preserve lazy gesture loading for non-1m timeframes. QEO-100 only changes
-  // the raw 1m completeness contract; QEO-103 owns cache/retention optimization.
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (timeframe === "1m") return
     if (event.button === 0) dragStartXRef.current = event.clientX
@@ -152,8 +169,6 @@ function HistoryBoundChart({
     button?.click()
   }, [])
 
-  // QEO-173: the native chart owns crosshair time. Pane chrome observes the
-  // existing canonical legend timestamp instead of creating a second hover model.
   useEffect(() => {
     const terminal = terminalRef.current
     if (!terminal || !isMaximized) {
@@ -178,9 +193,6 @@ function HistoryBoundChart({
     return () => observer.disconnect()
   }, [isMaximized, ticker, timeframe])
 
-  // QEO-172: publish render readiness conservatively after the replacement
-  // dataset has propagated through child effects and two animation frames. The
-  // marker is observational only; it never drives chart behavior.
   useEffect(() => {
     const terminal = terminalRef.current
     terminal?.removeAttribute("data-chart-rendered-key")
@@ -211,6 +223,8 @@ function HistoryBoundChart({
       data-chart-maximized={isMaximized ? "true" : "false"}
       data-chart-live-state={liveState}
       data-chart-loading={loading ? "true" : "false"}
+      data-chart-preparing-timeframe={preparingTimeframe ?? ""}
+      onClickCapture={onTimeframeClickCapture}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMoveCapture={handleMouseMoveCapture}
       onMouseUpCapture={() => { dragStartXRef.current = null }}
@@ -258,7 +272,17 @@ function HistoryBoundChart({
         )}
       </div>
 
-      {loading && (
+      {preparingTimeframe && (
+        <div
+          data-chart-timeframe-preparing
+          className="pointer-events-none absolute right-2 top-9 z-40 flex items-center gap-1.5 rounded border border-white/[0.08] bg-[#0b1118]/90 px-2 py-1 font-mono text-[10px] text-slate-400"
+        >
+          <span className="size-1.5 animate-pulse rounded-full bg-cyan-300/80" />
+          Đang chuẩn bị {preparingTimeframe}…
+        </div>
+      )}
+
+      {loading && !preparingTimeframe && (
         <div
           data-chart-loading-indicator
           className="pointer-events-none absolute right-2 top-9 z-40 flex items-center gap-1.5 rounded border border-white/[0.08] bg-[#0b1118]/90 px-2 py-1 font-mono text-[10px] text-slate-400"
@@ -373,30 +397,109 @@ function HistoryBoundChart({
 }
 
 export function StockTradingViewChartData(props: StockTradingViewChartDataProps) {
-  const { navigationTimeframe, onTimeframeChange, ticker } = props
+  const { navigationTimeframe, onTimeframeChange, preparedInitial: externalPrepared, ticker } = props
   const requestedTimeframe = navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase()
     ? navigationTimeframe.timeframe
     : null
-  const [timeframe, setTimeframe] = useState<ChartTimeframe>(
-    () => requestedTimeframe ?? readStoredChartTimeframe(ticker) ?? "1D",
+  const initialTimeframe = externalPrepared?.ticker === ticker.toUpperCase()
+    ? externalPrepared.timeframe
+    : requestedTimeframe ?? readStoredChartTimeframe(ticker) ?? "1D"
+  const [committedTimeframe, setCommittedTimeframe] = useState<ChartTimeframe>(initialTimeframe)
+  const [preparedInitial, setPreparedInitial] = useState<PreparedChartHistory | null>(
+    externalPrepared?.ticker === ticker.toUpperCase() ? externalPrepared : null,
   )
+  const [preparingTimeframe, setPreparingTimeframe] = useState<ChartTimeframe | null>(null)
+  const preparationRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
+  const replayTimeframeClickRef = useRef(false)
+
+  const prepareAndCommit = useCallback(async (nextTimeframe: ChartTimeframe, replayButton?: HTMLButtonElement) => {
+    if (nextTimeframe === committedTimeframe) return
+    const generation = preparationRef.current.generation + 1
+    preparationRef.current.controller?.abort()
+    const controller = new AbortController()
+    preparationRef.current = { generation, controller }
+    setPreparingTimeframe(nextTimeframe)
+
+    try {
+      const prepared = await prepareInitialChartHistory({
+        ticker,
+        timeframe: nextTimeframe,
+        signal: controller.signal,
+      })
+      if (controller.signal.aborted || preparationRef.current.generation !== generation) return
+
+      flushSync(() => {
+        setPreparedInitial(prepared)
+        setCommittedTimeframe(nextTimeframe)
+        onTimeframeChange?.(nextTimeframe)
+        if (replayButton?.isConnected) {
+          replayTimeframeClickRef.current = true
+          replayButton.click()
+        }
+      })
+    } catch (cause) {
+      if (!controller.signal.aborted) console.error("Unable to prepare target chart timeframe:", cause)
+    } finally {
+      if (preparationRef.current.generation === generation) {
+        preparationRef.current.controller = null
+        setPreparingTimeframe(null)
+      }
+    }
+  }, [committedTimeframe, onTimeframeChange, ticker])
+
+  const handleTimeframeClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (replayTimeframeClickRef.current) {
+      replayTimeframeClickRef.current = false
+      return
+    }
+    const target = event.target as HTMLElement | null
+    const button = target?.closest("button") as HTMLButtonElement | null
+    if (!button) return
+    const nextTimeframe = timeframeFromButton(button)
+    if (!nextTimeframe || nextTimeframe === committedTimeframe) return
+    event.preventDefault()
+    event.stopPropagation()
+    void prepareAndCommit(nextTimeframe, button)
+  }, [committedTimeframe, prepareAndCommit])
 
   useEffect(() => {
-    const nextTimeframe = requestedTimeframe ?? readStoredChartTimeframe(ticker) ?? "1D"
-    setTimeframe(nextTimeframe)
-    onTimeframeChange?.(nextTimeframe)
-  }, [onTimeframeChange, requestedTimeframe, ticker])
+    if (!externalPrepared || externalPrepared.ticker !== ticker.toUpperCase()) return
+    preparationRef.current.controller?.abort()
+    setPreparedInitial(externalPrepared)
+    setCommittedTimeframe(externalPrepared.timeframe)
+    setPreparingTimeframe(null)
+    onTimeframeChange?.(externalPrepared.timeframe)
+  }, [externalPrepared, onTimeframeChange, ticker])
+
+  useEffect(() => {
+    if (!requestedTimeframe || requestedTimeframe === committedTimeframe) return
+    if (externalPrepared?.ticker === ticker.toUpperCase() && externalPrepared.timeframe === requestedTimeframe) return
+    void prepareAndCommit(requestedTimeframe)
+  }, [committedTimeframe, externalPrepared, prepareAndCommit, requestedTimeframe, ticker])
 
   useEffect(() => {
     const onTimeframe = (event: Event) => {
       const detail = (event as CustomEvent<TimeframeEventDetail>).detail
       if (!detail || detail.ticker !== ticker.toUpperCase()) return
-      setTimeframe(detail.timeframe)
-      onTimeframeChange?.(detail.timeframe)
+      if (detail.timeframe === committedTimeframe) {
+        onTimeframeChange?.(detail.timeframe)
+        return
+      }
+      void prepareAndCommit(detail.timeframe)
     }
     window.addEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
     return () => window.removeEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
-  }, [onTimeframeChange, ticker])
+  }, [committedTimeframe, onTimeframeChange, prepareAndCommit, ticker])
 
-  return <HistoryBoundChart {...props} timeframe={timeframe} />
+  useEffect(() => () => preparationRef.current.controller?.abort(), [])
+
+  return (
+    <HistoryBoundChart
+      {...props}
+      timeframe={committedTimeframe}
+      preparedInitial={preparedInitial}
+      onTimeframeClickCapture={handleTimeframeClickCapture}
+      preparingTimeframe={preparingTimeframe}
+    />
+  )
 }
