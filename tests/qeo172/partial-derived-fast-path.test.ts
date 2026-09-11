@@ -7,15 +7,17 @@ function source(path: string) {
 }
 
 test("QEO-172 partial old-range reads reuse only positively-ready existing derived manifests", () => {
-  const store = source("modules/market/chart-data/derived-hourly-store.ts")
+  const readyRange = source("modules/market/chart-data/derived-hourly-ready-range.ts")
   const timeframe = source("modules/market/chart-data/timeframe-service.ts")
 
-  assert.match(store, /export async function derivedHourlyExistingManifestsReady/)
-  assert.match(store, /readDerivedHourlyRange[\s\S]*?listVerifiedColdManifests/)
-  assert.match(store, /readDerivedHourlyRange[\s\S]*?\.in\("source_manifest_id",\s*manifestIds\)/)
-  assert.match(store, /readDerivedHourlyRange[\s\S]*?validateDerivedHourlyManifestReadiness/)
+  assert.match(readyRange, /export async function derivedHourlyExistingManifestsReady/)
+  assert.match(readyRange, /readReadyDerivedHourlyRange[\s\S]*?listExistingManifests/)
+  assert.match(readyRange, /readReadyDerivedHourlyRange[\s\S]*?\.in\("source_manifest_id",\s*ids\)/)
+  assert.match(readyRange, /readReadyDerivedHourlyRange[\s\S]*?validateDerivedHourlyManifestReadiness/)
+  assert.match(readyRange, /postRead[\s\S]*?ready !== true/)
 
   assert.match(timeframe, /derivedHourlyExistingManifestsReady/)
+  assert.match(timeframe, /readReadyDerivedHourlyRange/)
   assert.match(timeframe, /const derivedCoverage:[\s\S]*?derivedHourlyExistingManifestsReady/)
 
   const hourlyStart = timeframe.indexOf("async function loadHourlyFamily")
@@ -33,5 +35,5 @@ test("QEO-172 full derived coverage still requires every requested trading sessi
   const store = source("modules/market/chart-data/derived-hourly-store.ts")
   assert.match(store, /derivedHourlyColdCoverageComplete[\s\S]*?requiredTradingDates/)
   assert.match(store, /requiredDates\.some\(\(dateKey\) => !datesWithManifest\.has\(dateKey\)\)/)
-  assert.match(store, /derivedHourlyColdCoverageComplete[\s\S]*?derivedHourlyExistingManifestsReady/)
+  assert.match(store, /derivedHourlyColdCoverageComplete[\s\S]*?validateDerivedHourlyManifestReadiness/)
 })
