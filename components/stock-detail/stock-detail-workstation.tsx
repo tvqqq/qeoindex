@@ -102,13 +102,11 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
       try {
         const [targetData, targetPrepared] = await Promise.all([
           getStockDetail(sym),
-          targetTimeframe === "1D"
-            ? Promise.resolve<PreparedChartHistory | null>(null)
-            : prepareInitialChartHistory({
-                ticker: sym,
-                timeframe: targetTimeframe,
-                signal: controller.signal,
-              }),
+          prepareInitialChartHistory({
+            ticker: sym,
+            timeframe: targetTimeframe,
+            signal: controller.signal,
+          }),
         ])
         if (controller.signal.aborted || navigationGenerationRef.current !== generation) return
 
