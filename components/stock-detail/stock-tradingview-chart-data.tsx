@@ -412,12 +412,16 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
   const [preparingTimeframe, setPreparingTimeframe] = useState<ChartTimeframe | null>(null)
   const preparationRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
   const replayTimeframeClickRef = useRef(false)
+  const consumedExternalPreparedRef = useRef<PreparedChartHistory | null>(null)
 
-  // Parent ticker navigation already has a fully prepared dataset before it
-  // commits the new ticker. Use that dataset synchronously in this render so
-  // the first paint can never pair the new ticker with the previous bars.
-  const renderPreparedInitial = externalPreparedForTicker ?? preparedInitial
-  const renderTimeframe = externalPreparedForTicker?.timeframe ?? committedTimeframe
+  // A parent navigation handoff is authoritative only until this wrapper has
+  // consumed that exact prepared object. Later direct timeframe changes own
+  // their internal prepared state and cannot be pinned by the stale parent prop.
+  const pendingExternalPrepared = externalPreparedForTicker && consumedExternalPreparedRef.current !== externalPreparedForTicker
+    ? externalPreparedForTicker
+    : null
+  const renderPreparedInitial = pendingExternalPrepared ?? preparedInitial
+  const renderTimeframe = pendingExternalPrepared?.timeframe ?? committedTimeframe
 
   const prepareAndCommit = useCallback(async (nextTimeframe: ChartTimeframe, replayButton?: HTMLButtonElement) => {
     if (nextTimeframe === committedTimeframe) return
@@ -470,19 +474,14 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
   }, [committedTimeframe, prepareAndCommit])
 
   useEffect(() => {
-    if (!externalPreparedForTicker) return
+    if (!externalPreparedForTicker || consumedExternalPreparedRef.current === externalPreparedForTicker) return
+    consumedExternalPreparedRef.current = externalPreparedForTicker
     preparationRef.current.controller?.abort()
     setPreparedInitial(externalPreparedForTicker)
     setCommittedTimeframe(externalPreparedForTicker.timeframe)
     setPreparingTimeframe(null)
     onTimeframeChange?.(externalPreparedForTicker.timeframe)
   }, [externalPreparedForTicker, onTimeframeChange])
-
-  useEffect(() => {
-    if (!requestedTimeframe || requestedTimeframe === committedTimeframe) return
-    if (externalPreparedForTicker?.timeframe === requestedTimeframe) return
-    void prepareAndCommit(requestedTimeframe)
-  }, [committedTimeframe, externalPreparedForTicker, prepareAndCommit, requestedTimeframe])
 
   useEffect(() => {
     const onTimeframe = (event: Event) => {
