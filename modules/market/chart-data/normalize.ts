@@ -137,3 +137,11 @@ export function detectTradingSessionGaps(bars: CanonicalOhlcvBar[]): ChartDataGa
   }
   return gaps
 }
+
+/**
+ * Closed provider reads are terminal only when canonical Vietnam session-gap
+ * semantics find no missing minute inside a continuous trading segment.
+ */
+export function closedProviderBarsAreComplete(bars: CanonicalOhlcvBar[]) {
+  return bars.length > 0 && detectTradingSessionGaps(bars).length === 0
+}
