@@ -13,6 +13,7 @@ import {
   type ChartHistoryResponse,
   type ChartRangeInput,
 } from "../../components/stock-detail/chart/chart-history.ts"
+import { chartHttpCachePolicy } from "../../modules/market/chart-data/http-cache-policy.ts"
 import {
   createChartPerformanceRecorder,
   type ChartPerfStage,
@@ -128,6 +129,30 @@ test("QEO-172 completed Daily does not get an intraday current-date tail", () =>
     to: epoch("2026-09-10T10:30:00+07:00"),
   }
   assert.deepEqual(planChartHistorySlices(input, now), { stableClosed: input, currentDateTail: null })
+})
+
+test("QEO-172 server cache policy admits only safe stable complete ranges", () => {
+  const now = new Date("2026-09-10T16:00:00+07:00")
+  const stableInput: ChartRangeInput = {
+    ticker: "VIC",
+    timeframe: "1h",
+    from: epoch("2026-09-01T09:00:00+07:00"),
+    to: epoch("2026-09-09T15:00:00+07:00"),
+  }
+  const safe = completeResponse(stableInput, [stableInput.from, stableInput.to])
+  assert.deepEqual(chartHttpCachePolicy(stableInput, safe, now), {
+    cacheControl: "private, max-age=600",
+    vary: "Cookie",
+  })
+
+  const sameDayInput = { ...stableInput, to: epoch("2026-09-10T15:00:00+07:00") }
+  const sameDay = completeResponse(sameDayInput, [sameDayInput.from, sameDayInput.to])
+  assert.deepEqual(chartHttpCachePolicy(sameDayInput, sameDay, now), { cacheControl: "no-store" })
+
+  assert.deepEqual(chartHttpCachePolicy(stableInput, {
+    ...safe,
+    coverage: { complete: false, state: "PARTIAL" },
+  }, now), { cacheControl: "no-store" })
 })
 
 test("QEO-172 stable request uses default transport while fresh request stays no-store", async () => {
