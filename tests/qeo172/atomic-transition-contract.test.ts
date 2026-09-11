@@ -8,13 +8,13 @@ function source(path: string) {
 
 test("QEO-172 timeframe transition separates requested and committed state", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
-  const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
 
   assert.match(wrapper, /committedTimeframe/)
   assert.match(wrapper, /prepareInitialChartHistory/)
   assert.match(wrapper, /preparedInitial/)
-  assert.match(chart, /onTimeframeRequest/)
-  assert.match(chart, /controlledTimeframe/)
+  assert.match(wrapper, /handleTimeframeClickCapture/)
+  assert.match(wrapper, /replayTimeframeClickRef/)
+  assert.match(wrapper, /flushSync/)
 })
 
 test("QEO-172 ticker navigation has bounded prefetch and full preparation before commit", () => {
