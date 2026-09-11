@@ -38,6 +38,14 @@ test("QEO-172 external prepared/navigation handoff is one-shot and cannot pin a 
   assert.doesNotMatch(wrapper, /void prepareAndCommit\(requestedTimeframe\)/)
 })
 
+test("QEO-172 replayed timeframe event observes the committed ref and cannot prepare the same target twice", () => {
+  const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+
+  assert.match(wrapper, /committedTimeframeRef/)
+  assert.match(wrapper, /committedTimeframeRef\.current = nextTimeframe/)
+  assert.match(wrapper, /detail\.timeframe === committedTimeframeRef\.current/)
+})
+
 test("QEO-172 ticker navigation has bounded prefetch and full preparation before commit", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
