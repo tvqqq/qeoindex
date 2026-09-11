@@ -4,6 +4,7 @@ import { LandingLogin } from "@/components/auth/landing-login"
 import { InsightsDashboard } from "@/components/insights/insights-dashboard"
 import { getServerAuthContext } from "@/modules/auth/server"
 import { loadVn30FuturesBasisPulseLatest } from "@/modules/research/market-insight/futures-basis-loader"
+import { loadCompactMacroPulse } from "@/modules/research/market-insight/macro-pulse-loader"
 import { getInsightsDashboardData } from "@/modules/research/insights/data"
 import { normalizeInsightsDashboardSectors } from "@/modules/research/insights/sector-normalization"
 
@@ -24,14 +25,16 @@ export default async function InsightsPage({
   if (!auth) return <LandingLogin />
   const query = searchParams ? await searchParams : {}
   const requestedTicker = (Array.isArray(query.ticker) ? query.ticker[0] : query.ticker || (Array.isArray(query.rating) ? query.rating[0] : query.rating) || "").trim().toUpperCase()
-  const [dashboardData, futuresBasisPulse] = await Promise.all([
+  const [dashboardData, futuresBasisPulse, macroPulse] = await Promise.all([
     getInsightsDashboardData(auth.supabase),
     loadVn30FuturesBasisPulseLatest(auth.supabase).catch(() => null),
+    loadCompactMacroPulse().catch(() => null),
   ])
   const data = normalizeInsightsDashboardSectors(dashboardData)
   if (data.marketClose) {
     Object.assign(data.marketClose, {
       futuresBasisPulse: futuresBasisPulse?.sessionDate === data.marketClose.sessionDate ? futuresBasisPulse : null,
+      macroPulse,
     })
   }
   return <InsightsDashboard data={data} initialTicker={requestedTicker} />
