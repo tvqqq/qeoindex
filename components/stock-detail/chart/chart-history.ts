@@ -240,6 +240,8 @@ export function requestChartRange(
   const key = requestKey(normalized)
   const now = options.now ?? new Date()
   const stable = isStableClosedChartRange(normalized, now)
+  const transportMode = !options.bypassCache && stable ? "stable" : "fresh"
+  const flightKey = `${key}:${transportMode}`
 
   if (!options.bypassCache && stable) {
     const cached = findCachedRange(normalized, { touch: true, trackHit: true })
@@ -247,7 +249,7 @@ export function requestChartRange(
     cacheMisses += 1
   }
 
-  const existing = inFlight.get(key)
+  const existing = inFlight.get(flightKey)
   if (existing) return existing
 
   const params = new URLSearchParams({
@@ -259,7 +261,7 @@ export function requestChartRange(
 
   const promise = (async () => {
     const response = await fetchImpl(`/api/market/ohlcv?${params.toString()}`, {
-      cache: !options.bypassCache && stable ? "default" : "no-store",
+      cache: transportMode === "stable" ? "default" : "no-store",
       headers: { Accept: "application/json" },
       signal,
     })
@@ -274,10 +276,10 @@ export function requestChartRange(
     rememberClosedRange(normalized, result, now)
     return result
   })().finally(() => {
-    inFlight.delete(key)
+    inFlight.delete(flightKey)
   })
 
-  inFlight.set(key, promise)
+  inFlight.set(flightKey, promise)
   return promise
 }
 
