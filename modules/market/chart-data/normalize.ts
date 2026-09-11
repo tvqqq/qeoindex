@@ -105,17 +105,18 @@ function tradingSegment(time: number) {
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
   const date = `${value("year")}-${value("month")}-${value("day")}`
   const minutes = Number(value("hour")) * 60 + Number(value("minute"))
-  const segment = minutes >= 9 * 60 && minutes <= 11 * 60 + 30
+  const segment = minutes >= 9 * 60 + 15 && minutes <= 11 * 60 + 30
     ? "AM"
-    : minutes >= 13 * 60 && minutes <= 14 * 60 + 45
+    : minutes >= 13 * 60 && minutes < 14 * 60 + 30
       ? "PM"
       : null
   return { date, segment }
 }
 
 /**
- * Gap evidence for production 1m coverage. Expected overnight and lunch breaks
- * are ignored; QEO-93 owns the richer exchange-calendar/timeframe engine.
+ * Gap evidence for production 1m coverage. Only continuous matching windows
+ * are expected to be minute-contiguous; call auctions, overnight and lunch are
+ * intentionally sparse/non-continuous. QEO-93 owns the richer timeframe engine.
  */
 export function detectTradingSessionGaps(bars: CanonicalOhlcvBar[]): ChartDataGap[] {
   const sorted = [...bars].sort((a, b) => a.time - b.time)
