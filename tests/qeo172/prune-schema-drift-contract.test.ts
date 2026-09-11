@@ -29,3 +29,18 @@ test("QEO-172 corrective prune migration preserves QEO-147 positive readiness au
   assert.match(migration, /and\s+v\.ready/i)
   assert.match(migration, /qeo_prune_verified_chart_intraday_partition\s*\(\s*p_manifest_id uuid/is)
 })
+
+test("QEO-172 corrective migration is replay-safe before quarantined QEO-147 is activated", () => {
+  const migration = correctiveMigration()
+
+  assert.doesNotMatch(
+    migration,
+    /to_regprocedure\('public\.qeo_validate_chart_derived_hourly_manifests\(uuid\[\]\)'\)/i,
+    "zero-to-latest replay must not require the quarantined QEO-147 validator at DDL time",
+  )
+  assert.match(
+    migration,
+    /qeo_validate_chart_derived_hourly_manifests\(array\[p_manifest_id\]\)/i,
+    "prune execution must still fail closed through QEO-147 positive readiness authority",
+  )
+})
