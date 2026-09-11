@@ -42,6 +42,7 @@ import {
   type ClosedRangeIngestionResult,
 } from "./provider-ingestion"
 import {
+  isProviderConfirmedSparseGap,
   mergeProviderRanges,
   missingTradingProviderRanges,
   uncoveredProviderRanges,
@@ -490,6 +491,7 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
   }
 
   const gaps = detectTradingSessionGaps(normalized.bars)
+    .filter((gap) => !isProviderConfirmedSparseGap(gap, coveredRanges))
   if (normalized.integrityIssues.length) errors.push({ code: "INTEGRITY_WARNING" })
   const uniqueErrors = [...new Map(errors.map((item) => [item.code, item])).values()]
   const complete = normalized.bars.length > 0 && gaps.length === 0 && normalized.integrityIssues.length === 0 && uniqueErrors.length === 0
