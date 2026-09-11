@@ -1,10 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { expect, test, type Page } from "@playwright/test"
+import { ALL_TIMEFRAMES } from "../../components/stock-detail/chart/stock-chart-types"
 
 const BASE_URL = process.env.QEO173_BASE_URL ?? "https://qeoindex.qeoqeo.com"
 const TEST_EMAIL = process.env.QEO171_TEST_EMAIL
 const TEST_PASSWORD = process.env.QEO171_TEST_PASSWORD
 const TICKERS = ["VIC", "VCB"] as const
+const TIMEFRAME_PATTERN = ALL_TIMEFRAMES.map(({ id }) => id).join("|")
 
 type EvidenceRow = {
   ticker: string
@@ -33,9 +35,12 @@ async function login(page: Page) {
 async function waitRendered(page: Page, ticker: string) {
   const terminal = page.locator('[data-chart-terminal="true"]')
   await expect(terminal).toBeVisible({ timeout: 20_000 })
+  // QEO-173 must preserve the user's persisted timeframe. Production QA only
+  // requires the requested ticker to finish rendering on any supported chart
+  // timeframe; it must not force or assume the default 1D state.
   await expect(terminal).toHaveAttribute(
     "data-chart-rendered-key",
-    new RegExp(`^${ticker}:1D:\\d+:\\d+$`),
+    new RegExp(`^${ticker}:(?:${TIMEFRAME_PATTERN}):\\d+:\\d+$`),
     { timeout: 30_000 },
   )
   return terminal
