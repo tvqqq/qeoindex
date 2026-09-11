@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { closedProviderBarsAreComplete } from "../../modules/market/chart-data/provider-response-coverage.ts"
+import { closedProviderBarsAreComplete } from "../../modules/market/chart-data/normalize.ts"
 
 const epoch = (iso: string) => Math.floor(Date.parse(iso) / 1000)
 const bar = (iso: string) => ({
