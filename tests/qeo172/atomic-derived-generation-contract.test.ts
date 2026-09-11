@@ -8,10 +8,10 @@ function source(path: string) {
 
 test("QEO-172 publishes one derived generation atomically under the manifest lock", () => {
   const migrationUrl = new URL(
-    "../../supabase/pending-migrations/20260911162000_qeo172_atomic_derived_generation_publish.sql",
+    "../../supabase/migrations/20260911162000_qeo172_atomic_derived_generation_publish.sql",
     import.meta.url,
   )
-  assert.equal(existsSync(migrationUrl), true, "atomic derived-generation migration must exist")
+  assert.equal(existsSync(migrationUrl), true, "active atomic derived-generation migration must exist")
 
   const migration = readFileSync(migrationUrl, "utf8")
   const store = source("modules/market/chart-data/derived-hourly-store.ts")
