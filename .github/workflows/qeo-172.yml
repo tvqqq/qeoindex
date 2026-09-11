@@ -37,8 +37,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: QEO-172 performance contract
-        run: node --test tests/qeo172/chart-performance-contract.test.ts
+      - name: QEO-172 performance contracts
+        run: node --test tests/qeo172/*.test.ts
 
   production-browser:
     if: github.event_name == 'workflow_dispatch'
