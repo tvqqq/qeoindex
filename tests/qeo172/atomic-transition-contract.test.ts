@@ -17,6 +17,17 @@ test("QEO-172 timeframe transition separates requested and committed state", () 
   assert.match(wrapper, /flushSync/)
 })
 
+test("QEO-172 prepared ticker-timeframe handoff is synchronized before browser paint", () => {
+  const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+  const history = source("components/stock-detail/chart/use-chart-history.ts")
+
+  assert.match(wrapper, /renderPreparedInitial/)
+  assert.match(wrapper, /renderTimeframe/)
+  assert.match(wrapper, /timeframe=\{renderTimeframe\}/)
+  assert.match(wrapper, /preparedInitial=\{renderPreparedInitial\}/)
+  assert.match(history, /useLayoutEffect/)
+})
+
 test("QEO-172 ticker navigation has bounded prefetch and full preparation before commit", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
