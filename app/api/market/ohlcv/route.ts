@@ -10,6 +10,8 @@ import {
   createChartPerformanceRecorder,
   type ChartPerfSnapshot,
 } from "@/modules/market/chart-data/performance"
+import { INTERACTIVE_CHART_PROVIDER_BUDGET_MS } from "@/modules/market/chart-data/provider-budget"
+import { createPrimaryChartOhlcvProvider } from "@/modules/market/chart-data/provider"
 import { getChartOhlcv } from "@/modules/market/chart-data/timeframe-service"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
@@ -71,9 +73,16 @@ export async function GET(request: Request) {
   const to = parseEpoch(url.searchParams.get("to"))
   const startedAt = performance.now()
   const recorder = createChartPerformanceRecorder()
+  const interactiveProvider = createPrimaryChartOhlcvProvider({
+    totalBudgetMs: INTERACTIVE_CHART_PROVIDER_BUDGET_MS,
+  })
 
   try {
-    const result = await getChartOhlcv({ supabase, performance: recorder }, { ticker, resolution, from, to })
+    const result = await getChartOhlcv({
+      supabase,
+      performance: recorder,
+      provider: interactiveProvider,
+    }, { ticker, resolution, from, to })
     const cachePolicy = chartHttpCachePolicy({
       ticker: result.ticker,
       timeframe: result.resolution,

@@ -84,9 +84,12 @@ function tradingSessionRanges(request: ProviderCoverageRange): ProviderCoverageR
 
   for (let guard = 0; dateKey <= lastDateKey && guard < 3700; guard += 1) {
     if (isVietnamSecuritiesTradingDateKey(dateKey)) {
+      // Provider gap recovery expects one-minute continuity only during HOSE
+      // continuous matching. Opening/closing call auctions are intentionally
+      // sparse and must not trigger blocking minute-by-minute backfill.
       for (const range of [
-        sessionRange(dateKey, "09:00:00", "11:30:00"),
-        sessionRange(dateKey, "13:00:00", "14:46:00"),
+        sessionRange(dateKey, "09:15:00", "11:30:00"),
+        sessionRange(dateKey, "13:00:00", "14:29:59"),
       ]) {
         const clipped = normalizeRange(range, normalizedRequest)
         if (clipped && clipped.to > clipped.from) ranges.push(clipped)
@@ -99,9 +102,9 @@ function tradingSessionRanges(request: ProviderCoverageRange): ProviderCoverageR
 }
 
 /**
- * Provider recovery is only meaningful inside actual Vietnam securities
- * trading windows. Successful coverage can legitimately stop at session close;
- * overnight, lunch, weekends and after-close must never become blocking fetches.
+ * Provider recovery is only meaningful inside continuous Vietnam securities
+ * matching windows. Call-auction sparsity, overnight, lunch, weekends and
+ * after-close must never become blocking minute-by-minute fetches.
  */
 export function missingTradingProviderRanges(
   request: ProviderCoverageRange,

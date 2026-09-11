@@ -33,6 +33,7 @@ export interface ProviderHealth {
 
 export interface DnseMinuteReadOptions {
   includeCurrent?: boolean
+  budgetMs?: number
 }
 
 function credentials() {
@@ -260,7 +261,10 @@ export async function fetchMinuteOhlcvRange(
   if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= from) throw new Error("Invalid DNSE 1m OHLC range")
   if (to - from > MAX_MINUTE_RANGE_SECONDS) throw new Error("DNSE 1m OHLC range exceeds 31 days")
 
-  const deadlineMs = Date.now() + MINUTE_ADAPTIVE_BUDGET_MS
+  const requestedBudgetMs = options.budgetMs == null || !Number.isFinite(options.budgetMs)
+    ? MINUTE_ADAPTIVE_BUDGET_MS
+    : Math.min(MINUTE_ADAPTIVE_BUDGET_MS, Math.max(1, Math.floor(options.budgetMs)))
+  const deadlineMs = Date.now() + requestedBudgetMs
   const errors: string[] = []
   for (const resolution of ["1", "1m"]) {
     try {
