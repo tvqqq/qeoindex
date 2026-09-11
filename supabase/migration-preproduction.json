@@ -39,6 +39,14 @@
       "state": "REPO_AHEAD",
       "evidence": "QEO-188 approved exact-liquidity and million-to-billion denominator contract with RED producer/consumer coverage",
       "rationale": "QEO-188 persists same-session KFSP traded_value_1d_billion so Leadership Concentration can rank factual liquidity and compare Top 5/10 against VNINDEX traded value after explicit million-to-billion normalization. It remains repo-ahead until exact-head Verify and production migration/readback complete."
+    },
+    {
+      "logicalName": "qeo172_restore_chart_prune_locks",
+      "repositoryVersion": "20260911103500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-172 production acceptance run 34557599087 plus production RETENTION_CLEANUP/schema readback; RED contract run 34558647958 and GREEN QEO-172 run 34558743426",
+      "rationale": "Production QEO-147 had overwritten the QEO-149 prune body with a stale two-argument session-lock call, leaving 48/48 attempted archive partitions unpruned. This corrective migration restores the canonical qeo108-chart-session date lock set and ascending lock order while retaining QEO-147 positive derived-readiness validation and exact QEO-149 content/version checks. It remains repo-ahead until zero-to-latest replay, rehearsals, full Verify, production promotion and function-definition readback pass."
     }
   ]
 }
