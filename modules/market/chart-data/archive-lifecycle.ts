@@ -22,6 +22,7 @@ import {
   readOldestHotIntradayTime,
   type HotArchivePartition,
 } from "./hot-store"
+import { listExpiredHotPartitionsForTicker } from "./targeted-archive-partitions"
 import { aggregateChartTimeframe } from "./timeframes"
 
 export {
@@ -88,12 +89,16 @@ function failure(partition: HotArchivePartition, cause: unknown): ChartArchiveFa
 
 export async function runChartIntradayArchiveLifecycle(
   supabase: SupabaseClient,
-  input: { referenceAt?: Date; maxPartitions?: number } = {},
+  input: { referenceAt?: Date; maxPartitions?: number; ticker?: string } = {},
 ): Promise<ChartIntradayArchiveMetrics> {
   const referenceAt = input.referenceAt ?? new Date()
   const cutoff = chartHotSessionRetentionCutoff(referenceAt)
   const maxPartitions = Math.max(1, Math.min(48, Math.floor(input.maxPartitions ?? DEFAULT_ARCHIVE_PARTITIONS_PER_RUN)))
-  const partitions = await listExpiredHotPartitions(supabase, { cutoff, maxPartitions })
+  const targetedTicker = input.ticker?.trim().toUpperCase() || null
+  if (targetedTicker && !/^[A-Z0-9]{2,12}$/.test(targetedTicker)) throw new Error("Invalid targeted chart archive ticker")
+  const partitions = targetedTicker
+    ? await listExpiredHotPartitionsForTicker(supabase, { ticker: targetedTicker, cutoff, maxPartitions })
+    : await listExpiredHotPartitions(supabase, { cutoff, maxPartitions })
   const retentionProofs = await proveHotArchivePartitionsEligibility(supabase, partitions)
   const cold = createSupabaseColdOhlcvStorage(supabase)
 
