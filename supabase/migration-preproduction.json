@@ -53,7 +53,7 @@
       "repositoryVersion": "20260911162000",
       "productionVersion": null,
       "state": "REPO_AHEAD",
-      "evidence": "QEO-172 production VCB 2026-03-10 deterministic generation-race proof plus PR #463 RED contract run 34583110679",
+      "evidence": "QEO-172 VCB 2026-03-10 deterministic generation-race proof; PR #463 RED run 34583110679; QEO-172 run 34584021278 PASS; Verify 34584021355 PASS; DB Drift 34584021250 migration ledger and zero-to-latest replay PASS with generated type artifact 10192874747; generated type commit 0eb73bd5bb618e5352e1afa0c0362f6a5ad1eaa3",
       "rationale": "Production historical backfill proved the prior QEO-147 application protocol could be superseded between PostgREST upsert and readback because the manifest advisory lock was transaction-scoped while generation publication crossed multiple transactions. This migration moves replacement, exact persisted-bar/source proof, digest, readiness publication and post-validation into one service-role RPC transaction under the complete manifest lock set. It remains repo-ahead until zero-to-latest DB replay, QEO-147/149 rehearsals, full Verify, production promotion and VCB backfill smoke pass."
     }
   ]
