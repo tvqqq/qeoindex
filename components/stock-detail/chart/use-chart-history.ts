@@ -3,27 +3,29 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { chartHistoryFloor } from "@/modules/market/chart-data/history-policy"
+import { vietnamDateKey } from "@/modules/market/calendar"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import type { ChartTimeframe } from "./stock-chart-types"
 import {
-  initialChartHistoryRange,
+  loadInitialChartHistory,
   mergeChartBars,
   olderChartHistoryRange,
   requestChartRange,
   requestFreshChartRange,
   type ChartHistoryResponse,
+  type PreparedChartHistory,
 } from "./chart-history"
 
 interface UseChartHistoryOptions {
   ticker: string
   timeframe: ChartTimeframe
   seedDailyBars?: OhlcvBar[]
+  preparedInitial?: PreparedChartHistory | null
 }
 
 type LiveState = "closed" | "live" | "stale"
 
 const LIVE_REFRESH_INTERVAL_MS = 5_000
-const LIVE_REFRESH_LOOKBACK_SECONDS = 12 * 60 * 60
 const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h", "4h"])
 
 function mergeCoverage(
@@ -40,17 +42,35 @@ function resultLiveState(result: ChartHistoryResponse): LiveState {
   return result.errors.some((item) => item.code === "PROVIDER_UNAVAILABLE") ? "stale" : "live"
 }
 
-export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseChartHistoryOptions) {
-  const [bars, setBars] = useState<OhlcvBar[]>(() => timeframe === "1D" ? seedDailyBars : [])
-  const [loading, setLoading] = useState(true)
+function preparedMatches(prepared: PreparedChartHistory | null | undefined, ticker: string, timeframe: ChartTimeframe) {
+  return Boolean(
+    prepared
+    && prepared.ticker === ticker.trim().toUpperCase()
+    && prepared.timeframe === timeframe,
+  )
+}
+
+function vietnamSessionOpenEpoch(now: Date) {
+  return Math.floor(Date.parse(`${vietnamDateKey(now)}T09:00:00+07:00`) / 1000)
+}
+
+export function useChartHistory({
+  ticker,
+  timeframe,
+  seedDailyBars = [],
+  preparedInitial = null,
+}: UseChartHistoryOptions) {
+  const exactPrepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
+  const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : []))
+  const [loading, setLoading] = useState(() => !exactPrepared)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [coverage, setCoverage] = useState<ChartHistoryResponse["coverage"] | null>(null)
+  const [coverage, setCoverage] = useState<ChartHistoryResponse["coverage"] | null>(() => exactPrepared?.result.coverage ?? null)
   const [hasMore, setHasMore] = useState(true)
-  const [liveState, setLiveState] = useState<LiveState>("closed")
+  const [liveState, setLiveState] = useState<LiveState>(() => exactPrepared ? resultLiveState(exactPrepared.result) : "closed")
   const [liveError, setLiveError] = useState<string | null>(null)
-  const [liveProvider, setLiveProvider] = useState<string | null>(null)
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
+  const [liveProvider, setLiveProvider] = useState<string | null>(() => exactPrepared?.result.metadata?.provider ?? null)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(() => exactPrepared?.result.metadata?.lastUpdatedAt ?? exactPrepared?.result.generatedAt ?? null)
 
   const barsRef = useRef(bars)
   const generationRef = useRef(0)
@@ -66,33 +86,37 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
   useEffect(() => {
     const generation = ++generationRef.current
     const controller = new AbortController()
-    const initialBars = timeframe === "1D" ? seedDailyBars : []
+    const prepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
+    const initialBars = prepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : [])
     barsRef.current = initialBars
-    historyCursorRef.current = null
+    historyCursorRef.current = prepared?.range.from ?? null
     setBars(initialBars)
-    setLoading(true)
+    setLoading(!prepared)
     setLoadingOlder(false)
     olderRequestRef.current = false
     liveRequestRef.current = false
     setError(null)
-    setCoverage(null)
-    setHasMore(true)
-    setLiveState("closed")
-    setLiveError(null)
-    setLiveProvider(null)
-    setLastUpdatedAt(null)
+    setCoverage(prepared?.result.coverage ?? null)
+    setLiveState(prepared ? resultLiveState(prepared.result) : "closed")
+    setLiveError(prepared?.result.errors.some((item) => item.code === "PROVIDER_UNAVAILABLE")
+      ? "Dữ liệu realtime tạm thời không khả dụng."
+      : null)
+    setLiveProvider(prepared?.result.metadata?.provider ?? null)
+    setLastUpdatedAt(prepared?.result.metadata?.lastUpdatedAt ?? prepared?.result.generatedAt ?? null)
+
+    if (prepared) {
+      const horizonTo = prepared.range.to
+      horizonToRef.current = horizonTo
+      setHasMore(prepared.range.from > chartHistoryFloor(timeframe, horizonTo) + 1)
+      return () => controller.abort()
+    }
 
     const now = new Date()
     const to = Math.floor(now.getTime() / 1000)
     horizonToRef.current = to
-    const range = initialChartHistoryRange(timeframe, to)
-    const session = getMarketSessionStatus(now)
-    const initialRequest = LIVE_TIMEFRAMES.has(timeframe) && session.isLiveSession
-      ? requestFreshChartRange({ ticker, timeframe, ...range }, controller.signal)
-      : requestChartRange({ ticker, timeframe, ...range }, controller.signal)
 
-    void initialRequest
-      .then((result) => {
+    void loadInitialChartHistory({ ticker, timeframe, now, signal: controller.signal })
+      .then(({ range, result }) => {
         if (generationRef.current !== generation) return
         let mergedBars: OhlcvBar[] = []
         setBars((current) => {
@@ -118,7 +142,7 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
       })
 
     return () => controller.abort()
-  }, [seedDailyBars, ticker, timeframe])
+  }, [preparedInitial, seedDailyBars, ticker, timeframe])
 
   useEffect(() => {
     if (!LIVE_TIMEFRAMES.has(timeframe)) return
@@ -135,7 +159,7 @@ export function useChartHistory({ ticker, timeframe, seedDailyBars = [] }: UseCh
       if (liveRequestRef.current) return
 
       const to = Math.floor(now.getTime() / 1000)
-      const from = Math.max(chartHistoryFloor(timeframe, to), to - LIVE_REFRESH_LOOKBACK_SECONDS)
+      const from = Math.max(chartHistoryFloor(timeframe, to), vietnamSessionOpenEpoch(now))
       if (from >= to) return
 
       liveRequestRef.current = true
