@@ -41,13 +41,13 @@ jobs:
         run: node --test tests/qeo172/*.test.ts
 
   production-browser:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: contract
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       QEO172_BASE_URL: https://qeoindex.qeoqeo.com
-      QEO172_BENCHMARK_MODE: ${{ inputs.benchmark_mode }}
+      QEO172_BENCHMARK_MODE: acceptance
       QEO172_WORKFLOW_SHA: ${{ github.sha }}
       QEO171_TEST_EMAIL: ${{ secrets.QEO171_TEST_EMAIL }}
       QEO171_TEST_PASSWORD: ${{ secrets.QEO171_TEST_PASSWORD }}
@@ -93,7 +93,7 @@ jobs:
         if: always() && steps.auth.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: qeo172-production-performance-${{ inputs.benchmark_mode }}
+          name: qeo172-production-performance-acceptance
           path: |
             test-results/qeo172-performance.json
             playwright-report/
