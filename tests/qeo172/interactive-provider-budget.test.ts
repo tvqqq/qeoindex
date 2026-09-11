@@ -28,9 +28,10 @@ test("QEO-172 maintenance/default provider budget remains unbounded", () => {
   assert.equal(budget.remainingMs(), null)
 })
 
-test("QEO-172 interactive read wires one bounded provider across closed recovery and live tail", () => {
+test("QEO-172 browser route injects one bounded provider while canonical maintenance defaults stay unchanged", () => {
   const provider = source("modules/market/chart-data/provider.ts")
-  const service = source("modules/market/chart-data/service.ts")
+  const route = source("app/api/market/ohlcv/route.ts")
+  const maintenance = source("modules/market/chart-data/maintenance.ts")
   const dnse = source("modules/market/providers/dnse/history.ts")
   const vci = source("modules/market/providers/vci/history.ts")
 
@@ -40,7 +41,8 @@ test("QEO-172 interactive read wires one bounded provider across closed recovery
   assert.match(dnse, /budgetMs\?: number/)
   assert.match(vci, /timeoutMs\?: number/)
 
-  assert.match(service, /INTERACTIVE_CHART_PROVIDER_BUDGET_MS/)
-  assert.match(service, /createPrimaryChartOhlcvProvider\(\{\s*totalBudgetMs:\s*INTERACTIVE_CHART_PROVIDER_BUDGET_MS\s*\}\)/)
-  assert.match(service, /runClosedProviderRange\([\s\S]*?provider[\s\S]*?\)/)
+  assert.match(route, /INTERACTIVE_CHART_PROVIDER_BUDGET_MS/)
+  assert.match(route, /createPrimaryChartOhlcvProvider\(\{\s*totalBudgetMs:\s*INTERACTIVE_CHART_PROVIDER_BUDGET_MS\s*\}\)/)
+  assert.match(route, /provider:\s*interactiveProvider/)
+  assert.match(maintenance, /createPrimaryChartOhlcvProvider\(\)/)
 })
