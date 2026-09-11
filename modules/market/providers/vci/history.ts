@@ -22,6 +22,7 @@ type VciVector = {
 
 export interface VciMinuteReadOptions {
   includeCurrent?: boolean
+  timeoutMs?: number
 }
 
 function finite(value: unknown) {
@@ -109,6 +110,9 @@ export async function fetchVciMinuteOhlcvRange(
   if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= from) throw new Error("Invalid VCI 1m OHLC range")
   if (to - from > MAX_RANGE_SECONDS) throw new Error("VCI 1m OHLC range exceeds 31 days")
 
+  const timeoutMs = options.timeoutMs == null || !Number.isFinite(options.timeoutMs)
+    ? REQUEST_TIMEOUT_MS
+    : Math.min(REQUEST_TIMEOUT_MS, Math.max(1, Math.floor(options.timeoutMs)))
   const response = await fetch(VCI_OHLC_URL, {
     method: "POST",
     cache: "no-store",
@@ -126,7 +130,7 @@ export async function fetchVciMinuteOhlcvRange(
       to,
       countBack: countBackForRange(from, to),
     }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!response.ok) throw new Error(`VCI OHLC request failed (${response.status})`)
 
