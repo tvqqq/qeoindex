@@ -59,6 +59,7 @@ function finitePositive(value: unknown): number | null {
 }
 
 function finiteOrNull(value: unknown): number | null {
+  if (value == null || (typeof value === "string" && !value.trim())) return null
   const number = typeof value === "number" ? value : Number(value)
   return Number.isFinite(number) ? number : null
 }
@@ -112,7 +113,9 @@ function vietnamDateKey(date: Date): string | null {
 
 export function parseVietcombankUsdVndXml(xml: string): VietcombankUsdVndQuote | null {
   if (!xml.trim()) return null
-  const dateText = /<Date>([^<]+)<\/Date>/i.exec(xml)?.[1]?.trim() ?? null
+  const dateText = /<DateTime>([^<]+)<\/DateTime>/i.exec(xml)?.[1]?.trim()
+    ?? /<Date>([^<]+)<\/Date>/i.exec(xml)?.[1]?.trim()
+    ?? null
   const usdTag = [...xml.matchAll(/<Exrate\b[^>]*>/gi)]
     .map((match) => readAttributes(match[0]))
     .find((attributes) => attributes.currencycode?.trim().toUpperCase() === "USD")
@@ -230,7 +233,7 @@ export function buildCompactMacroPulse(input: BuildCompactMacroPulseInput): Comp
   const metrics = {
     usdVnd,
     vndOvernight: unavailableMetric(
-      "SBV",
+      "Nguồn chưa xác minh",
       "%",
       "Nguồn VND overnight (O/N) tự động chưa được xác minh.",
     ),
