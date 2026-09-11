@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  chartHistoryCacheStats,
   clearChartHistoryCache,
   requestChartRange,
   requestFreshChartRange,
@@ -57,4 +58,27 @@ test("QEO-172 fresh no-store request never joins an in-flight stable/default req
   assert.deepEqual(new Set(seen), new Set<RequestCache | undefined>(["default", "no-store"]))
   release()
   await Promise.all([stable, fresh])
+})
+
+test("QEO-172 repeated covered stable range is local, network-free and resolves within 50ms", async () => {
+  clearChartHistoryCache()
+  const input: ChartRangeInput = { ticker: "VCB", timeframe: "1h", from: 1, to: 2 }
+  const now = new Date("2026-09-12T10:00:00+07:00")
+  let fetchCount = 0
+  const fetchImpl = async () => {
+    fetchCount += 1
+    return new Response(JSON.stringify(response(input)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  await requestChartRange(input, undefined, fetchImpl, { now })
+  const startedAt = performance.now()
+  await requestChartRange(input, undefined, fetchImpl, { now })
+  const localMs = performance.now() - startedAt
+
+  assert.equal(fetchCount, 1)
+  assert.ok(localMs <= 50, `expected local cache reuse <= 50ms, got ${localMs.toFixed(3)}ms`)
+  assert.equal(chartHistoryCacheStats().hits, 1)
 })
