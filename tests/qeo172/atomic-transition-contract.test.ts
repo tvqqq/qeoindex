@@ -35,6 +35,8 @@ test("QEO-172 external prepared/navigation handoff is one-shot and cannot pin a 
 
   assert.match(wrapper, /\[consumedExternalPrepared, setConsumedExternalPrepared\] = useState/)
   assert.match(wrapper, /pendingExternalPrepared/)
+  assert.match(wrapper, /renderNavigationTimeframe\s*=\s*pendingExternalPrepared\s*\?\s*navigationTimeframe\s*:\s*null/)
+  assert.match(wrapper, /navigationTimeframe=\{renderNavigationTimeframe\}/)
   assert.doesNotMatch(wrapper, /consumedExternalPreparedRef\.current/)
   assert.doesNotMatch(wrapper, /void prepareAndCommit\(requestedTimeframe\)/)
 })
