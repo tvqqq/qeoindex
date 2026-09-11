@@ -10,78 +10,94 @@
 
 .terminalSurface > div:first-child {
   overflow: hidden;
-  border-radius: 10px;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  border-color: rgba(255, 255, 255, 0.085);
   background: #080b10;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
-/* Trading terminal top bar: compact, single-line, no layout jump when controls appear. */
+/* Trading terminal top bar: one compact control rail; data chrome is overlaid. */
 .terminalSurface > div:first-child > div:first-child {
-  min-height: 38px;
+  min-height: 32px;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 4px;
   overflow: visible;
-  border-color: rgba(255, 255, 255, 0.085);
-  background: #0d1118;
-  padding: 5px 8px;
+  border-color: rgba(255, 255, 255, 0.075);
+  background: #0c1016;
+  padding: 3px 6px;
 }
 
 .terminalSurface > div:first-child > div:first-child > div:first-child {
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 3px;
 }
 
 .terminalSurface > div:first-child > div:first-child > div:last-child {
   flex: 0 0 auto;
-  gap: 6px;
+  gap: 4px;
+}
+
+/* QEO-173 owns the single financial header in the data shell. */
+.terminalSurface > div:first-child > div:first-child > div:last-child > div:first-child {
+  display: none;
 }
 
 .terminalSurface > div:first-child > div:first-child button {
-  border-radius: 4px;
+  min-height: 26px;
+  height: 26px !important;
+  border-radius: 3px;
 }
 
-/* Price canvas: flat terminal surface, with stronger rail separation. */
+/* Price canvas: flat terminal surface, with restrained rail separation. */
 .terminalSurface > div:first-child > div:nth-child(2) {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.012), rgba(255, 255, 255, 0) 22%),
-    #080b10;
+  background: #080b10;
 }
 
-/* Keep the drawing toolbox as a detached TradingView-style floating capsule. */
+/* Replace the old full-plot loading card with the shell's tiny status chip. */
+.terminalSurface[data-chart-loading="true"] [data-chart-plot="lightweight"] > div[class*="grid"][class*="place-items-center"] {
+  display: none;
+}
+
+/* Keep the drawing toolbox detached but dense; avoid expensive decorative blur. */
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {
-  gap: 3px !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  background: rgba(10, 15, 22, 0.94) !important;
-  padding: 6px !important;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.72) !important;
-  backdrop-filter: blur(10px);
+  gap: 2px !important;
+  border-color: rgba(255, 255, 255, 0.085) !important;
+  background: rgba(9, 14, 20, 0.96) !important;
+  padding: 4px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
 }
 
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button,
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px !important;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px !important;
 }
 
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > button > svg,
 .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] > div > button > svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
-/* Bottom range/status rail: dense and visually distinct from the plotting surface. */
+/* Inline pane controls supersede the legacy detached +/- controls. */
+.terminalSurface > div:first-child button[title$="pane RSI"],
+.terminalSurface > div:first-child button[title$="pane MACD"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Bottom range/status rail: one dense line, leaving more height to the plot. */
 .terminalSurface > div:first-child > div:last-child {
-  min-height: 28px;
+  min-height: 24px;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
-  border-color: rgba(255, 255, 255, 0.085);
-  background: #0a0e14;
-  padding: 4px 8px;
+  border-color: rgba(255, 255, 255, 0.075);
+  background: #090d12;
+  padding: 2px 6px;
   scrollbar-width: none;
 }
 
@@ -90,13 +106,12 @@
 }
 
 .terminalSurface > div:first-child > div:last-child button {
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 /*
  * Maximized mode lives inside a viewport-height workstation with overflow hidden.
- * Do not let the old fixed minimums on the chart/canvas push the X-axis and
- * bottom range rail below the viewport. The canvas owns the remaining height.
+ * The native plot owns every pixel not used by the compact rails.
  */
 .maximized {
   height: 100%;
@@ -107,7 +122,7 @@
 .maximized > div:first-child {
   height: 100%;
   min-height: 0 !important;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .maximized > div:first-child > div:first-child,
@@ -125,10 +140,10 @@
   z-index: 35;
 }
 
-/* RSI/MACD pane titles previously started underneath the opaque left drawing rail. */
+/* Native RSI/MACD series labels stay clear of the compact drawing rail. */
 .maximized > div:first-child > div:nth-child(2) > svg text[fill="#c084fc"],
 .maximized > div:first-child > div:nth-child(2) > svg text[fill="#38bdf8"] {
-  transform: translateX(34px);
+  transform: translateX(30px);
 }
 
 @media (min-width: 1024px) {
@@ -156,11 +171,11 @@
 
 @media (max-width: 767px) {
   .terminalSurface > div:first-child {
-    border-radius: 8px;
+    border-radius: 6px;
   }
 
   .terminalSurface > div:first-child > div:first-child {
-    padding-inline: 6px;
+    padding-inline: 5px;
   }
 
   .terminalSurface > div:first-child > div:nth-child(2) aside[aria-label="Thanh công cụ vẽ TradingView"] {
