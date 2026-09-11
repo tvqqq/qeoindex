@@ -20,12 +20,14 @@ test("QEO-172 timeframe transition separates requested and committed state", () 
 test("QEO-172 prepared ticker-timeframe handoff is synchronized before browser paint", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const history = source("components/stock-detail/chart/use-chart-history.ts")
+  const sync = source("components/stock-detail/chart/use-user-chart-sync.ts")
 
   assert.match(wrapper, /renderPreparedInitial/)
   assert.match(wrapper, /renderTimeframe/)
   assert.match(wrapper, /timeframe=\{renderTimeframe\}/)
   assert.match(wrapper, /preparedInitial=\{renderPreparedInitial\}/)
   assert.match(history, /useLayoutEffect/)
+  assert.match(sync, /useLayoutEffect\(\(\) => \{[\s\S]*preferredTimeframe[\s\S]*setTimeframe/s)
 })
 
 test("QEO-172 ticker navigation has bounded prefetch and full preparation before commit", () => {
