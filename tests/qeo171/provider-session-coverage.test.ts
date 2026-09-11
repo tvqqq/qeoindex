@@ -11,7 +11,7 @@ function epoch(value: string) {
   return Math.floor(Date.parse(value) / 1000)
 }
 
-test("QEO-171 provider recovery ignores overnight/lunch/after-close holes", () => {
+test("QEO-171 provider recovery ignores auction/overnight/lunch/after-close holes", () => {
   const candidate = (providerCoverage as unknown as Record<string, unknown>).missingTradingProviderRanges
   assert.equal(typeof candidate, "function", "production provider coverage must expose session-aware missing ranges")
   const missingTradingProviderRanges = candidate as MissingTradingProviderRanges
@@ -38,7 +38,7 @@ test("QEO-171 provider recovery ignores overnight/lunch/after-close holes", () =
     }, morningOnlyCoverage),
     [{
       from: epoch("2026-09-10T13:00:00+07:00"),
-      to: epoch("2026-09-10T14:46:00+07:00"),
+      to: epoch("2026-09-10T14:29:59+07:00"),
     }],
   )
 
