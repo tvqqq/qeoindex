@@ -4,7 +4,7 @@ import { fetchMinuteOhlcvRange } from "@/modules/market/providers/dnse/history"
 import { fetchVciMinuteOhlcvRange } from "@/modules/market/providers/vci/history"
 import { createSsiIboardProbeProvider } from "@/modules/market/provider-benchmark/providers/ssi-iboard"
 import type { CanonicalChartOhlcvRequest, CanonicalOhlcvBar } from "./contract"
-import { closedProviderBarsAreComplete } from "./provider-response-coverage"
+import { closedProviderBarsAreComplete } from "./normalize"
 
 export interface ChartOhlcvProviderResult {
   provider: string
