@@ -107,15 +107,18 @@ function tradingSegment(time: number) {
   const minutes = Number(value("hour")) * 60 + Number(value("minute"))
   const segment = minutes >= 9 * 60 && minutes <= 11 * 60 + 30
     ? "AM"
-    : minutes >= 13 * 60 && minutes <= 14 * 60 + 45
+    : minutes >= 13 * 60 && minutes <= 14 * 60 + 29
       ? "PM"
-      : null
+      : minutes === 14 * 60 + 45
+        ? "ATC"
+        : null
   return { date, segment }
 }
 
 /**
- * Gap evidence for production 1m coverage. Expected overnight and lunch breaks
- * are ignored; QEO-93 owns the richer exchange-calendar/timeframe engine.
+ * Gap evidence for production 1m coverage. Expected overnight, lunch, and
+ * closing-auction breaks are ignored; QEO-93 owns the richer
+ * exchange-calendar/timeframe engine.
  */
 export function detectTradingSessionGaps(bars: CanonicalOhlcvBar[]): ChartDataGap[] {
   const sorted = [...bars].sort((a, b) => a.time - b.time)
