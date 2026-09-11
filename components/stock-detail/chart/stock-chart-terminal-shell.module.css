@@ -39,11 +39,6 @@
   gap: 4px;
 }
 
-/* QEO-173 owns the single financial header in the data shell. */
-.terminalSurface > div:first-child > div:first-child > div:last-child > div:first-child {
-  display: none;
-}
-
 .terminalSurface > div:first-child > div:first-child button {
   min-height: 26px;
   height: 26px !important;
@@ -147,6 +142,12 @@
 }
 
 @media (min-width: 1024px) {
+  /* QEO-173 owns the single desktop financial header in the data shell. Keep
+   * the native compact metadata below lg as a responsive identity fallback. */
+  .terminalSurface > div:first-child > div:first-child > div:last-child > div:first-child {
+    display: none;
+  }
+
   .terminalSurface:not(.maximized) > div:first-child {
     min-height: 460px !important;
   }
