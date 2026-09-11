@@ -408,6 +408,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     ?? readStoredChartTimeframe(ticker)
     ?? "1D"
   const [committedTimeframe, setCommittedTimeframe] = useState<ChartTimeframe>(initialTimeframe)
+  const committedTimeframeRef = useRef<ChartTimeframe>(initialTimeframe)
   const [preparedInitial, setPreparedInitial] = useState<PreparedChartHistory | null>(externalPreparedForTicker)
   const [preparingTimeframe, setPreparingTimeframe] = useState<ChartTimeframe | null>(null)
   const preparationRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
@@ -424,7 +425,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
   const renderTimeframe = pendingExternalPrepared?.timeframe ?? committedTimeframe
 
   const prepareAndCommit = useCallback(async (nextTimeframe: ChartTimeframe, replayButton?: HTMLButtonElement) => {
-    if (nextTimeframe === committedTimeframe) return
+    if (nextTimeframe === committedTimeframeRef.current) return
     const generation = preparationRef.current.generation + 1
     preparationRef.current.controller?.abort()
     const controller = new AbortController()
@@ -440,6 +441,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
       if (controller.signal.aborted || preparationRef.current.generation !== generation) return
 
       flushSync(() => {
+        committedTimeframeRef.current = nextTimeframe
         setPreparedInitial(prepared)
         setCommittedTimeframe(nextTimeframe)
         onTimeframeChange?.(nextTimeframe)
@@ -456,7 +458,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
         setPreparingTimeframe(null)
       }
     }
-  }, [committedTimeframe, onTimeframeChange, ticker])
+  }, [onTimeframeChange, ticker])
 
   const handleTimeframeClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (replayTimeframeClickRef.current) {
@@ -467,16 +469,17 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     const button = target?.closest("button") as HTMLButtonElement | null
     if (!button) return
     const nextTimeframe = timeframeFromButton(button)
-    if (!nextTimeframe || nextTimeframe === committedTimeframe) return
+    if (!nextTimeframe || nextTimeframe === committedTimeframeRef.current) return
     event.preventDefault()
     event.stopPropagation()
     void prepareAndCommit(nextTimeframe, button)
-  }, [committedTimeframe, prepareAndCommit])
+  }, [prepareAndCommit])
 
   useEffect(() => {
     if (!externalPreparedForTicker || consumedExternalPreparedRef.current === externalPreparedForTicker) return
     consumedExternalPreparedRef.current = externalPreparedForTicker
     preparationRef.current.controller?.abort()
+    committedTimeframeRef.current = externalPreparedForTicker.timeframe
     setPreparedInitial(externalPreparedForTicker)
     setCommittedTimeframe(externalPreparedForTicker.timeframe)
     setPreparingTimeframe(null)
@@ -487,7 +490,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     const onTimeframe = (event: Event) => {
       const detail = (event as CustomEvent<TimeframeEventDetail>).detail
       if (!detail || detail.ticker !== normalizedTicker) return
-      if (detail.timeframe === committedTimeframe) {
+      if (detail.timeframe === committedTimeframeRef.current) {
         onTimeframeChange?.(detail.timeframe)
         return
       }
@@ -495,7 +498,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     }
     window.addEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
     return () => window.removeEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
-  }, [committedTimeframe, normalizedTicker, onTimeframeChange, prepareAndCommit])
+  }, [normalizedTicker, onTimeframeChange, prepareAndCommit])
 
   useEffect(() => () => preparationRef.current.controller?.abort(), [])
 
