@@ -9,7 +9,7 @@ import {
   type VietcombankUsdVndQuote,
 } from "@/modules/research/market-insight/macro-pulse"
 
-const VIETCOMBANK_XML_URL = "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx"
+const VIETCOMBANK_XML_URL = "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx?b=10"
 const TRADINGVIEW_GLOBAL_SCAN_URL = "https://scanner.tradingview.com/global/scan"
 const DXY_SYMBOL = "TVC:DXY"
 const WTI_SYMBOL = "NYMEX:CL1!"
@@ -20,7 +20,7 @@ async function fetchVietcombankUsdVnd(): Promise<VietcombankUsdVndQuote | null> 
       accept: "application/xml,text/xml;q=0.9,*/*;q=0.8",
       "user-agent": "QeoIndex/1.0 macro-pulse",
     },
-    cache: "no-store",
+    next: { revalidate: 300 },
     signal: AbortSignal.timeout(5_000),
   })
   if (!response.ok) throw new Error(`Vietcombank FX request failed (${response.status})`)
