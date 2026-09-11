@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 import { detectTradingSessionGaps } from "../modules/market/chart-data/normalize.ts"
@@ -14,6 +15,10 @@ function canonicalBar(iso: string): CanonicalOhlcvBar {
     close: 10,
     volume: 1,
   }
+}
+
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
 test("QEO-172 ignores the HOSE ATC auction boundary when detecting 1m session gaps", () => {
@@ -36,6 +41,21 @@ test("QEO-172 still reports missing bars inside the continuous PM session", () =
     toTime: Math.floor(Date.parse("2026-09-10T07:02:00Z") / 1000),
     missingBars: 1,
   }])
+})
+
+test("QEO-172 targeted archive recovery can scope expired HOT partitions to one ticker", () => {
+  const routeUrl = new URL("../app/api/qeoindex/chart-archive-targeted/route.ts", import.meta.url)
+  assert.equal(existsSync(routeUrl), true, "targeted authenticated archive route must exist")
+
+  const lifecycle = source("modules/market/chart-data/archive-lifecycle.ts")
+  const targeted = source("modules/market/chart-data/targeted-archive-partitions.ts")
+  const route = readFileSync(routeUrl, "utf8")
+
+  assert.match(lifecycle, /ticker\?: string/)
+  assert.match(lifecycle, /listExpiredHotPartitionsForTicker/)
+  assert.match(targeted, /\.eq\("ticker", ticker\)/)
+  assert.match(route, /runChartIntradayArchiveLifecycle/)
+  assert.match(route, /searchParams\.get\("ticker"\)/)
 })
 
 test("five-minute buckets keep minute bars in the same candle", () => {
