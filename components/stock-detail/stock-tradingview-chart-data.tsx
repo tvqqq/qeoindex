@@ -398,19 +398,26 @@ function HistoryBoundChart({
 
 export function StockTradingViewChartData(props: StockTradingViewChartDataProps) {
   const { navigationTimeframe, onTimeframeChange, preparedInitial: externalPrepared, ticker } = props
-  const requestedTimeframe = navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase()
+  const normalizedTicker = ticker.toUpperCase()
+  const externalPreparedForTicker = externalPrepared?.ticker === normalizedTicker ? externalPrepared : null
+  const requestedTimeframe = navigationTimeframe?.ticker.toUpperCase() === normalizedTicker
     ? navigationTimeframe.timeframe
     : null
-  const initialTimeframe = externalPrepared?.ticker === ticker.toUpperCase()
-    ? externalPrepared.timeframe
-    : requestedTimeframe ?? readStoredChartTimeframe(ticker) ?? "1D"
+  const initialTimeframe = externalPreparedForTicker?.timeframe
+    ?? requestedTimeframe
+    ?? readStoredChartTimeframe(ticker)
+    ?? "1D"
   const [committedTimeframe, setCommittedTimeframe] = useState<ChartTimeframe>(initialTimeframe)
-  const [preparedInitial, setPreparedInitial] = useState<PreparedChartHistory | null>(
-    externalPrepared?.ticker === ticker.toUpperCase() ? externalPrepared : null,
-  )
+  const [preparedInitial, setPreparedInitial] = useState<PreparedChartHistory | null>(externalPreparedForTicker)
   const [preparingTimeframe, setPreparingTimeframe] = useState<ChartTimeframe | null>(null)
   const preparationRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
   const replayTimeframeClickRef = useRef(false)
+
+  // Parent ticker navigation already has a fully prepared dataset before it
+  // commits the new ticker. Use that dataset synchronously in this render so
+  // the first paint can never pair the new ticker with the previous bars.
+  const renderPreparedInitial = externalPreparedForTicker ?? preparedInitial
+  const renderTimeframe = externalPreparedForTicker?.timeframe ?? committedTimeframe
 
   const prepareAndCommit = useCallback(async (nextTimeframe: ChartTimeframe, replayButton?: HTMLButtonElement) => {
     if (nextTimeframe === committedTimeframe) return
@@ -463,24 +470,24 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
   }, [committedTimeframe, prepareAndCommit])
 
   useEffect(() => {
-    if (!externalPrepared || externalPrepared.ticker !== ticker.toUpperCase()) return
+    if (!externalPreparedForTicker) return
     preparationRef.current.controller?.abort()
-    setPreparedInitial(externalPrepared)
-    setCommittedTimeframe(externalPrepared.timeframe)
+    setPreparedInitial(externalPreparedForTicker)
+    setCommittedTimeframe(externalPreparedForTicker.timeframe)
     setPreparingTimeframe(null)
-    onTimeframeChange?.(externalPrepared.timeframe)
-  }, [externalPrepared, onTimeframeChange, ticker])
+    onTimeframeChange?.(externalPreparedForTicker.timeframe)
+  }, [externalPreparedForTicker, onTimeframeChange])
 
   useEffect(() => {
     if (!requestedTimeframe || requestedTimeframe === committedTimeframe) return
-    if (externalPrepared?.ticker === ticker.toUpperCase() && externalPrepared.timeframe === requestedTimeframe) return
+    if (externalPreparedForTicker?.timeframe === requestedTimeframe) return
     void prepareAndCommit(requestedTimeframe)
-  }, [committedTimeframe, externalPrepared, prepareAndCommit, requestedTimeframe, ticker])
+  }, [committedTimeframe, externalPreparedForTicker, prepareAndCommit, requestedTimeframe])
 
   useEffect(() => {
     const onTimeframe = (event: Event) => {
       const detail = (event as CustomEvent<TimeframeEventDetail>).detail
-      if (!detail || detail.ticker !== ticker.toUpperCase()) return
+      if (!detail || detail.ticker !== normalizedTicker) return
       if (detail.timeframe === committedTimeframe) {
         onTimeframeChange?.(detail.timeframe)
         return
@@ -489,15 +496,15 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     }
     window.addEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
     return () => window.removeEventListener(CHART_TIMEFRAME_EVENT, onTimeframe)
-  }, [committedTimeframe, onTimeframeChange, prepareAndCommit, ticker])
+  }, [committedTimeframe, normalizedTicker, onTimeframeChange, prepareAndCommit])
 
   useEffect(() => () => preparationRef.current.controller?.abort(), [])
 
   return (
     <HistoryBoundChart
       {...props}
-      timeframe={committedTimeframe}
-      preparedInitial={preparedInitial}
+      timeframe={renderTimeframe}
+      preparedInitial={renderPreparedInitial}
       onTimeframeClickCapture={handleTimeframeClickCapture}
       preparingTimeframe={preparingTimeframe}
     />
