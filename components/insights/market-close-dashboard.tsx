@@ -9,12 +9,14 @@ import { VnindexContributionBadge, VnindexContributorsView } from "@/components/
 import { LeadershipConcentrationView } from "@/components/insights/leadership-concentration-view"
 import { DistributionDayTimeline } from "@/components/insights/distribution-day-timeline"
 import { Vn30FuturesBasisPulse } from "@/components/insights/vn30-futures-basis-pulse"
+import { CompactMacroPulse } from "@/components/insights/compact-macro-pulse"
 import { MarketBubbles, type MarketBubbleStock } from "@/components/insights/market-bubbles"
 import { SectorMapPanel } from "@/components/insights/sector-map-panel"
 import { MarketHealthView, MarketSentimentCard, MarketSentimentHistoryCard } from "@/components/insights/market-health-view"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { MarketCloseDashboardData } from "@/modules/research/market-insight/data"
 import type { FuturesBasisPulse } from "@/modules/research/market-insight/futures-basis-pulse"
+import type { CompactMacroPulseData } from "@/modules/research/market-insight/macro-pulse"
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import type { MarketAiConclusionView } from "@/modules/research/market-insight/ai-conclusion-loader"
 import { cn } from "@/modules/shared/ui/cn"
@@ -29,12 +31,13 @@ import { MarketWidgetChildHeader } from "@/components/insights/market-widget-chi
 
 export type { MarketBubbleStock }
 
-type MarketCloseDashboardWithFutures = MarketCloseDashboardData & {
+type MarketCloseDashboardWithContext = MarketCloseDashboardData & {
   futuresBasisPulse?: FuturesBasisPulse | null
+  macroPulse?: CompactMacroPulseData | null
 }
 
 interface MarketCloseDashboardProps {
-  data: MarketCloseDashboardWithFutures | null
+  data: MarketCloseDashboardWithContext | null
   ratings?: InsightsRatingRow[]
   bubbleStocks?: MarketBubbleStock[]
   bubbleAsOfDate?: string | null
@@ -165,7 +168,7 @@ export function MarketCloseDashboard({ data, ratings = [], bubbleStocks = [], bu
   )
 }
 
-function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketCloseDashboardWithFutures; marketAiConclusion?: MarketAiConclusionView }) {
+function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketCloseDashboardWithContext; marketAiConclusion?: MarketAiConclusionView }) {
   const { dailySummary, indexes, history, marketRegime } = data
   const distributionGuidance = getDistributionDayGuidance(dailySummary.distributionCount)
   const sessionChanges = buildMarketSessionChanges(data)
@@ -236,6 +239,7 @@ function MarketIntelligencePanel({ data, marketAiConclusion }: { data: MarketClo
 
           <div data-market-session-changes><MarketSessionChangesStrip changes={sessionChanges} liquidityContext={liquidityContext} /></div>
           <Vn30FuturesBasisPulse pulse={data.futuresBasisPulse ?? null} />
+          <CompactMacroPulse pulse={data.macroPulse ?? null} />
 
           <div data-market-intelligence-overview-row className="mt-4 grid gap-4 xl:grid-cols-3 xl:items-stretch">
             <div data-market-summary-column className="flex h-full items-center rounded-2xl border border-white/[0.08] bg-[#07131d]/90 p-4 shadow-xl sm:p-5">
