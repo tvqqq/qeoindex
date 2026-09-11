@@ -30,6 +30,14 @@ test("QEO-172 prepared ticker-timeframe handoff is synchronized before browser p
   assert.match(workstation, /timeframe:\s*currentChartTimeframeRef\.current/)
 })
 
+test("QEO-172 external prepared/navigation handoff is one-shot and cannot pin a later direct timeframe change", () => {
+  const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+
+  assert.match(wrapper, /consumedExternalPreparedRef/)
+  assert.match(wrapper, /pendingExternalPrepared/)
+  assert.doesNotMatch(wrapper, /void prepareAndCommit\(requestedTimeframe\)/)
+})
+
 test("QEO-172 ticker navigation has bounded prefetch and full preparation before commit", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
