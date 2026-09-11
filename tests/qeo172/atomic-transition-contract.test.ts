@@ -33,8 +33,9 @@ test("QEO-172 prepared ticker-timeframe handoff is synchronized before browser p
 test("QEO-172 external prepared/navigation handoff is one-shot and cannot pin a later direct timeframe change", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
 
-  assert.match(wrapper, /consumedExternalPreparedRef/)
+  assert.match(wrapper, /\[consumedExternalPrepared, setConsumedExternalPrepared\] = useState/)
   assert.match(wrapper, /pendingExternalPrepared/)
+  assert.doesNotMatch(wrapper, /consumedExternalPreparedRef\.current/)
   assert.doesNotMatch(wrapper, /void prepareAndCommit\(requestedTimeframe\)/)
 })
 
