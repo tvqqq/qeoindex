@@ -27,7 +27,8 @@ test("QEO-172 prepared ticker-timeframe handoff is synchronized before browser p
   assert.match(wrapper, /timeframe=\{renderTimeframe\}/)
   assert.match(wrapper, /preparedInitial=\{renderPreparedInitial\}/)
   assert.match(history, /useLayoutEffect/)
-  assert.match(sync, /useLayoutEffect\(\(\) => \{[\s\S]*preferredTimeframe[\s\S]*setTimeframe/s)
+  assert.match(sync, /useLayoutEffect/)
+  assert.match(sync, /setTimeframe\(\(current\) => current === preferredTimeframe \? current : preferredTimeframe\)/)
 })
 
 test("QEO-172 ticker navigation has bounded prefetch and full preparation before commit", () => {
