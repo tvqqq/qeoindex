@@ -4,6 +4,7 @@ import { fetchMinuteOhlcvRange } from "@/modules/market/providers/dnse/history"
 import { fetchVciMinuteOhlcvRange } from "@/modules/market/providers/vci/history"
 import { createSsiIboardProbeProvider } from "@/modules/market/provider-benchmark/providers/ssi-iboard"
 import type { CanonicalChartOhlcvRequest, CanonicalOhlcvBar } from "./contract"
+import { createProviderBudget } from "./provider-budget"
 
 export interface ChartOhlcvProviderResult {
   provider: string
@@ -12,6 +13,11 @@ export interface ChartOhlcvProviderResult {
 
 export interface ChartOhlcvProvider {
   fetch(input: CanonicalChartOhlcvRequest): Promise<CanonicalOhlcvBar[] | ChartOhlcvProviderResult>
+}
+
+export interface PrimaryChartOhlcvProviderOptions {
+  totalBudgetMs?: number
+  nowMs?: () => number
 }
 
 type RuntimeProvider = "VCI" | "DNSE" | "SSI_IBOARD"
@@ -89,16 +95,25 @@ async function fetchFromProvider(
   provider: RuntimeProvider,
   input: CanonicalChartOhlcvRequest,
   ssi: ReturnType<typeof createSsiIboardProbeProvider>,
+  remainingMs: number | null,
 ) {
   const now = new Date()
+  const timeoutMs = remainingMs == null ? undefined : Math.max(1, remainingMs)
   if (provider === "VCI") {
-    return fetchVciMinuteOhlcvRange(input.ticker, input.from, input.to, now, { includeCurrent: input.includeCurrent === true })
+    return fetchVciMinuteOhlcvRange(input.ticker, input.from, input.to, now, {
+      includeCurrent: input.includeCurrent === true,
+      timeoutMs,
+    })
   }
   if (provider === "SSI_IBOARD") {
-    const result = await ssi.fetch(input)
+    const activeSsi = timeoutMs == null ? ssi : createSsiIboardProbeProvider({ timeoutMs })
+    const result = await activeSsi.fetch(input)
     return result.bars
   }
-  return fetchMinuteOhlcvRange(input.ticker, input.from, input.to, now, { includeCurrent: input.includeCurrent === true })
+  return fetchMinuteOhlcvRange(input.ticker, input.from, input.to, now, {
+    includeCurrent: input.includeCurrent === true,
+    budgetMs: timeoutMs,
+  })
 }
 
 export function normalizeChartProviderResult(
@@ -108,8 +123,9 @@ export function normalizeChartProviderResult(
   return Array.isArray(result) ? { provider: fallbackProvider, bars: result } : result
 }
 
-export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
+export function createPrimaryChartOhlcvProvider(options: PrimaryChartOhlcvProviderOptions = {}): ChartOhlcvProvider {
   const ssi = createSsiIboardProbeProvider()
+  const budget = createProviderBudget(options.totalBudgetMs, options.nowMs)
   return {
     async fetch(input) {
       if (input.resolution !== "1m") {
@@ -120,8 +136,14 @@ export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
       for (const provider of providerOrder()) {
         let lastFailure: ChartProviderFailureCode | null = null
         for (let attempt = 1; attempt <= TRANSIENT_ATTEMPTS; attempt += 1) {
+          const remainingMs = budget.remainingMs()
+          if (remainingMs === 0) {
+            lastFailure = "TIMEOUT"
+            break
+          }
+
           try {
-            const bars = await fetchFromProvider(provider, input, ssi)
+            const bars = await fetchFromProvider(provider, input, ssi, remainingMs)
             if (bars.length) {
               logProviderEvent(input, provider, "success", { rowCount: bars.length, attempt })
               return { provider, bars }
@@ -131,9 +153,11 @@ export function createPrimaryChartOhlcvProvider(): ChartOhlcvProvider {
             lastFailure = providerFailureCode(error)
           }
 
-          if (!lastFailure || !isTransientFailure(lastFailure) || attempt >= TRANSIENT_ATTEMPTS) break
+          const remainingAfterAttempt = budget.remainingMs()
+          if (!lastFailure || !isTransientFailure(lastFailure) || attempt >= TRANSIENT_ATTEMPTS || remainingAfterAttempt === 0) break
           logProviderEvent(input, provider, "failure", { errorClass: lastFailure, attempt, retrying: true })
-          await sleep(RETRY_DELAY_MS * attempt)
+          const retryDelayMs = RETRY_DELAY_MS * attempt
+          await sleep(remainingAfterAttempt == null ? retryDelayMs : Math.min(retryDelayMs, remainingAfterAttempt))
         }
 
         const code = lastFailure ?? "EMPTY_COVERAGE"
