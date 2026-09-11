@@ -34,7 +34,7 @@ jobs:
         run: node --test tests/qeo173/chart-ui-polish-contract.test.ts
 
   production-browser:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: contract
     runs-on: ubuntu-latest
     timeout-minutes: 20
