@@ -15,8 +15,9 @@ async function loadMacroPulse() {
 test("QEO-192 parses Vietcombank USD transfer-buy/sell and source timestamp", async () => {
   const { parseVietcombankUsdVndXml } = await loadMacroPulse()
   const xml = `<?xml version="1.0" encoding="utf-8"?>
+    <!--For reference only. Only one request every 5 minutes!-->
     <ExrateList>
-      <Date>9/11/2026 7:35:00 AM</Date>
+      <DateTime>9/11/2026 7:35:00 AM</DateTime>
       <Exrate CurrencyCode="EUR" CurrencyName="EURO" Buy="30,000" Transfer="30,100" Sell="30,500" />
       <Exrate CurrencyName="US DOLLAR" Sell="26,450" Transfer="26,180" Buy="26,150" CurrencyCode="USD" />
       <Source>Joint Stock Commercial Bank for Foreign Trade of Vietnam - Vietcombank</Source>
@@ -113,7 +114,8 @@ test("QEO-192 loads macro sources in parallel at the Insights page boundary and 
   const canonicalMarketData = read("modules/research/market-insight/data.ts")
   const surface = `${loader}\n${insightsPage}\n${closeDashboard}\n${pulseView}`
 
-  assert.match(loader, /portal\.vietcombank\.com\.vn[\s\S]*pXML\.aspx/)
+  assert.match(loader, /portal\.vietcombank\.com\.vn[\s\S]*pXML\.aspx\?b=10/)
+  assert.match(loader, /revalidate:\s*300/)
   assert.match(loader, /scanner\.tradingview\.com\/global\/scan/)
   assert.match(loader, /TVC:DXY/)
   assert.match(loader, /NYMEX:CL1!/)
