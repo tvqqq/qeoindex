@@ -1,0 +1,6 @@
+[Unit]
+Description=Stop QeoIndex realtime worker at 14:50 ICT
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl stop qeo-market-realtime.service

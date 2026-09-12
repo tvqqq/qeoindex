@@ -1,0 +1,12 @@
+[Unit]
+Description=Start QeoIndex realtime worker at 08:55 ICT on trading weekdays
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 01:55:00 UTC
+Persistent=true
+AccuracySec=1s
+RandomizedDelaySec=0
+Unit=qeo-market-realtime.service
+
+[Install]
+WantedBy=timers.target

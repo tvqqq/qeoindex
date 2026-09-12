@@ -1,0 +1,19 @@
+services:
+  market-realtime-worker:
+    image: qeoindex-market-realtime-worker:local
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file:
+      - /etc/qeoindex/market-realtime-worker.env
+    restart: "no"
+    mem_limit: 384m
+    cpus: "0.75"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 20s

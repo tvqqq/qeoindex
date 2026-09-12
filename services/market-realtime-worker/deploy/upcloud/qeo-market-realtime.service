@@ -1,0 +1,14 @@
+[Unit]
+Description=QeoIndex DNSE market realtime worker
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/qeoindex/current/services/market-realtime-worker
+ExecStart=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml up --no-build --abort-on-container-exit --exit-code-from market-realtime-worker
+ExecStop=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml down --timeout 20
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
