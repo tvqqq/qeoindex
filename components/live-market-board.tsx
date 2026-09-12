@@ -42,7 +42,11 @@ import {
   type MarketUiPhase,
 } from "@/modules/market/realtime/session-ui"
 import { setSoundEnabled, playWhaleSound } from "@/modules/shared/ui/sound-engine"
-import { publishDnseMarketFrame } from "@/modules/market/providers/dnse/market-stream"
+import {
+  restartDnseMarketStream,
+  subscribeDnseMarketFrames,
+  subscribeDnseMarketStreamState,
+} from "@/modules/market/providers/dnse/market-stream"
 import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/modules/shared/media/screenshot"
 
 export type BoardUniverseStock = LiveBoardStock
@@ -103,8 +107,6 @@ function formatMarketValue(value?: number | null) {
 }
 
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
-type DnseAuthPayload = { action: string; api_key: string; signature: string; timestamp: number; nonce: string }
-type DnseAuthResponse = { ok: boolean; url?: string; auth?: DnseAuthPayload; message?: string }
 type IntradayHistoryResponse = {
   ok: boolean
   histories?: Record<string, { symbol: string; provider: "Yahoo" | null; points: IntradayPoint[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
@@ -113,10 +115,8 @@ type IndexHistoryResponse = { ok: boolean; quotes?: Record<string, IndexQuote> }
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
 const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
-const INDEX_CHANNELS = ["VNINDEX", "VN30", "HNX", "UPCOM"]
 const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
 const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
-const STREAM_STALE_MS = 60_000
 const WATCHLIST_KEY = "stockos:watchlist:v1"
 
 const SECTOR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -426,7 +426,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
           <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
             <div className="flex justify-between">
               <span>Nguồn dữ liệu:</span>
-              <span className="text-foreground font-sans">Yahoo 5m + DNSE</span>
+              <span className="text-foreground font-sans">Yahoo 5m + DNSE via Supabase</span>
             </div>
             <div className="flex justify-between">
               <span>Độ rộng TT:</span>
@@ -443,7 +443,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
               <span className="text-foreground">{historyCount}/{universeLength}</span>
             </div>
             <div className="flex justify-between">
-              <span>WS Feed live:</span>
+              <span>Realtime relay:</span>
               <span className={`font-bold ${isLunch ? "text-amber-400 font-sans" : "text-foreground"}`}>
                 {isLunch ? "Giờ nghỉ trưa (Tạm dừng)" : `${liveCount}/${universeLength}`}
               </span>
@@ -470,7 +470,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
             className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] py-1.5 text-[11px] font-semibold text-foreground hover:bg-white/[0.08] transition-colors shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${streamState === "CONNECTING" ? "animate-spin text-ref" : ""}`} />
-            <span>Kết nối lại DNSE Feed</span>
+            <span>Kết nối lại Realtime Feed</span>
           </button>
         </div>
       ) : null}
@@ -679,7 +679,6 @@ export function LiveMarketBoard({
   const sessionOpenAlertTimer = useRef<number | null>(null)
   const eodReloadTimers = useRef<number[]>([])
   const didResetCurrentAto = useRef(false)
-  const lastFrameAt = useRef(0)
 
   const scheduleMarketOrderingRefresh = useCallback((snapshot: Record<string, LiveStockQuote | IndexQuote>) => {
     latestCommittedQuotesRef.current = snapshot
@@ -1069,12 +1068,13 @@ export function LiveMarketBoard({
   }, [marketUiPhase, resetForNewTradingSession])
 
   useEffect(() => {
+    if (!sessionOpen) {
+      setStreamState("CLOSED")
+      setStreamError("")
+      return
+    }
+
     let disposed = false
-    let socket: WebSocket | null = null
-    let reconnectTimer: number | null = null
-    let pingTimer: number | null = null
-    let watchdogTimer: number | null = null
-    let attempts = 0
     let messageQueue: string[] = []
     let messageFrame: number | null = null
 
@@ -1087,53 +1087,9 @@ export function LiveMarketBoard({
         let data: Record<string, unknown>
         try { data = JSON.parse(raw) as Record<string, unknown> } catch { continue }
 
-        const action = String(data.action ?? data.a ?? "")
-        if (action === "ping") {
-          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "pong", timestamp: data.timestamp }))
-          continue
-        }
-        if (action === "welcome" || data.session_id || data.sid) {
-          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(authJsonRef.current?.auth ?? {}))
-          continue
-        }
-        if (action === "auth_success") {
-          attempts = 0
-          setStreamState("LIVE")
-          setStreamError("")
-          socket?.send(JSON.stringify(authJsonRef.current?.auth ?? {}))
-          socket?.send(JSON.stringify({
-            action: "subscribe",
-            channels: [
-              { name: "tick.G1.json", symbols: symbolList },
-              { name: "top_price.G1.json", symbols: symbolList },
-              { name: "ohlc.1.json", symbols: [...symbolList, "VN30F1M"] },
-              { name: "foreign.G1.json", symbols: symbolList },
-              ...INDEX_CHANNELS.map((name) => ({ name: `market_index.${name}.json` })),
-            ],
-          }))
-          pingTimer = window.setInterval(() => {
-            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
-          }, 15_000)
-          watchdogTimer = window.setInterval(() => {
-            if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-              setStreamError("Luồng DNSE im lặng quá 60 giây; đang tự kết nối lại.")
-              forceReconnect("stale DNSE stream")
-            }
-          }, 10_000)
-          continue
-        }
-        if (action === "auth_error" || action === "error") {
-          const message = String(data.message ?? data.msg ?? "DNSE WebSocket error")
-          setStreamState("ERROR")
-          setStreamError(message)
-          forceReconnect("DNSE auth/subscription error")
-          continue
-        }
-
         const now = new Date()
         const receivedAt = now.toISOString()
         lastMessageAtRef.current = receivedAt
-        publishDnseMarketFrame(data)
 
         // Pause market data processing during lunch break (11:30 - 13:00)
         if (isLunchBreak(now)) {
@@ -1297,6 +1253,9 @@ export function LiveMarketBoard({
       }
     }
 
+      }
+    }
+
     const scheduleMessage = (raw: string) => {
       messageQueue.push(raw)
       if (messageFrame === null) messageFrame = window.requestAnimationFrame(flushMessageQueue)
@@ -1308,113 +1267,27 @@ export function LiveMarketBoard({
       messageQueue = []
     }
 
-    const closeConnectionTimers = () => {
-      if (pingTimer) window.clearInterval(pingTimer)
-      if (watchdogTimer) window.clearInterval(watchdogTimer)
-      pingTimer = null
-      watchdogTimer = null
-    }
-
-    const clearReconnectTimer = () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-
-    const scheduleReconnect = () => {
-      if (disposed || reconnectTimer) return
-      attempts += 1
-      const base = Math.min(750 * 2 ** Math.min(attempts - 1, 4), 10_000)
-      const delay = base + Math.floor(Math.random() * 500)
-      reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null
-        void connect()
-      }, delay)
-    }
-
-    const forceReconnect = (reason: string) => {
+    const unsubscribeFrames = subscribeDnseMarketFrames((frame) => {
       if (disposed) return
-      clearMessageQueue()
-      closeConnectionTimers()
-      if (socket && socket.readyState < WebSocket.CLOSING) {
-        try { socket.close(4000, reason.slice(0, 120)) } catch { scheduleReconnect() }
-      } else {
-        scheduleReconnect()
-      }
-    }
-
-    const authJsonRef: { current: DnseAuthResponse | null } = { current: null }
-
-    const connect = async () => {
-      clearReconnectTimer()
-      clearMessageQueue()
-      closeConnectionTimers()
+      scheduleMessage(JSON.stringify(frame))
+    })
+    const unsubscribeState = subscribeDnseMarketStreamState((state) => {
       if (disposed) return
-      setStreamState("CONNECTING")
-      lastFrameAt.current = Date.now()
-
-      try {
-        const response = await fetch("/api/market/stream-auth", { cache: "no-store", headers: { Accept: "application/json" } })
-        const authJson = await response.json() as DnseAuthResponse
-        authJsonRef.current = authJson
-        if (!response.ok || !authJson.ok || !authJson.url || !authJson.auth) throw new Error(authJson.message ?? `DNSE stream auth ${response.status}`)
-        if (disposed) return
-
-        socket = new WebSocket(authJson.url)
-        socket.onopen = () => {
-          lastFrameAt.current = Date.now()
-          setStreamState("CONNECTING")
-        }
-        socket.onmessage = (event) => {
-          if (disposed || typeof event.data !== "string") return
-          lastFrameAt.current = Date.now()
-          scheduleMessage(event.data)
-        }
-
-        socket.onerror = () => {
-          if (!disposed) {
-            setStreamState("ERROR")
-            setStreamError("Kết nối DNSE WebSocket gặp lỗi; đang tự khôi phục.")
-            forceReconnect("DNSE websocket error")
-          }
-        }
-        socket.onclose = () => {
-          closeConnectionTimers()
-          if (disposed) return
-          setStreamState("CLOSED")
-          scheduleReconnect()
-        }
-      } catch (error) {
-        if (disposed) return
-        setStreamState("ERROR")
-        setStreamError(error instanceof Error ? error.message : String(error))
-        scheduleReconnect()
+      setStreamState(state.status)
+      setStreamError(state.error)
+      if (state.lastMessageAt) {
+        lastMessageAtRef.current = state.lastMessageAt
+        setLastMessageAt((previous) => previous === state.lastMessageAt ? previous : state.lastMessageAt)
       }
-    }
+    })
 
-    const recoverIfNeeded = () => {
-      if (document.visibilityState !== "visible") return
-      if (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-        forceReconnect("browser resumed")
-      }
-    }
-    const onVisibilityChange = () => recoverIfNeeded()
-    const onOnline = () => recoverIfNeeded()
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    window.addEventListener("online", onOnline)
-
-    if (sessionOpen) {
-      void connect()
-    }
     return () => {
       disposed = true
-      clearReconnectTimer()
       clearMessageQueue()
-      closeConnectionTimers()
-      document.removeEventListener("visibilitychange", onVisibilityChange)
-      window.removeEventListener("online", onOnline)
-      if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "board closed")
+      unsubscribeFrames()
+      unsubscribeState()
     }
-  }, [symbolKey, reconnectKey, pushFiveMinuteClose, symbolList, trackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote])
+  }, [reconnectKey, pushFiveMinuteClose, trackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote])
 
   const normalizedQuery = query.trim().toUpperCase()
   const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
@@ -1536,7 +1409,10 @@ export function LiveMarketBoard({
     },
     [displayQuotes, universe, priceHistoryCloses, openOrderBook],
   )
-  const reconnect = useCallback(() => setReconnectKey((key) => key + 1), [])
+  const reconnect = useCallback(() => {
+    void restartDnseMarketStream()
+    setReconnectKey((key) => key + 1)
+  }, [])
   const openIndexChart = useCallback(() => setIndexChartOpen(true), [])
 
   const { totalUniverseVolume, totalUniverseValue, totalForeignNet } = useMemo(() => {
