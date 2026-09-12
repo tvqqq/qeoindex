@@ -59,10 +59,10 @@
     {
       "logicalName": "qeo175_market_realtime_bus",
       "repositoryVersion": "20260912074500",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-175 RED/GREEN central DNSE realtime transport contract and PR #467 preproduction verification",
-      "rationale": "QEO-175 adds a dedicated bounded current-state Supabase Realtime bus for a stateless long-running DNSE worker. It deliberately does not repurpose stock_orderbook_snapshots, grants browser reads only to authenticated users, and remains repo-ahead until exact-head Verify, production migration/readback and Railway worker smoke complete."
+      "productionVersion": "20260912051019",
+      "state": "MAPPED",
+      "evidence": "QEO-175 PR #467 exact-head Verify #3824 and DB Drift #1289; production migration 20260912051019; schema/RLS/publication readback plus rollback service-role upsert smoke",
+      "rationale": "Supabase assigned production version 20260912051019 while repository replay keeps reviewed version 20260912074500. Production readback confirms the bounded bus schema and constraints, RLS, authenticated read-only access, service_role CRUD, anon denial, replica identity full and supabase_realtime publication. A service_role upsert smoke succeeded inside a rolled-back transaction. Worker runtime cutover remains isolated to QEO-196."
     }
   ]
 }
