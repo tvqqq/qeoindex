@@ -95,7 +95,7 @@ test("QEO-175 realtime bus is authenticated-read, service-write, publication-ena
   assert.match(migration, /grant select on public\.market_realtime_bus to authenticated/i)
   assert.match(migration, /to authenticated\s+using \(true\)/i)
   assert.match(migration, /supabase_realtime/i)
-  assert.match(migration, /octet_length\(frames::text\).*524288/is)
+  assert.match(migration, /octet_length\(frames::text\)[\s\S]*524288/i)
 })
 
 test("QEO-175 Laravel worker is stateless, coalesces DNSE frames, and publishes at a bounded cadence", () => {
@@ -111,7 +111,7 @@ test("QEO-175 Laravel worker is stateless, coalesces DNSE frames, and publishes 
   assert.match(command, /market_index\.VNINDEX\.json/)
   assert.match(command, /MARKET_REALTIME_FLUSH_MS/)
   assert.match(command, /1000/)
-  assert.match(buffer, /T.*symbol|symbol.*T/s)
+  assert.match(buffer, /T[\s\S]*symbol|symbol[\s\S]*T/)
   assert.match(buffer, /524288/)
   assert.match(publisher, /SUPABASE_SERVICE_ROLE_KEY/)
   assert.match(publisher, /market_realtime_bus/)
