@@ -5,7 +5,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     env_file:
-      - /etc/qeoindex/market-realtime-worker.env
+      - /opt/qeoindex/env/market-realtime-worker.env
     restart: "no"
     mem_limit: 384m
     cpus: "0.75"

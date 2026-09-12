@@ -16,11 +16,11 @@ A stateless Go worker owns the canonical DNSE Market Board feed and publishes co
 
 ## Secrets
 
-Create `/etc/qeoindex/market-realtime-worker.env` on the UpCloud host with mode `0600`. Use `.env.example` only as the key-name template. Never commit the real DNSE API secret or Supabase service-role key.
+Create `/opt/qeoindex/env/market-realtime-worker.env` on the UpCloud host with mode `0600`. Use `.env.example` only as the key-name template. Never commit the real DNSE API secret or Supabase service-role key.
 
 ## Build and manual smoke
 
-From `/opt/qeoindex/current/services/market-realtime-worker`:
+From `/opt/qeoindex/repo/services/market-realtime-worker`:
 
 ```bash
 docker compose -f deploy/upcloud/docker-compose.upcloud.yml build --pull

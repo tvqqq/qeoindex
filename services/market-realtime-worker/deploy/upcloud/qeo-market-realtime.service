@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/qeoindex/current/services/market-realtime-worker
+WorkingDirectory=/opt/qeoindex/repo/services/market-realtime-worker
 ExecStart=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml up --no-build --abort-on-container-exit --exit-code-from market-realtime-worker
 ExecStop=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml down --timeout 20
 Restart=on-failure
