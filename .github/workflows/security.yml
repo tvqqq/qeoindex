@@ -8,13 +8,40 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: verify-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  qeo175-cutover:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'tvq9612/qeo-175-central-dnse-realtime'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out QEO-175 feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-175-central-dnse-realtime
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply guarded QEO-175 cutover
+        run: node scripts/qeo175-run-cutover.mjs
+      - name: Commit generated source changes
+        shell: bash
+        run: |
+          if git diff --quiet -- components/live-market-board.tsx tests/market-board-visual-contract.test.ts; then
+            echo "QEO-175 source cutover already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/live-market-board.tsx tests/market-board-visual-contract.test.ts
+          git commit -m "feat(QEO-175): cut Market Board over to Supabase realtime"
+          git push origin HEAD:tvq9612/qeo-175-central-dnse-realtime
+
   verify:
     runs-on: ubuntu-latest
     steps:
