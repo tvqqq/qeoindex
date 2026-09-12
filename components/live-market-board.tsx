@@ -1253,9 +1253,6 @@ export function LiveMarketBoard({
       }
     }
 
-      }
-    }
-
     const scheduleMessage = (raw: string) => {
       messageQueue.push(raw)
       if (messageFrame === null) messageFrame = window.requestAnimationFrame(flushMessageQueue)
