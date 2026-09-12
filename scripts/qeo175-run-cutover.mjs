@@ -12,6 +12,8 @@ if (board.includes("new WebSocket(authJson.url)")) {
   console.log("QEO-175 Market Board cutover already applied")
 }
 
+await import("./qeo175-fix-generated.mjs")
+
 const tests = readFileSync(testPath, "utf8")
 if (tests.includes('test("DNSE websocket messages use animation-frame buffering without retaining closures"')) {
   await import("./qeo175-update-tests.mjs")
