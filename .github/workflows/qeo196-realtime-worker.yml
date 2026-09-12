@@ -1,0 +1,35 @@
+name: QEO-196 Realtime Worker
+
+on:
+  pull_request:
+    paths:
+      - "services/market-realtime-worker/**"
+      - "tests/dnse-request-windows.test.ts"
+      - ".github/workflows/qeo196-realtime-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: services/market-realtime-worker/go.sum
+      - name: Unit tests
+        working-directory: services/market-realtime-worker
+        run: go test ./...
+      - name: Vet
+        working-directory: services/market-realtime-worker
+        run: go vet ./...
+      - name: Build worker binary
+        working-directory: services/market-realtime-worker
+        run: CGO_ENABLED=0 go build -trimpath -o /tmp/market-realtime-worker ./cmd/market-realtime-worker
+      - name: Build production container
+        run: docker build -t qeoindex-market-realtime-worker:ci services/market-realtime-worker
