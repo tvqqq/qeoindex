@@ -92,13 +92,15 @@ test("after-close fallback still feeds both visible price and mini chart", () =>
   assert.match(stockSource, /formatBoardPrice\(quote\?\.price\)/)
 })
 
-test("DNSE websocket messages use animation-frame buffering without retaining closures", () => {
+test("Supabase realtime frames use animation-frame buffering without retaining closures", () => {
   assert.match(boardSource, /let messageQueue: string\[\] = \[\]/)
   assert.match(boardSource, /window\.requestAnimationFrame\(flushMessageQueue\)/)
   assert.match(boardSource, /window\.cancelAnimationFrame\(messageFrame\)/)
-  assert.match(boardSource, /socket\.onmessage = \(event\) =>[\s\S]*?scheduleMessage\(event\.data\)/)
+  assert.match(boardSource, /subscribeDnseMarketFrames\(\(frame\) =>[\s\S]*?scheduleMessage\(JSON\.stringify\(frame\)\)/)
+  assert.match(boardSource, /subscribeDnseMarketStreamState/)
   assert.match(boardSource, /for \(const raw of queued\)/)
-  assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?socket\.close\(1000, "board closed"\)/)
+  assert.match(boardSource, /clearMessageQueue\(\)[\s\S]*?unsubscribeFrames\(\)[\s\S]*?unsubscribeState\(\)/)
+  assert.doesNotMatch(boardSource, /socket\.onmessage/)
 })
 
 test("realtime market state uses a ref-backed store with slower React commits", () => {
@@ -307,7 +309,7 @@ test("DNSE normalUser board subscription stays within the 200-channel budget for
   assert.ok(plan.subscriptionCount <= DNSE_NORMAL_USER_CHANNEL_LIMIT, `subscriptionCount=${plan.subscriptionCount}`)
 })
 
-test("DNSE board transport rewrites legacy multi-feed subscription and preserves tick-driven mini charts", () => {
+test("central realtime bus preserves the provider budget and tick-driven mini charts", () => {
   const symbols = Array.from({ length: 200 }, (_, index) => `S${String(index + 1).padStart(3, "0")}`)
   const legacy = JSON.stringify({
     action: "subscribe",
@@ -331,7 +333,11 @@ test("DNSE board transport rewrites legacy multi-feed subscription and preserves
   assert.ok(synthetic)
   assert.deepEqual(JSON.parse(synthetic!), { T: "b", symbol: "VCB", matchPrice: 61_500, time: 1_788_921_000, close: 61_500 })
 
-  assert.match(boardSource, /publishDnseMarketFrame/)
-  assert.match(marketStreamSource, /installDnseBoardSubscriptionBudgetGuard\(\)/)
-  assert.match(marketStreamSource, /preserveBoardMiniCharts\(this\)/)
+  assert.match(boardSource, /subscribeDnseMarketFrames/)
+  assert.match(boardSource, /subscribeDnseMarketStreamState/)
+  assert.doesNotMatch(boardSource, /new WebSocket\(/)
+  assert.doesNotMatch(boardSource, /\/api\/market\/stream-auth/)
+  assert.match(marketStreamSource, /market_realtime_bus/)
+  assert.match(marketStreamSource, /postgres_changes/)
+  assert.match(marketStreamSource, /synthesizeDnseOhlcFromTickMessage/)
 })
