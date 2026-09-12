@@ -69,8 +69,8 @@ test("QEO-60 exposes seven stable business phases while retaining internal durab
 })
 
 test("QEO-60 runs TTAI and Market Close as sibling branches only after Rating and joins before READY", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
+  const workflow = source("modules/eod/orchestrator.ts")
+  const body = workflow.slice(workflow.indexOf("export async function runQeoIndexEodOrchestrator"))
 
   const rating = body.indexOf("runKfspRatingRefreshStep")
   const parallel = body.indexOf("Promise.all", rating)
@@ -87,7 +87,7 @@ test("QEO-60 runs TTAI and Market Close as sibling branches only after Rating an
 })
 
 test("QEO-60 bounds provider history concurrency with a configurable hard cap", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const steps = source("modules/eod/workflow-steps.ts")
 
   assert.match(workflow, /QEOINDEX_EOD_HISTORY_CONCURRENCY/)
@@ -100,8 +100,8 @@ test("QEO-60 bounds provider history concurrency with a configurable hard cap", 
 })
 
 test("QEO-60 enforces Deterministic Council then Market Synthesis then LLM debate", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
+  const workflow = source("modules/eod/orchestrator.ts")
+  const body = workflow.slice(workflow.indexOf("export async function runQeoIndexEodOrchestrator"))
 
   const deterministic = body.indexOf("runDeterministicCouncilStep")
   const synthesis = body.indexOf("runMarketSynthesisStep")
@@ -163,7 +163,7 @@ test("QEO-64 Market Synthesis evidence hash participates in prompt/cache identit
 })
 
 test("QEO-60 keeps historical backfill explicit and never runs current Rating/TTAI refresh in that branch", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const body = workflow.slice(workflow.indexOf("if (historicalBackfill)"), workflow.indexOf("if (!ready)"))
   const historical = body.slice(0, body.indexOf("} else {"))
 

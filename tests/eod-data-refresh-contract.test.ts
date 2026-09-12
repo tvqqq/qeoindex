@@ -9,9 +9,9 @@ function source(path: string) {
 }
 
 function workflowBody() {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const start = workflow.indexOf("export async function qeoindexEodPipeline")
-  assert.ok(start >= 0, "canonical EOD workflow must exist")
+  const workflow = source("modules/eod/orchestrator.ts")
+  const start = workflow.indexOf("export async function runQeoIndexEodOrchestrator")
+  assert.ok(start >= 0, "canonical EOD orchestrator must exist")
   return workflow.slice(start)
 }
 
@@ -50,7 +50,7 @@ test("Rating refresh freezes an exact canonical universe for the session", () =>
 
 test("TTAI refresh is session-bound and explicit about degraded partial failures", () => {
   const steps = source("modules/eod/data-refresh-steps.ts")
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   assert.match(steps, /export async function runTtaiRefreshStep/)
   assert.match(steps, /kfsp-ttai-history-sync/)
   assert.match(steps, /latest_rating_date/)
@@ -79,7 +79,7 @@ test("READY validates frozen run identity and exact membership, not count only",
 })
 
 test("READY retries bounded known not-ready states even when wrapper error codes are lost", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   assert.match(workflow, /EOD_READY_MAX_ATTEMPTS = 4/)
   assert.match(workflow, /EOD_READY_RETRY_INTERVAL_MS = 5 \* 60_000/)
   assert.match(workflow, /function isEodNotReady/)
@@ -87,6 +87,17 @@ test("READY retries bounded known not-ready states even when wrapper error codes
   assert.match(workflow, /FINAL EOD MARKET SNAPSHOTS INCOMPLETE/)
   assert.match(workflow, /CANONICAL RATING UNIVERSE INCOMPLETE/)
   assert.match(workflow, /KFSP\/TTAI RATING DATE/)
+})
+
+
+test("15:01 cutover keeps market-close and READY retries spaced from the actual failure time", () => {
+  const orchestrator = source("modules/eod/orchestrator.ts")
+  assert.match(orchestrator, /MARKET_CLOSE_MAX_ATTEMPTS = 6/)
+  assert.match(orchestrator, /function nextRetryAt\(intervalMs: number\)/)
+  assert.match(orchestrator, /new Date\(Date\.now\(\) \+ intervalMs\)/)
+  assert.match(orchestrator, /const nextAttemptAt = nextRetryAt\(MARKET_CLOSE_RETRY_INTERVAL_MS\)/)
+  assert.match(orchestrator, /sleepUntil\(nextAttemptAt\)/)
+  assert.match(orchestrator, /sleepUntil\(nextRetryAt\(EOD_READY_RETRY_INTERVAL_MS\)\)/)
 })
 
 test("MARKET_CLOSE_COLLECT produces final orderbook snapshots before READY consumes them", () => {
