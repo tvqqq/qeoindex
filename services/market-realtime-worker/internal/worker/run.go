@@ -55,9 +55,13 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	indexStream := newStream("indexes", cfg, auth, dnse.IndexChannels(), onFrame, logger)
 	startStream(runCtx, indexStream)
 
-	stockCtx, stockCancel := context.WithCancel(runCtx)
-	stockStream := newStream("ticks", cfg, auth, dnse.StockChannels(tickers), onFrame, logger)
-	startStream(stockCtx, stockStream)
+	startStockStream := func(symbols []string) context.CancelFunc {
+		streamCtx, streamCancel := context.WithCancel(runCtx)
+		stockStream := newStream("ticks", cfg, auth, dnse.StockChannels(symbols), onFrame, logger)
+		startStream(streamCtx, stockStream)
+		return streamCancel
+	}
+	stockCancel := startStockStream(tickers)
 
 	flushTicker := time.NewTicker(cfg.FlushInterval)
 	universeTicker := time.NewTicker(cfg.UniverseRefreshInterval)
@@ -105,9 +109,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			}
 			stockCancel()
 			tickers = next
-			stockCtx, stockCancel = context.WithCancel(runCtx)
-			stockStream = newStream("ticks", cfg, auth, dnse.StockChannels(tickers), onFrame, logger)
-			startStream(stockCtx, stockStream)
+			stockCancel = startStockStream(tickers)
 			logger.Info("canonical_universe_subscription_refreshed", "tickers", len(tickers))
 		case <-heartbeatTicker.C:
 			logger.Info("market_realtime_worker_heartbeat", "sequence", lastSequence, "last_flush_frames", lastFlushFrames, "buffered_frames", buffer.Len(), "tickers", len(tickers))
