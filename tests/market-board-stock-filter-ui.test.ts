@@ -50,11 +50,12 @@ test("saved criteria and daily cache are scoped by user, Vietnam day, universe r
   assert.match(shellSource, /isValidDailyFilterCache/)
 })
 
-test("Filter CP limits the child board universe while centralized realtime is filtered client-side", () => {
+test("Filter CP limits the child board universe while centralized Supabase realtime stays canonical", () => {
   assert.match(shellSource, /universe=\{activeUniverse\}/)
   assert.match(boardSource, /const symbolList = useMemo\(\(\) => universe\.map\(\(stock\) => stock\.ticker\)/)
   assert.match(boardSource, /const trackedSymbols = useMemo\(\(\) => new Set\(symbolList\)/)
-  assert.match(boardSource, /trackedSymbols\.has\(ticker\)/)
+  assert.match(boardSource, /if \(!trackedSymbols\.has\(ticker\)\) continue/)
+
   assert.match(boardSource, /subscribeDnseMarketFrames/)
   assert.match(boardSource, /subscribeDnseMarketStreamState/)
   assert.doesNotMatch(boardSource, /new WebSocket\(/)
