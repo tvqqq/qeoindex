@@ -1,0 +1,246 @@
+.cardRailScope :global(div:has(> #rating-tab-overview)) {
+  gap: 0;
+  padding: 0 12px 3px;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 12px;
+  overscroll-behavior-inline: contain;
+  border-bottom-color: rgba(255, 255, 255, 0.045);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.055), transparent 32%),
+    linear-gradient(180deg, #090f16 0%, #080d13 100%);
+}
+
+.cardRailScope :global(#rating-tab-overview) {
+  --tab-index: "01";
+  --tab-subtitle: "Snapshot & tín hiệu chính";
+}
+
+.cardRailScope :global(#rating-tab-info) {
+  --tab-index: "02";
+  --tab-subtitle: "Cơ bản, định giá & tài chính";
+}
+
+.cardRailScope :global(#rating-tab-ta) {
+  --tab-index: "03";
+  --tab-subtitle: "Xu hướng & chỉ báo kỹ thuật";
+}
+
+.cardRailScope :global(#rating-tab-ttai) {
+  --tab-index: "04";
+  --tab-subtitle: "Technical Trading AI";
+}
+
+.cardRailScope :global(#rating-tab-wyckoff) {
+  --tab-index: "05";
+  --tab-subtitle: "Cấu trúc, cung cầu & phase";
+}
+
+.cardRailScope :global(#rating-tab-council) {
+  --tab-index: "06";
+  --tab-subtitle: "Luận điểm & phản biện AI";
+}
+
+.cardRailScope :global([id^="rating-tab-"]) {
+  position: relative;
+  display: grid !important;
+  flex: 0 0 clamp(232px, 20vw, 280px);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  column-gap: 10px;
+  row-gap: 7px;
+  min-height: 88px;
+  margin: 23px 12px 14px 0;
+  padding: 16px 18px 14px !important;
+  overflow: visible;
+  border: 1px solid rgba(148, 163, 184, 0.17) !important;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(14, 21, 31, 0.98), rgba(9, 14, 21, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  color: rgb(148 163 184);
+  text-align: left;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  cursor: pointer;
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease,
+    color 180ms ease;
+  will-change: transform;
+}
+
+.cardRailScope :global([id^="rating-tab-"])::before {
+  content: var(--tab-index);
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  min-width: 30px;
+  padding: 2px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgb(148 163 184);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 18px;
+  text-align: center;
+  letter-spacing: -0.02em;
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.cardRailScope :global([id^="rating-tab-"])::after {
+  content: var(--tab-subtitle);
+  grid-column: 1 / -1;
+  grid-row: 2;
+  overflow: hidden;
+  color: rgb(100 116 139);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 180ms ease;
+}
+
+.cardRailScope :global([id^="rating-tab-"] > span) {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardRailScope :global([id^="rating-tab-"] > svg) {
+  position: absolute;
+  top: -19px;
+  left: 50%;
+  width: 38px;
+  height: 38px;
+  padding: 9px;
+  border: 1px solid rgba(103, 232, 249, 0.2);
+  border-radius: 999px;
+  background: #0a111a;
+  color: rgb(103 232 249);
+  opacity: 0;
+  box-shadow: 0 10px 24px -14px rgba(34, 211, 238, 0.85);
+  transform: translateX(-50%) translateY(5px) scale(0.82);
+  transition:
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+  pointer-events: none;
+}
+
+.cardRailScope :global([id^="rating-tab-"][aria-selected="true"]) {
+  border-color: rgba(34, 211, 238, 0.52) !important;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(34, 211, 238, 0.15), transparent 44%),
+    linear-gradient(145deg, rgba(10, 28, 40, 0.98), rgba(8, 17, 27, 0.99));
+  box-shadow:
+    0 18px 38px -28px rgba(34, 211, 238, 0.9),
+    inset 0 1px 0 rgba(165, 243, 252, 0.08);
+  color: rgb(226 232 240);
+  transform: translateY(-3px);
+}
+
+.cardRailScope :global([id^="rating-tab-"][aria-selected="true"])::before {
+  border-color: rgba(103, 232, 249, 0.46);
+  background: rgba(34, 211, 238, 0.16);
+  color: rgb(165 243 252);
+  box-shadow: 0 0 16px -8px rgba(34, 211, 238, 0.9);
+}
+
+.cardRailScope :global([id^="rating-tab-"][aria-selected="true"])::after {
+  color: rgb(148 163 184);
+}
+
+.cardRailScope :global([id^="rating-tab-"][aria-selected="true"] > svg) {
+  opacity: 1;
+  border-color: rgba(103, 232, 249, 0.46);
+  box-shadow:
+    0 12px 28px -14px rgba(34, 211, 238, 0.92),
+    0 0 0 4px rgba(34, 211, 238, 0.055);
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.cardRailScope :global([id^="rating-tab-"]:focus-visible) {
+  outline: none;
+  border-color: rgba(103, 232, 249, 0.72) !important;
+  box-shadow:
+    0 0 0 2px rgba(8, 13, 19, 1),
+    0 0 0 4px rgba(34, 211, 238, 0.32);
+}
+
+.cardRailScope :global([role="tabpanel"]) {
+  animation: stockTabPanelIn 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (hover: hover) {
+  .cardRailScope :global([id^="rating-tab-"]:not([aria-selected="true"]):hover) {
+    border-color: rgba(103, 232, 249, 0.25) !important;
+    background: linear-gradient(145deg, rgba(14, 25, 36, 0.99), rgba(9, 16, 24, 0.99));
+    color: rgb(203 213 225);
+    transform: translateY(-2px);
+  }
+
+  .cardRailScope :global([id^="rating-tab-"]:not([aria-selected="true"]):hover)::before {
+    border-color: rgba(103, 232, 249, 0.2);
+    color: rgb(165 243 252);
+  }
+}
+
+@media (max-width: 639px) {
+  .cardRailScope :global(div:has(> #rating-tab-overview)) {
+    padding-inline: 10px;
+    scroll-padding-inline: 10px;
+  }
+
+  .cardRailScope :global([id^="rating-tab-"]) {
+    flex-basis: min(78vw, 278px);
+    min-width: 236px;
+    min-height: 84px;
+    margin-right: 9px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .cardRailScope :global([id^="rating-tab-"]) {
+    flex-basis: clamp(226px, 17vw, 262px);
+  }
+}
+
+@keyframes stockTabPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardRailScope :global([id^="rating-tab-"]),
+  .cardRailScope :global([id^="rating-tab-"]::before),
+  .cardRailScope :global([id^="rating-tab-"]::after),
+  .cardRailScope :global([id^="rating-tab-"] > svg),
+  .cardRailScope :global([role="tabpanel"]) {
+    transition: none !important;
+    animation: none !important;
+  }
+}
