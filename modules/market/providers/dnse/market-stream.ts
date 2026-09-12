@@ -1,71 +1,163 @@
 "use client"
 
+import type { RealtimeChannel } from "@supabase/supabase-js"
 import type { DnseMarketFrame } from "@/modules/market/realtime/index-candles"
-import {
-  rewriteDnseBoardSubscriptionMessage,
-  synthesizeDnseOhlcFromTickMessage,
-} from "@/modules/market/board/dnse-subscriptions"
+import { synthesizeDnseOhlcFromTickMessage } from "@/modules/market/board/dnse-subscriptions"
+import { getSupabaseBrowserClient } from "@/modules/shared/supabase/client"
+
+export type DnseMarketStreamStatus = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
+export type DnseMarketStreamState = {
+  status: DnseMarketStreamStatus
+  error: string
+  lastMessageAt: string
+  sequence: number
+}
 
 type DnseMarketFrameListener = (frame: DnseMarketFrame) => void
-type WebSocketSendData = Parameters<WebSocket["send"]>[0]
+type DnseMarketStreamStateListener = (state: DnseMarketStreamState) => void
 
-const listeners = new Set<DnseMarketFrameListener>()
-const guardedSockets = new WeakSet<WebSocket>()
+type MarketRealtimeBusRow = {
+  stream?: unknown
+  sequence?: unknown
+  frames?: unknown
+  source_updated_at?: unknown
+  updated_at?: unknown
+}
 
-function isDnseStreamSocket(socket: WebSocket) {
+const STREAM_KEY = "dnse-market"
+const CHANNEL_NAME = "market-realtime-bus"
+const frameListeners = new Set<DnseMarketFrameListener>()
+const stateListeners = new Set<DnseMarketStreamStateListener>()
+
+let realtimeChannel: RealtimeChannel | null = null
+let bootstrapStarted = false
+let latestSequence = 0
+let streamState: DnseMarketStreamState = {
+  status: "CLOSED",
+  error: "",
+  lastMessageAt: "",
+  sequence: 0,
+}
+
+function setStreamState(patch: Partial<DnseMarketStreamState>) {
+  streamState = { ...streamState, ...patch }
+  for (const listener of stateListeners) listener(streamState)
+}
+
+function parseFrame(value: unknown): DnseMarketFrame | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as DnseMarketFrame
+}
+
+function emitFrame(frame: DnseMarketFrame) {
+  for (const listener of frameListeners) listener(frame)
+}
+
+function emitFrameWithSyntheticOhlc(frame: DnseMarketFrame) {
+  emitFrame(frame)
+  const synthetic = synthesizeDnseOhlcFromTickMessage(JSON.stringify(frame))
+  if (!synthetic) return
   try {
-    const hostname = new URL(socket.url).hostname.toLowerCase()
-    return hostname === "ws-openapi.dnse.com.vn" || hostname.endsWith(".dnse.com.vn")
+    const parsed = parseFrame(JSON.parse(synthetic))
+    if (parsed) emitFrame(parsed)
   } catch {
-    return false
+    // Ignore malformed synthetic frames. The original provider frame still flows.
   }
 }
 
-/**
- * The DNSE normalUser tier caps subscriptions at 200 symbol/channel memberships.
- * The market board historically requested four stock feeds for the whole Top 200
- * plus index feeds, which DNSE rejects before any market frames can flow.
- *
- * Keep the canonical Top 200 on the core realtime trade feed. The existing board
- * still receives reference/foreign snapshots from its bootstrap paths; a transport
- * wrapper below also synthesizes OHLC frames from ticks so mini charts keep moving.
- */
-function preserveBoardMiniCharts(socket: WebSocket) {
-  if (guardedSockets.has(socket) || !socket.onmessage) return
-  const originalOnMessage = socket.onmessage
+function applyBusRow(row: MarketRealtimeBusRow | null | undefined) {
+  if (!row) return
+  const sequence = Number(row.sequence ?? 0)
+  if (!Number.isFinite(sequence) || sequence <= latestSequence) return
+  const frames = Array.isArray(row.frames) ? row.frames : []
+  const accepted = frames.map(parseFrame).filter((frame): frame is DnseMarketFrame => Boolean(frame))
+  if (!accepted.length) return
 
-  socket.onmessage = function onBudgetedMarketMessage(event) {
-    originalOnMessage.call(socket, event)
-    const synthetic = synthesizeDnseOhlcFromTickMessage(event.data)
-    if (!synthetic) return
-    originalOnMessage.call(socket, new MessageEvent("message", { data: synthetic }))
-  }
-  guardedSockets.add(socket)
+  latestSequence = sequence
+  const updatedAt = String(row.source_updated_at ?? row.updated_at ?? new Date().toISOString())
+  for (const frame of accepted) emitFrameWithSyntheticOhlc(frame)
+  setStreamState({ status: "LIVE", error: "", lastMessageAt: updatedAt, sequence })
 }
 
-function installDnseBoardSubscriptionBudgetGuard() {
-  if (typeof WebSocket === "undefined") return
-  const runtime = globalThis as typeof globalThis & { __qeoDnseBoardBudgetGuardInstalled?: boolean }
-  if (runtime.__qeoDnseBoardBudgetGuardInstalled) return
+async function bootstrapCurrentRow() {
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) return
+  const { data, error } = await supabase
+    .from("market_realtime_bus")
+    .select("stream,sequence,frames,source_updated_at,updated_at")
+    .eq("stream", STREAM_KEY)
+    .maybeSingle()
 
-  const originalSend = WebSocket.prototype.send
-  WebSocket.prototype.send = function sendWithDnseBoardBudget(data: WebSocketSendData) {
-    if (!isDnseStreamSocket(this)) return originalSend.call(this, data)
-    const rewritten = rewriteDnseBoardSubscriptionMessage(data)
-    if (rewritten !== data) preserveBoardMiniCharts(this)
-    return originalSend.call(this, rewritten as WebSocketSendData)
+  if (error) {
+    setStreamState({ status: "ERROR", error: `Supabase realtime bootstrap failed: ${error.message}` })
+    return
   }
-  runtime.__qeoDnseBoardBudgetGuardInstalled = true
+  applyBusRow(data as MarketRealtimeBusRow | null)
 }
 
-installDnseBoardSubscriptionBudgetGuard()
+function ensureSupabaseRealtime() {
+  if (realtimeChannel || bootstrapStarted) return
+  bootstrapStarted = true
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) {
+    setStreamState({ status: "ERROR", error: "Supabase browser client is not configured." })
+    return
+  }
+
+  setStreamState({ status: "CONNECTING", error: "" })
+  void bootstrapCurrentRow()
+
+  realtimeChannel = supabase
+    .channel(CHANNEL_NAME)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "market_realtime_bus", filter: `stream=eq.${STREAM_KEY}` },
+      (payload) => applyBusRow(payload.new as MarketRealtimeBusRow),
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        setStreamState({ status: latestSequence > 0 ? "LIVE" : "CONNECTING", error: "" })
+        return
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        setStreamState({ status: "ERROR", error: `Supabase realtime channel ${status.toLowerCase()}.` })
+        return
+      }
+      if (status === "CLOSED") setStreamState({ status: "CLOSED" })
+    })
+}
 
 export function publishDnseMarketFrame(frame: DnseMarketFrame) {
-  if (!listeners.size) return
-  for (const listener of listeners) listener(frame)
+  emitFrame(frame)
 }
 
 export function subscribeDnseMarketFrames(listener: DnseMarketFrameListener) {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
+  frameListeners.add(listener)
+  ensureSupabaseRealtime()
+  return () => frameListeners.delete(listener)
+}
+
+export function subscribeDnseMarketStreamState(listener: DnseMarketStreamStateListener) {
+  stateListeners.add(listener)
+  listener(streamState)
+  ensureSupabaseRealtime()
+  return () => stateListeners.delete(listener)
+}
+
+export async function restartDnseMarketStream() {
+  const supabase = getSupabaseBrowserClient()
+  const channel = realtimeChannel
+  realtimeChannel = null
+  bootstrapStarted = false
+  setStreamState({ status: "CONNECTING", error: "" })
+
+  if (supabase && channel) {
+    try {
+      await supabase.removeChannel(channel)
+    } catch {
+      // A failed cleanup must not prevent a fresh subscription attempt.
+    }
+  }
+
+  ensureSupabaseRealtime()
 }

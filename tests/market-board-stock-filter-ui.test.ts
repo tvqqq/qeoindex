@@ -50,11 +50,14 @@ test("saved criteria and daily cache are scoped by user, Vietnam day, universe r
   assert.match(shellSource, /isValidDailyFilterCache/)
 })
 
-test("Filter CP limits the child board universe so its existing DNSE symbolList is filtered", () => {
+test("Filter CP limits the child board universe while centralized realtime is filtered client-side", () => {
   assert.match(shellSource, /universe=\{activeUniverse\}/)
   assert.match(boardSource, /const symbolList = useMemo\(\(\) => universe\.map\(\(stock\) => stock\.ticker\)/)
-  assert.match(boardSource, /\{ name: "tick\.G1\.json", symbols: symbolList \}/)
-  assert.match(boardSource, /INDEX_CHANNELS\.map/)
+  assert.match(boardSource, /const trackedSymbols = useMemo\(\(\) => new Set\(symbolList\)/)
+  assert.match(boardSource, /trackedSymbols\.has\(ticker\)/)
+  assert.match(boardSource, /subscribeDnseMarketFrames/)
+  assert.match(boardSource, /subscribeDnseMarketStreamState/)
+  assert.doesNotMatch(boardSource, /new WebSocket\(/)
 })
 
 test("returning to full modes reconciles quotes and forces fresh intraday bootstrap before remount", () => {

@@ -2724,6 +2724,33 @@ export type Database = {
           },
         ]
       }
+      market_realtime_bus: {
+        Row: {
+          frames: Json
+          provider: string
+          sequence: number
+          source_updated_at: string
+          stream: string
+          updated_at: string
+        }
+        Insert: {
+          frames?: Json
+          provider?: string
+          sequence: number
+          source_updated_at: string
+          stream: string
+          updated_at?: string
+        }
+        Update: {
+          frames?: Json
+          provider?: string
+          sequence?: number
+          source_updated_at?: string
+          stream?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       market_research_report_analyses: {
         Row: {
           analysis_version: string
