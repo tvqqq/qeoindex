@@ -143,3 +143,21 @@ export function subscribeDnseMarketStreamState(listener: DnseMarketStreamStateLi
   ensureSupabaseRealtime()
   return () => stateListeners.delete(listener)
 }
+
+export async function restartDnseMarketStream() {
+  const supabase = getSupabaseBrowserClient()
+  const channel = realtimeChannel
+  realtimeChannel = null
+  bootstrapStarted = false
+  setStreamState({ status: "CONNECTING", error: "" })
+
+  if (supabase && channel) {
+    try {
+      await supabase.removeChannel(channel)
+    } catch {
+      // A failed cleanup must not prevent a fresh subscription attempt.
+    }
+  }
+
+  ensureSupabaseRealtime()
+}
