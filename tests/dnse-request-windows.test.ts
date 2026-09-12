@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 import { rewriteDnseBoardSubscriptionMessage } from "../modules/market/board/dnse-subscriptions.ts"
@@ -98,23 +98,89 @@ test("QEO-175 realtime bus is authenticated-read, service-write, publication-ena
   assert.match(migration, /octet_length\(frames::text\)[\s\S]*524288/i)
 })
 
-test("QEO-175 Laravel worker is stateless, coalesces DNSE frames, and publishes at a bounded cadence", () => {
-  const composer = readFileSync("services/market-realtime-worker/composer.json", "utf8")
-  const command = readFileSync("services/market-realtime-worker/app/Console/Commands/StreamDnseMarket.php", "utf8")
-  const buffer = readFileSync("services/market-realtime-worker/app/Market/MarketFrameBuffer.php", "utf8")
-  const publisher = readFileSync("services/market-realtime-worker/app/Market/SupabaseRealtimeBus.php", "utf8")
-  const railway = readFileSync("services/market-realtime-worker/railway.json", "utf8")
+test("QEO-175 centralized worker contract remains bounded after the QEO-196 runtime cutover", () => {
+  const stream = readFileSync("services/market-realtime-worker/internal/dnse/stream.go", "utf8")
+  const config = readFileSync("services/market-realtime-worker/internal/config/config.go", "utf8")
+  const buffer = readFileSync("services/market-realtime-worker/internal/realtime/buffer.go", "utf8")
+  const publisher = readFileSync("services/market-realtime-worker/internal/supabase/client.go", "utf8")
+  const worker = readFileSync("services/market-realtime-worker/internal/worker/run.go", "utf8")
 
-  assert.match(composer, /"laravel\/framework"\s*:\s*"\^12\.0"/)
-  assert.match(command, /market:stream/)
-  assert.match(command, /tick\.G1\.json/)
-  assert.match(command, /market_index\.VNINDEX\.json/)
-  assert.match(command, /MARKET_REALTIME_FLUSH_MS/)
-  assert.match(command, /1000/)
-  assert.match(buffer, /T[\s\S]*symbol|symbol[\s\S]*T/)
+  assert.match(stream, /tick\.G1\.json/)
+  assert.match(stream, /market_index\.VNINDEX\.json/)
+  assert.match(config, /MARKET_REALTIME_FLUSH_MS/)
+  assert.match(config, /1000/)
+  assert.match(config, /MARKET_UNIVERSE_REFRESH_MS/)
+  assert.match(config, /300000/)
   assert.match(buffer, /524288/)
-  assert.match(publisher, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(publisher, /SUPABASE_SERVICE_ROLE_KEY|serviceRoleKey/)
   assert.match(publisher, /market_realtime_bus/)
-  assert.match(railway, /php artisan market:stream/)
-  assert.doesNotMatch(railway, /volume|mount/i)
+  assert.match(publisher, /CurrentSequence/)
+  assert.match(worker, /NextSequence/)
+})
+
+test("QEO-196 cuts the centralized realtime runtime over to a bounded Go worker", () => {
+  const goModPath = "services/market-realtime-worker/go.mod"
+  const mainPath = "services/market-realtime-worker/cmd/market-realtime-worker/main.go"
+  const configPath = "services/market-realtime-worker/internal/config/config.go"
+  const streamPath = "services/market-realtime-worker/internal/dnse/stream.go"
+  const workerPath = "services/market-realtime-worker/internal/worker/run.go"
+  const supabasePath = "services/market-realtime-worker/internal/supabase/client.go"
+
+  for (const path of [goModPath, mainPath, configPath, streamPath, workerPath, supabasePath]) {
+    assert.equal(existsSync(path), true, `missing QEO-196 Go worker artifact: ${path}`)
+  }
+
+  const mainSource = readFileSync(mainPath, "utf8")
+  const configSource = readFileSync(configPath, "utf8")
+  const streamSource = readFileSync(streamPath, "utf8")
+  const workerSource = readFileSync(workerPath, "utf8")
+  const supabaseSource = readFileSync(supabasePath, "utf8")
+
+  assert.match(mainSource, /slog\.NewJSONHandler/)
+  assert.match(mainSource, /signal\.NotifyContext/)
+  assert.match(streamSource, /tick\.G1\.json/)
+  assert.match(streamSource, /market_index\.VNINDEX\.json/)
+  assert.match(streamSource, /stale/i)
+  assert.match(streamSource, /backoff/i)
+  assert.match(configSource, /Asia\/Ho_Chi_Minh/)
+  assert.match(configSource, /08:55/)
+  assert.match(configSource, /14:50/)
+  assert.match(configSource, /MARKET_UNIVERSE_REFRESH_MS/)
+  assert.match(supabaseSource, /market_realtime_bus/)
+  assert.match(supabaseSource, /CurrentSequence/)
+  assert.match(workerSource, /NextSequence/)
+
+  assert.equal(existsSync("services/market-realtime-worker/railway.json"), false)
+  assert.equal(existsSync("services/market-realtime-worker/composer.json"), false)
+})
+
+test("QEO-196 UpCloud runtime has no public port and is fail-closed until E2E timer enablement", () => {
+  const dockerfilePath = "services/market-realtime-worker/Dockerfile"
+  const composePath = "services/market-realtime-worker/deploy/upcloud/docker-compose.upcloud.yml"
+  const servicePath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime.service"
+  const startTimerPath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime-start.timer"
+  const stopTimerPath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime-stop.timer"
+
+  for (const path of [dockerfilePath, composePath, servicePath, startTimerPath, stopTimerPath]) {
+    assert.equal(existsSync(path), true, `missing QEO-196 UpCloud artifact: ${path}`)
+  }
+
+  const dockerfile = readFileSync(dockerfilePath, "utf8")
+  const compose = readFileSync(composePath, "utf8")
+  const service = readFileSync(servicePath, "utf8")
+  const startTimer = readFileSync(startTimerPath, "utf8")
+  const stopTimer = readFileSync(stopTimerPath, "utf8")
+
+  assert.doesNotMatch(dockerfile, /^EXPOSE\s/im)
+  assert.match(dockerfile, /USER\s+/i)
+  assert.match(compose, /mem_limit:\s*384m/i)
+  assert.match(compose, /cpus:\s*["']?0\.[0-9]+/i)
+  assert.match(compose, /\/opt\/qeoindex\/env\/market-realtime-worker\.env/)
+  assert.doesNotMatch(compose, /ports:/i)
+  assert.match(service, /WorkingDirectory=\/opt\/qeoindex\/repo\/services\/market-realtime-worker/)
+  assert.match(service, /--no-build/)
+  assert.match(startTimer, /01:55:00\s+UTC/)
+  assert.match(startTimer, /Persistent=true/)
+  assert.match(stopTimer, /07:50:00\s+UTC/)
+  assert.match(stopTimer, /Persistent=true/)
 })
