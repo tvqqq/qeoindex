@@ -151,11 +151,10 @@ test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forw
   assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
 })
 
-test("scheduler reconciliation keeps one EOD owner plus independent QEO-150, Research Reports and intraday AM/PM", () => {
+test("scheduler reconciliation leaves EOD to UpCloud and verifies the remaining Supabase schedules", () => {
   assert.deepEqual(
     EXPECTED_SUPABASE_SCHEDULERS.map((mapping) => mapping.schedulerName),
     [
-      "qeoindex-eod-pipeline-1515-ict",
       "qeoindex-chart-intraday-maintenance-1450-ict",
       "research-reports-daily-0705-ict",
       "sync-universe-5m",
@@ -173,14 +172,14 @@ test("scheduler reconciliation keeps one EOD owner plus independent QEO-150, Res
     lastFinishedAt: null,
   }))
   const reconciled = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(reconciled.aggregate.expected, 6, "five Supabase schedules + one Vercel config-only schedule")
-  assert.equal(reconciled.aggregate.liveVerified, 5)
+  assert.equal(reconciled.aggregate.expected, 5, "four Supabase schedules + one Vercel config-only schedule")
+  assert.equal(reconciled.aggregate.liveVerified, 4)
   assert.equal(reconciled.aggregate.missing, 0)
   assert.equal(reconciled.aggregate.inventoryClean, true)
   assert.equal(reconciled.aggregate.expectedMappingsVerified, true)
   assert.deepEqual(
     reconciled.logical.map((mapping) => mapping.jobKey),
-    ["qeoindex.eod_pipeline", "qeoindex.chart_intraday_maintenance", "research_reports.daily", "market.sync_5m", "signals.daily"],
+    ["qeoindex.chart_intraday_maintenance", "research_reports.daily", "market.sync_5m", "signals.daily"],
   )
 })
 

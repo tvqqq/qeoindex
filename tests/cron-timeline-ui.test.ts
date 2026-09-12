@@ -57,11 +57,12 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
 
   const timeline = buildCronTimelineModel(jobs)
 
-  assert.equal(timeline.lanes.length, 4)
+  assert.equal(timeline.lanes.length, 5)
   assert.equal(timeline.lanes[0].id, "vercel")
   assert.equal(timeline.lanes[1].id, "pg_cron")
-  assert.equal(timeline.lanes[2].id, "manual")
-  assert.equal(timeline.lanes[3].id, "disabled")
+  assert.equal(timeline.lanes[2].id, "systemd")
+  assert.equal(timeline.lanes[3].id, "manual")
+  assert.equal(timeline.lanes[4].id, "disabled")
 
   const vercelJob = timeline.lanes[0].jobs.find((j) => j.key === "signals.daily")
   assert.ok(vercelJob)
@@ -80,9 +81,9 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(chartMaintenance.daysLabel, "T2-T6")
   assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
 
-  const eodJob = timeline.lanes[1].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
+  const eodJob = timeline.lanes[2].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodJob)
-  assert.equal(eodJob.timeIctLabel, "15:15 ICT")
+  assert.equal(eodJob.timeIctLabel, "15:01 ICT")
   assert.equal(eodJob.phases?.length, 7)
   assert.deepEqual(eodJob.phases?.map((p) => p.key), EOD_PIPELINE_PHASES.map((p) => p.key))
   assert.deepEqual(eodJob.phases?.map((p) => p.key), [
@@ -105,7 +106,7 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.ttai_history"), false)
   assert.equal(timeline.totalScheduled, 5, "signals + research reports + chart maintenance + canonical EOD + intraday market sync")
 
-  const recoveryKeys = timeline.lanes[2].jobs.map((job) => job.key).sort()
+  const recoveryKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
   assert.deepEqual(recoveryKeys, [
     "kfsp.rating_daily",
     "kfsp.ttai_history",
@@ -116,28 +117,28 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
     "wyckoff.ingest",
   ])
 
-  const scanner = timeline.lanes[2].jobs.find((j) => j.key === "scanner.run")
+  const scanner = timeline.lanes[3].jobs.find((j) => j.key === "scanner.run")
   assert.ok(scanner)
   assert.equal(scanner.displayType, "manual")
   assert.equal(scanner.manualPurpose, "recovery")
   assert.deepEqual(scanner.automatedParentKeys, ["signals.daily"])
 
-  const recoveryTtai = timeline.lanes[2].jobs.find((j) => j.key === "kfsp.ttai_history")
+  const recoveryTtai = timeline.lanes[3].jobs.find((j) => j.key === "kfsp.ttai_history")
   assert.ok(recoveryTtai)
   assert.equal(recoveryTtai.manualPurpose, "recovery")
   assert.equal(recoveryTtai.timeIctLabel, "Thủ công")
   assert.equal(recoveryTtai.schedulerName, undefined)
   assert.deepEqual(recoveryTtai.automatedParentKeys, ["qeoindex.eod_pipeline"])
 
-  const backfill = timeline.lanes[2].jobs.find((j) => j.key === "research_reports.backfill")
+  const backfill = timeline.lanes[3].jobs.find((j) => j.key === "research_reports.backfill")
   assert.ok(backfill)
   assert.equal(backfill.manualPurpose, "recovery")
   assert.equal(backfill.timeIctLabel, "Thủ công")
   assert.equal(backfill.schedulerName, undefined)
 
-  const disabledKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
+  const disabledKeys = timeline.lanes[4].jobs.map((job) => job.key).sort()
   assert.deepEqual(disabledKeys, ["market.cache_invalidate", "market.sync_eod", "wyckoff.run"])
-  const retiredMarketEod = timeline.lanes[3].jobs.find((job) => job.key === "market.sync_eod")
+  const retiredMarketEod = timeline.lanes[4].jobs.find((job) => job.key === "market.sync_eod")
   assert.ok(retiredMarketEod)
   assert.equal(retiredMarketEod.displayType, "manual")
   assert.equal(retiredMarketEod.manualPolicy, "disabled")

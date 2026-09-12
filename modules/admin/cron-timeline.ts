@@ -22,7 +22,7 @@ export const EOD_PIPELINE_PHASES: TimelinePhaseItem[] = QEOINDEX_EOD_BUSINESS_PH
   order: phase.order,
 }))
 
-export type TimelineLaneId = "vercel" | "pg_cron" | "manual" | "disabled"
+export type TimelineLaneId = "vercel" | "pg_cron" | "systemd" | "manual" | "disabled"
 
 export interface TimelineJobNode {
   key: string
@@ -85,7 +85,7 @@ function manualContextDescription(node: TimelineJobNode) {
     if (node.automatedParentKeys?.length) {
       return `${node.description} Manual recovery · Automated by: ${node.automatedParentKeys.join(", ")}.`
     }
-    if (node.lane === "vercel" || node.lane === "pg_cron") {
+    if (node.lane === "vercel" || node.lane === "pg_cron" || node.lane === "systemd") {
       return `${node.description} Manual recovery của scheduled job ${node.key}.`
     }
     return `${node.description} Manual recovery one-shot.`
@@ -177,6 +177,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     const minB = right.startMinuteOfDay ?? 9999
     return minA - minB
   })
+  const systemdJobs = allNodes.filter((node) => node.lane === "systemd").sort((left, right) => (left.startMinuteOfDay ?? 9999) - (right.startMinuteOfDay ?? 9999))
   const manualJobs = allNodes
     .filter((node) => isAllowlistedManualJobKey(node.key) && node.manualPolicy !== "disabled")
     .map((node) => ({
@@ -208,6 +209,12 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
       jobs: pgCronJobs,
     },
     {
+      id: "systemd",
+      title: "UpCloud systemd timers",
+      description: "Lịch dịch vụ chạy trực tiếp trên UpCloud; trạng thái scheduler trong web app là config-only và được nghiệm thu trên host.",
+      jobs: systemdJobs,
+    },
+    {
       id: "manual",
       title: "Manual Recovery & Maintenance",
       description: "Các one-shot action lấy trực tiếp từ dispatch allowlist để recovery/diagnostic; chúng không thay thế scheduler tự động.",
@@ -221,7 +228,7 @@ export function buildCronTimelineModel(jobs: AdminJobView[]): CronTimelineModel 
     },
   ]
 
-  const totalScheduled = vercelJobs.length + pgCronJobs.length
+  const totalScheduled = vercelJobs.length + pgCronJobs.length + systemdJobs.length
   const totalManual = manualJobs.length
   const healthyCount = allNodes.filter((node) => node.executionStatus === "healthy").length
   const failingCount = allNodes.filter((node) => node.executionStatus === "failing").length

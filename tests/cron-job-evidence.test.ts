@@ -114,7 +114,7 @@ test("QeoIndex EOD pipeline without runs remains unknown/pending first run", () 
 
   assert.equal(resolved.schedulerStatus, "active")
   assert.equal(resolved.executionStatus, "unknown")
-  assert.match(resolved.healthReason, /15:15 ICT/)
+  assert.match(resolved.healthReason, /15:01 ICT/)
 })
 
 test("Signals Daily without system_job_runs remains unknown until telemetry completes", () => {

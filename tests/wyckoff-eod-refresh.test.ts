@@ -114,12 +114,14 @@ test("operational Council operations request the rebuilt final EOD evidence ense
 })
 
 test("EOD orchestration is one durable v4 dependency workflow with bounded Daily history and Council steps", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const wrapper = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const steps = source("modules/eod/workflow-steps.ts")
   const operations = source("modules/ai-council/operations.ts")
   const route = source("app/api/qeoindex/eod/route.ts")
-  assert.match(workflow, /"use workflow"/)
-  assert.doesNotMatch(workflow, /"use step"/)
+  assert.match(wrapper, /"use workflow"/)
+  assert.match(wrapper, /runQeoIndexEodOrchestrator/)
+  assert.doesNotMatch(workflow, /"use workflow"|"use step"/)
   assert.match(steps, /"use step"/)
   assert.match(steps, /refreshOhlcvHistoryBatch/)
   assert.doesNotMatch(steps, /refreshOhlcvHistoryUniverse|hourlyFetchedBars/)
@@ -138,8 +140,8 @@ test("EOD orchestration is one durable v4 dependency workflow with bounded Daily
 })
 
 test("unified EOD keeps QEO-60 gates and QEO-62 downstream summary without Drive", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
-  const body = workflow.slice(workflow.indexOf("export async function qeoindexEodPipeline"))
+  const workflow = source("modules/eod/orchestrator.ts")
+  const body = workflow.slice(workflow.indexOf("export async function runQeoIndexEodOrchestrator"))
   const ordered = [
     "runKfspRatingRefreshStep", "runEodReadyStep", "runHistoryRefreshWindowStep", "runWyckoffBuildStep",
     "runSupabaseValidateStep", "runSupabasePublishStep", "runDeterministicCouncilStep", "runMarketSynthesisStep",

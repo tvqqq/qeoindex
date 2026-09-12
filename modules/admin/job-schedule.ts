@@ -22,7 +22,6 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
 
 /** Active pg_cron ownership after QEO-64/QEO-85/QEO-150 cutovers. */
 export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.freeze({
-  "qeoindex.eod_pipeline": "qeoindex-eod-pipeline-1515-ict",
   "qeoindex.chart_intraday_maintenance": "qeoindex-chart-intraday-maintenance-1450-ict",
   "research_reports.daily": "research-reports-daily-0705-ict",
   "market.sync_5m": "sync-universe-5m",
@@ -36,7 +35,7 @@ export function getPgCronNameForJobKey(jobKey: string): string | undefined {
   return JOB_KEY_TO_PG_CRON_NAME[jobKey]
 }
 
-export type TimelineLane = "vercel" | "pg_cron" | "manual"
+export type TimelineLane = "vercel" | "pg_cron" | "systemd" | "manual"
 
 export function getJobTimelineLane(job: { provider: string; scheduleKind?: string }): TimelineLane {
   if (job.scheduleKind === "manual" || job.provider === "machine" || job.provider === "manual") {
@@ -44,6 +43,9 @@ export function getJobTimelineLane(job: { provider: string; scheduleKind?: strin
   }
   if (job.provider.startsWith("vercel_cron")) {
     return "vercel"
+  }
+  if (job.provider === "upcloud_systemd") {
+    return "systemd"
   }
   return "pg_cron"
 }

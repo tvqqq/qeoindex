@@ -43,3 +43,5 @@ export {
   runSupabaseValidateStep,
   runWyckoffBuildStep,
 } from "./workflow-steps"
+
+export { runQeoIndexEodOrchestrator } from "./orchestrator"

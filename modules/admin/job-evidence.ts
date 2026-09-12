@@ -261,6 +261,8 @@ export function resolveJobEvidence(
     schedulerStatus = "unscheduled"
   } else if (def.provider.startsWith("vercel_cron")) {
     schedulerStatus = "active"
+  } else if (def.provider === "upcloud_systemd") {
+    schedulerStatus = "unknown"
   }
 
   const matchedCron = latestMatchingCron(def, raw.cronSnapshots)
@@ -329,7 +331,7 @@ export function resolveJobEvidence(
     schedulerEvidence: (raw.schedulerReconciliation
       ? raw.schedulerReconciliation.availability === "unavailable"
         ? { availability: "unavailable" as const, reason: raw.schedulerReconciliation.aggregate.unavailable ? "RPC unavailable" : "Invalid scheduler evidence" }
-        : { availability: "available" as const, status: (logicalScheduler?.status ?? (def.provider.startsWith("vercel_cron") ? "config_only" : "missing")) as SchedulerReconciliationView["status"], children: raw.schedulerReconciliation.physicalMappings.filter((mapping) => mapping.jobKey === def.key).map((mapping) => ({ mappingId: mapping.mappingId, status: mapping.status })) }
+        : { availability: "available" as const, status: (logicalScheduler?.status ?? (def.provider.startsWith("vercel_cron") || def.provider === "upcloud_systemd" ? "config_only" : "missing")) as SchedulerReconciliationView["status"], children: raw.schedulerReconciliation.physicalMappings.filter((mapping) => mapping.jobKey === def.key).map((mapping) => ({ mappingId: mapping.mappingId, status: mapping.status })) }
       : { availability: "unavailable" as const, reason: "Scheduler evidence not loaded" }) as NonNullable<AdminJobView["schedulerEvidence"]>,
   })
 
@@ -593,7 +595,7 @@ export function resolveJobEvidence(
   } else {
     executionStatus = "unknown"
     if (def.key === "qeoindex.eod_pipeline") {
-      healthReason = "Chưa ghi nhận lần chạy nào (chờ lượt chạy đầu tiên lúc 15:15 ICT)"
+      healthReason = "Chưa ghi nhận lần chạy nào (chờ lượt chạy đầu tiên lúc 15:01 ICT)"
     } else if (def.key === "signals.daily") {
       healthReason = "Chưa ghi nhận telemetry hoàn tất workflow (chờ hoàn tất lúc 07:00 ICT)"
     } else {

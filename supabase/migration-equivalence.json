@@ -433,6 +433,14 @@
       "state": "MAPPED",
       "evidence": "qeo140-production-ledger-schema-rls-grants-indexes-and-no-backfill-readback",
       "rationale": "QEO-140 append-only stop-event to actual sell-fill evidence was promoted only after exact-head QEO-137/QEO-138/QEO-139/EOD gates plus zero-to-latest replay/generated types/TypeScript/build passed. Production readback verified RLS, own-row SELECT/INSERT policies, sell-only composite FKs, unique transaction linkage, covering indexes, zero link rows, and the legacy transaction remained trade_id NULL. Production timestamp differs from repository replay ordering."
+    },
+    {
+      "logicalName": "qeo197_retire_supabase_eod_scheduler",
+      "repositoryVersion": "20260912145500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "qeo197-upcloud-eod-cutover-preproduction-gate",
+      "rationale": "QEO-197 preserves the legacy Supabase 15:15 EOD pg_cron row as an inactive rollback owner while the hardened UpCloud systemd timer becomes canonical at 15:01 ICT. Production promotion occurs only after worker image, disabled-timer smoke, and single-owner cutover verification."
     }
   ]
 }

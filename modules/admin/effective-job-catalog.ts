@@ -4,15 +4,15 @@ import { withSchedulePolicy } from "./schedule-policy.ts"
 
 const QEOINDEX_EOD_PIPELINE_JOB: AdminJobDefinition = {
   key: "qeoindex.eod_pipeline",
-  provider: "supabase_pg_cron_workflow",
+  provider: "upcloud_systemd",
   label: "QeoIndex EOD Pipeline",
   description:
     "Canonical EOD v4 owner: same-session KFSP Rating → concurrent TTAI + market close → frozen READY → OHLCV/Wyckoff → Supabase publish → deterministic Council → Market Synthesis → LLM → post-analysis.",
   group: "system",
-  scheduleUtc: "15 8 * * 1-5",
-  scheduleIct: "15:15 T2-T6",
+  scheduleUtc: "1 8 * * 1-5",
+  scheduleIct: "15:01 T2-T6",
   scheduleKind: "workflow",
-  schedulerName: "qeoindex-eod-pipeline-1515-ict",
+  schedulerName: "qeo-eod.timer",
   scheduleDays: "weekdays",
   dependencies: [
     "KFSP_RATING_REFRESH",
@@ -169,7 +169,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
     return asEodRecoveryJob(
       job,
       "KFSP Rating Refresh (Manual Recovery)",
-      "EOD v4 15:15 owns same-session KFSP Rating before READY. Standalone 07:00 pg_cron is retired by QEO-64; this action remains only for operator recovery/backfill.",
+      "EOD v4 15:01 UpCloud owner runs same-session KFSP Rating before READY. Standalone 07:00 pg_cron is retired by QEO-64; this action remains only for operator recovery/backfill.",
     )
   }
 

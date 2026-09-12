@@ -41,7 +41,7 @@ test("current-session no-trade repair accepts the full canonical max-200 univers
 
 test("recoverable history failures remain observable before exact-session repair while historical backfill fails closed", () => {
   const steps = source("modules/eod/workflow-steps.ts")
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
 
   assert.doesNotMatch(steps, /if \(result\.failedTickers > 0\) \{[\s\S]*?HISTORY_REFRESH failed for/)
   assert.match(steps, /allowRecoverableFailures\s*=\s*false/)

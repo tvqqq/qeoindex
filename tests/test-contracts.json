@@ -1175,6 +1175,16 @@
       ]
     },
     {
+      "path": "tests/qeo197-upcloud-eod-worker.test.ts",
+      "owner": "eod",
+      "invariant": "QEO-197 keeps one canonical EOD graph while UpCloud owns the hardened 15:01 ICT systemd schedule and legacy Supabase EOD remains rollback-only.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
       "path": "tests/qeo186-contributor-producer.test.ts",
       "owner": "market",
       "invariant": "QEO-186 persists full-feed KFSP return inputs and derives fail-closed Qeo VNINDEX contributor estimates for Market Insights.",
