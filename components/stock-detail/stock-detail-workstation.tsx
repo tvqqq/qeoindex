@@ -7,6 +7,7 @@ import { StockCompanyHeader } from "./stock-company-header"
 import { adjacentWatchlistTicker, shouldIgnoreStockDetailShortcut } from "./stock-detail-shortcuts"
 import { StockTradingViewChartData } from "./stock-tradingview-chart-data"
 import { StockTabsPanel } from "./stock-tabs-panel"
+import tabRailStyles from "./stock-tabs-panel.module.css"
 import { StockWatchlistSidebar } from "./stock-watchlist-sidebar"
 import {
   adjacentPrefetchTargets,
@@ -272,7 +273,9 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               onTimeframeChange={handleChartTimeframeChange}
             />
 
-            {!isChartMaximized && <StockTabsPanel data={currentData} />}
+            <div className={tabRailStyles.cardRailScope}>
+              {!isChartMaximized && <StockTabsPanel data={currentData} />}
+            </div>
           </section>
 
           <aside className="w-full lg:h-full lg:overflow-hidden">
