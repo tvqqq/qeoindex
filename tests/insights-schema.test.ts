@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 const baseMigration = readFileSync("supabase/migrations/20260822083327_insights_stock_ratings.sql", "utf8")
@@ -227,6 +227,9 @@ test("stock detail workstation integrates insights rating tabs and removes metho
   const workstation = readFileSync("components/stock-detail/stock-detail-workstation.tsx", "utf8")
   const tabsPanel = readFileSync("components/stock-detail/stock-tabs-panel.tsx", "utf8")
   const stockDetailData = readFileSync("modules/research/insights/stock-detail-data.ts", "utf8")
+  const tabRailCssPath = "components/stock-detail/stock-tabs-panel.module.css"
+  const tabRailCssExists = existsSync(tabRailCssPath)
+  const tabRailCss = tabRailCssExists ? readFileSync(tabRailCssPath, "utf8") : ""
 
   // 1. Methodology footer is removed
   assert.doesNotMatch(workstation, /Methodology: Workstation chi tiết cổ phiếu kết hợp dữ liệu kỹ thuật/)
@@ -240,10 +243,31 @@ test("stock detail workstation integrates insights rating tabs and removes metho
     assert.match(tabsPanel, new RegExp(`rating-panel-${panel}|TtaiDashboard`))
   }
 
-  // 3. Compact tabs without liquid glass
-  assert.match(tabsPanel, /border-white\/\[0\.08\] bg-\[#080d13\]/)
-  assert.match(tabsPanel, /border-b border-white\/\[0\.06\] bg-\[#0a0f16\]/)
-  assert.doesNotMatch(tabsPanel, /shadow-\[0_40px_120px_-20px_rgba\(0,0,0,\.98\)/)
+  // 3. Stock Detail uses a horizontal card rail with QeoIndex cyan interaction treatment.
+  assert.match(workstation, /import tabRailStyles from "\.\/stock-tabs-panel\.module\.css"/)
+  assert.match(workstation, /className=\{tabRailStyles\.cardRailScope\}[\s\S]*<StockTabsPanel data=\{currentData\} \/>/)
+  assert.equal(tabRailCssExists, true, "stock detail tab card rail CSS module should exist")
+  for (const id of ["overview", "info", "ta", "ttai", "wyckoff", "council"]) {
+    assert.match(tabRailCss, new RegExp(`rating-tab-${id}`))
+  }
+  for (const index of ["01", "02", "03", "04", "05", "06"]) {
+    assert.match(tabRailCss, new RegExp(`--tab-index:\\s*"${index}"`))
+  }
+  for (const subtitle of [
+    "Snapshot & tín hiệu chính",
+    "Cơ bản, định giá & tài chính",
+    "Xu hướng & chỉ báo kỹ thuật",
+    "Technical Trading AI",
+    "Cấu trúc, cung cầu & phase",
+    "Luận điểm & phản biện AI",
+  ]) {
+    assert.match(tabRailCss, new RegExp(subtitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+  }
+  assert.match(tabRailCss, /\[aria-selected="true"\]/)
+  assert.match(tabRailCss, /rgba\(34,\s*211,\s*238/)
+  assert.match(tabRailCss, /scroll-snap-align:\s*start/)
+  assert.match(tabRailCss, /@keyframes stockTabPanelIn/)
+  assert.match(tabRailCss, /@media \(prefers-reduced-motion:\s*reduce\)/)
 
   // 4. Wyckoff and Council content integrated
   assert.match(tabsPanel, /href=\{`\/insights\/wyckoff\?ticker=\$\{row\.ticker\}&timeframe=1D`\}/)
