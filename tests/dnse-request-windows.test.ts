@@ -72,3 +72,49 @@ test("DNSE board budget guard leaves popup orderbook subscription untouched", ()
 
   assert.equal(rewriteDnseBoardSubscriptionMessage(orderbook), orderbook)
 })
+
+test("QEO-175 gives Market Board a Supabase realtime transport instead of a browser DNSE socket", () => {
+  const boardSource = readFileSync("components/live-market-board.tsx", "utf8")
+  const streamSource = readFileSync("modules/market/providers/dnse/market-stream.ts", "utf8")
+
+  assert.doesNotMatch(boardSource, /new WebSocket\(authJson\.url\)/)
+  assert.match(boardSource, /subscribeDnseMarketFrames/)
+  assert.match(boardSource, /subscribeDnseMarketStreamState/)
+  assert.match(streamSource, /getSupabaseBrowserClient/)
+  assert.match(streamSource, /market_realtime_bus/)
+  assert.match(streamSource, /postgres_changes/)
+  assert.match(streamSource, /synthesizeDnseOhlcFromTickMessage/)
+})
+
+test("QEO-175 realtime bus is authenticated-read, service-write, publication-enabled, and bounded", () => {
+  const migration = readFileSync("supabase/migrations/20260912074500_qeo175_market_realtime_bus.sql", "utf8")
+
+  assert.match(migration, /create table if not exists public\.market_realtime_bus/i)
+  assert.match(migration, /frames jsonb not null/i)
+  assert.match(migration, /sequence bigint not null/i)
+  assert.match(migration, /grant select on public\.market_realtime_bus to authenticated/i)
+  assert.match(migration, /to authenticated\s+using \(true\)/i)
+  assert.match(migration, /supabase_realtime/i)
+  assert.match(migration, /octet_length\(frames::text\).*524288/is)
+})
+
+test("QEO-175 Laravel worker is stateless, coalesces DNSE frames, and publishes at a bounded cadence", () => {
+  const composer = readFileSync("services/market-realtime-worker/composer.json", "utf8")
+  const command = readFileSync("services/market-realtime-worker/app/Console/Commands/StreamDnseMarket.php", "utf8")
+  const buffer = readFileSync("services/market-realtime-worker/app/Market/MarketFrameBuffer.php", "utf8")
+  const publisher = readFileSync("services/market-realtime-worker/app/Market/SupabaseRealtimeBus.php", "utf8")
+  const railway = readFileSync("services/market-realtime-worker/railway.json", "utf8")
+
+  assert.match(composer, /"laravel\/framework"\s*:\s*"\^12\.0"/)
+  assert.match(command, /market:stream/)
+  assert.match(command, /tick\.G1\.json/)
+  assert.match(command, /market_index\.VNINDEX\.json/)
+  assert.match(command, /MARKET_REALTIME_FLUSH_MS/)
+  assert.match(command, /1000/)
+  assert.match(buffer, /T.*symbol|symbol.*T/s)
+  assert.match(buffer, /524288/)
+  assert.match(publisher, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(publisher, /market_realtime_bus/)
+  assert.match(railway, /php artisan market:stream/)
+  assert.doesNotMatch(railway, /volume|mount/i)
+})
