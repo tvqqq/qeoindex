@@ -21,6 +21,7 @@ func NewBuffer(maxPayloadBytes int) *Buffer {
 	}
 	return &Buffer{frames: map[string]Frame{}, maxPayloadBytes: maxPayloadBytes}
 }
+
 func frameKey(frame Frame) (string, bool) {
 	typ, _ := frame["T"].(string)
 	symbol, _ := frame["symbol"].(string)
@@ -34,6 +35,7 @@ func frameKey(frame Frame) (string, bool) {
 	}
 	return typ + ":" + symbol, true
 }
+
 func (b *Buffer) Push(frame Frame) {
 	key, ok := frameKey(frame)
 	if !ok {
@@ -45,16 +47,20 @@ func (b *Buffer) Push(frame Frame) {
 		b.order = append(b.order, key)
 	}
 	b.frames[key] = frame
-	b.trimLocked()
 }
+
 func (b *Buffer) Drain() []Frame {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// The universe bounds the key-space, so payload sizing belongs on the ~1 Hz
+	// publish path rather than every incoming market tick.
+	b.trimLocked()
 	out := b.snapshotLocked()
 	b.frames = map[string]Frame{}
 	b.order = nil
 	return out
 }
+
 func (b *Buffer) Requeue(frames []Frame) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -69,9 +75,14 @@ func (b *Buffer) Requeue(frames []Frame) {
 		b.frames[key] = frame
 		b.order = append(b.order, key)
 	}
-	b.trimLocked()
 }
-func (b *Buffer) Len() int { b.mu.Lock(); defer b.mu.Unlock(); return len(b.frames) }
+
+func (b *Buffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.frames)
+}
+
 func (b *Buffer) snapshotLocked() []Frame {
 	out := make([]Frame, 0, len(b.order))
 	for _, key := range b.order {
@@ -81,8 +92,9 @@ func (b *Buffer) snapshotLocked() []Frame {
 	}
 	return out
 }
+
 func (b *Buffer) trimLocked() {
-	for len(b.order) > 1 {
+	for len(b.order) > 0 {
 		payload, err := json.Marshal(b.snapshotLocked())
 		if err == nil && len(payload) <= b.maxPayloadBytes {
 			return
