@@ -33,3 +33,42 @@ jobs:
         run: CGO_ENABLED=0 go build -trimpath -o /tmp/market-realtime-worker ./cmd/market-realtime-worker
       - name: Build production container
         run: docker build -t qeoindex-market-realtime-worker:ci services/market-realtime-worker
+
+  repo-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: TypeScript with annotations
+        shell: bash
+        run: |
+          set +e
+          output="$(pnpm typecheck 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^(.+)\(([0-9]+),([0-9]+)\):[[:space:]]error[[:space:]]TS[0-9]+: ]]; then
+              file="${BASH_REMATCH[1]}"
+              row="${BASH_REMATCH[2]}"
+              col="${BASH_REMATCH[3]}"
+              safe="${line//'%'/'%25'}"
+              safe="${safe//$'\r'/'%0D'}"
+              safe="${safe//$'\n'/'%0A'}"
+              echo "::error file=${file},line=${row},col=${col}::${safe}"
+            fi
+          done <<< "$output"
+          exit "$status"
