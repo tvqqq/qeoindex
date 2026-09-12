@@ -1,0 +1,38 @@
+name: QEO-175 One-shot Board Cutover
+
+on:
+  push:
+    branches:
+      - tvq9612/qeo-175-central-dnse-realtime
+    paths:
+      - scripts/qeo175-cutover.mjs
+      - .github/workflows/qeo175-cutover.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tvq9612/qeo-175-central-dnse-realtime
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply guarded Market Board transport cutover
+        run: node scripts/qeo175-cutover.mjs
+      - name: Commit generated cutover
+        shell: bash
+        run: |
+          if git diff --quiet -- components/live-market-board.tsx; then
+            echo "No Market Board changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/live-market-board.tsx
+          git commit -m "feat(QEO-175): cut Market Board over to Supabase realtime"
+          git push origin HEAD:tvq9612/qeo-175-central-dnse-realtime
