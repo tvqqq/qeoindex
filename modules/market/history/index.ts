@@ -1,6 +1,7 @@
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { vietnamDateKey } from "@/modules/market/calendar"
 import { fetchDailyOhlcv as fetchDnseDailyOhlcv, fetchHourlyOhlcv as fetchDnseHourlyOhlcv } from "@/modules/market/providers/dnse/history"
+import { isRetryableDnseWindowError } from "@/modules/market/providers/dnse/request-windows"
 import { fetchTitanLabsDailyOhlcv } from "@/modules/market/providers/titanlabs/daily"
 import { fetchVciDailyOhlcv } from "@/modules/market/providers/vci/daily"
 import { fetchVnDirectDailyOhlcv } from "@/modules/market/providers/vndirect/history"
@@ -38,7 +39,7 @@ function shouldTryDnse() {
 
 function markDnseUnavailable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network|adaptive deadline exceeded/i.test(message)) {
+  if (isRetryableDnseWindowError(error) || /ENOTFOUND|adaptive deadline exceeded/i.test(message)) {
     dnseUnavailableUntil = Date.now() + 5 * 60_000
   }
   return message

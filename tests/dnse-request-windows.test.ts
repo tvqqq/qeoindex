@@ -51,6 +51,12 @@ test("adaptive DNSE split retries only transient failures", () => {
   assert.equal(isRetryableDnseWindowError(new Error("DNSE OHLC VGI 1D failed (404): symbol not found")), false)
 })
 
+test("market history cooldown reuses the DNSE transient failure classifier", () => {
+  const marketHistorySource = readFileSync("modules/market/history/index.ts", "utf8")
+  assert.match(marketHistorySource, /isRetryableDnseWindowError/)
+  assert.match(marketHistorySource, /function markDnseUnavailable[\s\S]*isRetryableDnseWindowError\(error\)/)
+})
+
 test("Daily transient retry floor is small enough to recover a VGI-like 23-day timeout", () => {
   const historySource = readFileSync("modules/market/providers/dnse/history.ts", "utf8")
   assert.match(historySource, /DAILY_MIN_RETRY_WINDOW_DAYS\s*=\s*7/)
