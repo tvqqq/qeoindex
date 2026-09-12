@@ -60,7 +60,7 @@ test("P3 outcome refresh computes VNINDEX alpha and calibration stays sample-gat
 test("daily Council P3 operation is machine-authorized and runs inside the unified EOD dependency chain", () => {
   const route = source("app/api/ai-council/daily/route.ts")
   const operations = source("modules/ai-council/operations.ts")
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const steps = source("modules/eod/workflow-steps.ts")
   const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   const vercel = JSON.parse(source("vercel.json")) as { crons: Array<{ path: string; schedule: string }> }
@@ -228,7 +228,7 @@ test("P4.3 freezes raw KFSP, TTAI history and Wyckoff context without changing d
 test("P4 debate stage is isolated behind an authenticated endpoint and the unified dependency-driven EOD workflow", () => {
   const route = source("app/api/ai-council/debate-daily/route.ts")
   const operations = source("modules/ai-council/operations.ts")
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const steps = source("modules/eod/workflow-steps.ts")
   const scheduler = source("supabase/migrations/20260825174500_qeoindex_eod_pipeline_cron.sql")
   const page = source("app/insights/ai-council/debates/page.tsx")

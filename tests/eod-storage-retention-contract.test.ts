@@ -55,7 +55,7 @@ test("safe retention deletes terminal orphan parents only when canonical evidenc
 
 test("Wyckoff build stages run-scoped artifacts and validates/publishes by hash instead of durable workflow payload", () => {
   const steps = source("modules/eod/workflow-steps.ts")
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
 
   assert.match(steps, /loadWyckoffV2CachedHistories/)
   assert.doesNotMatch(steps, /loadWyckoffV2CachedTickerHistory/)
@@ -84,7 +84,7 @@ test("direct Wyckoff publish keeps two analysis snapshots and one raw Daily char
 })
 
 test("Notion is a downstream analytical summary, not operational retention state", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const summary = source("modules/eod/notion-summary.ts")
   const summaryStep = source("modules/eod/notion-summary-step.ts")
 

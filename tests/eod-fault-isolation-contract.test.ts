@@ -82,7 +82,7 @@ test("QEO-61 schema permits partial parent runs and preserves exact retry metada
 })
 
 test("QEO-61 pipeline terminalizes incomplete canonical build coverage as partial before publish or Council", () => {
-  const workflow = source("workflows/qeoindex-eod-pipeline.ts")
+  const workflow = source("modules/eod/orchestrator.ts")
   const build = workflow.indexOf("runWyckoffBuildStep")
   const partial = workflow.indexOf("completeQeoIndexEodPartialStep", build)
   const validate = workflow.indexOf("runSupabaseValidateStep", build)

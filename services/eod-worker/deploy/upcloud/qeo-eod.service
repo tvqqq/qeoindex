@@ -1,0 +1,13 @@
+[Unit]
+Description=QeoIndex Unified EOD worker
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=qeo
+Group=qeo
+WorkingDirectory=/opt/qeoindex/repo/services/eod-worker
+ExecStart=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml run --rm --no-deps eod-worker
+TimeoutStartSec=7200

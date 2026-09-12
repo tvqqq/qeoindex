@@ -82,7 +82,7 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
   const timeline = buildCronTimelineModel(jobs)
 
   const matchesFilter = (node: TimelineJobNode, laneId: TimelineLaneId) => {
-    if (filterMode === "scheduled") return laneId === "vercel" || laneId === "pg_cron"
+    if (filterMode === "scheduled") return laneId === "vercel" || laneId === "pg_cron" || laneId === "systemd"
     if (filterMode === "issues") return node.executionStatus === "failing" || node.executionStatus === "degraded" || Boolean(node.conflictWarning)
     if (filterMode === "weekdays") return laneId !== "manual" && laneId !== "disabled" && node.daysLabel === "T2-T6"
     if (filterMode === "daily") return laneId !== "manual" && laneId !== "disabled" && node.daysLabel === "Hàng ngày"
@@ -175,7 +175,7 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
           <span>11:30 (Nghỉ trưa)</span>
           <span>13:00 (Chiều)</span>
           <span className="font-bold text-emerald-400">14:45 (ATC & EOD Sync)</span>
-          <span className="font-bold text-sky-400">15:15 (EOD Chain)</span>
+          <span className="font-bold text-sky-400">15:01 (EOD Chain)</span>
           <span>24:00</span>
         </div>
         <div className="relative mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
@@ -191,8 +191,8 @@ export function AdminCronTimeline({ jobs }: AdminCronTimelineProps) {
           />
           <div
             className="absolute top-0 bottom-0 w-1.5 bg-sky-400"
-            style={{ left: "63.5%" }}
-            title="15:15 ICT: QeoIndex Unified EOD Pipeline"
+            style={{ left: "62.57%" }}
+            title="15:01 ICT: QeoIndex Unified EOD Pipeline"
           />
         </div>
       </div>

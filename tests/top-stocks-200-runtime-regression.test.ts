@@ -33,7 +33,7 @@ const marketSyncUniverse = source("modules/market/universe/sync.ts")
 const marketUniverseEdge = source("supabase/functions/market-universe-sync/index.ts")
 const orderbookSync = source("supabase/functions/orderbook-sync/index.ts")
 const sessionCountdown = source("modules/market/realtime/session-countdown.ts")
-const eodWorkflow = source("workflows/qeoindex-eod-pipeline.ts")
+const eodWorkflow = source("modules/eod/orchestrator.ts")
 
 test("Wyckoff runtime reads canonical Supabase universe instead of Notion Top100", () => {
   assert.match(wyckoffRunner, /getCanonicalUniverse/)

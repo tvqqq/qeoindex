@@ -29,11 +29,11 @@ const definition: AdminJobDefinition = {
   maxDurationMinutes: 5,
 }
 
-test("canonical EOD v4 schedule is weekday 15:15 ICT and respects due state", () => {
+test("canonical EOD v4 schedule is weekday 15:01 ICT and respects due state", () => {
   const eod = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.eod_pipeline")
   assert.ok(eod?.schedulePolicy)
-  assert.equal(eod.scheduleUtc, "15 8 * * 1-5")
-  assert.equal(eod.scheduleIct, "15:15 T2-T6")
+  assert.equal(eod.scheduleUtc, "1 8 * * 1-5")
+  assert.equal(eod.scheduleIct, "15:01 T2-T6")
 
   assert.equal(deriveScheduleDueState(eod.schedulePolicy, null, new Date("2026-08-30T08:30:00.000Z")), "not_due")
   assert.equal(deriveScheduleDueState(eod.schedulePolicy, null, new Date("2026-08-31T08:00:00.000Z")), "not_due")
@@ -105,7 +105,7 @@ test("buildAdminJobViews aggregates current catalog jobs and counts", () => {
 test("effective admin catalog has one EOD v4 owner and recovery-only legacy children", () => {
   const pipeline = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.eod_pipeline")
   assert.ok(pipeline)
-  assert.equal(pipeline.provider, "supabase_pg_cron_workflow")
+  assert.equal(pipeline.provider, "upcloud_systemd")
   assert.equal(pipeline.manualPolicy, "disabled")
   assert.match(pipeline.description, /Canonical EOD v4 owner/)
 

@@ -34,6 +34,7 @@ test("QEO-197 standalone worker build and hardened UpCloud deployment exist", ()
   assert.match(compose, /read_only:\s*true/)
   assert.match(compose, /no-new-privileges:true/)
   assert.match(compose, /cap_drop:[\s\S]*ALL/)
+  assert.match(compose, /context:\s*\.\.\/\.\.\/\.\.\/\.\./, "Compose build context must resolve to repository root")
   assert.doesNotMatch(compose, /^\s*ports:/m)
 })
 
@@ -51,4 +52,16 @@ test("QEO-197 retirement migration preserves the legacy pg_cron row but makes it
   assert.match(sql, /cron\.alter_job/)
   assert.match(sql, /active\s*:=\s*false/i)
   assert.doesNotMatch(sql, /cron\.unschedule\('qeoindex-eod-pipeline-1515-ict'\)/i)
+})
+
+
+test("QEO-197 admin metadata points to UpCloud while legacy pg_cron is historical-only", () => {
+  const catalog = source("modules/admin/effective-job-catalog.ts")
+  const schedule = source("modules/admin/job-schedule.ts")
+  assert.match(catalog, /provider:\s*"upcloud_systemd"/)
+  assert.match(catalog, /scheduleIct:\s*"15:01 T2-T6"/)
+  assert.match(catalog, /schedulerName:\s*"qeo-eod\.timer"/)
+  assert.match(schedule, /"qeoindex-eod-pipeline-1515-ict": "qeoindex\.eod_pipeline"/)
+  const activeBlock = schedule.slice(schedule.indexOf("JOB_KEY_TO_PG_CRON_NAME"))
+  assert.doesNotMatch(activeBlock, /"qeoindex\.eod_pipeline": "qeoindex-eod-pipeline-1515-ict"/)
 })
