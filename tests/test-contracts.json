@@ -1193,6 +1193,15 @@
         "fast",
         "ui-contracts"
       ]
+    },
+    {
+      "path": "tests/upcloud-restic-contract.test.ts",
+      "owner": "tooling",
+      "invariant": "QEO-202 keeps UpCloud Restic backup and restore artifacts encrypted, allowlisted, disabled-first, and fail-closed.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
     }
   ]
 }
