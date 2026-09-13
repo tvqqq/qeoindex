@@ -102,6 +102,15 @@ test("QEO-211 health aggregation fails closed and preserves unknown state", asyn
   assert.equal(health.overallHealthState([]), "unknown")
 })
 
+test("QEO-211 Jobs health reflects aggregate failures instead of only EOD state", async () => {
+  const health = await import("../services/ops-dashboard/src/health.ts")
+  assert.equal(health.healthStateFromOperationalCounts({ failing: 1, degraded: 0, stale: 0, unknown: 0 }), "critical")
+  assert.equal(health.healthStateFromOperationalCounts({ failing: 0, degraded: 1, stale: 0, unknown: 0 }), "degraded")
+  assert.equal(health.healthStateFromOperationalCounts({ failing: 0, degraded: 0, stale: 1, unknown: 0 }), "degraded")
+  assert.equal(health.healthStateFromOperationalCounts({ failing: 0, degraded: 0, stale: 0, unknown: 2 }), "unknown")
+  assert.equal(health.healthStateFromOperationalCounts({ failing: 0, degraded: 0, stale: 0, unknown: 0 }), "healthy")
+})
+
 test("QEO-211 unconfigured Gatus provider is explicit unknown, never fake healthy", async () => {
   const path = "services/ops-dashboard/src/providers/gatus.ts"
   if (!existsSync(repoFile(path))) {
