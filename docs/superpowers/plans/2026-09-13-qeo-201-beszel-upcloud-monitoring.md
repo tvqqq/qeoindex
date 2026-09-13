@@ -102,7 +102,7 @@ test("QEO-201 Beszel deployment is version-pinned and private-only", () => {
 test("QEO-201 Agent uses local Unix socket and mediated Docker read access", () => {
   const compose = source(composePath)
   assert.match(compose, /LISTEN:\s*\/beszel_socket\/beszel\.sock/)
-  assert.match(compose, /DOCKER_HOST:\s*http:\/\/127\.0\.0\.1:2375/)
+  assert.match(compose, /DOCKER_HOST:\s*tcp:\/\/127\.0\.0\.1:2375/)
   assert.match(compose, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/)
 
   const agentBlock = compose.slice(compose.indexOf("beszel-agent:"))
@@ -225,8 +225,6 @@ services:
     restart: unless-stopped
     environment:
       CONTAINERS: "1"
-      EVENTS: "1"
-      INFO: "1"
       VERSION: "1"
       POST: "0"
     ports:
@@ -253,7 +251,7 @@ services:
     environment:
       TZ: Asia/Ho_Chi_Minh
       LISTEN: /beszel_socket/beszel.sock
-      DOCKER_HOST: http://127.0.0.1:2375
+      DOCKER_HOST: tcp://127.0.0.1:2375
     volumes:
       - /opt/qeoindex/state/beszel/agent:/var/lib/beszel-agent
       - beszel_socket:/beszel_socket
@@ -272,7 +270,7 @@ Implementation notes:
 
 - `127.0.0.1:8090` is the only Hub bind; Tailscale Serve is the browser ingress owner.
 - The Agent must not receive `/var/run/docker.sock` directly. The proxy is the only container with the socket mount.
-- `POST=0` prevents Docker write-method access through the proxy. Only the read endpoints needed by Beszel are enabled.
+- `POST=0` prevents Docker write-method access through the proxy. `CONTAINERS=1` plus `VERSION=1` is the intended least-privilege read surface for Beszel container discovery/version checks.
 - `CONTAINER_DETAILS=false` keeps the Hub focused on monitoring and avoids exposing container shell/log-detail features that QEO-201 does not need.
 - `network_mode: host` is retained only for Agent host-network statistics; Agent service ingress remains the Unix socket.
 - Hard memory caps are safety ceilings, not acceptance targets. Actual idle usage must still satisfy the approved `<=150 MB` Hub+Agent target or be classified MARGINAL/FAIL from measured evidence.
@@ -401,7 +399,7 @@ Rollback keeps `/opt/qeoindex/state/beszel/hub` intact unless a separately revie
 
 - [ ] **Step 2: Document Telegram and initial alert policy without embedding credentials**
 
-Document the Telegram notification URL form only as a placeholder-free format example with redacted symbolic components:
+Document the Telegram notification URL form only as a non-secret syntax example:
 
 ```text
 telegram://<BOT_TOKEN>@telegram?chats=<CHAT_ID>
@@ -434,7 +432,7 @@ The active doc must record:
 - backup boundary: QEO-202 should review only persistent state, not runtime Unix socket;
 - failure behavior: Beszel failure never blocks QeoIndex workloads and colocated monitoring is not independent host-down monitoring;
 - upgrade sequence: backup/protect state -> pin new version -> deploy -> verify metrics/history -> rollback to prior pin if needed;
-- acceptance evidence table with rows for private access, public-port denial, UFW/Funnel invariants, historical metrics, Telegram alert/recovery, idle resources, market-session baseline, EOD baseline, final PASS/MARGINAL/FAIL. Keep evidence cells explicitly marked `Pending runtime acceptance` until actually measured; do not claim success in source-only work.
+- acceptance evidence table with rows for private access, public-port denial, UFW/Funnel invariants, historical metrics, Telegram alert/recovery, idle resources, market-session baseline, EOD baseline, final PASS/MARGINAL/FAIL. Evidence cells must say `Pending runtime acceptance` until actually measured; do not claim success in source-only work.
 
 - [ ] **Step 4: Add the active doc to `docs/README.md`**
 
@@ -486,6 +484,7 @@ Socket proxy == ghcr.io/linuxserver/socket-proxy:3.4.3-r0-ls93
 Hub bind == 127.0.0.1:8090
 Proxy bind == 127.0.0.1:2375
 Agent LISTEN == /beszel_socket/beszel.sock
+Agent DOCKER_HOST == tcp://127.0.0.1:2375
 Agent has no /var/run/docker.sock mount
 Proxy has /var/run/docker.sock:ro and POST=0
 No :latest tags
