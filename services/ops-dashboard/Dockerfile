@@ -1,7 +1,7 @@
-FROM node:22-alpine AS build
+FROM node:22.20-alpine AS build
 WORKDIR /repo
 
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
@@ -10,7 +10,7 @@ COPY modules ./modules
 COPY services/ops-dashboard ./services/ops-dashboard
 RUN node services/ops-dashboard/build.mjs
 
-FROM node:22-alpine AS runtime
+FROM node:22.20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     QEO_OPS_PUBLIC_DIR=/app/public \
