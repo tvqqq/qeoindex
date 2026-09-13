@@ -73,7 +73,7 @@
     {
       "path": "tests/ai-council-research-context.test.ts",
       "owner": "ai",
-      "invariant": "Preserve the current ai council research context contract.",
+      "invariant": "Preserve the current ai council research context unit contract.",
       "bucket": "canonical",
       "suites": [
         "fast",
@@ -1182,6 +1182,15 @@
       "suites": [
         "fast",
         "eod"
+      ]
+    },
+    {
+      "path": "tests/qeo201-beszel-upcloud.test.ts",
+      "owner": "tooling",
+      "invariant": "QEO-201 keeps Beszel version-pinned, private-only, Unix-socket connected, Docker-write-isolated, and bounded on the UpCloud host.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
       ]
     },
     {

@@ -1,0 +1,69 @@
+services:
+  beszel-hub:
+    image: henrygd/beszel:0.19.0
+    container_name: qeo-beszel-hub
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      APP_URL: https://qeoindex-sg.tail426fe8.ts.net/beszel
+      CHECK_UPDATES: "false"
+      CONTAINER_DETAILS: "false"
+      USER_CREATION: "false"
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - /opt/qeoindex/state/beszel/hub:/beszel_data
+      - beszel_socket:/beszel_socket
+    mem_limit: 192m
+    cpus: "0.15"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  docker-socket-proxy:
+    image: ghcr.io/linuxserver/socket-proxy:3.4.3-r0-ls93
+    container_name: qeo-beszel-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      VERSION: "1"
+      POST: "0"
+    ports:
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 32m
+    cpus: "0.05"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  beszel-agent:
+    image: henrygd/beszel-agent:0.19.0
+    container_name: qeo-beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - beszel-hub
+      - docker-socket-proxy
+    env_file:
+      - path: /opt/qeoindex/env/beszel-agent.env
+        required: false
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      LISTEN: /beszel_socket/beszel.sock
+      DOCKER_HOST: tcp://127.0.0.1:2375
+    volumes:
+      - /opt/qeoindex/state/beszel/agent:/var/lib/beszel-agent
+      - beszel_socket:/beszel_socket
+    mem_limit: 96m
+    cpus: "0.15"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  beszel_socket:

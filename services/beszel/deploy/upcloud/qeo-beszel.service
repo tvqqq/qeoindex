@@ -1,0 +1,19 @@
+[Unit]
+Description=QeoIndex Beszel private monitoring
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=qeo
+Group=qeo
+WorkingDirectory=/opt/qeoindex/repo/services/beszel
+ExecStart=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml down --timeout 20
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
