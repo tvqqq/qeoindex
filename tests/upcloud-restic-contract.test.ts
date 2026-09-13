@@ -98,8 +98,11 @@ test("daily backup quiesces Hermes only for staging and backs up a relative tree
   assert.match(backup, /trap .*EXIT/)
 })
 
-test("maintenance is check-first with exact retention and explicit dry-run/apply modes", () => {
+test("maintenance supports one-time init and keeps scheduled retention check-first", () => {
   const maintenance = source("ops/upcloud/restic/maintenance.sh")
+  assert.match(maintenance, /init\|dry-run\|apply/)
+  assert.match(maintenance, /if \[\[ "\$MODE" == init \]\]; then[\s\S]*restic init[\s\S]*exit 0/)
+  assert.ok(maintenance.indexOf("restic init") < maintenance.indexOf("heartbeat_start"))
   assert.match(maintenance, /restic check/)
   assert.match(maintenance, /--keep-daily 14/)
   assert.match(maintenance, /--keep-weekly 8/)
