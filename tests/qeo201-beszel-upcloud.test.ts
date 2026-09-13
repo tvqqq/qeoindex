@@ -49,6 +49,22 @@ test("QEO-201 bootstrap does not require Agent credentials before Hub setup", ()
   )
 })
 
+test("QEO-201 host preparation keeps cap-dropped state writable without relaxing permissions", () => {
+  const readme = source(readmePath)
+  assert.match(
+    readme,
+    /sudo install -d -o root -g root -m 0750 \/opt\/qeoindex\/state\/beszel\/hub/,
+  )
+  assert.match(
+    readme,
+    /sudo install -d -o root -g root -m 0750 \/opt\/qeoindex\/state\/beszel\/agent/,
+  )
+  assert.match(
+    readme,
+    /sudo install -d -o qeo -g qeo -m 0750 \/opt\/qeoindex\/env/,
+  )
+})
+
 test("QEO-201 keeps authentication and secrets server-side", () => {
   const compose = source(composePath)
   const envExample = source(envExamplePath)
