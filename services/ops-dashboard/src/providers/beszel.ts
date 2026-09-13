@@ -30,6 +30,8 @@ export interface BeszelHealthData {
 type JsonRecord = Record<string, unknown>
 type PocketBaseList = { items?: unknown[] }
 
+const CONTAINER_FRESH_MS = 3 * 60 * 1000
+
 function record(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}
 }
@@ -63,6 +65,19 @@ function numericTuple(value: unknown): unknown[] {
 
 function text(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback
+}
+
+function timestampMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? value : value * 1000
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return numeric > 1_000_000_000_000 ? numeric : numeric * 1000
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 function firstListItem(value: unknown): JsonRecord | null {
@@ -130,15 +145,38 @@ function containerHealth(item: JsonRecord): BeszelContainerHealth {
   }
 }
 
+function currentContainers(items: unknown[], nowMs = Date.now()): BeszelContainerHealth[] {
+  const sorted = items.map(record).sort((left, right) => {
+    return (timestampMs(right.updated) ?? 0) - (timestampMs(left.updated) ?? 0)
+  })
+  const seen = new Set<string>()
+  const current: BeszelContainerHealth[] = []
+
+  for (const item of sorted) {
+    const updatedMs = timestampMs(item.updated)
+    if (updatedMs !== null && nowMs - updatedMs > CONTAINER_FRESH_MS) continue
+
+    const health = containerHealth(item)
+    if (seen.has(health.name)) continue
+    seen.add(health.name)
+    current.push(health)
+  }
+  return current
+}
+
+function isHealthyContainerStatus(status: string): boolean {
+  const normalized = status.toLowerCase().trim()
+  if (!normalized || normalized === "unknown") return true
+  if (["running", "up", "healthy"].includes(normalized)) return true
+  return normalized.startsWith("up ") || normalized.startsWith("running ")
+}
+
 function deriveStatus(systemStatus: string, stale: boolean, containers: BeszelContainerHealth[]): HealthState {
   const normalized = systemStatus.toLowerCase()
   if (["down", "offline", "failed", "unreachable"].includes(normalized)) return "critical"
   if (!normalized || normalized === "unknown") return "unknown"
 
-  const unhealthyContainer = containers.some((container) => {
-    const status = container.status.toLowerCase()
-    return status && !["running", "up", "healthy", "unknown"].includes(status)
-  })
+  const unhealthyContainer = containers.some((container) => !isHealthyContainerStatus(container.status))
   if (stale || unhealthyContainer) return "degraded"
   return "healthy"
 }
@@ -187,7 +225,7 @@ export async function loadBeszelSnapshot(env: Partial<NodeJS.ProcessEnv> = proce
         method: "GET",
         headers: authHeaders(token),
       }, timeoutMs),
-      fetchJson(`${baseUrl}/api/collections/containers/records?page=1&perPage=100&skipTotal=1&filter=${containerFilter}`, {
+      fetchJson(`${baseUrl}/api/collections/containers/records?page=1&perPage=100&skipTotal=1&sort=-updated&filter=${containerFilter}`, {
         method: "GET",
         headers: authHeaders(token),
       }, timeoutMs),
@@ -195,8 +233,7 @@ export async function loadBeszelSnapshot(env: Partial<NodeJS.ProcessEnv> = proce
 
     const statsRecord = firstListItem(statsValue)
     const containersList = record(containersValue)
-    const containers = (Array.isArray(containersList.items) ? containersList.items : [])
-      .map((item) => containerHealth(record(item)))
+    const containers = currentContainers(Array.isArray(containersList.items) ? containersList.items : [])
     const metrics = systemMetrics(system, statsRecord)
     const statsObservedAt = text(statsRecord?.created, text(system.updated, observedAt))
     const stale = isSnapshotStale(statsObservedAt, 3 * 60 * 1000)
