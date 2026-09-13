@@ -1,4 +1,4 @@
-import { unknownProvider, type ProviderSnapshot } from "../health.ts"
+import { unknownProvider, type ProviderSnapshot } from "../health"
 
 export interface GatusHealthData {
   configured: boolean
