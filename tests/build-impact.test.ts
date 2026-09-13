@@ -117,6 +117,84 @@ test("QEO-211 unconfigured Gatus provider is explicit unknown, never fake health
   assert.match(result.message ?? "", /not configured/i)
 })
 
+test("QEO-211 Beszel adapter follows current PocketBase telemetry schema", async () => {
+  const path = "services/ops-dashboard/src/providers/beszel.ts"
+  if (!existsSync(repoFile(path))) {
+    assert.fail(`${path} must exist before Beszel schema semantics can be verified`)
+    return
+  }
+
+  const { loadBeszelSnapshot } = await import("../services/ops-dashboard/src/providers/beszel.ts")
+  const originalFetch = globalThis.fetch
+  const observedAt = new Date().toISOString()
+
+  globalThis.fetch = async (input) => {
+    const url = typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url
+
+    if (url.includes("/api/collections/users/auth-with-password")) {
+      return Response.json({ token: "test-token" })
+    }
+    if (url.includes("/api/collections/systems/records")) {
+      return Response.json({
+        items: [{
+          id: "system-1",
+          name: "qeoindex-sg",
+          status: "up",
+          updated: observedAt,
+          info: { cpu: 12, mp: 50, dp: 25, la: [0.7, 0.5, 0.3], u: 3600 },
+        }],
+      })
+    }
+    if (url.includes("/api/collections/system_stats/records")) {
+      return Response.json({
+        items: [{
+          created: observedAt,
+          stats: {
+            cpu: 12,
+            m: 2,
+            mu: 1,
+            mp: 50,
+            s: 1,
+            su: 0.2,
+            d: 40,
+            du: 10,
+            dp: 25,
+            la: [0.7, 0.5, 0.3],
+          },
+        }],
+      })
+    }
+    if (url.includes("/api/collections/containers/records")) {
+      return Response.json({
+        items: [{ name: "qeo-worker", status: "running", cpu: 7.5, memory: 128 }],
+      })
+    }
+    return new Response("not found", { status: 404 })
+  }
+
+  try {
+    const result = await loadBeszelSnapshot({
+      QEO_OPS_BESZEL_URL: "http://beszel.test:8090",
+      QEO_OPS_BESZEL_EMAIL: "ops@example.test",
+      QEO_OPS_BESZEL_PASSWORD: "test-password",
+      QEO_OPS_BESZEL_SYSTEM_NAME: "qeoindex-sg",
+    })
+
+    assert.equal(result.status, "healthy")
+    assert.equal(result.data?.load1, 0.7)
+    assert.equal(result.data?.load5, 0.5)
+    assert.equal(result.data?.load15, 0.3)
+    assert.equal(result.data?.containers[0]?.cpuPercent, 7.5)
+    assert.equal(result.data?.containers[0]?.memoryMb, 128)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("QEO-211 deployment and PWA contracts keep operations data private and network-fresh", () => {
   const required = [
     "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml",
