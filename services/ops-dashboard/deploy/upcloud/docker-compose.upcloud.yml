@@ -1,3 +1,5 @@
+name: qeo-ops-dashboard
+
 services:
   ops-dashboard:
     image: qeoindex-ops-dashboard:local
