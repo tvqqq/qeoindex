@@ -1,6 +1,5 @@
 import { loadAdminJobsSnapshot } from "../../../../modules/admin/job-health.ts"
-import type { AdminJobStatus } from "../../../../modules/admin/types.ts"
-import { unknownProvider, type HealthState, type ProviderSnapshot } from "../health.ts"
+import { healthStateFromOperationalCounts, unknownProvider, type ProviderSnapshot } from "../health.ts"
 
 export interface JobsHealthData {
   counts: {
@@ -25,46 +24,26 @@ export interface JobsHealthData {
   } | null
 }
 
-function mapAdminStatus(status: AdminJobStatus): HealthState {
-  switch (status) {
-    case "failing":
-      return "critical"
-    case "degraded":
-    case "stale":
-      return "degraded"
-    case "unknown":
-      return "unknown"
-    case "healthy":
-    case "in_progress":
-      return "healthy"
-  }
-}
-
 export async function loadJobsSnapshot(): Promise<ProviderSnapshot<JobsHealthData>> {
   const observedAt = new Date().toISOString()
 
   try {
     const snapshot = await loadAdminJobsSnapshot()
     const eod = snapshot.jobs.find((job) => job.key === "qeoindex.eod_pipeline") ?? null
-    const status = mapAdminStatus(eod?.status ?? (snapshot.counts.failing > 0
-      ? "failing"
-      : snapshot.counts.degraded > 0 || snapshot.counts.stale > 0
-        ? "degraded"
-        : snapshot.counts.unknown > 0
-          ? "unknown"
-          : "healthy"))
+    const status = healthStateFromOperationalCounts(snapshot.counts)
+    const eodIsFailing = eod?.status === "failing"
 
-    const message = eod?.lastErrorMessage
+    const message = eodIsFailing && eod?.lastErrorMessage
       ? `EOD: ${eod.lastErrorMessage}`
       : status === "healthy"
         ? null
-        : eod?.healthReason || `Operational jobs are ${status}`
+        : `Operational jobs are ${status}`
 
     return {
       source: "jobs",
       status,
       observedAt,
-      stale: eod?.status === "stale",
+      stale: snapshot.counts.stale > 0,
       message,
       data: {
         counts: {
