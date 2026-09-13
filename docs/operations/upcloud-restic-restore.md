@@ -197,20 +197,19 @@ The placeholder above is an operator/agent input, not a credential.
 
 ## Phase 4 — restore to quarantine staging
 
-Create a unique temporary target:
+Choose a unique quarantine target that does not already exist:
 
 ```bash
 RESTORE_ROOT="/var/tmp/qeo-restore/${SNAPSHOT_ID}"
-sudo install -d -m 0700 -o root -g root "$RESTORE_ROOT"
 ```
 
-Restore there only:
+Restore there only through the root-owned helper, which loads Restic credentials internally and refuses targets outside `/var/tmp/qeo-restore/`:
 
 ```bash
-sudo -E restic restore "$SNAPSHOT_ID" --target "$RESTORE_ROOT"
+sudo qeo-restic-restore-stage --snapshot "$SNAPSHOT_ID" --target "$RESTORE_ROOT"
 ```
 
-Never change `--target` to `/`, `/opt`, `/etc` or another live prefix.
+Do not pre-create the target: the helper creates it mode `0700` and removes a partial target if restore fails. Never change the target to `/`, `/opt`, `/etc` or another live prefix.
 
 After restore, inspect only metadata/path names first:
 
