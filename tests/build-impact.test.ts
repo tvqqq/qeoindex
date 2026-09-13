@@ -1,7 +1,14 @@
 import assert from "node:assert/strict"
+import { existsSync, readFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 
 import { isRuntimeBuildRelevant, needsVercelBuild } from "../scripts/build-impact.mjs"
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
+const repoFile = (path: string) => resolve(repoRoot, path)
+const source = (path: string) => readFileSync(repoFile(path), "utf8")
 
 test("documentation and verification-only changes do not require a Vercel runtime build", () => {
   const files = [
@@ -40,4 +47,107 @@ test("mixed commits build when any runtime-relevant file changes", () => {
 
 test("unknown or empty diffs build conservatively", () => {
   assert.equal(needsVercelBuild([]), true)
+})
+
+test("QEO-211 private ops dashboard changes do not trigger the public Vercel app build", () => {
+  const files = [
+    "services/ops-dashboard/src/server.ts",
+    "services/ops-dashboard/src/providers/beszel.ts",
+    "services/ops-dashboard/public/app.js",
+    "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml",
+  ]
+
+  assert.equal(needsVercelBuild(files), false)
+  for (const file of files) assert.equal(isRuntimeBuildRelevant(file), false, file)
+})
+
+test("QEO-211 private ops dashboard source package is complete", () => {
+  const required = [
+    "services/ops-dashboard/src/health.ts",
+    "services/ops-dashboard/src/providers/beszel.ts",
+    "services/ops-dashboard/src/providers/jobs.ts",
+    "services/ops-dashboard/src/providers/gatus.ts",
+    "services/ops-dashboard/src/snapshot.ts",
+    "services/ops-dashboard/src/server.ts",
+    "services/ops-dashboard/public/index.html",
+    "services/ops-dashboard/public/app.js",
+    "services/ops-dashboard/public/styles.css",
+    "services/ops-dashboard/public/manifest.webmanifest",
+    "services/ops-dashboard/public/sw.js",
+    "services/ops-dashboard/public/icon.svg",
+    "services/ops-dashboard/build.mjs",
+    "services/ops-dashboard/Dockerfile",
+    "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml",
+    "services/ops-dashboard/deploy/upcloud/qeo-ops-dashboard.service",
+    "services/ops-dashboard/ops-dashboard.env.example",
+    "services/ops-dashboard/README.md",
+    "docs/operations/ops-dashboard.md",
+  ]
+
+  for (const path of required) assert.equal(existsSync(repoFile(path)), true, `${path} must exist`)
+})
+
+test("QEO-211 health aggregation fails closed and preserves unknown state", async () => {
+  const path = "services/ops-dashboard/src/health.ts"
+  if (!existsSync(repoFile(path))) {
+    assert.fail(`${path} must exist before health semantics can be verified`)
+    return
+  }
+
+  const health = await import("../services/ops-dashboard/src/health.ts")
+  assert.equal(health.overallHealthState(["healthy", "healthy"]), "healthy")
+  assert.equal(health.overallHealthState(["healthy", "unknown"]), "unknown")
+  assert.equal(health.overallHealthState(["unknown", "degraded"]), "degraded")
+  assert.equal(health.overallHealthState(["degraded", "critical", "unknown"]), "critical")
+  assert.equal(health.overallHealthState([]), "unknown")
+})
+
+test("QEO-211 unconfigured Gatus provider is explicit unknown, never fake healthy", async () => {
+  const path = "services/ops-dashboard/src/providers/gatus.ts"
+  if (!existsSync(repoFile(path))) {
+    assert.fail(`${path} must exist before Gatus fallback semantics can be verified`)
+    return
+  }
+
+  const { loadGatusSnapshot } = await import("../services/ops-dashboard/src/providers/gatus.ts")
+  const result = await loadGatusSnapshot({})
+  assert.equal(result.source, "gatus")
+  assert.equal(result.status, "unknown")
+  assert.equal(result.data, null)
+  assert.match(result.message ?? "", /not configured/i)
+})
+
+test("QEO-211 deployment and PWA contracts keep operations data private and network-fresh", () => {
+  const required = [
+    "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml",
+    "services/ops-dashboard/public/app.js",
+    "services/ops-dashboard/public/sw.js",
+    "services/ops-dashboard/ops-dashboard.env.example",
+  ]
+  if (required.some((path) => !existsSync(repoFile(path)))) {
+    assert.fail("QEO-211 deployment and PWA files must exist before privacy contracts can be verified")
+    return
+  }
+
+  const compose = source(required[0])
+  const client = source(required[1])
+  const worker = source(required[2])
+  const envExample = source(required[3])
+
+  assert.match(compose, /127\.0\.0\.1:8787:8787/)
+  assert.doesNotMatch(compose, /\/var\/run\/docker\.sock/)
+  assert.doesNotMatch(compose, /network_mode:\s*host/)
+
+  for (const secret of ["SUPABASE_SERVICE_ROLE_KEY", "QEO_OPS_BESZEL_PASSWORD", "QEO_OPS_BESZEL_EMAIL"]) {
+    assert.doesNotMatch(client, new RegExp(secret))
+    assert.doesNotMatch(worker, new RegExp(secret))
+  }
+  assert.doesNotMatch(client, /localStorage|sessionStorage/)
+  assert.match(worker, /\/api\//)
+  assert.match(worker, /fetch\(request\)/)
+
+  assert.match(envExample, /^SUPABASE_URL=$/m)
+  assert.match(envExample, /^SUPABASE_SERVICE_ROLE_KEY=$/m)
+  assert.match(envExample, /^QEO_OPS_BESZEL_EMAIL=$/m)
+  assert.match(envExample, /^QEO_OPS_BESZEL_PASSWORD=$/m)
 })
