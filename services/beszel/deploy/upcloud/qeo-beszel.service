@@ -10,8 +10,8 @@ RemainAfterExit=yes
 User=qeo
 Group=qeo
 WorkingDirectory=/opt/qeoindex/repo/services/beszel
-ExecStart=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f deploy/upcloud/docker-compose.upcloud.yml down --timeout 20
+ExecStart=/usr/bin/docker compose -p qeo-beszel -f deploy/upcloud/docker-compose.upcloud.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -p qeo-beszel -f deploy/upcloud/docker-compose.upcloud.yml down --timeout 20
 TimeoutStartSec=120
 TimeoutStopSec=30
 
