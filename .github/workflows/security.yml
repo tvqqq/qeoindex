@@ -105,6 +105,8 @@ jobs:
         run: pnpm exec eslint app/board/page.tsx components/market-board/stock-filter-modal.tsx modules/market/board/stock-filter.ts app/api/me/market-board-filter/route.ts tests/market-board-filter-avg50-regression.test.ts
       - name: TypeScript
         run: pnpm typecheck
+      - name: Ops dashboard build
+        run: pnpm ops-dashboard:build
       - name: Production build
         run: pnpm exec next build
       - name: Enforce historical secret gate

@@ -1,0 +1,26 @@
+services:
+  ops-dashboard:
+    image: qeoindex-ops-dashboard:local
+    build:
+      context: ../../../..
+      dockerfile: services/ops-dashboard/Dockerfile
+    env_file:
+      - /opt/qeoindex/env/ops-dashboard.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      QEO_OPS_HOST: 0.0.0.0
+      QEO_OPS_PORT: "8787"
+      QEO_OPS_PUBLIC_DIR: /app/public
+    ports:
+      - "127.0.0.1:8787:8787"
+    mem_limit: 160m
+    cpus: "0.20"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: node
+    restart: unless-stopped
