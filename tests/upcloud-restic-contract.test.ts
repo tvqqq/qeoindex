@@ -12,6 +12,7 @@ const requiredFiles = [
   "ops/upcloud/restic/host-copy.sh",
   "ops/upcloud/restic/backup.sh",
   "ops/upcloud/restic/maintenance.sh",
+  "ops/upcloud/restic/restore-stage.sh",
   "ops/upcloud/restic/restore-host.sh",
   "ops/upcloud/restic/install.sh",
   "ops/upcloud/restic/secrets.env.example",
@@ -146,6 +147,16 @@ test("installer is disabled-first and never broadly starts services", () => {
   assert.match(install, /systemctl disable qeo-restic-backup\.timer qeo-restic-maintenance\.timer/)
   assert.doesNotMatch(install, /enable --now/)
   assert.doesNotMatch(install, /systemctl (?:enable|start) .*\*/)
+})
+
+test("restore staging helper downloads only into quarantine and never promotes", () => {
+  const restoreStage = source("ops/upcloud/restic/restore-stage.sh")
+  assert.match(restoreStage, /source_restic_runtime/)
+  assert.match(restoreStage, /--snapshot/)
+  assert.match(restoreStage, /--target/)
+  assert.match(restoreStage, /\/var\/tmp\/qeo-restore\//)
+  assert.match(restoreStage, /restic restore "\$SNAPSHOT" --target "\$TARGET"/)
+  assert.doesNotMatch(restoreStage, /systemctl (?:start|enable)|rsync .*\/opt|qeo-restore-host/)
 })
 
 test("restore helper is quarantine-only, allowlisted, and fail-closed", () => {
