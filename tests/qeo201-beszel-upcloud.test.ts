@@ -41,6 +41,14 @@ test("QEO-201 Agent uses local Unix socket and mediated Docker read access", () 
   assert.match(compose, /POST:\s*["']?0["']?/)
 })
 
+test("QEO-201 bootstrap does not require Agent credentials before Hub setup", () => {
+  const compose = source(composePath)
+  assert.match(
+    compose,
+    /env_file:\s*\n\s*-\s*path:\s*\/opt\/qeoindex\/env\/beszel-agent\.env\s*\n\s*required:\s*false/,
+  )
+})
+
 test("QEO-201 keeps authentication and secrets server-side", () => {
   const compose = source(composePath)
   const envExample = source(envExamplePath)
