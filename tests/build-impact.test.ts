@@ -207,6 +207,7 @@ test("QEO-211 Beszel adapter follows current PocketBase telemetry schema", async
 test("QEO-211 deployment and PWA contracts keep operations data private and network-fresh", () => {
   const required = [
     "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml",
+    "services/ops-dashboard/deploy/upcloud/qeo-ops-dashboard.service",
     "services/ops-dashboard/public/app.js",
     "services/ops-dashboard/public/sw.js",
     "services/ops-dashboard/ops-dashboard.env.example",
@@ -217,11 +218,16 @@ test("QEO-211 deployment and PWA contracts keep operations data private and netw
   }
 
   const compose = source(required[0])
-  const client = source(required[1])
-  const worker = source(required[2])
-  const envExample = source(required[3])
+  const unit = source(required[1])
+  const client = source(required[2])
+  const worker = source(required[3])
+  const envExample = source(required[4])
 
+  assert.match(compose, /^name:\s*qeo-ops-dashboard$/m)
   assert.match(compose, /127\.0\.0\.1:8787:8787/)
+  assert.match(compose, /QEO_OPS_BESZEL_URL:\s*http:\/\/qeo-beszel-hub:8090/)
+  assert.match(compose, /qeo-monitoring/)
+  assert.match(unit, /docker network create --driver bridge --internal qeo-monitoring/)
   assert.doesNotMatch(compose, /\/var\/run\/docker\.sock/)
   assert.doesNotMatch(compose, /network_mode:\s*host/)
 
