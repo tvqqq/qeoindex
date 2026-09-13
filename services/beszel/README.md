@@ -16,10 +16,12 @@ QEO-201 deploys Beszel Hub + Agent on the existing UpCloud host as a private mon
 These commands are runtime instructions. They are not evidence that deployment has already occurred.
 
 ```bash
-sudo install -d -o qeo -g qeo -m 0750 /opt/qeoindex/state/beszel/hub
-sudo install -d -o qeo -g qeo -m 0750 /opt/qeoindex/state/beszel/agent
+sudo install -d -o root -g root -m 0750 /opt/qeoindex/state/beszel/hub
+sudo install -d -o root -g root -m 0750 /opt/qeoindex/state/beszel/agent
 sudo install -d -o qeo -g qeo -m 0750 /opt/qeoindex/env
 ```
+
+The Hub and Agent images run as UID 0 while the Compose hardening drops all Linux capabilities. Their bind-mounted persistent state therefore stays `root:root 0750`, so the processes can write as the directory owner without restoring `CAP_DAC_OVERRIDE` or widening permissions. The environment directory remains owned by `qeo` because the systemd Compose client runs as `qeo` and must read the Agent env file.
 
 Create `/opt/qeoindex/env/beszel-agent.env` from `deploy/upcloud/beszel-agent.env.example` only after the Hub provides the Agent credentials. Keep the real file mode `0600`.
 
