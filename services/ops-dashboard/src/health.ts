@@ -16,6 +16,13 @@ export interface AttentionItem {
   message: string
 }
 
+export interface OperationalHealthCounts {
+  failing: number
+  degraded: number
+  stale: number
+  unknown: number
+}
+
 const HEALTH_PRIORITY: Record<HealthState, number> = {
   healthy: 0,
   unknown: 1,
@@ -28,6 +35,13 @@ export function overallHealthState(states: HealthState[]): HealthState {
   return states.reduce<HealthState>((worst, state) => (
     HEALTH_PRIORITY[state] > HEALTH_PRIORITY[worst] ? state : worst
   ), "healthy")
+}
+
+export function healthStateFromOperationalCounts(counts: OperationalHealthCounts): HealthState {
+  if (counts.failing > 0) return "critical"
+  if (counts.degraded > 0 || counts.stale > 0) return "degraded"
+  if (counts.unknown > 0) return "unknown"
+  return "healthy"
 }
 
 export function unknownProvider<T>(source: ProviderSource, message: string, observedAt = new Date().toISOString()): ProviderSnapshot<T> {
