@@ -32,7 +32,7 @@ Required for Jobs/EOD data:
 
 Required for Beszel data:
 
-- `QEO_OPS_BESZEL_URL` — normally the Hub's private/loopback URL.
+- `QEO_OPS_BESZEL_URL` — an explicitly configured private URL that is reachable **from the ops-dashboard container**. Do not assume host loopback is reachable from inside the container; validate the selected Tailscale/private-network path during runtime acceptance.
 - `QEO_OPS_BESZEL_EMAIL` — dedicated read-only Beszel account.
 - `QEO_OPS_BESZEL_PASSWORD`
 - `QEO_OPS_BESZEL_SYSTEM_NAME` — defaults to `qeoindex-sg`.
@@ -55,7 +55,7 @@ sudo tailscale serve --bg --https=443 --set-path=/ops http://127.0.0.1:8787
 
 Do not enable Tailscale Funnel. Do not add a public UFW rule for 8787. Do not publish the service on a public host interface.
 
-The service accepts `/ops/...` as well as root-relative paths so it remains safe across reverse-proxy prefix behavior. A direct `/ops` request redirects to `/ops/` so relative PWA assets stay under the private route.
+The HTTP service accepts both `/ops/...` and root-relative paths so it remains tolerant of reverse-proxy prefix behavior. Browser shell assets are anchored under `/ops/` to keep the installed PWA inside the private route.
 
 ## Runtime smoke checklist
 
@@ -66,7 +66,7 @@ Runtime steps are **not** part of source-only implementation. When explicitly au
 3. `https://qeoindex-sg.tail426fe8.ts.net/ops/` works from authorized Mac/iPhone.
 4. PWA installs and launches standalone on iPhone.
 5. Wi-Fi and cellular work while Tailscale is connected.
-6. Beszel host/container data is real and fresh.
+6. Beszel host/container data is real and fresh using a container-reachable private URL.
 7. EOD/job state matches canonical QeoIndex admin evidence.
 8. Gatus remains explicitly Unknown until QEO-203 is deployed.
 9. Offline mode clearly marks old data stale; `/api/*` is never served from service-worker cache.
