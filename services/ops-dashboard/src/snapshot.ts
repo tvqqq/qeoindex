@@ -26,7 +26,7 @@ function rejectedProvider<T>(source: ProviderSource): ProviderSnapshot<T> {
   return unknownProvider<T>(source, `${source} health unavailable`)
 }
 
-export async function loadOperationsSnapshot(env: NodeJS.ProcessEnv = process.env): Promise<OperationsSnapshot> {
+export async function loadOperationsSnapshot(env: Partial<NodeJS.ProcessEnv> = process.env): Promise<OperationsSnapshot> {
   const [beszelResult, jobsResult, gatusResult] = await Promise.allSettled([
     loadBeszelSnapshot(env),
     loadJobsSnapshot(),
