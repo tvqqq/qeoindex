@@ -37,6 +37,11 @@ function percent(value) {
   return Number.isFinite(value) ? `${number(value, 1)}%` : "—"
 }
 
+function megabytes(value) {
+  if (!Number.isFinite(value)) return "—"
+  return `${number(value, Number(value) >= 100 ? 0 : 1)} MB`
+}
+
 function gigabytes(used, total) {
   if (!Number.isFinite(used) && !Number.isFinite(total)) return "—"
   if (Number.isFinite(used) && Number.isFinite(total)) return `${number(used, 1)} / ${number(total, 1)} GB`
@@ -113,7 +118,7 @@ function renderContainers(containers) {
     const detail = document.createElement("span")
     name.textContent = container.name || "unknown"
     detail.className = "muted"
-    detail.textContent = `${container.status || "unknown"} · CPU ${percent(container.cpuPercent)} · RAM ${percent(container.memoryPercent)}`
+    detail.textContent = `${container.status || "unknown"} · CPU ${percent(container.cpuPercent)} · RAM ${megabytes(container.memoryMb)}`
     item.append(name, detail)
     list.append(item)
   }
