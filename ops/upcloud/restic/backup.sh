@@ -11,13 +11,13 @@ source "$LIB_DIR/host-copy.sh"
 
 STAGE_ROOT=/var/lib/qeo-backup/stage/current
 LOCK_FILE=/var/lock/qeo-restic-backup.lock
-HERMES_COMPOSE=/opt/hermes/deploy/compose.yaml
+HERMES_UNIT=""
 HERMES_STOPPED=0
 BACKUP_OK=0
 
 restart_hermes_if_needed() {
   if [[ "$HERMES_STOPPED" -eq 1 ]]; then
-    docker compose -f "$HERMES_COMPOSE" up -d hermes >/dev/null
+    hermes_gateway_start "$HERMES_UNIT" >/dev/null
     HERMES_STOPPED=0
   fi
 }
@@ -41,7 +41,8 @@ heartbeat_start "${QEO_RESTIC_BACKUP_HEARTBEAT_URL:-}" || true
 rm -rf -- "$STAGE_ROOT"
 install -d -m 0700 "$STAGE_ROOT"
 
-docker compose -f "$HERMES_COMPOSE" stop hermes >/dev/null
+HERMES_UNIT="$(discover_hermes_gateway_unit)"
+hermes_gateway_stop "$HERMES_UNIT" >/dev/null
 HERMES_STOPPED=1
 stage_hermes_data "$STAGE_ROOT"
 restart_hermes_if_needed
