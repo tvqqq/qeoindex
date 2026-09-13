@@ -5,6 +5,7 @@ Status: **QEO-202 pre-deploy runbook**. The procedure becomes an active recovery
 Use this runbook when the QeoIndex/Hermes UpCloud host must be rebuilt on a replacement VPS or when selected host-only operational state must be recovered from the encrypted Restic repository.
 
 Design authority: `docs/superpowers/specs/2026-09-13-qeo-202-restic-backup-design.md`.
+Implementation plan: `docs/superpowers/plans/2026-09-13-qeo-202-restic-backup.md`.
 
 ## Agent objective
 
@@ -81,7 +82,7 @@ Use these recovery-only locations:
 /opt/hermes/deploy/               restored Hermes deployment state
 ```
 
-The QEO-202 implementation must use a deterministic staging layout and preserve that layout in the repository so restore helpers can locate approved files without guessing.
+The QEO-202 implementation uses a deterministic relative snapshot tree rooted at the approved staged content so restore helpers can locate approved files without guessing.
 
 ## Phase 0 — replacement VPS preflight
 
@@ -144,17 +145,17 @@ Provision these files through the operator's approved secret path:
 
 ```text
 /etc/restic/qeoindex/repository-password
-/etc/restic/qeoindex/r2.env
+/etc/restic/qeoindex/runtime.env
 ```
 
 Required permissions:
 
 ```bash
-sudo chown root:root /etc/restic/qeoindex/repository-password /etc/restic/qeoindex/r2.env
-sudo chmod 0600 /etc/restic/qeoindex/repository-password /etc/restic/qeoindex/r2.env
+sudo chown root:root /etc/restic/qeoindex/repository-password /etc/restic/qeoindex/runtime.env
+sudo chmod 0600 /etc/restic/qeoindex/repository-password /etc/restic/qeoindex/runtime.env
 ```
 
-`r2.env` must expose only the variables required by Restic's S3-compatible backend. Do not `cat`, `env`, `set -x`, `printenv` or otherwise dump it.
+`runtime.env` must expose only the variables required by Restic's S3-compatible backend and QEO-202 heartbeat integration. Do not `cat`, `env`, `set -x`, `printenv` or otherwise dump it.
 
 Load the credential file only in the root recovery shell and set the Restic repository/password-file variables using the deployed QEO-202 configuration. Never embed credential values in command arguments.
 
@@ -163,7 +164,7 @@ Load the credential file only in the root recovery shell and set the Restic repo
 First prove that the repository opens and identify candidate snapshots:
 
 ```bash
-restic snapshots --tag qeo-upcloud-operational
+restic snapshots --host qeo-upcloud-operational --tag qeo-upcloud-operational
 ```
 
 Then run the repository integrity gate defined by the deployed QEO-202 tooling. At minimum:
@@ -225,9 +226,10 @@ Before copying anything into live paths, verify that the snapshot contains the e
 
 Required checks:
 
+- `qeo-backup-manifest.sha256` exists and validates from inside the restore root;
 - Hermes persistent state exists;
 - Hermes deployment state exists;
-- QeoIndex host-only deployment/operational state exists;
+- QeoIndex host-only deployment/operational state exists when present on the source host;
 - expected systemd units/timers exist;
 - expected root-owned wrappers exist;
 - prohibited material such as `/opt/qeoindex/env/*`, SSH private keys, Docker layer storage and canonical database dumps is absent;
@@ -236,7 +238,7 @@ Required checks:
 
 If a restored Hermes SQLite database is present, run an integrity check against the staged copy before it is promoted. Do not start Hermes against an unchecked restored SQLite file.
 
-If the QEO-202 implementation writes a manifest/version file, verify it here and stop on an unsupported format version.
+The metadata contract version must be `1`. Stop on an unsupported version.
 
 ## Phase 6 — clone application source fresh
 
@@ -253,31 +255,32 @@ Check out the operator-approved production revision. Do not infer a historical a
 
 ## Phase 7 — promote approved operational state
 
-Prefer the QEO-202 restore helper if it exists and matches this runbook. Expected interface:
-
-```text
-qeo-restore-host --snapshot <snapshot-id> --from <restore-root> --mode normal|compromise
-```
-
-The helper must fail closed and must not start services/timers.
-
-If a helper is unavailable, promote files manually by category using `rsync`/`install`, preserving reviewed ownership and mode:
-
-1. `/opt/hermes/deploy`;
-2. `/opt/hermes/data` while Hermes is stopped;
-3. `/opt/qeoindex/deploy` or equivalent host-only operational state;
-4. approved root-owned wrapper scripts;
-5. approved systemd service/timer units.
-
-Do not copy arbitrary `/etc` trees wholesale.
-
-After systemd units are installed:
+Prefer the installed QEO-202 restore helper:
 
 ```bash
-sudo systemctl daemon-reload
+sudo qeo-restore-host --from "$RESTORE_ROOT" --mode normal
 ```
 
-Keep all recovered production timers disabled at this point.
+For suspected compromise:
+
+```bash
+sudo qeo-restore-host --from "$RESTORE_ROOT" --mode compromise
+```
+
+The helper consumes the already-restored quarantine tree. It does not choose/download a snapshot and must not start services or timers.
+
+Expected helper responsibilities:
+
+- verify restore-root safety and manifest/version;
+- restore Hermes deploy/state;
+- restore QeoIndex host-only deploy state when present;
+- install approved QeoIndex systemd units and root-owned wrappers;
+- run `systemctl daemon-reload`;
+- leave SSH/UFW/sudoers/Docker daemon copies as reference-only material for manual review;
+- leave services/timers disabled;
+- print PASS/WAIT only, with no secret values.
+
+If the helper is unavailable, follow the same allowlist manually using `rsync`/`install`; do not copy arbitrary `/etc` trees wholesale.
 
 ## Phase 8 — re-provision standalone secrets
 
@@ -362,6 +365,7 @@ Before enabling production timers, confirm all applicable checks are PASS:
 [PASS] selected snapshot deliberately verified
 [PASS] restore occurred only in quarantine staging
 [PASS] GitHub source cloned fresh
+[PASS] backup manifest verified
 [PASS] Hermes restored state verified
 [PASS] QeoIndex standalone secrets re-provisioned
 [PASS] compromise-mode rotations complete or not applicable
@@ -384,7 +388,7 @@ After the replacement host is operational:
 1. revoke the temporary R2 restore credential;
 2. provision the normal least-privilege backup credential for the new host;
 3. run one fresh backup using the deployed QEO-202 backup service;
-4. verify a new snapshot appears with tag `qeo-upcloud-operational`;
+4. verify a new snapshot appears with host/tag `qeo-upcloud-operational`;
 5. verify the external backup success heartbeat;
 6. record backup runtime and size;
 7. remove `/var/tmp/qeo-restore/<snapshot-id>` after recovery evidence is captured and no further inspection is needed;
@@ -404,9 +408,9 @@ When helping during an outage, use this ordering and report only status/evidence
 5. CHECK repository integrity
 6. SELECT known-good snapshot explicitly
 7. RESTORE to /var/tmp/qeo-restore/<id> only
-8. VERIFY expected layout / permissions / integrity
+8. VERIFY manifest/layout/permissions/integrity
 9. CLONE qeoindex fresh from GitHub
-10. PROMOTE approved operational files; keep timers disabled
+10. RUN qeo-restore-host --from <restore-root> --mode normal|compromise
 11. RE-PROVISION /opt/qeoindex/env secrets independently
 12. ROTATE Hermes embedded secrets first if compromise mode
 13. VALIDATE sudoers/systemd/UFW/ports
@@ -430,6 +434,7 @@ RESTIC
 - restic check: PASS/FAIL
 - selected snapshot: <id + timestamp only>
 - restore staging: PASS/FAIL
+- manifest verification: PASS/FAIL
 
 SOURCE OF TRUTH
 - GitHub fresh clone: PASS/FAIL
