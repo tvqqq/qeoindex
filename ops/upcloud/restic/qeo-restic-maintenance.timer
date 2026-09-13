@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly QeoIndex Restic maintenance Sunday 03:30 ICT
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00 Asia/Ho_Chi_Minh
+Persistent=false
+Unit=qeo-restic-maintenance.service
+
+[Install]
+WantedBy=timers.target

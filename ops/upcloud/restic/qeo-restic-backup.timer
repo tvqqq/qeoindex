@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily QeoIndex operational backup at 02:30 ICT
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Ho_Chi_Minh
+Persistent=false
+Unit=qeo-restic-backup.service
+
+[Install]
+WantedBy=timers.target

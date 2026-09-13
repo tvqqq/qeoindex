@@ -1,0 +1,11 @@
+[Unit]
+Description=QeoIndex encrypted operational Restic backup
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/qeo-restic-backup
+Nice=10
+IOSchedulingClass=idle

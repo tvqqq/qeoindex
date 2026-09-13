@@ -22,6 +22,7 @@
     "scan:secrets": "bash scripts/scan-secrets.sh",
     "test:manifest": "node scripts/verify-test-contracts.mjs",
     "test:repo-hygiene": "node --test scripts/repo/cleanup-branches.test.mjs",
+    "test:restic": "node --test tests/upcloud-restic-contract.test.ts",
     "repo:branches:audit": "node scripts/repo/cleanup-branches.mjs",
     "repo:branches:cleanup": "node scripts/repo/cleanup-branches.mjs --execute",
     "test:fast": "node scripts/run-test-suite.mjs fast",
