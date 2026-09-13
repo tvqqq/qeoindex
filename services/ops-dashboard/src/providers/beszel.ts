@@ -4,7 +4,7 @@ export interface BeszelContainerHealth {
   name: string
   status: string
   cpuPercent: number | null
-  memoryPercent: number | null
+  memoryMb: number | null
 }
 
 export interface BeszelHealthData {
@@ -57,6 +57,10 @@ function finiteNumber(...values: unknown[]): number | null {
   return null
 }
 
+function numericTuple(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
 function text(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback
 }
@@ -95,6 +99,9 @@ function safeBaseUrl(value: string): string | null {
 function systemMetrics(system: JsonRecord, statsRecord: JsonRecord | null) {
   const info = parseJsonRecord(system.info)
   const stats = parseJsonRecord(statsRecord?.stats)
+  const statsLoad = numericTuple(stats.la)
+  const infoLoad = numericTuple(info.la)
+
   return {
     cpuPercent: finiteNumber(stats.cpu, info.cpu, info.cpuPercent),
     memoryPercent: finiteNumber(stats.mp, info.mp, info.memoryPercent),
@@ -105,9 +112,9 @@ function systemMetrics(system: JsonRecord, statsRecord: JsonRecord | null) {
     diskPercent: finiteNumber(stats.dp, info.dp, info.diskPercent),
     diskUsedGb: finiteNumber(stats.du, info.du, info.diskUsed),
     diskTotalGb: finiteNumber(stats.d, info.d, info.diskTotal),
-    load1: finiteNumber(stats.l1, info.l1, info.load1),
-    load5: finiteNumber(stats.l5, info.l5, info.load5),
-    load15: finiteNumber(stats.l15, info.l15, info.load15),
+    load1: finiteNumber(statsLoad[0], infoLoad[0], stats.l1, info.l1, info.load1),
+    load5: finiteNumber(statsLoad[1], infoLoad[1], stats.l5, info.l5, info.load5),
+    load15: finiteNumber(statsLoad[2], infoLoad[2], stats.l15, info.l15, info.load15),
     uptimeSeconds: finiteNumber(info.u, info.uptime, stats.u, stats.uptime),
   }
 }
@@ -119,7 +126,7 @@ function containerHealth(item: JsonRecord): BeszelContainerHealth {
     name: text(item.name, text(info.name, "unknown")),
     status: text(item.status, text(info.status, "unknown")),
     cpuPercent: finiteNumber(item.cpu, stats.cpu, info.cpu),
-    memoryPercent: finiteNumber(item.memory, item.mem, stats.mp, info.mp),
+    memoryMb: finiteNumber(item.memory, item.mem, stats.m, info.m),
   }
 }
 
