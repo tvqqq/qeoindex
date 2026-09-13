@@ -136,7 +136,7 @@ function deriveStatus(systemStatus: string, stale: boolean, containers: BeszelCo
   return "healthy"
 }
 
-export async function loadBeszelSnapshot(env: NodeJS.ProcessEnv = process.env): Promise<ProviderSnapshot<BeszelHealthData>> {
+export async function loadBeszelSnapshot(env: Partial<NodeJS.ProcessEnv> = process.env): Promise<ProviderSnapshot<BeszelHealthData>> {
   const observedAt = new Date().toISOString()
   const configuredUrl = env.QEO_OPS_BESZEL_URL?.trim()
   const baseUrl = configuredUrl ? safeBaseUrl(configuredUrl) : null
