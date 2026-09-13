@@ -2,8 +2,6 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-import "./qeo201-beszel-upcloud.contract.ts"
-
 const validatorUrl = new URL("../scripts/verify-test-contracts.mjs", import.meta.url)
 const manifestUrl = new URL("./test-contracts.json", import.meta.url)
 
