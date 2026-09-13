@@ -3,6 +3,7 @@ const NON_RUNTIME_PREFIXES = [
   "docs/",
   "tests/",
   "supabase/migrations/",
+  "services/ops-dashboard/",
 ]
 
 const NON_RUNTIME_FILES = new Set([
