@@ -13,6 +13,9 @@ services:
       USER_CREATION: "false"
     ports:
       - "127.0.0.1:8090:8090"
+    networks:
+      - default
+      - qeo-monitoring
     volumes:
       - /opt/qeoindex/state/beszel/hub:/beszel_data
       - beszel_socket:/beszel_socket
@@ -69,3 +72,8 @@ services:
 
 volumes:
   beszel_socket:
+
+networks:
+  qeo-monitoring:
+    external: true
+    name: qeo-monitoring
