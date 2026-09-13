@@ -1,6 +1,6 @@
-import { loadAdminJobsSnapshot } from "../../../../modules/admin/job-health"
-import type { AdminJobStatus } from "../../../../modules/admin/types"
-import { unknownProvider, type HealthState, type ProviderSnapshot } from "../health"
+import { loadAdminJobsSnapshot } from "../../../../modules/admin/job-health.ts"
+import type { AdminJobStatus } from "../../../../modules/admin/types.ts"
+import { unknownProvider, type HealthState, type ProviderSnapshot } from "../health.ts"
 
 export interface JobsHealthData {
   counts: {
