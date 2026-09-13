@@ -196,9 +196,11 @@ git commit -m "feat: add Restic host backup contract"
 **Interfaces:**
 - `backup.sh` is installed as `/usr/local/sbin/qeo-restic-backup` and takes no positional arguments.
 - Fixed staging root: `/var/lib/qeo-backup/stage/current`.
-- Hermes control interface is the deployed QEO-198 Compose contract:
-  - stop: `docker compose -f /opt/hermes/deploy/compose.yaml stop hermes`
-  - start: `docker compose -f /opt/hermes/deploy/compose.yaml up -d hermes`
+- Hermes control interface follows the production user-systemd runtime:
+  - runtime user: `hermes`;
+  - unit pattern: `hermes-gateway-*.service`;
+  - discover exactly one matching user unit on each backup run; never hard-code the generated suffix;
+  - stop/start through `runuser -u hermes -- env XDG_RUNTIME_DIR=/run/user/<uid> systemctl --user ...`.
 - Backup runs from inside the staging directory using a relative source: `(cd "$STAGE_ROOT" && restic backup . --host qeo-upcloud-operational --tag qeo-upcloud-operational)` so the snapshot tree does not encode the staging prefix. Restic documents relative backup paths as relative snapshot trees; keep this invocation stable.
 - Backup writes `qeo-backup-manifest.sha256` and `qeo-backup-metadata.txt` inside staging before snapshot creation. Metadata contains only non-secret values: UTC timestamp, source host name, backup contract version `1`, and source path names.
 

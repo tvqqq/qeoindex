@@ -41,3 +41,25 @@ heartbeat_request() {
 heartbeat_start() { heartbeat_request "$1" /start; }
 heartbeat_success() { heartbeat_request "$1"; }
 heartbeat_fail() { heartbeat_request "$1" /fail; }
+HERMES_RUNTIME_USER=hermes
+
+discover_hermes_gateway_unit() {
+  local uid units count
+  uid="$(id -u "$HERMES_RUNTIME_USER")"
+  units="$(runuser -u "$HERMES_RUNTIME_USER" -- env "XDG_RUNTIME_DIR=/run/user/$uid" \
+    systemctl --user list-unit-files 'hermes-gateway-*.service' --no-legend --no-pager \
+    | awk '$1 ~ /^hermes-gateway-.*\.service$/ {print $1}' | sort -u)"
+  count="$(printf '%s\n' "$units" | sed '/^$/d' | wc -l | tr -d ' ')"
+  [[ "$count" -eq 1 ]] || { echo "Expected exactly one Hermes gateway unit; found $count" >&2; return 69; }
+  printf '%s\n' "$units"
+}
+
+hermes_user_systemctl() {
+  local action="$1" unit="$2" uid
+  uid="$(id -u "$HERMES_RUNTIME_USER")"
+  runuser -u "$HERMES_RUNTIME_USER" -- env "XDG_RUNTIME_DIR=/run/user/$uid" \
+    systemctl --user "$action" "$unit"
+}
+
+hermes_gateway_stop() { hermes_user_systemctl stop "$1"; }
+hermes_gateway_start() { hermes_user_systemctl start "$1"; }

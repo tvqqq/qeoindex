@@ -66,9 +66,9 @@ Therefore:
 2. Standalone QeoIndex runtime secrets remain excluded because they are independently reproducible.
 3. Hermes persistent state is included because removing embedded credentials selectively risks producing an incomplete or non-restorable Hermes state.
 
-To avoid copying a mutating Hermes state while keeping outage short:
+To avoid copying a mutating Hermes state while keeping outage short, use the production Hermes runtime contract: user `hermes`, exactly one discoverable `hermes-gateway-*.service` user-systemd unit, with the generated suffix discovered at runtime rather than hard-coded.
 
-1. gracefully stop the Hermes container/service;
+1. gracefully stop the discovered Hermes user-systemd gateway service;
 2. copy `/opt/hermes/data` into a root-only local staging tree;
 3. restart Hermes immediately;
 4. run Restic against the staging tree rather than the live Hermes data directory;
