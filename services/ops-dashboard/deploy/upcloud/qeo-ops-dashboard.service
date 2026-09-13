@@ -9,6 +9,7 @@ Type=oneshot
 User=qeo
 Group=qeo
 WorkingDirectory=/opt/qeoindex/repo/services/ops-dashboard
+ExecStartPre=-/usr/bin/docker network create --driver bridge --internal qeo-monitoring
 ExecStart=/usr/bin/docker compose -p qeo-ops-dashboard -f deploy/upcloud/docker-compose.upcloud.yml up -d --build --remove-orphans
 ExecStop=/usr/bin/docker compose -p qeo-ops-dashboard -f deploy/upcloud/docker-compose.upcloud.yml down
 RemainAfterExit=yes
