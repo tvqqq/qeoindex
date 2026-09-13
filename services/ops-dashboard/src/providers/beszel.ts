@@ -28,10 +28,7 @@ export interface BeszelHealthData {
 }
 
 type JsonRecord = Record<string, unknown>
-
-type PocketBaseList = {
-  items?: unknown[]
-}
+type PocketBaseList = { items?: unknown[] }
 
 function record(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}
@@ -50,7 +47,11 @@ function parseJsonRecord(value: unknown): JsonRecord {
 
 function finiteNumber(...values: unknown[]): number | null {
   for (const value of values) {
-    const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN
+    const parsed = typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN
     if (Number.isFinite(parsed)) return parsed
   }
   return null
@@ -65,7 +66,7 @@ function firstListItem(value: unknown): JsonRecord | null {
   return items.length > 0 ? record(items[0]) : null
 }
 
-function bearerHeaders(token: string): Record<string, string> {
+function authHeaders(token: string): Record<string, string> {
   return token ? { Authorization: token } : {}
 }
 
@@ -137,11 +138,15 @@ function deriveStatus(systemStatus: string, stale: boolean, containers: BeszelCo
 
 export async function loadBeszelSnapshot(env: NodeJS.ProcessEnv = process.env): Promise<ProviderSnapshot<BeszelHealthData>> {
   const observedAt = new Date().toISOString()
-  const baseUrl = safeBaseUrl(env.QEO_OPS_BESZEL_URL || "http://127.0.0.1:8090")
+  const configuredUrl = env.QEO_OPS_BESZEL_URL?.trim()
+  const baseUrl = configuredUrl ? safeBaseUrl(configuredUrl) : null
   const email = env.QEO_OPS_BESZEL_EMAIL?.trim()
   const password = env.QEO_OPS_BESZEL_PASSWORD
   const systemName = env.QEO_OPS_BESZEL_SYSTEM_NAME?.trim() || "qeoindex-sg"
-  const timeoutMs = Math.min(10_000, Math.max(500, Number(env.QEO_OPS_BESZEL_TIMEOUT_MS || 3_500)))
+  const timeoutCandidate = Number(env.QEO_OPS_BESZEL_TIMEOUT_MS || 3_500)
+  const timeoutMs = Number.isFinite(timeoutCandidate)
+    ? Math.min(10_000, Math.max(500, timeoutCandidate))
+    : 3_500
 
   if (!baseUrl || !email || !password) {
     return unknownProvider<BeszelHealthData>("beszel", "Beszel read-only access not configured", observedAt)
@@ -158,7 +163,7 @@ export async function loadBeszelSnapshot(env: NodeJS.ProcessEnv = process.env): 
 
     const systems = record(await fetchJson(`${baseUrl}/api/collections/systems/records?page=1&perPage=50&skipTotal=1`, {
       method: "GET",
-      headers: bearerHeaders(token),
+      headers: authHeaders(token),
     }, timeoutMs)) as PocketBaseList
     const system = (Array.isArray(systems.items) ? systems.items : [])
       .map(record)
@@ -168,21 +173,23 @@ export async function loadBeszelSnapshot(env: NodeJS.ProcessEnv = process.env): 
     const systemId = text(system.id)
     if (!systemId) return unknownProvider<BeszelHealthData>("beszel", "Beszel system identity unavailable", observedAt)
 
-    const filter = encodeURIComponent(`system = "${systemId}" && type = "1m"`)
+    const statsFilter = encodeURIComponent(`system = "${systemId}" && type = "1m"`)
+    const containerFilter = encodeURIComponent(`system = "${systemId}"`)
     const [statsValue, containersValue] = await Promise.all([
-      fetchJson(`${baseUrl}/api/collections/system_stats/records?page=1&perPage=1&skipTotal=1&sort=-created&filter=${filter}`, {
+      fetchJson(`${baseUrl}/api/collections/system_stats/records?page=1&perPage=1&skipTotal=1&sort=-created&filter=${statsFilter}`, {
         method: "GET",
-        headers: bearerHeaders(token),
+        headers: authHeaders(token),
       }, timeoutMs),
-      fetchJson(`${baseUrl}/api/collections/containers/records?page=1&perPage=100&skipTotal=1&filter=${encodeURIComponent(`system = "${systemId}"`)}`, {
+      fetchJson(`${baseUrl}/api/collections/containers/records?page=1&perPage=100&skipTotal=1&filter=${containerFilter}`, {
         method: "GET",
-        headers: bearerHeaders(token),
+        headers: authHeaders(token),
       }, timeoutMs),
     ])
 
     const statsRecord = firstListItem(statsValue)
     const containersList = record(containersValue)
-    const containers = (Array.isArray(containersList.items) ? containersList.items : []).map((item) => containerHealth(record(item)))
+    const containers = (Array.isArray(containersList.items) ? containersList.items : [])
+      .map((item) => containerHealth(record(item)))
     const metrics = systemMetrics(system, statsRecord)
     const statsObservedAt = text(statsRecord?.created, text(system.updated, observedAt))
     const stale = isSnapshotStale(statsObservedAt, 3 * 60 * 1000)
