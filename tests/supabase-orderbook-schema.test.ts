@@ -69,7 +69,12 @@ test("latest orderbook cron fix dispatches provider calls only inside exact trad
   assert.match(sessionFixSql, /'45 7 \* \* 1-5'/)
 })
 
-test("QEO-218 automated orderbook sync never promotes first trade into session reference", () => {
+test("QEO-218 automated orderbook sync never promotes current-session price into reference", () => {
   assert.doesNotMatch(orderbookSyncSource, /q\.r \?\? q\.closePrice \?\? \(trades\.length \? trades\[0\]\.price/)
-  assert.match(orderbookSyncSource, /const ref = normalizePrice\(Number\(q\.r \?\? q\.closePrice \?\? 0\)\)/)
+  assert.match(orderbookSyncSource, /from\("market_ohlcv_history"\)/)
+  assert.match(orderbookSyncSource, /\.eq\("timeframe", "1D"\)/)
+  assert.match(orderbookSyncSource, /previousTradingDateKey\(sessionDate\)/)
+  assert.match(orderbookSyncSource, /const providerReference = normalizePrice\(Number\(q\.r \?\? q\.closePrice \?\? 0\)\)/)
+  assert.match(orderbookSyncSource, /const ref = providerReference \?\? canonicalReferencePrices\.get\(ticker\) \?\? null/)
+  assert.match(orderbookSyncSource, /if \(!ref\) \{[\s\S]*?missingReference\.push\(ticker\)[\s\S]*?continue/)
 })
