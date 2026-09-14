@@ -552,21 +552,20 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
   const lastTradePrice = trades.length > 0 ? trades[trades.length - 1].price : null
   const firstTradePrice = trades.length > 0 ? trades[0].price : null
   const lastBarClose = prices.length > 0 ? prices[prices.length - 1].close : null
-  const firstBarOpen = prices.length > 0 ? prices[0].open : null
   const tradeVolume = trades.reduce((sum, t) => sum + (t.volume || 0), 0)
 
   const matchPrice = latestQuote?.matchPrice || fastOverview?.matchPrice || lastTradePrice || lastBarClose || null
-  const explicitRef = latestQuote?.reference ?? fastOverview?.refPrice ?? null
-  const explicitCeil = latestQuote?.ceiling ?? fastOverview?.ceiling ?? null
-  const explicitFloor = latestQuote?.floor ?? fastOverview?.floor ?? null
+  // Current-session market overview owns exchange reference/limit fields when available.
+  // Never synthesize reference from today's open/first trade: that corrupts all price tones and change percentages after refresh.
+  const explicitRef = fastOverview?.refPrice ?? latestQuote?.reference ?? null
+  const explicitCeil = fastOverview?.ceiling ?? latestQuote?.ceiling ?? null
+  const explicitFloor = fastOverview?.floor ?? latestQuote?.floor ?? null
 
   let refPrice = explicitRef
   if (!refPrice && explicitCeil && explicitFloor) {
     refPrice = Math.round(((explicitCeil + explicitFloor) / 2) * 100) / 100
   } else if (!refPrice && explicitCeil) {
     refPrice = Math.round((explicitCeil / 1.07) * 100) / 100
-  } else if (!refPrice) {
-    refPrice = firstBarOpen ?? firstTradePrice ?? matchPrice ?? null
   }
 
   const ceilingPrice = explicitCeil ?? (refPrice ? Math.round(refPrice * 1.07 * 100) / 100 : null)
@@ -589,9 +588,9 @@ export async function fetchDnseSessionHistory(symbol: string, now = new Date()):
     }
   } else {
     latestQuote.matchPrice = latestQuote.matchPrice ?? matchPrice
-    latestQuote.reference = latestQuote.reference ?? refPrice
-    latestQuote.ceiling = latestQuote.ceiling ?? ceilingPrice
-    latestQuote.floor = latestQuote.floor ?? floorPrice
+    latestQuote.reference = refPrice ?? latestQuote.reference
+    latestQuote.ceiling = ceilingPrice ?? latestQuote.ceiling
+    latestQuote.floor = floorPrice ?? latestQuote.floor
     latestQuote.totalVolume = latestQuote.totalVolume || fastOverview?.totalVolume || tradeVolume
     if (!latestQuote.bid?.length && fastOverview?.bids?.length) {
       latestQuote.bid = fastOverview.bids
@@ -726,4 +725,3 @@ export function clusterTrades<T extends { id: string; time: string; price: numbe
 
   return result
 }
-
