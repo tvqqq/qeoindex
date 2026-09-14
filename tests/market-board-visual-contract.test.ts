@@ -28,6 +28,7 @@ const boardTransitionSource = readFileSync(new URL("../components/smoothui/marke
 const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
 const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", import.meta.url), "utf8")
 const marketStreamSource = readFileSync(new URL("../modules/market/providers/dnse/market-stream.ts", import.meta.url), "utf8")
+const marketRuntimeSource = readFileSync(new URL("../modules/market/providers/dnse/market-runtime.ts", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -75,6 +76,16 @@ test("daily performance stays anchored to reference price, never session open", 
   assert.match(boardSource, /dailyReferences\.current\[symbol\] = history\.reference/)
   assert.doesNotMatch(boardSource, /OPEN_PRICE_KEYS|INDEX_OPEN_KEYS|openingReferences|indexOpeningReferences/)
   assert.match(stockSource, /giá tham chiếu \(đóng cửa phiên trước\)/)
+})
+
+test("orderbook session bootstrap never treats today's open as reference price", () => {
+  assert.match(marketRuntimeSource, /const explicitRef = fastOverview\?\.refPrice \?\? latestQuote\?\.reference \?\? null/)
+  assert.match(marketRuntimeSource, /const explicitCeil = fastOverview\?\.ceiling \?\? latestQuote\?\.ceiling \?\? null/)
+  assert.match(marketRuntimeSource, /const explicitFloor = fastOverview\?\.floor \?\? latestQuote\?\.floor \?\? null/)
+  assert.doesNotMatch(marketRuntimeSource, /refPrice = firstBarOpen \?\? firstTradePrice \?\? matchPrice/)
+  assert.match(marketRuntimeSource, /latestQuote\.reference = refPrice \?\? latestQuote\.reference/)
+  assert.match(orderbookSource, /if \(normPrice > ref\) return "text-up font-bold"/)
+  assert.match(orderbookSource, /if \(normPrice < ref\) return "text-down font-bold"/)
 })
 
 test("strong gainer highlight is static and therefore reduced-motion safe", () => {
