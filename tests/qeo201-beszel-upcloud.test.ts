@@ -83,8 +83,14 @@ test("QEO-201 stack is bounded and systemd-owned", () => {
   assert.match(compose, /cpus:/)
   assert.match(compose, /no-new-privileges:true/)
   assert.match(service, /WorkingDirectory=\/opt\/qeoindex\/repo\/services\/beszel/)
-  assert.match(service, /docker compose -f deploy\/upcloud\/docker-compose\.upcloud\.yml up -d/)
-  assert.match(service, /docker compose -f deploy\/upcloud\/docker-compose\.upcloud\.yml down --timeout 20/)
+  assert.match(
+    service,
+    /docker compose -p qeo-beszel -f deploy\/upcloud\/docker-compose\.upcloud\.yml up -d --remove-orphans/,
+  )
+  assert.match(
+    service,
+    /docker compose -p qeo-beszel -f deploy\/upcloud\/docker-compose\.upcloud\.yml down --timeout 20/,
+  )
 })
 
 test("QEO-201 runbook preserves Tailscale-only ingress", () => {
