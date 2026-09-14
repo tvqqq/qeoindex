@@ -14,7 +14,7 @@
       "productionVersion": "20260910101657",
       "state": "MAPPED",
       "evidence": "QEO-105 final-head gates, Vercel READY on merge SHA 3e5d232c94f3f13b2c22ff1867272adf157d5569, production migration promotion, and baseline durable-state readback",
-      "rationale": "Exact Top-200 transition state and added-only bootstrap orchestration were promoted after focused QEO-105, full Verify/build, zero-to-latest DB replay, generated types, current DB contracts, and QEO-108/149/147/148 rehearsals passed. Production version 20260910101657 was assigned by Supabase; first production prepare was safely baseline-only with added=0, removed=0, unchanged=200 and no dispatch."
+      "rationale": "Exact Top-200 transition state and added-only bootstrap orchestration were promoted after focused QEO-105, full Verify/build, zero-to-latest DB replay, generated types, current DB contracts, and QEO-108/149/147/148 rehearsals passed. Supabase assigned production version 20260910101657 was assigned by Supabase; first production prepare was safely baseline-only with added=0, removed=0, unchanged=200 and no dispatch."
     },
     {
       "logicalName": "qeo105_chart_universe_bootstrap_hardening",
@@ -75,10 +75,10 @@
     {
       "logicalName": "qeo220_preserve_market_ai_terminal_cause",
       "repositoryVersion": "20260914102000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-220 TDD RED in Verify #3978; corrective migration preserves sanitized post-model-start cause without changing completion_unknown terminal semantics",
-      "rationale": "QEO-219 production replay proved cost preflight now reaches model start, but existing mark_market_ai_completion_unknown discarded its validated p_error_code and always persisted MODEL_COMPLETION_UNKNOWN. This migration changes only the persisted sanitized error cause so the next retryable production replay can identify the actual post-start blocker while preserving fail-closed terminal/idempotency behavior."
+      "productionVersion": "20260914102101",
+      "state": "MAPPED",
+      "evidence": "QEO-220 PR #489 exact-head Verify #3980 and DB Drift #1355; production migration 20260914102101; live function-definition readback; 2026-09-11 replay succeeded within the $0.03 cap",
+      "rationale": "Supabase assigned production version 20260914102101 while repository replay keeps reviewed version 20260914102000. Production readback confirms mark_market_ai_completion_unknown preserves the sanitized p_error_code while retaining completion_unknown terminal semantics and the model_started_at guard. A retryable 2026-09-11 Market Synthesis replay then succeeded on attempt 2 using gpt-5.6-terra at $0.02621 estimated cost, proving the QEO-219 cost-bound path is cleared."
     }
   ]
 }
