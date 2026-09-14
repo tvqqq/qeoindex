@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { missingTradingProviderRanges } from "../../modules/market/chart-data/provider-coverage.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 }
@@ -36,4 +38,24 @@ test("QEO-172 full derived coverage still requires every requested trading sessi
   assert.match(store, /derivedHourlyColdCoverageComplete[\s\S]*?requiredTradingDates/)
   assert.match(store, /requiredDates\.some\(\(dateKey\) => !datesWithManifest\.has\(dateKey\)\)/)
   assert.match(store, /derivedHourlyColdCoverageComplete[\s\S]*?validateDerivedHourlyManifestReadiness/)
+})
+
+test("QEO-172 hourly source proof accepts durable HOT success while archive lags and stays fail-closed on partial coverage", () => {
+  const request = {
+    from: Math.floor(new Date("2026-09-07T09:00:00+07:00").getTime() / 1000),
+    to: Math.floor(new Date("2026-09-07T14:46:00+07:00").getTime() / 1000),
+  }
+  const fullDurableSuccess = [{ ...request }]
+  const partialDurableSuccess = [{
+    from: request.from,
+    to: Math.floor(new Date("2026-09-07T11:30:00+07:00").getTime() / 1000),
+  }]
+
+  assert.deepEqual(missingTradingProviderRanges(request, fullDurableSuccess), [])
+  assert.ok(missingTradingProviderRanges(request, partialDurableSuccess).length > 0)
+
+  const coverage = source("modules/market/chart-data/derived-hourly-source-coverage.ts")
+  assert.match(coverage, /readProviderRequestCoverage/)
+  assert.match(coverage, /missingTradingProviderRanges/)
+  assert.match(coverage, /datesWithManifest/)
 })
