@@ -29,6 +29,7 @@ Linear is the source of truth for current issue status, sequencing, blockers, an
 - Unsupported derived intraday chart timeframes must render unavailable rather than fabricate candles until the timeframe engine owns their aggregation.
 - Notion/other external knowledge systems may be downstream analytical or research layers, but they are not the active operational EOD state store.
 - Production release path: merge once to `main` → one Vercel Git Integration deployment → smoke the live system.
+- Private operations tooling stays outside the public Next.js route tree; QEO-211 is a separate loopback-bound service exposed only through Tailscale.
 
 See `HANDOVER.md` for the full contract and safety gates.
 
@@ -40,6 +41,7 @@ See `HANDOVER.md` for the full contract and safety gates.
 | [`chart-data.md`](./chart-data.md) | Canonical interactive-chart raw `1m`, hot/cold storage, merge integrity and API boundaries. |
 | [`market-board.md`](./market-board.md) | Market-board bootstrap, realtime path, filters, lifecycle and performance. |
 | [`operations/beszel.md`](./operations/beszel.md) | Private Beszel host/container monitoring topology, security boundary, alert policy, resource budget and acceptance evidence. |
+| [`operations/ops-dashboard.md`](./operations/ops-dashboard.md) | Private QEO-211 PWA/runtime boundary, provider ownership, caching/security and acceptance contract. |
 | [`security.md`](./security.md) | Security requirements and audit boundaries. |
 | [`auth.md`](./auth.md) | Supabase Auth, sessions, feature gates and RLS ownership. |
 | [`UI_LESSONS_LEARNED.md`](./UI_LESSONS_LEARNED.md) | Mandatory UI performance/interaction lessons. |
