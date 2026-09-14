@@ -193,7 +193,6 @@ export function overlayHourlyHotOnDerived(input: {
   derived: CanonicalOhlcvBar[]
   cold: CanonicalOhlcvBar[]
   hot: CanonicalOhlcvBar[]
-  allowHotOnlyBuckets?: boolean
 }) {
   const affectedBuckets = new Set(input.hot.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null))
   const derivedBuckets = new Set(input.derived.map((bar) => bar.time))
@@ -202,9 +201,8 @@ export function overlayHourlyHotOnDerived(input: {
     return bucket != null && affectedBuckets.has(bucket)
   })
   const coldBuckets = new Set(affectedCold.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null))
-  const allowHotOnlyBuckets = input.allowHotOnlyBuckets ?? true
   const hotOnlyBuckets = new Set(
-    [...affectedBuckets].filter((bucket) => allowHotOnlyBuckets && !coldBuckets.has(bucket) && !derivedBuckets.has(bucket)),
+    [...affectedBuckets].filter((bucket) => !coldBuckets.has(bucket) && !derivedBuckets.has(bucket)),
   )
   const rebuildBuckets = new Set([...coldBuckets, ...hotOnlyBuckets])
   const affectedHot = input.hot.filter((bar) => {
