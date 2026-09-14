@@ -40,6 +40,7 @@ See `HANDOVER.md` for the full contract and safety gates.
 | [`HANDOVER.md`](./HANDOVER.md) | Canonical production architecture, EOD, storage, DB safety, validation and acceptance. |
 | [`chart-data.md`](./chart-data.md) | Canonical interactive-chart raw `1m`, hot/cold storage, merge integrity and API boundaries. |
 | [`market-board.md`](./market-board.md) | Market-board bootstrap, realtime path, filters, lifecycle and performance. |
+| [`operations/beszel.md`](./operations/beszel.md) | Private Beszel host/container monitoring topology, security boundary, alert policy, resource budget and acceptance evidence. |
 | [`operations/ops-dashboard.md`](./operations/ops-dashboard.md) | Private QEO-211 PWA/runtime boundary, provider ownership, caching/security and acceptance contract. |
 | [`security.md`](./security.md) | Security requirements and audit boundaries. |
 | [`auth.md`](./auth.md) | Supabase Auth, sessions, feature gates and RLS ownership. |
