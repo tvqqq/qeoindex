@@ -16,7 +16,7 @@ QEO-216 extends the existing UpCloud Go realtime worker. The browser never conne
 
 `DNSE WS → UpCloud Go worker → bounded orderbook fanout → authenticated Supabase Realtime → Vercel browser`
 
-The existing Market Board `market_realtime_bus` contract remains stable unless a narrowly scoped checkpoint extension is required. No public UpCloud application port is introduced.
+The existing Market Board `dnse-market` bus stream and reducer contract remain unchanged. QEO-216 may add separate bounded orderbook checkpoint rows to the existing `market_realtime_bus`, but must not change the meaning, cadence, or payload contract of `dnse-market`. No public UpCloud application port is introduced.
 
 ### Provider sockets and capacity
 
@@ -31,6 +31,8 @@ Each supplemental shard carries only:
 - `top_price.G1.json`
 - `tick_extra.G1.json`
 - `foreign.G1.json`
+
+The canonical tick frames from Socket 1 are routed to both existing Market Board processing and the new orderbook fanout. QEO-216 does not create another tick provider subscription.
 
 `ohlc.1.json` is not duplicated. Popup mini-chart compatibility is synthesized from the canonical tick stream, matching the centralized Market Board direction.
 
@@ -58,6 +60,32 @@ A symbol maps deterministically to exactly one shard through a stable hash. The 
 Default orderbook fanout cadence is 500 ms (2 Hz). The worker batches frames per shard and caps individual payloads below the Supabase Broadcast payload ceiling; implementation should target a conservative ~192 KiB payload split threshold.
 
 The browser subscribes only to the shard for its symbol and filters frames by exact uppercase symbol. It must not receive DNSE auth material or provider URLs.
+
+### Private-channel authorization
+
+Orderbook Broadcast topics are receive-only for normal clients.
+
+- authenticated users with the existing market-board entitlement may receive `orderbook:v1:*` topics;
+- anonymous clients may not receive them;
+- browser clients may not publish provider/orderbook events;
+- server-side publishing uses trusted service-role credentials;
+- the Supabase Realtime authorization policy is scoped to the orderbook topic prefix and does not widen unrelated Realtime access.
+
+The implementation must add explicit authorization coverage for `realtime.messages`/private Broadcast rather than relying only on frontend gating.
+
+### Current-state checkpoint
+
+Private Broadcast is the live transport, not the durable authority. For fast bootstrap and continuity recovery, the worker also maintains ten small current-state checkpoints in `market_realtime_bus`, separate from the existing `dnse-market` row.
+
+Each checkpoint contains only:
+
+- latest `t` per symbol;
+- latest `q` per symbol;
+- latest `f` per symbol;
+- a bounded recent tail of `te` executions sufficient for short reconnect recovery;
+- shard sequence/epoch/source timestamp.
+
+The checkpoint must stay within the existing bus payload-size bound. It is not a full-session trade store and must not grow with the trading day. Existing `/api/market/session` plus `stock_orderbook_snapshots` remains the full-session recovery authority.
 
 ### Supabase capacity gate
 
@@ -102,6 +130,7 @@ Each Broadcast payload uses a versioned envelope conceptually equivalent to:
 ```json
 {
   "version": 1,
+  "epoch": "worker-start-uuid",
   "shard": 4,
   "sequence": 18291,
   "publishedAt": "2026-09-14T03:40:00.000Z",
@@ -109,7 +138,7 @@ Each Broadcast payload uses a versioned envelope conceptually equivalent to:
 }
 ```
 
-`sequence` is monotonic per shard. Consumers use it to distinguish continuous delivery from a transport gap.
+`sequence` is monotonic per shard inside one `epoch`. Consumers use `(epoch, sequence)` to distinguish continuous delivery from a worker restart or transport gap.
 
 A successful publish advances the shard's committed sequence. Failed publishes do not silently advance continuity state.
 
@@ -129,13 +158,14 @@ Any continuity discontinuity forces browser recovery before returning to healthy
 
 QEO-216 reuses the existing orderbook snapshot/session path instead of building a second durable execution log.
 
-Initial popup hydration continues to use the existing session/Supabase snapshot path. Realtime Broadcast supplies live deltas after hydration.
+Initial popup hydration continues to use the existing session/Supabase snapshot path. The bounded bus checkpoint may accelerate recovery, while Realtime Broadcast supplies live deltas after hydration.
 
 When the browser detects any of the following:
 
 - missing/non-contiguous shard sequence;
+- changed worker epoch;
 - channel timeout/error/closure;
-- worker epoch discontinuity;
+- continuity-gap flag from the worker;
 - visibility/network resume after a stale interval;
 
 it enters `RECOVERING`, refreshes the existing session/snapshot authority, merges trades using stable IDs, then rejoins through the same authenticated Realtime startup path.
@@ -152,7 +182,7 @@ Every initial join and every restart/rejoin path follows this order:
 2. `await supabase.auth.getSession()`;
 3. require a valid `session.access_token`;
 4. `await supabase.realtime.setAuth(session.access_token)`;
-5. only then perform authenticated snapshot/bootstrap work and subscribe to the private Broadcast shard;
+5. only then perform authenticated snapshot/checkpoint bootstrap work and subscribe to the private Broadcast shard;
 6. if auth/session startup fails, reset startup guards so retry remains possible;
 7. token refresh, visibility recovery, network recovery and manual reconnect all pass through the same auth gate.
 
@@ -187,13 +217,14 @@ The worker must expose enough structured logging to identify:
 - reconnect/backoff state;
 - fanout publish errors/429s;
 - shard queue depth and dropped/continuity-gap events;
-- last successful publish sequence per fanout shard.
+- last successful `(epoch, sequence)` per fanout shard.
 
 ## Security
 
 - DNSE API key/secret exist only on server/UpCloud runtime.
 - Supabase service-role credentials remain server-side only.
 - Browser joins private/authenticated Realtime channels only after setting the current user access token.
+- Browser Realtime authorization is enforced server-side by scoped private-channel policy, not only by UI checks.
 - Direct anonymous read access is not introduced.
 - No public UpCloud application port is added.
 - Existing Market Board authorization and transport remain intact.
@@ -216,7 +247,7 @@ Do not mark the batch committed. Collapse current-state frames to newest values,
 
 Do not subscribe. Reset the startup guard, surface recoverable state, and retry through the same auth-gated lifecycle.
 
-### Sequence gap
+### Sequence or epoch gap
 
 Enter `RECOVERING`, reload authoritative session/snapshot state, then resume the live shard from a fresh continuity point.
 
@@ -227,11 +258,15 @@ Regression coverage must establish at least these contracts:
 - `LiveOrderBookPanel` no longer contains browser-direct DNSE WebSocket startup or `/api/market/stream-auth` usage;
 - orderbook Realtime auth hydration and `realtime.setAuth()` happen before private channel subscription;
 - restart/resume paths reuse the same auth gate;
+- private Broadcast authorization permits entitled authenticated receive access and does not permit anonymous/client-provider publishing;
 - supplemental universe sharding is deterministic and bounded at <=150 memberships/socket for a 200-symbol universe;
 - exactly four supplemental orderbook streams are planned for a 200-symbol universe and total target provider socket count is six;
+- canonical tick frames feed both existing Market Board processing and orderbook fanout without a duplicate provider subscription;
 - `t/q/f` use latest-wins coalescing while every `te` frame is preserved in order;
 - failed fanout publish does not advance committed sequence;
-- continuity gap/truncation forces browser recovery;
+- worker restart/truncation changes epoch or exposes continuity loss;
+- continuity gap forces browser recovery;
+- bounded checkpoint rows do not change the existing `dnse-market` contract or exceed the bus payload bound;
 - Market Board centralized realtime contract remains unchanged;
 - popup mini-chart remains live through tick-derived compatibility updates rather than `ohlc.1` subscription.
 
@@ -249,7 +284,8 @@ Source merge alone does not complete QEO-216. Production acceptance requires all
 6. Two or more browsers viewing the same symbol share the centralized upstream path and do not increase provider socket count.
 7. At least 100 distinct symbols are exercised or capacity-proven without provider socket count exceeding six.
 8. Depth, executions, foreign flow, quote updates, mini-chart motion, reconnect and recovery behavior are accepted against the current popup semantics.
-9. A controlled Realtime interruption proves sequence-gap recovery without silent return to a false LIVE state.
+9. A controlled Realtime interruption proves sequence/epoch-gap recovery without silent return to a false LIVE state.
+10. Private-channel authorization rejects anonymous access and does not expose provider publishing capability to browsers.
 
 ## Explicit non-goals
 
@@ -257,7 +293,7 @@ QEO-216 does not:
 
 - add a public WebSocket/SSE gateway on UpCloud;
 - build Kafka/Redis Streams/a durable execution event log;
-- change Market Board reducer semantics or its existing 1 Hz bus contract;
+- change Market Board reducer semantics or its existing 1 Hz `dnse-market` bus contract;
 - dynamically allocate provider sockets per active popup;
 - guarantee transaction-level delivery during unlimited infrastructure outages;
 - bypass DNSE account limits with uncontrolled socket sharding.
