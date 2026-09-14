@@ -36,6 +36,15 @@ func StockChannels(tickers []string) []Channel {
 	return []Channel{{Name: "tick.G1.json", Symbols: append([]string(nil), tickers...)}}
 }
 
+func OrderbookChannels(tickers []string) []Channel {
+	symbols := append([]string(nil), tickers...)
+	return []Channel{
+		{Name: "top_price.G1.json", Symbols: append([]string(nil), symbols...)},
+		{Name: "tick_extra.G1.json", Symbols: append([]string(nil), symbols...)},
+		{Name: "foreign.G1.json", Symbols: append([]string(nil), symbols...)},
+	}
+}
+
 func IndexChannels() []Channel {
 	return []Channel{
 		{Name: "market_index.VNINDEX.json"},
