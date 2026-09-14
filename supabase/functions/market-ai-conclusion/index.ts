@@ -15,6 +15,7 @@ const REASONING_EFFORT = "low"
 const MAX_OUTPUT_TOKENS = 1_800
 const MAX_COST_USD = 0.03
 const MAX_INPUT_CHARS = 36_000
+const MAX_LEADER_FACTS_IN_PROMPT = 10
 const OPENAI_TIMEOUT_MS = 30_000
 const JOB_KEY = "market.ai_conclusion"
 
@@ -199,9 +200,17 @@ function outputSchema(packet: Awaited<ReturnType<typeof buildMarketAiEvidencePac
 
 function compactInput(packet: unknown) {
   const object = packet as JsonObject
+  const facts = Array.isArray(object.facts) ? object.facts : []
+  let leaderFacts = 0
+  const boundedFacts = facts.filter((fact) => {
+    const id = String(asObject(fact)?.id || "")
+    if (!id.startsWith("leader:")) return true
+    leaderFacts += 1
+    return leaderFacts <= MAX_LEADER_FACTS_IN_PROMPT
+  }).slice(0, 220)
   return {
     ...object,
-    facts: Array.isArray(object.facts) ? object.facts.slice(0, 220) : [],
+    facts: boundedFacts,
     observations: Array.isArray(object.observations) ? object.observations.slice(0, 8) : [],
   }
 }
@@ -260,6 +269,21 @@ function estimateCost(inputTokens: number, outputTokens: number, config: { input
   return Number(cost.toFixed(6))
 }
 
+function budgetProfile(prompt: string, config: { model: string; inputRate: number; outputRate: number }) {
+  const estimatedInputTokens = Math.ceil(prompt.length / 3)
+  return {
+    model: config.model,
+    promptChars: prompt.length,
+    estimatedInputTokens,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    maxCostUsd: MAX_COST_USD,
+    inputUsdPerMillion: config.inputRate,
+    outputUsdPerMillion: config.outputRate,
+    estimatedWorstCaseCostUsd: estimateCost(estimatedInputTokens, MAX_OUTPUT_TOKENS, config),
+    leaderFactLimit: MAX_LEADER_FACTS_IN_PROMPT,
+  }
+}
+
 async function callOpenAi(prompt: string, config: { model: string }, schema: ReturnType<typeof outputSchema>) {
   const key = Deno.env.get("OPENAI_API_KEY") || ""
   if (!key) throw Object.assign(new Error("OpenAI key missing"), { code: "OPENAI_NOT_CONFIGURED" })
@@ -312,7 +336,20 @@ Deno.serve(async (req: Request) => {
     if (!snapshot) return jsonResponse({ ok: false, error: "SNAPSHOT_NOT_FOUND" }, 404)
     const packet = await buildMarketAiEvidencePacket(snapshot)
     const evidenceHash = await hashMarketAiEvidence(packet)
-    const manifest = { packetVersion: packet.packetVersion, snapshotId: packet.snapshotId, sessionDate: packet.sessionDate, asOf: packet.asOf, evidenceHash, mandatoryDimensions: packet.mandatoryDimensions, missingEvidence: expectedMissingEvidence(packet) }
+    const insufficient = packet.qualityStatus !== "healthy" || Object.values(packet.mandatoryDimensions).some((value) => value !== "complete")
+    const prompt = insufficient ? null : buildPrompt(packet)
+    const pricing = insufficient ? null : pricingConfig()
+    const budget = prompt && pricing ? budgetProfile(prompt, pricing) : null
+    const manifest = {
+      packetVersion: packet.packetVersion,
+      snapshotId: packet.snapshotId,
+      sessionDate: packet.sessionDate,
+      asOf: packet.asOf,
+      evidenceHash,
+      mandatoryDimensions: packet.mandatoryDimensions,
+      missingEvidence: expectedMissingEvidence(packet),
+      ...(budget ? { budget } : {}),
+    }
     currentManifest = manifest
     const claim = await supabase.rpc("claim_market_ai_conclusion", { p_snapshot_id: packet.snapshotId, p_session_date: packet.sessionDate, p_as_of: packet.asOf, p_schema_version: packet.packetVersion, p_policy_version: packet.policyVersion, p_prompt_version: packet.promptVersion, p_evidence_hash: evidenceHash, p_evidence_manifest: manifest })
     if (claim.error) throw Object.assign(new Error("claim failed"), { code: "CLAIM_FAILED" })
@@ -323,16 +360,13 @@ Deno.serve(async (req: Request) => {
     if (row.status !== "running" || !row.claim_token) return jsonResponse({ ok: true, status: "in_progress", session_date: packet.sessionDate, evidence_hash: evidenceHash }, 202)
     claimToken = String(row.claim_token)
 
-    const insufficient = packet.qualityStatus !== "healthy" || Object.values(packet.mandatoryDimensions).some((value) => value !== "complete")
     if (insufficient) {
       await complete(supabase, packetId, claimToken, "insufficient_evidence", "insufficient_evidence", {}, manifest, null, null, null, null, null)
       return jsonResponse({ ok: true, status: "insufficient_evidence", session_date: packet.sessionDate, evidence_hash: evidenceHash, missing_evidence: manifest.missingEvidence })
     }
 
-    const prompt = buildPrompt(packet)
-    const pricing = pricingConfig()
-    const worstCost = estimateCost(Math.ceil(prompt.length / 3), MAX_OUTPUT_TOKENS, pricing)
-    if (worstCost > MAX_COST_USD) throw Object.assign(new Error("worst-case model cost bound exceeded"), { code: "COST_BOUND_EXCEEDED" })
+    if (!prompt || !pricing || !budget) throw Object.assign(new Error("budget profile unavailable"), { code: "AI_CONFIG_INVALID" })
+    if (budget.estimatedWorstCaseCostUsd > MAX_COST_USD) throw Object.assign(new Error("worst-case model cost bound exceeded"), { code: "COST_BOUND_EXCEEDED" })
     const started = await supabase.rpc("start_market_ai_conclusion_model", { p_id: packetId, p_claim_token: claimToken })
     if (started.error || started.data !== true) throw Object.assign(new Error("model start claim rejected"), { code: "MODEL_START_FAILED" })
     modelStarted = true
@@ -344,7 +378,7 @@ Deno.serve(async (req: Request) => {
     if (inputCost > MAX_COST_USD) throw Object.assign(new Error("model cost bound exceeded"), { code: "COST_BOUND_EXCEEDED" })
     const typedPayload = normalizedPayload
     await complete(supabase, packetId, claimToken, "succeeded", typedPayload.posture, typedPayload as unknown as JsonObject, manifest, modelResponse.model, modelResponse.inputTokens, modelResponse.outputTokens, inputCost, null)
-    return jsonResponse({ ok: true, status: "succeeded", session_date: packet.sessionDate, evidence_hash: evidenceHash, model: modelResponse.model, input_tokens: modelResponse.inputTokens, output_tokens: modelResponse.outputTokens })
+    return jsonResponse({ ok: true, status: "succeeded", session_date: packet.sessionDate, evidence_hash: evidenceHash, model: modelResponse.model, input_tokens: modelResponse.inputTokens, output_tokens: modelResponse.outputTokens, estimated_cost_usd: inputCost })
   } catch (error) {
     const code = errorCode(error)
     if (packetId && claimToken) {
@@ -355,6 +389,7 @@ Deno.serve(async (req: Request) => {
       }
     }
     const validationErrors = (error as { validationErrors?: unknown } | null)?.validationErrors
-    return jsonResponse({ ok: false, status: "failed", error: code, ...(Array.isArray(validationErrors) ? { validation_errors: validationErrors } : {}) }, code === "SNAPSHOT_NOT_FOUND" ? 404 : 502)
+    const budget = asObject(currentManifest?.budget)
+    return jsonResponse({ ok: false, status: "failed", error: code, ...(budget ? { budget } : {}), ...(Array.isArray(validationErrors) ? { validation_errors: validationErrors } : {}) }, code === "SNAPSHOT_NOT_FOUND" ? 404 : 502)
   }
 })
