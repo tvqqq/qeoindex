@@ -14,7 +14,7 @@
       "productionVersion": "20260910101657",
       "state": "MAPPED",
       "evidence": "QEO-105 final-head gates, Vercel READY on merge SHA 3e5d232c94f3f13b2c22ff1867272adf157d5569, production migration promotion, and baseline durable-state readback",
-      "rationale": "Exact Top-200 transition state and added-only bootstrap orchestration were promoted after focused QEO-105, full Verify/build, zero-to-latest DB replay, generated types, current DB contracts, and QEO-108/149/147/148 rehearsals passed. Supabase assigned production version 20260910101657 was assigned by Supabase; first production prepare was safely baseline-only with added=0, removed=0, unchanged=200 and no dispatch."
+      "rationale": "Exact Top-200 transition state and added-only bootstrap orchestration were promoted after focused QEO-105, full Verify/build, zero-to-latest DB replay, generated types, current DB contracts, and QEO-108/149/147/148 rehearsals passed. Production version 20260910101657 was assigned by Supabase; first production prepare was safely baseline-only with added=0, removed=0, unchanged=200 and no dispatch."
     },
     {
       "logicalName": "qeo105_chart_universe_bootstrap_hardening",
