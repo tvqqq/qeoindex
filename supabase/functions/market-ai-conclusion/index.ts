@@ -331,6 +331,7 @@ Deno.serve(async (req: Request) => {
   let claimToken = ""
   let modelStarted = false
   let currentManifest: JsonObject | null = null
+  let currentBudget: JsonObject | null = null
   try {
     const snapshot = await loadSnapshot(supabase, typeof requestedDate === "string" ? requestedDate : null)
     if (!snapshot) return jsonResponse({ ok: false, error: "SNAPSHOT_NOT_FOUND" }, 404)
@@ -340,16 +341,9 @@ Deno.serve(async (req: Request) => {
     const prompt = insufficient ? null : buildPrompt(packet)
     const pricing = insufficient ? null : pricingConfig()
     const budget = prompt && pricing ? budgetProfile(prompt, pricing) : null
-    const manifest = {
-      packetVersion: packet.packetVersion,
-      snapshotId: packet.snapshotId,
-      sessionDate: packet.sessionDate,
-      asOf: packet.asOf,
-      evidenceHash,
-      mandatoryDimensions: packet.mandatoryDimensions,
-      missingEvidence: expectedMissingEvidence(packet),
-      ...(budget ? { budget } : {}),
-    }
+    currentBudget = budget as JsonObject | null
+    if (budget) console.info("MARKET_AI_BUDGET", JSON.stringify({ sessionDate: packet.sessionDate, evidenceHash, ...budget }))
+    const manifest = { packetVersion: packet.packetVersion, snapshotId: packet.snapshotId, sessionDate: packet.sessionDate, asOf: packet.asOf, evidenceHash, mandatoryDimensions: packet.mandatoryDimensions, missingEvidence: expectedMissingEvidence(packet) }
     currentManifest = manifest
     const claim = await supabase.rpc("claim_market_ai_conclusion", { p_snapshot_id: packet.snapshotId, p_session_date: packet.sessionDate, p_as_of: packet.asOf, p_schema_version: packet.packetVersion, p_policy_version: packet.policyVersion, p_prompt_version: packet.promptVersion, p_evidence_hash: evidenceHash, p_evidence_manifest: manifest })
     if (claim.error) throw Object.assign(new Error("claim failed"), { code: "CLAIM_FAILED" })
@@ -378,7 +372,7 @@ Deno.serve(async (req: Request) => {
     if (inputCost > MAX_COST_USD) throw Object.assign(new Error("model cost bound exceeded"), { code: "COST_BOUND_EXCEEDED" })
     const typedPayload = normalizedPayload
     await complete(supabase, packetId, claimToken, "succeeded", typedPayload.posture, typedPayload as unknown as JsonObject, manifest, modelResponse.model, modelResponse.inputTokens, modelResponse.outputTokens, inputCost, null)
-    return jsonResponse({ ok: true, status: "succeeded", session_date: packet.sessionDate, evidence_hash: evidenceHash, model: modelResponse.model, input_tokens: modelResponse.inputTokens, output_tokens: modelResponse.outputTokens, estimated_cost_usd: inputCost })
+    return jsonResponse({ ok: true, status: "succeeded", session_date: packet.sessionDate, evidence_hash: evidenceHash, model: modelResponse.model, input_tokens: modelResponse.inputTokens, output_tokens: modelResponse.outputTokens, estimated_cost_usd: inputCost, budget })
   } catch (error) {
     const code = errorCode(error)
     if (packetId && claimToken) {
@@ -389,7 +383,6 @@ Deno.serve(async (req: Request) => {
       }
     }
     const validationErrors = (error as { validationErrors?: unknown } | null)?.validationErrors
-    const budget = asObject(currentManifest?.budget)
-    return jsonResponse({ ok: false, status: "failed", error: code, ...(budget ? { budget } : {}), ...(Array.isArray(validationErrors) ? { validation_errors: validationErrors } : {}) }, code === "SNAPSHOT_NOT_FOUND" ? 404 : 502)
+    return jsonResponse({ ok: false, status: "failed", error: code, ...(currentBudget ? { budget: currentBudget } : {}), ...(Array.isArray(validationErrors) ? { validation_errors: validationErrors } : {}) }, code === "SNAPSHOT_NOT_FOUND" ? 404 : 502)
   }
 })
