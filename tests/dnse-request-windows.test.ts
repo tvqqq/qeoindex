@@ -207,3 +207,73 @@ test("QEO-196 UpCloud runtime has no public port and is fail-closed until E2E ti
   assert.match(stopTimer, /07:50:00\s+UTC/)
   assert.match(stopTimer, /Persistent=true/)
 })
+
+test("QEO-216 removes browser-direct DNSE orderbook transport", () => {
+  const transportPath = "modules/market/providers/dnse/orderbook-stream.ts"
+  assert.equal(existsSync(transportPath), true, "QEO-216 centralized orderbook transport must exist")
+
+  const panel = readFileSync("components/orderbook/live-orderbook-panel.tsx", "utf8")
+  const transport = readFileSync(transportPath, "utf8")
+
+  assert.doesNotMatch(panel, /new WebSocket\(authJson\.url\)/)
+  assert.doesNotMatch(panel, /\/api\/market\/stream-auth/)
+  assert.match(panel, /subscribeDnseOrderbookFrames/)
+  assert.match(transport, /private:\s*true/)
+  assert.match(transport, /broadcast/)
+  assert.doesNotMatch(transport, /ws-openapi\.dnse\.com\.vn/)
+})
+
+test("QEO-216 shares the QEO-196 auth hydration boundary before private Realtime joins", () => {
+  const helperPath = "modules/shared/supabase/authenticated-realtime.ts"
+  const transportPath = "modules/market/providers/dnse/orderbook-stream.ts"
+  assert.equal(existsSync(helperPath), true, "shared authenticated Realtime helper must exist")
+  assert.equal(existsSync(transportPath), true, "centralized orderbook transport must exist")
+
+  const helper = readFileSync(helperPath, "utf8")
+  const orderbook = readFileSync(transportPath, "utf8")
+  const market = readFileSync("modules/market/providers/dnse/market-stream.ts", "utf8")
+
+  const getSession = helper.indexOf("await supabase.auth.getSession()")
+  const setAuth = helper.indexOf("await supabase.realtime.setAuth(session.access_token)")
+  assert.ok(getSession >= 0, "helper must hydrate the browser auth session")
+  assert.ok(setAuth > getSession, "Realtime auth must be set after session hydration")
+  assert.match(orderbook, /getAuthenticatedSupabaseRealtimeClient/)
+  assert.match(market, /getAuthenticatedSupabaseRealtimeClient/)
+})
+
+test("QEO-216 worker uses four bounded supplemental sockets and reuses canonical ticks", () => {
+  const planPath = "services/market-realtime-worker/internal/worker/orderbook_plan.go"
+  const bufferPath = "services/market-realtime-worker/internal/realtime/orderbook_buffer.go"
+  assert.equal(existsSync(planPath), true, "orderbook provider shard planner must exist")
+  assert.equal(existsSync(bufferPath), true, "orderbook fanout buffer must exist")
+
+  const stream = readFileSync("services/market-realtime-worker/internal/dnse/stream.go", "utf8")
+  const plan = readFileSync(planPath, "utf8")
+  const worker = readFileSync("services/market-realtime-worker/internal/worker/run.go", "utf8")
+  const config = readFileSync("services/market-realtime-worker/internal/config/config.go", "utf8")
+
+  assert.match(stream, /top_price\.G1\.json/)
+  assert.match(stream, /tick_extra\.G1\.json/)
+  assert.match(stream, /foreign\.G1\.json/)
+  assert.match(plan, /50/)
+  assert.match(plan, /4/)
+  assert.match(worker, /orderbook-0/)
+  assert.match(worker, /OrderbookBuffer|orderbookBuffer/)
+  assert.match(config, /ORDERBOOK_REALTIME_FLUSH_MS/)
+  assert.match(config, /500/)
+  assert.doesNotMatch(stream, /func OrderbookChannels[\s\S]*ohlc\.1\.json/)
+})
+
+test("QEO-216 private Broadcast authorization is scoped to authenticated orderbook listeners", () => {
+  const migrationPath = "supabase/migrations/20260914090000_qeo216_orderbook_realtime_broadcast.sql"
+  assert.equal(existsSync(migrationPath), true, "QEO-216 Realtime authorization migration must exist")
+
+  const migration = readFileSync(migrationPath, "utf8")
+  assert.match(migration, /on\s+"?realtime"?\."?messages"?/i)
+  assert.match(migration, /for\s+select/i)
+  assert.match(migration, /to\s+authenticated/i)
+  assert.match(migration, /realtime\.topic\(\)/i)
+  assert.match(migration, /orderbook:v1:/i)
+  assert.match(migration, /extension[\s\S]*broadcast/i)
+  assert.doesNotMatch(migration, /for\s+insert[\s\S]*to\s+authenticated/i)
+})
