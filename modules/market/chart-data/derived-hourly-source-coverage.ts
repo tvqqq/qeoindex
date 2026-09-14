@@ -3,6 +3,8 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { hasVietnamSecuritiesTradingCalendarCoverage, isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "../calendar"
 import { listVerifiedColdManifests } from "./cold-store"
+import { readProviderRequestCoverage } from "./hot-store"
+import { missingTradingProviderRanges } from "./provider-coverage"
 
 function vietnamSessionStart(dateKey: string, hour: number, minute = 0) {
   return Math.floor(new Date(`${dateKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+07:00`).getTime() / 1000)
@@ -32,10 +34,20 @@ function requiredTradingDates(from: number, to: number): string[] | null {
   return required
 }
 
+function dateRange(dateKey: string) {
+  return {
+    from: vietnamSessionStart(dateKey, 0),
+    to: vietnamSessionStart(nextVietnamDateKey(dateKey), 0) - 1,
+  }
+}
+
 /**
  * Proves that every authoritative Vietnam trading session intersecting the
- * requested old range has at least one verified RAW manifest. This is a
- * source-coverage proof only; derived-cache readiness is validated separately.
+ * requested old range still has verified RAW authority. Archived sessions are
+ * proven by verified COLD manifests; sessions whose archive is lagging may be
+ * proven by QEO-148 durable provider-success coverage published only after
+ * canonical HOT persistence completed. Derived-cache readiness remains a
+ * separate fail-closed proof.
  */
 export async function verifiedHourlySourceCoverageComplete(
   supabase: SupabaseClient,
@@ -45,13 +57,26 @@ export async function verifiedHourlySourceCoverageComplete(
   const requiredDates = requiredTradingDates(input.from, input.to)
   if (requiredDates == null) return false
   if (!requiredDates.length) return true
+
   const manifests = await listVerifiedColdManifests(supabase, {
     ticker: input.ticker,
     from: input.from,
     to: input.to,
     baseResolution: "1m",
   })
-  if (!manifests.length) return false
   const datesWithManifest = new Set(manifests.map((manifest) => vietnamDateKey(manifest.rangeStart * 1000)))
-  return requiredDates.every((dateKey) => datesWithManifest.has(dateKey))
+  const unarchivedDates = requiredDates.filter((dateKey) => !datesWithManifest.has(dateKey))
+  if (!unarchivedDates.length) return true
+
+  const durableHotCoverage = await readProviderRequestCoverage(supabase, input.ticker, input.from, input.to)
+  if (!durableHotCoverage.length) return false
+
+  return unarchivedDates.every((dateKey) => {
+    const day = dateRange(dateKey)
+    const request = {
+      from: Math.max(input.from, day.from),
+      to: Math.min(input.to, day.to),
+    }
+    return missingTradingProviderRanges(request, durableHotCoverage).length === 0
+  })
 }
