@@ -73,7 +73,7 @@
     {
       "path": "tests/ai-council-research-context.test.ts",
       "owner": "ai",
-      "invariant": "Preserve the current ai council research context unit contract.",
+      "invariant": "Preserve the current ai council research context contract.",
       "bucket": "canonical",
       "suites": [
         "fast",
@@ -1201,6 +1201,15 @@
       "suites": [
         "fast",
         "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/upcloud-restic-contract.test.ts",
+      "owner": "tooling",
+      "invariant": "QEO-202 keeps UpCloud Restic backup and restore artifacts encrypted, allowlisted, disabled-first, and fail-closed.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
       ]
     }
   ]
