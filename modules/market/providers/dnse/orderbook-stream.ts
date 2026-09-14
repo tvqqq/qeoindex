@@ -152,6 +152,7 @@ export function subscribeDnseOrderbookFrames(
   const restartForRecovery = (message: string) => {
     if (disposed) return
     generation += 1
+    latestEpoch = 0
     clearReconnectTimer()
     setState({ status: "RECOVERING", error: message })
     void removeCurrentChannel().finally(() => scheduleReconnect("RECOVERING", message))
@@ -247,7 +248,9 @@ export function subscribeDnseOrderbookFrames(
         if (disposed || thisGeneration !== generation || channel !== nextChannel) return
         if (status === "SUBSCRIBED") {
           attempts = 0
-          setState({ status: latestSequence > 0 ? "LIVE" : "CONNECTING", error: "" })
+          // A checkpoint is hydration, not proof that the producer is currently
+          // live. Only a fresh Broadcast envelope transitions the popup to LIVE.
+          setState({ status: "CONNECTING", error: "" })
           return
         }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
