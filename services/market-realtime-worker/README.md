@@ -1,22 +1,32 @@
-# QEO-196 Market Realtime Worker
+# QEO-196/QEO-216 Market Realtime Worker
 
-A stateless Go worker owns the canonical DNSE Market Board feed and publishes coalesced current-state batches to the existing Supabase `market_realtime_bus`. The browser contract from QEO-175 is unchanged.
+A stateless Go worker owns the canonical DNSE Market Board feed and the centralized popup orderbook upstream feed. Market Board current-state batches continue through the existing Supabase `market_realtime_bus`; QEO-216 adds bounded orderbook checkpoints plus authenticated Supabase Realtime Broadcast fanout so browsers no longer open DNSE WebSockets directly.
 
 ## Runtime contract
 
 - canonical stock universe: `vn_top_stocks`, maximum 200 symbols;
-- DNSE socket A: `tick.G1.json` for the canonical stock set;
-- DNSE socket B: VNINDEX, VN30, HNX and UPCOM market-index channels;
-- latest frame per `(T, symbol/index)` is coalesced and flushed at approximately 1 Hz;
-- the worker bootstraps its sequence from the current `dnse-market` bus row so sequence values remain increasing across restarts;
-- universe membership refreshes periodically without restarting the index stream;
+- DNSE socket 1: `tick.G1.json` for the canonical stock set; this same tick stream feeds both Market Board and popup quote/mini-chart behavior;
+- DNSE socket 2: VNINDEX, VN30, HNX and UPCOM market-index channels;
+- DNSE sockets 3–6: up to four deterministic 50-symbol supplemental shards carrying only `top_price.G1.json`, `tick_extra.G1.json`, and `foreign.G1.json` (maximum 150 memberships/socket);
+- no supplemental `ohlc.1.json` subscription is created; popup mini-chart motion is synthesized from canonical ticks;
+- Market Board latest frame per `(T, symbol/index)` remains coalesced at approximately 1 Hz;
+- orderbook fanout maps symbols deterministically into ten private topics `orderbook:v1:00` through `orderbook:v1:09` and flushes at 500 ms by default;
+- orderbook `t/q/f` frames are latest-wins while `te` executions remain ordered in a bounded queue; queue truncation/restart is exposed as a continuity gap so browsers recover from the session/snapshot authority;
+- orderbook checkpoint keys are `orderbook-v1-00` through `orderbook-v1-09`; their sequences are strict monotonic counters used for gap detection;
+- universe membership refreshes periodically; changed supplemental shards restart independently while healthy index/tick streams remain isolated;
 - stale stream detection is active during trading sub-windows, not during lunch/pre-open;
 - SIGINT/SIGTERM closes the WebSockets and exits cleanly;
 - no HTTP server or public listening port exists.
 
+## Capacity gates
+
+QEO-216 source architecture targets six simultaneous DNSE provider sockets for a full 200-symbol universe, independent of browser count. Production cutover is **fail-closed** until the production DNSE API key proves it can authenticate and subscribe all six sockets concurrently without account-level rejection or `MAX_CHANNELS_EXCEEDED`.
+
+The 100-simultaneous-unique-popup guarantee also requires an effective Supabase Realtime budget of at least **500 events/sec**. Do not claim or enable that production guarantee on a lower project limit.
+
 ## Secrets
 
-Create `/opt/qeoindex/env/market-realtime-worker.env` on the UpCloud host with mode `0600`. Use `.env.example` only as the key-name template. Never commit the real DNSE API secret or Supabase service-role key.
+Create `/opt/qeoindex/env/market-realtime-worker.env` on the UpCloud host with mode `0600`. Use `.env.example` only as the key-name template. Never commit the real DNSE API secret or Supabase service-role key. Browsers receive neither DNSE credentials nor stream-auth payloads.
 
 ## Build and manual smoke
 
@@ -31,12 +41,14 @@ The worker intentionally exits outside Monday–Friday 08:55–14:50 `Asia/Ho_Ch
 
 During the manual market-hours smoke, verify:
 
-1. JSON logs show both `ticks` and `indexes` subscribed without printing credentials.
-2. `market_realtime_bus` row `dnse-market` receives bounded frames and an increasing `sequence`.
+1. JSON logs show `ticks`, `indexes`, and four orderbook supplemental streams at full universe without printing credentials.
+2. `market_realtime_bus` row `dnse-market` keeps the existing bounded 1 Hz contract; orderbook checkpoint rows advance independently.
 3. Market Board receives Supabase Realtime changes end-to-end with no canonical browser DNSE socket.
-4. A deliberate DNSE/network interruption causes reconnect/backoff and recovery.
-5. `docker stats --no-stream` stays inside the initial 384 MB / 0.75 CPU container budget.
-6. The old centralized ingestion worker is stopped so only one producer writes `dnse-market`.
+4. Opening popup orderbooks creates only authenticated Supabase Realtime traffic in the browser; Chrome Network shows no `ws-openapi.dnse.com.vn` connection.
+5. Multiple browsers viewing the same symbol do not increase the DNSE provider socket count; capacity proof covers at least 100 distinct symbols while provider sockets remain bounded by six.
+6. A deliberate DNSE/Supabase interruption causes bounded reconnect/recovery and a continuity gap never silently returns the popup to a false LIVE state.
+7. `docker stats --no-stream` stays inside the initial 384 MB / 0.75 CPU container budget.
+8. The old centralized ingestion worker is stopped so only one producer writes the realtime bus/fanout.
 
 Useful database observation query:
 
@@ -44,12 +56,13 @@ Useful database observation query:
 select stream, sequence, jsonb_array_length(frames) as frame_count,
        source_updated_at, updated_at
 from public.market_realtime_bus
-where stream = 'dnse-market';
+where stream = 'dnse-market' or stream like 'orderbook-v1-%'
+order by stream;
 ```
 
 ## systemd cutover
 
-**Do not enable the timers until the manual DNSE → Supabase → browser smoke passes.** QEO-196 is fail-closed by design.
+**Do not enable the timers until the manual DNSE → Supabase → browser smoke passes.** QEO-196/QEO-216 remain fail-closed by design.
 
 After the smoke passes, install the four units under `deploy/upcloud/` to `/etc/systemd/system/`, run `systemctl daemon-reload`, then enable both timers:
 
