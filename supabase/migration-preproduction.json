@@ -63,6 +63,14 @@
       "state": "MAPPED",
       "evidence": "QEO-175 PR #467 exact-head Verify #3824 and DB Drift #1289; production migration 20260912051019; schema/RLS/publication readback plus rollback service-role upsert smoke",
       "rationale": "Supabase assigned production version 20260912051019 while repository replay keeps reviewed version 20260912074500. Production readback confirms the bounded bus schema and constraints, RLS, authenticated read-only access, service_role CRUD, anon denial, replica identity full and supabase_realtime publication. A service_role upsert smoke succeeded inside a rolled-back transaction. Worker runtime cutover remains isolated to QEO-196."
+    },
+    {
+      "logicalName": "qeo216_orderbook_realtime_broadcast",
+      "repositoryVersion": "20260914090000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-216 approved centralized orderbook spec, TDD RED/GREEN contracts, and PR #484 preproduction gates",
+      "rationale": "QEO-216 adds authenticated private Supabase Broadcast authorization for centralized popup orderbook fanout while keeping DNSE credentials and upstream sockets server-owned. It remains repo-ahead until the exact PR head passes full Verify and DB replay, then the migration is promoted and production RLS/Broadcast behavior is read back."
     }
   ]
 }
