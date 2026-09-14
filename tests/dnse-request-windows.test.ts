@@ -92,6 +92,23 @@ test("QEO-175 gives Market Board a Supabase realtime transport instead of a brow
   assert.match(streamSource, /synthesizeDnseOhlcFromTickMessage/)
 })
 
+test("QEO-196 waits for browser auth before realtime bus bootstrap and CDC join", () => {
+  const source = readFileSync("modules/market/providers/dnse/market-stream.ts", "utf8")
+  const start = source.indexOf("async function startSupabaseRealtime")
+  assert.notEqual(start, -1, "market stream must have an auth-gated async startup path")
+
+  const body = source.slice(start, source.indexOf("export function publishDnseMarketFrame"))
+  const authIndex = body.indexOf("await supabase.auth.getSession()")
+  const setAuthIndex = body.indexOf("await supabase.realtime.setAuth(session.access_token)")
+  const bootstrapIndex = body.indexOf("await bootstrapCurrentRow(supabase)")
+  const channelIndex = body.indexOf(".channel(CHANNEL_NAME)")
+
+  assert.ok(authIndex >= 0, "startup must hydrate the browser Supabase session")
+  assert.ok(setAuthIndex > authIndex, "Realtime must receive the authenticated access token")
+  assert.ok(bootstrapIndex > setAuthIndex, "authenticated bootstrap must happen after Realtime auth")
+  assert.ok(channelIndex > bootstrapIndex, "CDC subscription must happen only after authenticated bootstrap")
+})
+
 test("QEO-175 realtime bus is authenticated-read, service-write, publication-enabled, and bounded", () => {
   const migration = readFileSync("supabase/migrations/20260912074500_qeo175_market_realtime_bus.sql", "utf8")
 
