@@ -8,17 +8,17 @@ import (
 )
 
 type OrderbookBatch struct {
-	Frames         []Frame
-	ContinuityGap  bool
-	Epoch          int64
+	Frames        []Frame
+	ContinuityGap bool
+	Epoch         int64
 }
 
 type orderbookShardBuffer struct {
-	state          map[string]Frame
-	stateOrder     []string
-	executions     []Frame
-	continuityGap  bool
-	epoch          int64
+	state         map[string]Frame
+	stateOrder    []string
+	executions    []Frame
+	continuityGap bool
+	epoch         int64
 }
 
 type OrderbookBuffer struct {
@@ -81,11 +81,7 @@ func (b *OrderbookBuffer) Push(frame Frame) {
 		if len(shard.executions) > b.maxExecutionFrames {
 			overflow := len(shard.executions) - b.maxExecutionFrames
 			shard.executions = append([]Frame(nil), shard.executions[overflow:]...)
-			if !shard.continuityGap {
-				shard.continuityGap = true
-				shard.epoch++
-				b.gapCount++
-			}
+			b.markGapLocked(shard)
 		}
 		return
 	}
@@ -95,6 +91,14 @@ func (b *OrderbookBuffer) Push(frame Frame) {
 		shard.stateOrder = append(shard.stateOrder, key)
 	}
 	shard.state[key] = copyFrame
+}
+
+func (b *OrderbookBuffer) MarkContinuityGapAll() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for index := range b.shards {
+		b.markGapLocked(&b.shards[index])
+	}
 }
 
 func (b *OrderbookBuffer) DrainShard(shardIndex int) OrderbookBatch {
@@ -200,11 +204,7 @@ func (b *OrderbookBuffer) RequeueShard(shardIndex int, batch OrderbookBatch) {
 		if len(combined) > b.maxExecutionFrames {
 			drop := len(combined) - b.maxExecutionFrames
 			combined = combined[drop:]
-			if !shard.continuityGap {
-				shard.continuityGap = true
-				shard.epoch++
-				b.gapCount++
-			}
+			b.markGapLocked(shard)
 		}
 		shard.executions = append([]Frame(nil), combined...)
 	}
@@ -230,6 +230,15 @@ func (b *OrderbookBuffer) GapCount() int64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.gapCount
+}
+
+func (b *OrderbookBuffer) markGapLocked(shard *orderbookShardBuffer) {
+	if shard.continuityGap {
+		return
+	}
+	shard.continuityGap = true
+	shard.epoch++
+	b.gapCount++
 }
 
 func payloadFits(frames []Frame, maxBytes int) bool {
