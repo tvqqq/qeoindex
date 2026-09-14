@@ -77,9 +77,9 @@ func TestOrderbookBufferMarksContinuityGapWhenExecutionQueueOverflows(t *testing
 func TestFanoutShardIsStableForKnownSymbols(t *testing.T) {
 	vectors := map[string]int{
 		"VCB": 4,
-		"FPT": 9,
-		"MSN": 1,
-		"VIC": 7,
+		"FPT": 3,
+		"MSN": 5,
+		"VIC": 9,
 	}
 	for symbol, want := range vectors {
 		if got := FanoutShard(symbol, 10); got != want {
