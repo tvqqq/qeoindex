@@ -3,9 +3,14 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { missingTradingProviderRanges } from "../../modules/market/chart-data/provider-coverage.ts"
+import { overlayHourlyHotOnDerived } from "../../modules/market/chart-data/timeframes.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
+}
+
+function epoch(value: string) {
+  return Math.floor(new Date(value).getTime() / 1000)
 }
 
 test("QEO-172 partial old-range reads reuse only positively-ready existing derived manifests", () => {
@@ -42,13 +47,13 @@ test("QEO-172 full derived coverage still requires every requested trading sessi
 
 test("QEO-172 hourly source proof accepts durable HOT success while archive lags and stays fail-closed on partial coverage", () => {
   const request = {
-    from: Math.floor(new Date("2026-09-07T09:00:00+07:00").getTime() / 1000),
-    to: Math.floor(new Date("2026-09-07T14:46:00+07:00").getTime() / 1000),
+    from: epoch("2026-09-07T09:00:00+07:00"),
+    to: epoch("2026-09-07T14:46:00+07:00"),
   }
   const fullDurableSuccess = [{ ...request }]
   const partialDurableSuccess = [{
     from: request.from,
-    to: Math.floor(new Date("2026-09-07T11:30:00+07:00").getTime() / 1000),
+    to: epoch("2026-09-07T11:30:00+07:00"),
   }]
 
   assert.deepEqual(missingTradingProviderRanges(request, fullDurableSuccess), [])
@@ -58,4 +63,61 @@ test("QEO-172 hourly source proof accepts durable HOT success while archive lags
   assert.match(coverage, /readProviderRequestCoverage/)
   assert.match(coverage, /missingTradingProviderRanges/)
   assert.match(coverage, /datesWithManifest/)
+})
+
+test("QEO-172 authoritative HOT-only hour fills an unarchived derived gap without requiring COLD overlap", () => {
+  const derived = [{
+    time: epoch("2026-09-04T09:00:00+07:00"),
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100.5,
+    volume: 1000,
+  }]
+  const hot = [
+    { time: epoch("2026-09-07T09:15:00+07:00"), open: 110, high: 111, low: 109, close: 110.5, volume: 10 },
+    { time: epoch("2026-09-07T09:16:00+07:00"), open: 110.5, high: 112, low: 110, close: 111.5, volume: 20 },
+  ]
+
+  const overlay = overlayHourlyHotOnDerived({
+    derived,
+    cold: [],
+    hot,
+    allowHotOnlyBuckets: true,
+  })
+
+  assert.equal(overlay.unresolvedHotOverlap, false)
+  assert.equal(overlay.bars.length, 2)
+  assert.deepEqual(overlay.bars[1], {
+    time: epoch("2026-09-07T09:00:00+07:00"),
+    open: 110,
+    high: 112,
+    low: 109,
+    close: 111.5,
+    volume: 30,
+  })
+})
+
+test("QEO-172 HOT without COLD never replaces an existing derived bucket even with source coverage proof", () => {
+  const derived = [{
+    time: epoch("2026-09-07T09:00:00+07:00"),
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100.5,
+    volume: 1000,
+  }]
+  const hot = [
+    { time: epoch("2026-09-07T09:15:00+07:00"), open: 110, high: 111, low: 109, close: 110.5, volume: 10 },
+  ]
+
+  const overlay = overlayHourlyHotOnDerived({
+    derived,
+    cold: [],
+    hot,
+    allowHotOnlyBuckets: true,
+  })
+
+  assert.equal(overlay.unresolvedHotOverlap, true)
+  assert.deepEqual(overlay.bars, derived)
 })
