@@ -1,6 +1,6 @@
 "use client"
 
-import type { RealtimeChannel } from "@supabase/supabase-js"
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { DnseMarketFrame } from "@/modules/market/realtime/index-candles"
 import { synthesizeDnseOhlcFromTickMessage } from "@/modules/market/board/dnse-subscriptions"
 import { getSupabaseBrowserClient } from "@/modules/shared/supabase/client"
@@ -79,9 +79,7 @@ function applyBusRow(row: MarketRealtimeBusRow | null | undefined) {
   setStreamState({ status: "LIVE", error: "", lastMessageAt: updatedAt, sequence })
 }
 
-async function bootstrapCurrentRow() {
-  const supabase = getSupabaseBrowserClient()
-  if (!supabase) return
+async function bootstrapCurrentRow(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("market_realtime_bus")
     .select("stream,sequence,frames,source_updated_at,updated_at")
@@ -95,17 +93,32 @@ async function bootstrapCurrentRow() {
   applyBusRow(data as MarketRealtimeBusRow | null)
 }
 
-function ensureSupabaseRealtime() {
+async function startSupabaseRealtime() {
   if (realtimeChannel || bootstrapStarted) return
   bootstrapStarted = true
+
   const supabase = getSupabaseBrowserClient()
   if (!supabase) {
+    bootstrapStarted = false
     setStreamState({ status: "ERROR", error: "Supabase browser client is not configured." })
     return
   }
 
   setStreamState({ status: "CONNECTING", error: "" })
-  void bootstrapCurrentRow()
+
+  const { data, error } = await supabase.auth.getSession()
+  const session = data.session
+  if (error || !session?.access_token) {
+    bootstrapStarted = false
+    setStreamState({
+      status: "ERROR",
+      error: error ? `Supabase auth session failed: ${error.message}` : "Supabase auth session is unavailable.",
+    })
+    return
+  }
+
+  await supabase.realtime.setAuth(session.access_token)
+  await bootstrapCurrentRow(supabase)
 
   realtimeChannel = supabase
     .channel(CHANNEL_NAME)
@@ -125,6 +138,10 @@ function ensureSupabaseRealtime() {
       }
       if (status === "CLOSED") setStreamState({ status: "CLOSED" })
     })
+}
+
+function ensureSupabaseRealtime() {
+  void startSupabaseRealtime()
 }
 
 export function publishDnseMarketFrame(frame: DnseMarketFrame) {
