@@ -3,6 +3,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { DnseMarketFrame } from "@/modules/market/realtime/index-candles"
 import { synthesizeDnseOhlcFromTickMessage } from "@/modules/market/board/dnse-subscriptions"
+import { getAuthenticatedSupabaseRealtimeClient } from "@/modules/shared/supabase/authenticated-realtime"
 import { getSupabaseBrowserClient } from "@/modules/shared/supabase/client"
 
 export type DnseMarketStreamStatus = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
@@ -31,6 +32,7 @@ const stateListeners = new Set<DnseMarketStreamStateListener>()
 
 let realtimeChannel: RealtimeChannel | null = null
 let bootstrapStarted = false
+let startupGeneration = 0
 let latestSequence = 0
 let streamState: DnseMarketStreamState = {
   status: "CLOSED",
@@ -96,48 +98,40 @@ async function bootstrapCurrentRow(supabase: SupabaseClient) {
 async function startSupabaseRealtime() {
   if (realtimeChannel || bootstrapStarted) return
   bootstrapStarted = true
-
-  const supabase = getSupabaseBrowserClient()
-  if (!supabase) {
-    bootstrapStarted = false
-    setStreamState({ status: "ERROR", error: "Supabase browser client is not configured." })
-    return
-  }
-
+  const generation = ++startupGeneration
   setStreamState({ status: "CONNECTING", error: "" })
 
-  const { data, error } = await supabase.auth.getSession()
-  const session = data.session
-  if (error || !session?.access_token) {
+  try {
+    const supabase = await getAuthenticatedSupabaseRealtimeClient()
+    if (generation !== startupGeneration) return
+
+    await bootstrapCurrentRow(supabase)
+    if (generation !== startupGeneration) return
+
+    realtimeChannel = supabase
+      .channel(CHANNEL_NAME)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "market_realtime_bus", filter: `stream=eq.${STREAM_KEY}` },
+        (payload) => applyBusRow(payload.new as MarketRealtimeBusRow),
+      )
+      .subscribe((status) => {
+        if (generation !== startupGeneration) return
+        if (status === "SUBSCRIBED") {
+          setStreamState({ status: latestSequence > 0 ? "LIVE" : "CONNECTING", error: "" })
+          return
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setStreamState({ status: "ERROR", error: `Supabase realtime channel ${status.toLowerCase()}.` })
+          return
+        }
+        if (status === "CLOSED") setStreamState({ status: "CLOSED" })
+      })
+  } catch (error) {
+    if (generation !== startupGeneration) return
     bootstrapStarted = false
-    setStreamState({
-      status: "ERROR",
-      error: error ? `Supabase auth session failed: ${error.message}` : "Supabase auth session is unavailable.",
-    })
-    return
+    setStreamState({ status: "ERROR", error: error instanceof Error ? error.message : String(error) })
   }
-
-  await supabase.realtime.setAuth(session.access_token)
-  await bootstrapCurrentRow(supabase)
-
-  realtimeChannel = supabase
-    .channel(CHANNEL_NAME)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "market_realtime_bus", filter: `stream=eq.${STREAM_KEY}` },
-      (payload) => applyBusRow(payload.new as MarketRealtimeBusRow),
-    )
-    .subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        setStreamState({ status: latestSequence > 0 ? "LIVE" : "CONNECTING", error: "" })
-        return
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        setStreamState({ status: "ERROR", error: `Supabase realtime channel ${status.toLowerCase()}.` })
-        return
-      }
-      if (status === "CLOSED") setStreamState({ status: "CLOSED" })
-    })
 }
 
 function ensureSupabaseRealtime() {
@@ -164,6 +158,7 @@ export function subscribeDnseMarketStreamState(listener: DnseMarketStreamStateLi
 export async function restartDnseMarketStream() {
   const supabase = getSupabaseBrowserClient()
   const channel = realtimeChannel
+  startupGeneration += 1
   realtimeChannel = null
   bootstrapStarted = false
   setStreamState({ status: "CONNECTING", error: "" })

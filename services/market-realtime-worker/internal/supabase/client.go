@@ -56,9 +56,17 @@ func (c *Client) Universe(ctx context.Context) ([]string, error) {
 }
 
 func (c *Client) CurrentSequence(ctx context.Context) (int64, error) {
+	return c.CurrentSequenceFor(ctx, "dnse-market")
+}
+
+func (c *Client) CurrentSequenceFor(ctx context.Context, stream string) (int64, error) {
+	stream = strings.TrimSpace(stream)
+	if stream == "" {
+		return 0, fmt.Errorf("realtime stream is required")
+	}
 	query := url.Values{}
 	query.Set("select", "sequence")
-	query.Set("stream", "eq.dnse-market")
+	query.Set("stream", "eq."+stream)
 	query.Set("limit", "1")
 	var rows []struct {
 		Sequence int64 `json:"sequence"`
@@ -73,12 +81,20 @@ func (c *Client) CurrentSequence(ctx context.Context) (int64, error) {
 }
 
 func (c *Client) Publish(ctx context.Context, sequence int64, frames []map[string]any) error {
+	return c.PublishCheckpoint(ctx, "dnse-market", sequence, frames)
+}
+
+func (c *Client) PublishCheckpoint(ctx context.Context, stream string, sequence int64, frames []map[string]any) error {
 	if len(frames) == 0 {
 		return nil
 	}
+	stream = strings.TrimSpace(stream)
+	if stream == "" {
+		return fmt.Errorf("realtime stream is required")
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	body, err := json.Marshal(map[string]any{
-		"stream":            "dnse-market",
+		"stream":            stream,
 		"sequence":          sequence,
 		"provider":          "DNSE",
 		"frames":            frames,
@@ -89,6 +105,25 @@ func (c *Client) Publish(ctx context.Context, sequence int64, frames []map[strin
 		return fmt.Errorf("encode realtime bus payload: %w", err)
 	}
 	return c.doJSON(ctx, http.MethodPost, "/rest/v1/market_realtime_bus?on_conflict=stream", body, "resolution=merge-duplicates,return=minimal", nil)
+}
+
+func (c *Client) PublishPrivateBroadcast(ctx context.Context, topic, event string, payload any) error {
+	topic = strings.TrimSpace(topic)
+	event = strings.TrimSpace(event)
+	if topic == "" || event == "" {
+		return fmt.Errorf("broadcast topic and event are required")
+	}
+	body, err := json.Marshal(map[string]any{
+		"messages": []map[string]any{{
+			"topic":   topic,
+			"event":   event,
+			"payload": payload,
+		}},
+	})
+	if err != nil {
+		return fmt.Errorf("encode Realtime Broadcast payload: %w", err)
+	}
+	return c.doJSON(ctx, http.MethodPost, "/realtime/v1/api/broadcast", body, "", nil)
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body []byte, prefer string, out any) error {
@@ -115,7 +150,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body []byte, p
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("Supabase request failed with status %d", response.StatusCode)
+		responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		message := strings.TrimSpace(string(responseBody))
+		if message == "" {
+			return fmt.Errorf("Supabase request failed with status %d", response.StatusCode)
+		}
+		return fmt.Errorf("Supabase request failed with status %d: %s", response.StatusCode, message)
 	}
 	if out == nil || response.StatusCode == http.StatusNoContent {
 		_, _ = io.Copy(io.Discard, response.Body)
