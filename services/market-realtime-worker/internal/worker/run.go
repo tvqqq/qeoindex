@@ -115,6 +115,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	startStockStream := func(symbols []string) context.CancelFunc {
 		streamCtx, streamCancel := context.WithCancel(runCtx)
 		stockStream := newStream("ticks", cfg, auth, dnse.StockChannels(symbols), onTickFrame, logger)
+		stockStream.OnContinuityGap = orderbookBuffer.MarkContinuityGapAll
 		startStream(streamCtx, stockStream)
 		return streamCancel
 	}
@@ -124,6 +125,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	startOrderbookShard := func(index int, symbols []string) context.CancelFunc {
 		streamCtx, streamCancel := context.WithCancel(runCtx)
 		stream := newStream(orderbookStreamNames[index], cfg, auth, dnse.OrderbookChannels(symbols), onOrderbookFrame, logger)
+		stream.OnContinuityGap = orderbookBuffer.MarkContinuityGapAll
 		logger.Info("orderbook_provider_shard_start", "stream", stream.Name, "symbols", len(symbols), "memberships", len(symbols)*3)
 		startStream(streamCtx, stream)
 		return streamCancel
