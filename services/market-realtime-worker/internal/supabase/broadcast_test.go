@@ -8,12 +8,17 @@ import (
 	"testing"
 )
 
-func TestPublishPrivateBroadcastUsesScopedRealtimeEndpoint(t *testing.T) {
-	var gotPath, gotQuery, gotAPIKey, gotContentType string
-	var gotBody map[string]any
+func TestPublishPrivateBroadcastUsesRealtimeBatchEndpoint(t *testing.T) {
+	var gotPath, gotAPIKey, gotContentType string
+	var gotBody struct {
+		Messages []struct {
+			Topic   string         `json:"topic"`
+			Event   string         `json:"event"`
+			Payload map[string]any `json:"payload"`
+		} `json:"messages"`
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		gotQuery = r.URL.RawQuery
 		gotAPIKey = r.Header.Get("apikey")
 		gotContentType = r.Header.Get("Content-Type")
 		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
@@ -29,11 +34,8 @@ func TestPublishPrivateBroadcastUsesScopedRealtimeEndpoint(t *testing.T) {
 		t.Fatalf("PublishPrivateBroadcast: %v", err)
 	}
 
-	if gotPath != "/realtime/v1/api/broadcast/orderbook:v1:04/events/orderbook" {
+	if gotPath != "/realtime/v1/api/broadcast" {
 		t.Fatalf("unexpected path %q", gotPath)
-	}
-	if gotQuery != "private=true" {
-		t.Fatalf("unexpected query %q", gotQuery)
 	}
 	if gotAPIKey != "service-key" {
 		t.Fatalf("unexpected apikey %q", gotAPIKey)
@@ -41,8 +43,15 @@ func TestPublishPrivateBroadcastUsesScopedRealtimeEndpoint(t *testing.T) {
 	if gotContentType != "application/json" {
 		t.Fatalf("unexpected content type %q", gotContentType)
 	}
-	if gotBody["version"] != float64(1) || gotBody["sequence"] != float64(7) {
-		t.Fatalf("unexpected payload %#v", gotBody)
+	if len(gotBody.Messages) != 1 {
+		t.Fatalf("expected one broadcast message, got %#v", gotBody.Messages)
+	}
+	message := gotBody.Messages[0]
+	if message.Topic != "orderbook:v1:04" || message.Event != "orderbook" {
+		t.Fatalf("unexpected topic/event %#v", message)
+	}
+	if message.Payload["version"] != float64(1) || message.Payload["sequence"] != float64(7) {
+		t.Fatalf("unexpected payload %#v", message.Payload)
 	}
 }
 
