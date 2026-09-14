@@ -585,7 +585,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryState("READY")
       setHistoryMessage("Phiên mới 09:00 · đang chờ dữ liệu ATO.")
       setQuote((current) => {
-        const rawRef = current?.reference || initialMeta?.reference || initialMeta?.price || 0
+        const rawRef = current?.reference || initialMeta?.reference || 0
         const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
         if (!reference) return null
         const rawCeil = current?.ceiling || initialMeta?.ceiling
@@ -631,7 +631,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryMessage("Đã tải từ bộ nhớ đệm.")
     } else if (initialMeta) {
       if (initialMeta.price || initialMeta.reference) {
-        const rawRef = initialMeta.reference ?? initialMeta.price ?? 0
+        const rawRef = initialMeta.reference ?? 0
         const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
         const rawPrice = initialMeta.price ?? reference
         const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
