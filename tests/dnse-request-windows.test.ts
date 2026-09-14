@@ -86,26 +86,29 @@ test("QEO-175 gives Market Board a Supabase realtime transport instead of a brow
   assert.doesNotMatch(boardSource, /new WebSocket\(authJson\.url\)/)
   assert.match(boardSource, /subscribeDnseMarketFrames/)
   assert.match(boardSource, /subscribeDnseMarketStreamState/)
-  assert.match(streamSource, /getSupabaseBrowserClient/)
+  assert.match(streamSource, /getAuthenticatedSupabaseRealtimeClient/)
   assert.match(streamSource, /market_realtime_bus/)
   assert.match(streamSource, /postgres_changes/)
   assert.match(streamSource, /synthesizeDnseOhlcFromTickMessage/)
 })
 
-test("QEO-196 waits for browser auth before realtime bus bootstrap and CDC join", () => {
+test("QEO-196 shared auth boundary precedes Market Board bootstrap and CDC join", () => {
+  const helper = readFileSync("modules/shared/supabase/authenticated-realtime.ts", "utf8")
   const source = readFileSync("modules/market/providers/dnse/market-stream.ts", "utf8")
-  const start = source.indexOf("async function startSupabaseRealtime")
-  assert.notEqual(start, -1, "market stream must have an auth-gated async startup path")
 
+  const getSessionIndex = helper.indexOf("await supabase.auth.getSession()")
+  const setAuthIndex = helper.indexOf("await supabase.realtime.setAuth(session.access_token)")
+  assert.ok(getSessionIndex >= 0, "shared startup must hydrate the browser Supabase session")
+  assert.ok(setAuthIndex > getSessionIndex, "Realtime must receive the authenticated access token after hydration")
+
+  const start = source.indexOf("async function startSupabaseRealtime")
+  assert.notEqual(start, -1, "market stream must retain an auth-gated async startup path")
   const body = source.slice(start, source.indexOf("export function publishDnseMarketFrame"))
-  const authIndex = body.indexOf("await supabase.auth.getSession()")
-  const setAuthIndex = body.indexOf("await supabase.realtime.setAuth(session.access_token)")
+  const helperIndex = body.indexOf("await getAuthenticatedSupabaseRealtimeClient()")
   const bootstrapIndex = body.indexOf("await bootstrapCurrentRow(supabase)")
   const channelIndex = body.indexOf(".channel(CHANNEL_NAME)")
-
-  assert.ok(authIndex >= 0, "startup must hydrate the browser Supabase session")
-  assert.ok(setAuthIndex > authIndex, "Realtime must receive the authenticated access token")
-  assert.ok(bootstrapIndex > setAuthIndex, "authenticated bootstrap must happen after Realtime auth")
+  assert.ok(helperIndex >= 0, "Market Board startup must use the shared auth gate")
+  assert.ok(bootstrapIndex > helperIndex, "authenticated bootstrap must happen after the shared auth gate")
   assert.ok(channelIndex > bootstrapIndex, "CDC subscription must happen only after authenticated bootstrap")
 })
 
@@ -237,8 +240,12 @@ test("QEO-216 shares the QEO-196 auth hydration boundary before private Realtime
   const setAuth = helper.indexOf("await supabase.realtime.setAuth(session.access_token)")
   assert.ok(getSession >= 0, "helper must hydrate the browser auth session")
   assert.ok(setAuth > getSession, "Realtime auth must be set after session hydration")
-  assert.match(orderbook, /getAuthenticatedSupabaseRealtimeClient/)
-  assert.match(market, /getAuthenticatedSupabaseRealtimeClient/)
+  assert.match(orderbook, /await getAuthenticatedSupabaseRealtimeClient\(\)/)
+  assert.match(market, /await getAuthenticatedSupabaseRealtimeClient\(\)/)
+
+  const orderbookAuth = orderbook.indexOf("await getAuthenticatedSupabaseRealtimeClient()")
+  const orderbookChannel = orderbook.indexOf(".channel(topic, { config: { private: true } })")
+  assert.ok(orderbookAuth >= 0 && orderbookChannel > orderbookAuth, "private Broadcast join must occur after auth hydration")
 })
 
 test("QEO-216 worker uses four bounded supplemental sockets and reuses canonical ticks", () => {
@@ -255,10 +262,10 @@ test("QEO-216 worker uses four bounded supplemental sockets and reuses canonical
   assert.match(stream, /top_price\.G1\.json/)
   assert.match(stream, /tick_extra\.G1\.json/)
   assert.match(stream, /foreign\.G1\.json/)
-  assert.match(plan, /50/)
-  assert.match(plan, /4/)
+  assert.match(plan, /maxOrderbookSymbolsPerSocket\s*=\s*50/)
+  assert.match(plan, /maxOrderbookSupplementalSockets\s*=\s*4/)
   assert.match(worker, /orderbook-0/)
-  assert.match(worker, /OrderbookBuffer|orderbookBuffer/)
+  assert.match(worker, /onTickFrame[\s\S]*orderbookBuffer\.Push/)
   assert.match(config, /ORDERBOOK_REALTIME_FLUSH_MS/)
   assert.match(config, /500/)
   assert.doesNotMatch(stream, /func OrderbookChannels[\s\S]*ohlc\.1\.json/)
