@@ -235,6 +235,7 @@ export function normalizeForeignFlow(raw: any, fallbackPrice?: number | null): C
  */
 export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): CanonicalOrderbookSnapshot {
   const ticker = symbol.toUpperCase().trim()
+  const nestedQuote: any = raw?.latest_quote ?? raw?.latestQuote ?? null
 
   const rawTrades = Array.isArray(raw?.trades) ? raw.trades : []
   const trades: CanonicalSessionTrade[] = rawTrades.map((t: any, idx: number) => ({
@@ -257,14 +258,26 @@ export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): Canonica
   }).filter((b: CanonicalIntradayPoint) => b.close > 0)
 
   const lastTradePrice = trades.length > 0 ? trades[trades.length - 1].price : null
-  const firstTradePrice = trades.length > 0 ? trades[0].price : null
   const lastBarClose = intraday1m.length > 0 ? intraday1m[intraday1m.length - 1].close : null
   const firstBarOpen = intraday1m.length > 0 ? intraday1m[0].open : null
 
-  const parsedRef = normalizeToKiloPrice(raw?.reference_price ?? raw?.reference ?? raw?.refPrice ?? raw?.r ?? raw?.basicPrice ?? raw?.closePrice)
-  const parsedCeil = normalizeToKiloPrice(raw?.ceiling_price ?? raw?.ceiling ?? raw?.c)
-  const parsedFloor = normalizeToKiloPrice(raw?.floor_price ?? raw?.floor ?? raw?.f)
-  const parsedLast = normalizeToKiloPrice(raw?.latest_price ?? raw?.matchPrice ?? raw?.lastPrice ?? raw?.price)
+  // A session reference is an exchange quote field. It must never be synthesized from
+  // today's open, first trade, or current match price. DnseSessionHistory carries these
+  // fields inside latestQuote, while stored Supabase rows expose canonical top-level fields.
+  const parsedRef = normalizeToKiloPrice(
+    raw?.reference_price ?? raw?.reference ?? raw?.refPrice ?? raw?.r ?? raw?.basicPrice ?? raw?.closePrice ??
+    nestedQuote?.reference ?? nestedQuote?.referencePrice ?? nestedQuote?.refPrice,
+  )
+  const parsedCeil = normalizeToKiloPrice(
+    raw?.ceiling_price ?? raw?.ceiling ?? raw?.c ?? nestedQuote?.ceiling ?? nestedQuote?.ceilingPrice,
+  )
+  const parsedFloor = normalizeToKiloPrice(
+    raw?.floor_price ?? raw?.floor ?? raw?.f ?? nestedQuote?.floor ?? nestedQuote?.floorPrice,
+  )
+  const parsedLast = normalizeToKiloPrice(
+    raw?.latest_price ?? raw?.matchPrice ?? raw?.lastPrice ?? raw?.price ??
+    nestedQuote?.matchPrice ?? nestedQuote?.lastPrice ?? nestedQuote?.price,
+  )
 
   const last = parsedLast ?? lastTradePrice ?? lastBarClose ?? parsedRef
 
@@ -273,20 +286,21 @@ export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): Canonica
     ref = Math.round(((parsedCeil + parsedFloor) / 2) * 100) / 100
   } else if (!ref && parsedCeil) {
     ref = Math.round((parsedCeil / 1.07) * 100) / 100
-  } else if (!ref) {
-    ref = firstBarOpen ?? firstTradePrice ?? last
   }
 
   const ceil = parsedCeil ?? (ref ? Math.round(ref * 1.07 * 100) / 100 : null)
   const floor = parsedFloor ?? (ref ? Math.round(ref * 0.93 * 100) / 100 : null)
 
-  let totalVolume = normalizeVolume(raw?.total_volume ?? raw?.totalVolume ?? raw?.totalVolumeTraded ?? (raw?.lot ? Number(raw.lot) * 10 : 0))
+  let totalVolume = normalizeVolume(
+    raw?.total_volume ?? raw?.totalVolume ?? raw?.totalVolumeTraded ?? nestedQuote?.totalVolume ??
+    (raw?.lot ? Number(raw.lot) * 10 : 0),
+  )
   if (totalVolume === 0 && trades.length > 0) {
     totalVolume = trades.reduce((sum, t) => sum + (t.volume || 0), 0)
   }
 
-  const rawBids = raw?.latest_quote?.bids ?? raw?.bids ?? raw?.bid ?? []
-  const rawAsks = raw?.latest_quote?.asks ?? raw?.asks ?? raw?.offer ?? []
+  const rawBids = nestedQuote?.bids ?? nestedQuote?.bid ?? raw?.bids ?? raw?.bid ?? []
+  const rawAsks = nestedQuote?.asks ?? nestedQuote?.offer ?? raw?.asks ?? raw?.offer ?? []
 
   const rawPt = Array.isArray(raw?.put_through) ? raw.put_through : Array.isArray(raw?.putThrough) ? raw.putThrough : []
   const putThrough: CanonicalPutThroughDeal[] = rawPt.map((pt: any, idx: number) => ({
@@ -323,10 +337,18 @@ export function toCanonicalOrderbookSnapshot(symbol: string, raw: any): Canonica
       ceiling: ceil,
       floor: floor,
       matchPrice: last,
-      openPrice: normalizeToKiloPrice(raw?.open_price ?? raw?.openPrice ?? raw?.open ?? firstBarOpen ?? ref),
-      highPrice: normalizeToKiloPrice(raw?.high_price ?? raw?.highPrice ?? raw?.high ?? last),
-      lowPrice: normalizeToKiloPrice(raw?.low_price ?? raw?.lowPrice ?? raw?.low ?? last),
-      avgPrice: normalizeToKiloPrice(raw?.avg_price ?? raw?.avgPrice ?? raw?.avePrice),
+      openPrice: normalizeToKiloPrice(
+        raw?.open_price ?? raw?.openPrice ?? raw?.open ?? nestedQuote?.openPrice ?? nestedQuote?.open ?? firstBarOpen ?? ref,
+      ),
+      highPrice: normalizeToKiloPrice(
+        raw?.high_price ?? raw?.highPrice ?? raw?.high ?? nestedQuote?.highPrice ?? nestedQuote?.high ?? last,
+      ),
+      lowPrice: normalizeToKiloPrice(
+        raw?.low_price ?? raw?.lowPrice ?? raw?.low ?? nestedQuote?.lowPrice ?? nestedQuote?.low ?? last,
+      ),
+      avgPrice: normalizeToKiloPrice(
+        raw?.avg_price ?? raw?.avgPrice ?? raw?.avePrice ?? nestedQuote?.avgPrice ?? nestedQuote?.avePrice,
+      ),
       totalVolume,
       bids: normalizeDepthLevels(rawBids),
       asks: normalizeDepthLevels(rawAsks),

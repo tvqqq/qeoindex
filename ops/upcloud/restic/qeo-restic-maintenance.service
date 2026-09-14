@@ -1,0 +1,11 @@
+[Unit]
+Description=QeoIndex Restic repository check and retention maintenance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/qeo-restic-maintenance apply
+Nice=10
+IOSchedulingClass=idle

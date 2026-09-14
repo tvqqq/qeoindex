@@ -90,6 +90,38 @@ async function loadCanonicalTickers(supabase: SupabaseClient) {
   return { tickers, runId: String(data?.runId || "") }
 }
 
+function previousTradingDateKey(dateKey: string) {
+  const cursor = new Date(`${dateKey}T12:00:00+07:00`)
+  if (!Number.isFinite(cursor.getTime())) throw new Error("Invalid Vietnam session date")
+  for (let offset = 1; offset <= 14; offset += 1) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+    const candidate = vietnamDateKey(cursor)
+    if (isVietnamSecuritiesTradingDateKey(candidate)) return candidate
+  }
+  throw new Error(`Unable to resolve previous Vietnam securities trading date before ${dateKey}`)
+}
+
+async function loadCanonicalReferencePrices(supabase: SupabaseClient, tickers: string[], sessionDate: string) {
+  const previousSessionDate = previousTradingDateKey(sessionDate)
+  const previousSessionBarTime = new Date(`${previousSessionDate}T09:00:00+07:00`).toISOString()
+  const { data, error } = await supabase
+    .from("market_ohlcv_history")
+    .select("ticker,close")
+    .eq("timeframe", "1D")
+    .eq("bar_time", previousSessionBarTime)
+    .in("ticker", tickers)
+
+  if (error) throw new Error(`Canonical previous-close lookup failed: ${error.message}`)
+
+  const references = new Map<string, number>()
+  for (const row of data ?? []) {
+    const ticker = String(row.ticker || "").toUpperCase()
+    const close = normalizePrice(Number(row.close ?? 0))
+    if (ticker && close) references.set(ticker, close)
+  }
+  return { references, previousSessionDate }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
   if (req.method !== "GET" && req.method !== "POST") {
@@ -140,6 +172,7 @@ Deno.serve(async (req: Request) => {
     const tickerSet = new Set(tickers)
 
     if (isAutomated || rawSnapshots.length === 0) {
+      const { references: canonicalReferencePrices, previousSessionDate } = await loadCanonicalReferencePrices(supabase, tickers, today)
       const ptMap: Record<string, Record<string, unknown>[]> = {}
       try {
         const ptRes = await fetch("https://bgapidatafeed.vps.com.vn/getlistpt", {
@@ -199,14 +232,23 @@ Deno.serve(async (req: Request) => {
       }
 
       const records: Record<string, unknown>[] = []
+      const missingReference: string[] = []
       for (const ticker of tickers) {
         const q = quoteMap[ticker] || {}
         const trades = tradesMap[ticker] || []
         const putThrough = ptMap[ticker] || []
-        const ref = normalizePrice(Number(q.r ?? q.closePrice ?? (trades.length ? trades[0].price : 0)))
-        const lastPrice = normalizePrice(Number(q.lastPrice ?? q.openPrice ?? (trades.length ? trades[trades.length - 1].price : (ref ?? 0)))) || ref
-        const ceiling = normalizePrice(Number(q.c ?? 0)) || (ref ? Math.round(ref * 1.07 * 100) / 100 : null)
-        const floor = normalizePrice(Number(q.f ?? 0)) || (ref ? Math.round(ref * 0.93 * 100) / 100 : null)
+        // Prefer the exchange/provider reference because it already reflects ex-rights adjustments.
+        // If VPS omits it, previous canonical Daily close is a safe normal-session fallback.
+        // Never substitute today's first trade/open/current match for previous-session reference.
+        const providerReference = normalizePrice(Number(q.r ?? q.closePrice ?? 0))
+        const ref = providerReference ?? canonicalReferencePrices.get(ticker) ?? null
+        if (!ref) {
+          missingReference.push(ticker)
+          continue
+        }
+        const lastPrice = normalizePrice(Number(q.lastPrice ?? q.openPrice ?? (trades.length ? trades[trades.length - 1].price : ref))) || ref
+        const ceiling = normalizePrice(Number(q.c ?? 0)) || Math.round(ref * 1.07 * 100) / 100
+        const floor = normalizePrice(Number(q.f ?? 0)) || Math.round(ref * 0.93 * 100) / 100
         const totalVolume = Number(q.lot || 0) * 10
         const bids = [parseGroupLevel(q.g1 as string | undefined), parseGroupLevel(q.g2 as string | undefined), parseGroupLevel(q.g3 as string | undefined)].filter(Boolean)
         const asks = [parseGroupLevel(q.g4 as string | undefined), parseGroupLevel(q.g5 as string | undefined), parseGroupLevel(q.g6 as string | undefined)].filter(Boolean)
@@ -233,6 +275,10 @@ Deno.serve(async (req: Request) => {
         })
       }
 
+      if (missingReference.length > 0) {
+        throw new Error(`Canonical reference unavailable for ${missingReference.length} ticker(s): ${missingReference.slice(0, 10).join(",")}`)
+      }
+
       for (let i = 0; i < records.length; i += 25) {
         const { error } = await supabase.from("stock_orderbook_snapshots").upsert(records.slice(i, i + 25), { onConflict: "symbol" })
         if (error) throw new Error(`Orderbook persistence failed: ${error.message}`)
@@ -240,6 +286,7 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         ok: true, skipped: false, source: "vps_full_deep_sync", universeRunId: runId, universeCount: tickers.length,
+        previousSessionDate, canonicalReferenceCount: canonicalReferencePrices.size,
         count: records.length, session_date: today, synced_at: new Date().toISOString(),
       })
     }

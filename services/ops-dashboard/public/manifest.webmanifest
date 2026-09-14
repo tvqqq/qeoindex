@@ -1,0 +1,19 @@
+{
+  "name": "QeoIndex Operations",
+  "short_name": "Qeo Ops",
+  "description": "Private QeoIndex operations health cockpit",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1016",
+  "theme_color": "#0b1016",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

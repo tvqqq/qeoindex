@@ -8,7 +8,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "verify:pr": "pnpm scan:secrets && pnpm test:manifest && pnpm test:repo-hygiene && pnpm test:current && pnpm lint:touched && pnpm typecheck",
+    "verify:pr": "pnpm scan:secrets && pnpm test:manifest && pnpm test:repo-hygiene && pnpm test:current && pnpm lint:touched && pnpm typecheck && pnpm ops-dashboard:build",
     "verify:full": "pnpm verify:pr && pnpm db:drift:verify && pnpm db:replay:verify && pnpm db:types:verify && pnpm test:db-drift",
     "db:drift:verify": "node scripts/db/verify-migration-drift.mjs",
     "db:types:generate": "supabase gen types typescript --local --schema public > modules/shared/supabase/database.types.ts",
@@ -18,10 +18,11 @@
     "db:recovery:rehearse": "bash scripts/db/rehearse-destructive-recovery.sh",
     "test:db-recovery": "node --test tests/db-recovery-rehearsal.test.ts",
     "lint": "eslint .",
-    "lint:touched": "eslint --cache --cache-strategy content --cache-location .next/cache/eslint/.eslintcache app components modules workflows --ignore-pattern modules/shared/supabase/database.types.ts",
+    "lint:touched": "eslint --cache --cache-strategy content --cache-location .next/cache/eslint/.eslintcache app components modules workflows services/ops-dashboard/src services/ops-dashboard/build.mjs --ignore-pattern modules/shared/supabase/database.types.ts",
     "scan:secrets": "bash scripts/scan-secrets.sh",
     "test:manifest": "node scripts/verify-test-contracts.mjs",
     "test:repo-hygiene": "node --test scripts/repo/cleanup-branches.test.mjs",
+    "test:restic": "node --test tests/upcloud-restic-contract.test.ts",
     "repo:branches:audit": "node scripts/repo/cleanup-branches.mjs",
     "repo:branches:cleanup": "node scripts/repo/cleanup-branches.mjs --execute",
     "test:fast": "node scripts/run-test-suite.mjs fast",
@@ -48,7 +49,8 @@
     "test:qeo144": "node --test tests/portfolio/qeo144-*.test.ts",
     "test:qeo144:browser": "playwright test tests/browser/qeo144-portfolio.spec.ts",
     "typecheck": "tsc --noEmit",
-    "eod:worker:build": "node services/eod-worker/build.mjs"
+    "eod:worker:build": "node services/eod-worker/build.mjs",
+    "ops-dashboard:build": "node services/ops-dashboard/build.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

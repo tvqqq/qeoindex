@@ -34,6 +34,7 @@ import { calculateSessionCountdown } from "@/modules/market/realtime/session-cou
 import { calculateForeignRoomPercent, getEodForeignRoom } from "@/modules/eod/shares"
 import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/modules/shared/supabase/browser-orderbook"
+import { subscribeDnseOrderbookFrames } from "@/modules/market/providers/dnse/orderbook-stream"
 import { StockLogo } from "@/components/stock-logo"
 
 export type DepthLevel = { price: number; volume: number }
@@ -128,7 +129,6 @@ type SessionHistoryResponse = {
 const ORDERBOOK_VOLUME_MULTIPLIER = 10
 const LARGE_TRADE_MIN_VOLUME = 10_000
 const OPEN_PRICE_KEYS = ["openPrice", "openingPrice", "open", "openValue", "firstPrice"]
-const STREAM_STALE_MS = 45_000
 const MAX_SESSION_TRADES = 30_000
 
 /** 
@@ -144,8 +144,8 @@ function getWhaleThreshold(price?: number | null, spread?: number | null): numbe
 
   if (!price || price <= 0) return 50_000
   const normalizedPrice = price > 1000 ? price / 1000 : price
-  if (normalizedPrice >= 50) return 30_000   // spread = 0.1 → ≥30K
-  return 50_000                              // spread = 0.05 → ≥50K
+  if (normalizedPrice >= 50) return 30_000
+  return 50_000
 }
 
 function getWhaleLabel(price?: number | null, spread?: number | null): string {
@@ -296,7 +296,6 @@ function timeLabel(value: string | number) {
   if (/^\d{2}:\d{2}$/.test(str)) return `${str}:00`
 
   const num = Number(str)
-  // If value is seconds of day (e.g. 53100 = 14:45:00, 33300 = 09:15:00)
   if (Number.isFinite(num) && num >= 0 && num < 86400) {
     const hrs = Math.floor(num / 3600) % 24
     const mins = Math.floor((num % 3600) / 60)
@@ -304,7 +303,6 @@ function timeLabel(value: string | number) {
     return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
   }
 
-  // If value is epoch seconds
   if (Number.isFinite(num) && num >= 86400 && num < 1e11) {
     return new Date(num * 1000).toLocaleTimeString("vi-VN", {
       timeZone: "Asia/Ho_Chi_Minh",
@@ -315,7 +313,6 @@ function timeLabel(value: string | number) {
     })
   }
 
-  // If value is epoch ms
   if (Number.isFinite(num) && num >= 1e11) {
     return new Date(num).toLocaleTimeString("vi-VN", {
       timeZone: "Asia/Ho_Chi_Minh",
@@ -411,10 +408,8 @@ function nextQuote(symbol: string, data: Record<string, unknown>, current: Stock
   const explicitCeil = firstPositive(data, ["ceilingPrice", "ceiling", "c"])
   const explicitFloor = firstPositive(data, ["floorPrice", "floor", "f"])
 
-  // If explicit reference is provided, normalize to kilo scale (e.g. 69500 -> 69.5)
   let rawReference = explicitRef ? (explicitRef > 1000 ? explicitRef / 1000 : explicitRef) : 0
 
-  // If explicit reference is missing or equal to price (which happens on bad feeds for gap-up stocks), protect current reference
   if (!rawReference || (rawReference === current?.price && current?.reference && current.reference !== rawReference)) {
     rawReference = current?.reference ? (current.reference > 1000 ? current.reference / 1000 : current.reference) : 0
   }
@@ -493,7 +488,6 @@ export interface CachedSessionData {
   cachedAt: number
 }
 
-// In-memory client-side cache for session orderbook data
 export const sessionOrderBookCache = new Map<string, CachedSessionData>()
 
 function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
@@ -507,6 +501,7 @@ function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
 function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMeta?: StockInitialMeta) {
   const cachedInitial = getMarketUiPhase() === "ATO" ? undefined : sessionOrderBookCache.get(symbol)
   const [state, setState] = useState<StreamState>("CONNECTING")
+  const [recoveryKey, setRecoveryKey] = useState(0)
   const [bids, setBids] = useState<DepthLevel[]>(() => cachedInitial?.bids ?? [])
   const [asks, setAsks] = useState<DepthLevel[]>(() => cachedInitial?.asks ?? [])
   const [trades, setTrades] = useState<StreamTrade[]>(() => cachedInitial?.trades ?? [])
@@ -566,7 +561,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [updatedAt, setUpdatedAt] = useState("")
   const [error, setError] = useState("")
   const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: cachedInitial?.bids ?? [], asks: cachedInitial?.asks ?? [] })
-  const lastFrameAt = useRef(0)
   const lastForeignEventKey = useRef<string>("")
   const lastMiniChartBucket = useRef<number | null>(null)
 
@@ -591,7 +585,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryState("READY")
       setHistoryMessage("Phiên mới 09:00 · đang chờ dữ liệu ATO.")
       setQuote((current) => {
-        const rawRef = current?.reference || initialMeta?.reference || initialMeta?.price || 0
+        const rawRef = current?.reference || initialMeta?.reference || 0
         const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
         if (!reference) return null
         const rawCeil = current?.ceiling || initialMeta?.ceiling
@@ -620,7 +614,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     }
   }, [symbol, initialMeta])
 
-  // Hydrate from initial metadata if symbol changes
   useEffect(() => {
     const isAto = getMarketUiPhase() === "ATO"
     const cached = isAto ? null : sessionOrderBookCache.get(symbol)
@@ -638,7 +631,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setHistoryMessage("Đã tải từ bộ nhớ đệm.")
     } else if (initialMeta) {
       if (initialMeta.price || initialMeta.reference) {
-        const rawRef = initialMeta.reference ?? initialMeta.price ?? 0
+        const rawRef = initialMeta.reference ?? 0
         const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
         const rawPrice = initialMeta.price ?? reference
         const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
@@ -682,17 +675,12 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           }
         })
       }
-      if (initialMeta.history?.length) {
-        setPriceHistory(initialMeta.history)
-      }
-      if (initialMeta.companyName) {
-        setCompany({ nameVi: initialMeta.companyName, sector: initialMeta.sector })
-      }
+      if (initialMeta.history?.length) setPriceHistory(initialMeta.history)
+      if (initialMeta.companyName) setCompany({ nameVi: initialMeta.companyName, sector: initialMeta.sector })
     }
     setForeignEvents([])
   }, [symbol, initialMeta])
 
-  // Parse raw trade objects to StreamTrade model
   const parseRawTrades = (rawTrades: any[] | undefined, source: TradeSource): StreamTrade[] => {
     return (rawTrades ?? [])
       .map((trade: any, index: number) => {
@@ -711,7 +699,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       .filter((trade) => trade.price > 0 && trade.volume > 0)
   }
 
-  // Fast-path instant hydration from Supabase (sub-20ms)
   useEffect(() => {
     if (getMarketUiPhase() === "ATO") return
     let disposed = false
@@ -723,9 +710,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
           if (directPrices.length > 0) setPriceHistory(directPrices)
           if (direct.trades?.length) {
             const parsedTrades = parseRawTrades(direct.trades, "SUPABASE_SNAPSHOT")
-            if (parsedTrades.length > 0) {
-              setTrades((current) => mergeTrades(parsedTrades, current))
-            }
+            if (parsedTrades.length > 0) setTrades((current) => mergeTrades(parsedTrades, current))
           }
           if (direct.latestQuote) {
             const b = normalizeDepth(direct.latestQuote.bid).sort((x, y) => y.price - x.price)
@@ -760,9 +745,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       }
     })()
     return () => { disposed = true }
-  }, [symbol, reconnectKey])
+  }, [symbol, reconnectKey, recoveryKey])
 
-  // Fetch REST session history + initial hydration with smart cache (SWR)
   useEffect(() => {
     const controller = new AbortController()
     let disposed = false
@@ -786,11 +770,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         if (disposed) return
 
         const prices = isAto ? [] : (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
-        if (prices.length > 0) {
-          setPriceHistory(prices)
-        } else if (isAto) {
-          setPriceHistory([])
-        }
+        if (prices.length > 0) setPriceHistory(prices)
+        else if (isAto) setPriceHistory([])
 
         let nextCompany: CompanyInfo | null = null
         if (payload.company) {
@@ -875,9 +856,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             mergedTradesList = mergeTrades(historicalTrades, current)
             return mergedTradesList
           })
-        } else if (isAto) {
-          setTrades([])
-        }
+        } else if (isAto) setTrades([])
 
         if (isAto) {
           setHistoryState("READY")
@@ -891,11 +870,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         }
 
         const putThroughList = payload.putThrough ?? []
-        if (putThroughList.length > 0) {
-          setPutThroughDeals(putThroughList)
-        }
+        if (putThroughList.length > 0) setPutThroughDeals(putThroughList)
 
-        // Cache the session data for subsequent popup opens
         sessionOrderBookCache.set(symbol, {
           prices,
           company: nextCompany || company,
@@ -911,7 +887,6 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       } catch (nextError) {
         if (disposed || (nextError instanceof DOMException && nextError.name === "AbortError")) return
 
-        // Fallback directly to Supabase client from browser
         try {
           const direct = await fetchOrderbookFromSupabaseDirect(symbol)
           if (direct && !disposed && getMarketUiPhase() !== "ATO") {
@@ -948,11 +923,11 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
             return
           }
         } catch {
-          // ignore fallback error and use live fallback
+          // ignore fallback error and use last-known snapshot
         }
 
         setHistoryState("READY")
-        setHistoryMessage("Sử dụng dữ liệu trực tiếp từ bảng điện.")
+        setHistoryMessage("Đang dùng dữ liệu snapshot gần nhất.")
       }
     })()
 
@@ -960,14 +935,13 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       disposed = true
       controller.abort()
     }
-  }, [symbol, reconnectKey])
+  }, [symbol, reconnectKey, recoveryKey])
 
-  // Supabase Realtime Subscription for active orderbook
   useEffect(() => {
     const unsubscribe = subscribeToOrderbookRealtime(symbol, (snapshot) => {
       if (!snapshot) return
-      // DNSE WebSocket is the source of truth for all live UI behavior.
-      // Supabase/VPS updates are recovery-only and must not overwrite a healthy live stream.
+      // Centralized DNSE fanout is the source of truth for live UI behavior.
+      // Supabase snapshot CDC remains recovery-only and must not overwrite a healthy live stream.
       if (state === "LIVE") return
       if (getMarketUiPhase() === "ATO") return
       const snapshotPrices = (snapshot.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
@@ -1013,12 +987,9 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       }
     })
 
-    return () => {
-      unsubscribe()
-    }
+    return () => unsubscribe()
   }, [symbol, state])
 
-  // Realtime Put-Through Polling & Alerting (every 5 seconds)
   useEffect(() => {
     let disposed = false
     const pollPutThrough = async () => {
@@ -1043,12 +1014,8 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
               if (!newlyArrived) newlyArrived = d
             }
           }
-          if (incoming.length > 0) {
-            setPutThroughDeals(incoming)
-          }
-          if (newlyArrived) {
-            setLatestPtAlert(newlyArrived)
-          }
+          if (incoming.length > 0) setPutThroughDeals(incoming)
+          if (newlyArrived) setLatestPtAlert(newlyArrived)
         }
       } catch {
         // silent fail on background poll
@@ -1065,344 +1032,196 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
   useEffect(() => {
     if (!latestPtAlert) return
-    const timer = window.setTimeout(() => {
-      setLatestPtAlert(null)
-    }, 6000)
+    const timer = window.setTimeout(() => setLatestPtAlert(null), 6000)
     return () => window.clearTimeout(timer)
   }, [latestPtAlert])
 
-  // WebSocket Live Stream
+  // Centralized orderbook realtime: DNSE -> UpCloud -> private Supabase Broadcast -> browser.
   useEffect(() => {
-    let disposed = false
-    let socket: WebSocket | null = null
-    let reconnectTimer: number | null = null
-    let pingTimer: number | null = null
-    let watchdogTimer: number | null = null
-    let attempts = 0
-    let connectionGeneration = 0
     let fallbackLiveTradeSequence = 0
+    let recoveryRequested = false
 
     setState("CONNECTING")
     setError("")
 
-    const clearConnectionTimers = () => {
-      if (pingTimer) window.clearInterval(pingTimer)
-      if (watchdogTimer) window.clearInterval(watchdogTimer)
-      pingTimer = null
-      watchdogTimer = null
-    }
+    const unsubscribe = subscribeDnseOrderbookFrames(
+      symbol,
+      (frame) => {
+        const data = frame as any
+        const ticker = String(data?.symbol ?? "").toUpperCase()
+        if (ticker !== symbol) return
 
-    const clearReconnectTimer = () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-
-    const scheduleReconnect = () => {
-      if (disposed || reconnectTimer) return
-      attempts += 1
-      const base = Math.min(650 * 2 ** Math.min(attempts - 1, 4), 8_000)
-      reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null
-        void connect()
-      }, base + Math.floor(Math.random() * 400))
-    }
-
-    const forceReconnect = (reason: string) => {
-      if (disposed) return
-      connectionGeneration += 1
-      clearConnectionTimers()
-      const currentSocket = socket
-      socket = null
-      if (currentSocket && currentSocket.readyState < WebSocket.CLOSING) {
-        try {
-          currentSocket.close(4000, reason.slice(0, 120))
-        } catch {
-          // Reconnect below even if closing the stale socket throws.
+        if (data?.T === "q") {
+          const nextBids = normalizeDepth(data?.bid).sort((a, b) => b.price - a.price)
+          const nextAsks = normalizeDepth(data?.offer).sort((a, b) => a.price - b.price)
+          depthRef.current = { bids: nextBids, asks: nextAsks }
+          setBids(nextBids)
+          setAsks(nextAsks)
+          setQuote((current) => nextQuote(symbol, data, current))
+          setUpdatedAt(new Date().toISOString())
+          setError("")
+          return
         }
-      }
-      scheduleReconnect()
-    }
 
-    const connect = async () => {
-      clearReconnectTimer()
-      clearConnectionTimers()
-      if (disposed) return
-      const generation = ++connectionGeneration
-      setState("CONNECTING")
-      lastFrameAt.current = Date.now()
-      try {
-        const authResponse = await fetch("/api/market/stream-auth", { cache: "no-store", headers: { Accept: "application/json" } })
-        const authJson = await authResponse.json()
-        if (!authResponse.ok || !authJson.ok || !authJson.url || !authJson.auth) throw new Error(authJson.message ?? `Stream auth ${authResponse.status}`)
-        if (disposed || generation !== connectionGeneration) return
-
-        let lastPongAt = Date.now()
-
-        const nextSocket = new WebSocket(authJson.url)
-        socket = nextSocket
-        nextSocket.onopen = () => {
-          if (disposed || generation !== connectionGeneration || socket !== nextSocket) return
-          lastFrameAt.current = Date.now()
-          lastPongAt = Date.now()
-          setState("CONNECTING")
+        if (data?.T === "t") {
+          const rawClose = firstPositive(data, ["matchPrice", "lastPrice", "price", "matchedPrice"])
+          const close = rawClose > 1000 ? rawClose / 1000 : rawClose
+          const timestamp = normalizeEpochSeconds(data?.time ?? data?.t ?? data?.timestamp ?? data?.ts, Date.now() / 1000)
+          if (close > 0 && shouldAcceptRealtimeMiniChart(timestamp)) {
+            const bucket = Math.floor(timestamp / 300) * 300
+            setPriceHistory((current) => {
+              if (lastMiniChartBucket.current === bucket && current.length > 0) {
+                if (current.at(-1) === close) return current
+                return [...current.slice(0, -1), close]
+              }
+              lastMiniChartBucket.current = bucket
+              return [...current, close].slice(-90)
+            })
+          }
+          setQuote((current) => nextQuote(symbol, data, current))
+          setUpdatedAt(new Date().toISOString())
+          setError("")
+          return
         }
-        nextSocket.onmessage = (event) => {
-          if (disposed || generation !== connectionGeneration || socket !== nextSocket || typeof event.data !== "string") return
-          lastFrameAt.current = Date.now()
-          let data: any
-          try {
-            data = JSON.parse(event.data)
-          } catch {
-            return
-          }
 
-          const action = data?.action ?? data?.a
-          if (action === "pong") {
-            lastPongAt = Date.now()
-            return
+        if (data?.T === "te") {
+          const rawPrice = number(data?.matchPrice)
+          const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+          const volume = number(data?.matchQtty) * ORDERBOOK_VOLUME_MULTIPLIER
+          setQuote((current) => nextQuote(symbol, data, current))
+          setUpdatedAt(new Date().toISOString())
+          setError("")
+          if (price <= 0 || volume <= 0) return
+          const time = normalizeTime(data?.time)
+          const providerTradeId = [data?.transId, data?.tradeId, data?.sequence, data?.seqNo, data?.id]
+            .map((value) => String(value ?? "").trim())
+            .find((value) => value && value !== "3220")
+          const tradeId = providerTradeId
+            ? `live-${symbol}-${providerTradeId}`
+            : `live-fallback-${symbol}-${time}-${price}-${volume}-${String(data?.side ?? "")}-${++fallbackLiveTradeSequence}`
+          const trade: StreamTrade = {
+            id: tradeId,
+            time,
+            price,
+            volume,
+            side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),
+            source: "DNSE_LIVE",
           }
-          if (action === "ping") {
-            lastPongAt = Date.now()
-            if (nextSocket.readyState === WebSocket.OPEN) nextSocket.send(JSON.stringify({ action: "pong", timestamp: data?.timestamp }))
-            return
-          }
-          if (data?.session_id || data?.sid || action === "welcome") {
-            nextSocket.send(JSON.stringify(authJson.auth))
-            return
-          }
-          if (action === "auth_success") {
-            setState("LIVE")
-            setError("")
-            attempts = 0
-            lastPongAt = Date.now()
-            nextSocket.send(
-              JSON.stringify({
-                action: "subscribe",
-                channels: [
-                  { name: "tick.G1.json", symbols: [symbol] },
-                  { name: "top_price.G1.json", symbols: [symbol] },
-                  { name: "tick_extra.G1.json", symbols: [symbol] },
-                  { name: "ohlc.1.json", symbols: [symbol] },
-                  { name: "foreign.G1.json", symbols: [symbol] },
-                ],
-              }),
-            )
-            pingTimer = window.setInterval(() => {
-              if (nextSocket.readyState === WebSocket.OPEN) nextSocket.send(JSON.stringify({ action: "ping", timestamp: Date.now() }))
-            }, 15_000)
-            watchdogTimer = window.setInterval(() => {
-              if (socket?.readyState === WebSocket.OPEN && Date.now() - lastPongAt > 40_000) {
-                forceReconnect("websocket keepalive pong timeout")
+          setTrades((current) => mergeTrades([trade], current))
+          return
+        }
+
+        if (data?.T === "f") {
+          const time = normalizeTime(data?.transactTime ?? data?.time)
+          const buyVolume = number(data?.buyVolume)
+          const sellVolume = number(data?.sellVolume)
+          const buyValue = number(data?.buyTradedAmount)
+          const sellValue = number(data?.sellTradedAmount)
+
+          const totalBuyVol = number(data?.totalBuyVolume ?? data?.totalBuyQtty ?? data?.foreignBuyVolume)
+          const totalSellVol = number(data?.totalSellVolume ?? data?.totalSellQtty ?? data?.foreignSellVolume)
+          const totalBuyVal = number(data?.totalBuyTradedAmount ?? data?.totalBuyValue ?? data?.foreignBuyValue)
+          const totalSellVal = number(data?.totalSellTradedAmount ?? data?.totalSellValue ?? data?.foreignSellValue)
+          const room = nullableNumber(data?.foreignerBuyPossibleQuantity ?? data?.foreignBuyPossibleQuantity ?? data?.room ?? data?.availableRoom)
+          const limit = nullableNumber(data?.foreignerOrderLimitQuantity ?? data?.orderLimitQuantity ?? data?.totalRoom)
+
+          setForeign((current) => {
+            const nextBuyVol = totalBuyVol > 0 ? totalBuyVol : (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : (current?.totalBuyVolume || 0))
+            const nextSellVol = totalSellVol > 0 ? totalSellVol : (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : (current?.totalSellVolume || 0))
+            const nextBuy = totalBuyVal > 0 ? totalBuyVal : (buyValue > 0 && current ? current.totalBuyValue + buyValue : (current?.totalBuyValue || 0))
+            const nextSell = totalSellVal > 0 ? totalSellVal : (sellValue > 0 && current ? current.totalSellValue + sellValue : (current?.totalSellValue || 0))
+            const nextNet = nextBuy - nextSell
+
+            if (nextBuyVol === 0 && nextSellVol === 0 && current && (current.totalBuyVolume > 0 || current.totalSellVolume > 0)) return current
+
+            setForeignTimeline((prev) => {
+              const newPoint = {
+                time: timeLabel(time),
+                timestamp: Date.now(),
+                buyValue: nextBuy,
+                sellValue: nextSell,
+                netValue: nextNet,
               }
-            }, 10_000)
-            return
-          }
-          if (action === "auth_error" || action === "error") {
-            setState("ERROR")
-            setError(data?.message ?? data?.msg ?? "DNSE stream authentication failed")
-            forceReconnect("orderbook auth/subscription error")
-            return
-          }
-
-          const ticker = String(data?.symbol ?? "").toUpperCase()
-          if (ticker !== symbol) return
-
-          // DNSE emits 1-minute OHLC; retain one closing value per 5-minute bucket.
-          if (data?.T === "b") {
-            const close = firstPositive(data, ["close", "c", "closePrice"])
-            const timestamp = normalizeEpochSeconds(data?.time ?? data?.t ?? data?.timestamp ?? data?.ts, Date.now() / 1000)
-            if (close > 0 && shouldAcceptRealtimeMiniChart(timestamp)) {
-              const bucket = Math.floor(timestamp / 300) * 300
-              setPriceHistory((current) => {
-                if (lastMiniChartBucket.current === bucket && current.length > 0) {
-                  if (current.at(-1) === close) return current
-                  return [...current.slice(0, -1), close]
-                }
-                lastMiniChartBucket.current = bucket
-                return [...current, close].slice(-90)
-              })
-            }
-            return
-          }
-
-          // Top price depth update
-          if (data?.T === "q") {
-            const nextBids = normalizeDepth(data?.bid).sort((a, b) => b.price - a.price)
-            const nextAsks = normalizeDepth(data?.offer).sort((a, b) => a.price - b.price)
-            depthRef.current = { bids: nextBids, asks: nextAsks }
-            setBids(nextBids)
-            setAsks(nextAsks)
-            setQuote((current) => nextQuote(symbol, data, current))
-            setUpdatedAt(new Date().toISOString())
-            setError("")
-            return
-          }
-
-          // Tick quote update
-          if (data?.T === "t") {
-            setQuote((current) => nextQuote(symbol, data, current))
-            setUpdatedAt(new Date().toISOString())
-            setError("")
-            return
-          }
-
-          // Tick extra trade execution
-          if (data?.T === "te") {
-            const price = number(data?.matchPrice)
-            const volume = number(data?.matchQtty) * ORDERBOOK_VOLUME_MULTIPLIER
-            setQuote((current) => nextQuote(symbol, data, current))
-            setUpdatedAt(new Date().toISOString())
-            setError("")
-            if (price <= 0 || volume <= 0) return
-            const time = normalizeTime(data?.time)
-            const providerTradeId = [data?.transId, data?.tradeId, data?.sequence, data?.seqNo, data?.id]
-              .map((value) => String(value ?? "").trim())
-              .find((value) => value && value !== "3220")
-            const tradeId = providerTradeId
-              ? `live-${symbol}-${providerTradeId}`
-              : `live-fallback-${symbol}-${time}-${price}-${volume}-${String(data?.side ?? "")}-${++fallbackLiveTradeSequence}`
-            const trade: StreamTrade = {
-              id: tradeId,
-              time,
-              price,
-              volume,
-              side: inferSide(data?.side, price, depthRef.current.bids, depthRef.current.asks),
-              source: "DNSE_LIVE",
-            }
-            setTrades((current) => mergeTrades([trade], current))
-            return
-          }
-
-          // Foreign flow update
-          if (data?.T === "f") {
-            const time = normalizeTime(data?.transactTime ?? data?.time)
-            const buyVolume = number(data?.buyVolume)
-            const sellVolume = number(data?.sellVolume)
-            const buyValue = number(data?.buyTradedAmount)
-            const sellValue = number(data?.sellTradedAmount)
-
-            const totalBuyVol = number(data?.totalBuyVolume ?? data?.totalBuyQtty ?? data?.foreignBuyVolume)
-            const totalSellVol = number(data?.totalSellVolume ?? data?.totalSellQtty ?? data?.foreignSellVolume)
-            const totalBuyVal = number(data?.totalBuyTradedAmount ?? data?.totalBuyValue ?? data?.foreignBuyValue)
-            const totalSellVal = number(data?.totalSellTradedAmount ?? data?.totalSellValue ?? data?.foreignSellValue)
-            const room = nullableNumber(data?.foreignerBuyPossibleQuantity ?? data?.foreignBuyPossibleQuantity ?? data?.room ?? data?.availableRoom)
-            const limit = nullableNumber(data?.foreignerOrderLimitQuantity ?? data?.orderLimitQuantity ?? data?.totalRoom)
-
-            setForeign((current) => {
-              const nextBuyVol = totalBuyVol > 0 ? totalBuyVol : (buyVolume > 0 && current ? current.totalBuyVolume + buyVolume : (current?.totalBuyVolume || 0))
-              const nextSellVol = totalSellVol > 0 ? totalSellVol : (sellVolume > 0 && current ? current.totalSellVolume + sellVolume : (current?.totalSellVolume || 0))
-              const nextBuy = totalBuyVal > 0 ? totalBuyVal : (buyValue > 0 && current ? current.totalBuyValue + buyValue : (current?.totalBuyValue || 0))
-              const nextSell = totalSellVal > 0 ? totalSellVal : (sellValue > 0 && current ? current.totalSellValue + sellValue : (current?.totalSellValue || 0))
-              const nextNet = nextBuy - nextSell
-
-              if (nextBuyVol === 0 && nextSellVol === 0 && current && (current.totalBuyVolume > 0 || current.totalSellVolume > 0)) {
-                return current
+              if (!prev.length) {
+                return [{ time: "09:15", timestamp: Date.now() - 60000, buyValue: 0, sellValue: 0, netValue: 0 }, newPoint]
               }
-
-              setForeignTimeline((prev) => {
-                const newPoint = {
-                  time: timeLabel(time),
-                  timestamp: Date.now(),
-                  buyValue: nextBuy,
-                  sellValue: nextSell,
-                  netValue: nextNet,
-                }
-                if (!prev.length) {
-                  return [{ time: "09:15", timestamp: Date.now() - 60000, buyValue: 0, sellValue: 0, netValue: 0 }, newPoint]
-                }
-                return [...prev.slice(-120), newPoint]
-              })
-
-              return {
-                symbol,
-                totalBuyVolume: nextBuyVol,
-                totalSellVolume: nextSellVol,
-                totalBuyValue: nextBuy,
-                totalSellValue: nextSell,
-                availableRoom: room ?? current?.availableRoom ?? null,
-                orderLimitQuantity: limit ?? current?.orderLimitQuantity ?? null,
-                listedShare: current?.listedShare ?? null,
-                investorTypeCode: String(data?.foreignInvestorTypeCode ?? current?.investorTypeCode ?? ""),
-                updatedAt: time,
-              }
+              return [...prev.slice(-120), newPoint]
             })
 
-            // Deduplicate event transactions
-            const eventKey = `${time}-${buyVolume}-${sellVolume}`
-            if (eventKey !== lastForeignEventKey.current) {
-              lastForeignEventKey.current = eventKey
-              const events: ForeignFlowEvent[] = []
-              if (buyVolume > 0) {
-                events.push({
-                  id: `${time}-BUY-${buyVolume}-${Math.random().toString(36).slice(2, 6)}`,
-                  time,
-                  side: "BUY",
-                  volume: buyVolume,
-                  value: buyValue > 0 ? buyValue : null,
-                })
-              }
-              if (sellVolume > 0) {
-                events.push({
-                  id: `${time}-SELL-${sellVolume}-${Math.random().toString(36).slice(2, 6)}`,
-                  time,
-                  side: "SELL",
-                  volume: sellVolume,
-                  value: sellValue > 0 ? sellValue : null,
-                })
-              }
-              if (events.length) {
-                setForeignEvents((current) => [...events, ...current].slice(0, 100))
-              }
+            return {
+              symbol,
+              totalBuyVolume: nextBuyVol,
+              totalSellVolume: nextSellVol,
+              totalBuyValue: nextBuy,
+              totalSellValue: nextSell,
+              availableRoom: room ?? current?.availableRoom ?? null,
+              orderLimitQuantity: limit ?? current?.orderLimitQuantity ?? null,
+              listedShare: current?.listedShare ?? null,
+              investorTypeCode: String(data?.foreignInvestorTypeCode ?? current?.investorTypeCode ?? ""),
+              updatedAt: time,
             }
-            setUpdatedAt(new Date().toISOString())
-            setError("")
+          })
+
+          const eventKey = `${time}-${buyVolume}-${sellVolume}`
+          if (eventKey !== lastForeignEventKey.current) {
+            lastForeignEventKey.current = eventKey
+            const events: ForeignFlowEvent[] = []
+            if (buyVolume > 0) {
+              events.push({
+                id: `${time}-BUY-${buyVolume}-${Math.random().toString(36).slice(2, 6)}`,
+                time,
+                side: "BUY",
+                volume: buyVolume,
+                value: buyValue > 0 ? buyValue : null,
+              })
+            }
+            if (sellVolume > 0) {
+              events.push({
+                id: `${time}-SELL-${sellVolume}-${Math.random().toString(36).slice(2, 6)}`,
+                time,
+                side: "SELL",
+                volume: sellVolume,
+                value: sellValue > 0 ? sellValue : null,
+              })
+            }
+            if (events.length) setForeignEvents((current) => [...events, ...current].slice(0, 100))
           }
+          setUpdatedAt(new Date().toISOString())
+          setError("")
         }
-
-        nextSocket.onerror = () => {
-          if (disposed || generation !== connectionGeneration || socket !== nextSocket) return
+      },
+      (streamState) => {
+        if (streamState.status === "LIVE") {
+          recoveryRequested = false
+          setState("LIVE")
+          setError("")
+          return
+        }
+        if (streamState.status === "RECOVERING" || streamState.status === "STALE") {
+          setState("CONNECTING")
+          setError(streamState.error || "Đang khôi phục dữ liệu realtime tập trung.")
+          if (!recoveryRequested) {
+            recoveryRequested = true
+            setRecoveryKey((key) => key + 1)
+          }
+          return
+        }
+        if (streamState.status === "ERROR") {
           setState("ERROR")
-          setError("DNSE WebSocket kết nối lỗi; đang tự kết nối lại.")
-          forceReconnect("orderbook websocket error")
+          setError(streamState.error || "Lỗi realtime tập trung; đang tự kết nối lại.")
+          return
         }
-        nextSocket.onclose = () => {
-          if (disposed || generation !== connectionGeneration || socket !== nextSocket) return
-          socket = null
-          clearConnectionTimers()
+        if (streamState.status === "CLOSED") {
           setState("CLOSED")
-          scheduleReconnect()
+          setError(streamState.error || "Kênh realtime tập trung đã đóng; đang tự kết nối lại.")
+          return
         }
-      } catch (nextError) {
-        if (disposed || generation !== connectionGeneration) return
-        setState("ERROR")
-        setError(nextError instanceof Error ? nextError.message : String(nextError))
-        scheduleReconnect()
-      }
-    }
+        setState("CONNECTING")
+        if (!recoveryRequested) setError("")
+      },
+    )
 
-    const recoverIfNeeded = () => {
-      if (document.visibilityState !== "visible") return
-      if (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastFrameAt.current > STREAM_STALE_MS) {
-        forceReconnect("popup resumed")
-      }
-    }
-    const onVisibilityChange = () => recoverIfNeeded()
-    const onOnline = () => recoverIfNeeded()
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    window.addEventListener("online", onOnline)
-
-    void connect()
-    return () => {
-      disposed = true
-      connectionGeneration += 1
-      clearReconnectTimer()
-      clearConnectionTimers()
-      document.removeEventListener("visibilitychange", onVisibilityChange)
-      window.removeEventListener("online", onOnline)
-      const currentSocket = socket
-      socket = null
-      if (currentSocket && currentSocket.readyState < WebSocket.CLOSING) currentSocket.close(1000, "popup closed")
-    }
+    return unsubscribe
   }, [symbol, reconnectKey])
 
   const latestSnapshotRef = useRef({
@@ -1481,14 +1300,8 @@ function buildForeignTimeline(
     ]
   }
 
-  // Sort trades chronologically (oldest first)
-  const sortedTrades = [...trades].sort((a, b) => {
-    const ta = parseTradeSeconds(a.time)
-    const tb = parseTradeSeconds(b.time)
-    return ta - tb
-  })
+  const sortedTrades = [...trades].sort((a, b) => parseTradeSeconds(a.time) - parseTradeSeconds(b.time))
 
-  // Calculate cumulative buy and sell volume weights over time
   let totalBuyVol = 0
   let totalSellVol = 0
   for (const t of sortedTrades) {
@@ -1503,7 +1316,6 @@ function buildForeignTimeline(
   totalBuyVol = Math.max(1, totalBuyVol)
   totalSellVol = Math.max(1, totalSellVol)
 
-  // Sample trades into 30~50 uniform time intervals for smooth SVG rendering
   const pointCount = Math.min(60, Math.max(15, sortedTrades.length))
   const step = Math.max(1, Math.floor(sortedTrades.length / pointCount))
 
@@ -1541,7 +1353,6 @@ function buildForeignTimeline(
     }
   }
 
-  // Ensure last point exactly matches current official foreign totals
   const lastPoint = points.at(-1)
   if (lastPoint) {
     lastPoint.buyValue = totalBuyVal
@@ -1606,7 +1417,6 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
     const buyD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.buyY}` : `${acc} L ${pt.x},${pt.buyY}`), "")
     const sellD = coords.reduce((acc, pt, idx) => (idx === 0 ? `M ${pt.x},${pt.sellY}` : `${acc} L ${pt.x},${pt.sellY}`), "")
 
-    // Calculate dynamic milestone ticks across only the elapsed time in the chart
     let ticks: { x: number; time: string; isStart: boolean; isEnd: boolean }[] = []
     const count = coords.length
     if (count >= 2) {
@@ -1649,13 +1459,10 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
   const handlePointerLeave = () => setHoverIndex(null)
 
   const hovered = hoverIndex !== null && coordinates[hoverIndex] ? coordinates[hoverIndex] : null
-  const isNetPositive = (currentNetValue || 0) >= 0
-
   const zeroPct = Math.max(0, Math.min(100, (zeroY / height) * 100))
 
   return (
     <div className="flex flex-col space-y-2 rounded-lg border border-border/80 bg-[#121313] p-3">
-      {/* Header & Legend */}
       <div className="flex items-center justify-between text-xs">
         <span className="font-semibold text-foreground flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-brand" />
@@ -1663,25 +1470,13 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
           <span className="font-mono text-[10px] text-muted font-normal">({points.length} mốc)</span>
         </span>
         <div className="flex items-center gap-2.5 font-mono text-[10px]">
-          <span className="flex items-center gap-1 text-up font-semibold">
-            <span className="inline-block h-1.5 w-3 rounded bg-up" /> Mua lũy kế
-          </span>
-          <span className="flex items-center gap-1 text-down font-semibold">
-            <span className="inline-block h-1.5 w-3 rounded bg-down" /> Bán lũy kế
-          </span>
-          <span className="flex items-center gap-1 text-purple-400 font-bold">
-            <span className="inline-block h-2 w-2 rounded-full bg-purple-400" /> Ròng
-          </span>
+          <span className="flex items-center gap-1 text-up font-semibold"><span className="inline-block h-1.5 w-3 rounded bg-up" /> Mua lũy kế</span>
+          <span className="flex items-center gap-1 text-down font-semibold"><span className="inline-block h-1.5 w-3 rounded bg-down" /> Bán lũy kế</span>
+          <span className="flex items-center gap-1 text-purple-400 font-bold"><span className="inline-block h-2 w-2 rounded-full bg-purple-400" /> Ròng</span>
         </div>
       </div>
 
-      {/* SVG Chart Container */}
-      <div
-        ref={containerRef}
-        onPointerMove={handlePointerMove}
-        onPointerLeave={handlePointerLeave}
-        className="group relative h-[140px] w-full cursor-crosshair select-none overflow-hidden rounded bg-[#161717] p-1.5"
-      >
+      <div ref={containerRef} onPointerMove={handlePointerMove} onPointerLeave={handlePointerLeave} className="group relative h-[140px] w-full cursor-crosshair select-none overflow-hidden rounded bg-[#161717] p-1.5">
         <svg viewBox="0 0 600 140" preserveAspectRatio="none" className="h-full w-full overflow-visible">
           <defs>
             <linearGradient id="foreignNetLineGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1697,186 +1492,74 @@ const ForeignFlowChart = memo(function ForeignFlowChart({
               <stop offset="100%" stopColor="#ff4757" stopOpacity="0.4" />
             </linearGradient>
           </defs>
-
-          {/* Zero baseline */}
           <line x1="0" y1={zeroY} x2="600" y2={zeroY} stroke="#64748b" strokeDasharray="3 3" strokeOpacity="0.5" strokeWidth="1" />
-
-          {/* Vertical dynamic interval grid lines */}
-          {timelineTicks.slice(1, -1).map((tick, i) => (
-            <line
-              key={i}
-              x1={tick.x}
-              y1="0"
-              x2={tick.x}
-              y2="140"
-              stroke="#ffffff"
-              strokeDasharray="2 3"
-              strokeOpacity="0.08"
-              strokeWidth="1"
-            />
-          ))}
-
-          {/* Net Flow Fill Area */}
+          {timelineTicks.slice(1, -1).map((tick, i) => <line key={i} x1={tick.x} y1="0" x2={tick.x} y2="140" stroke="#ffffff" strokeDasharray="2 3" strokeOpacity="0.08" strokeWidth="1" />)}
           <path d={netAreaD} fill="url(#foreignNetAreaGrad)" />
-
-          {/* Buy Cumulative Line */}
           <path d={buyPathD} fill="none" stroke="#22c98a" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
-
-          {/* Sell Cumulative Line */}
           <path d={sellPathD} fill="none" stroke="#ff4757" strokeWidth="1.2" strokeDasharray="3 2" strokeOpacity="0.7" />
-
-          {/* Net Value Main Line (Green when positive, Red when negative) */}
           <path d={netPathD} fill="none" stroke="url(#foreignNetLineGrad)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* Current / Hovered point */}
           {hovered ? (
             <>
               <line x1={hovered.x} y1="0" x2={hovered.x} y2="140" stroke="#ffffff" strokeOpacity="0.3" strokeDasharray="2 2" strokeWidth="1" />
               <circle cx={hovered.x} cy={hovered.netY} r="4.5" fill={hovered.netValue >= 0 ? "#22c98a" : "#ff4757"} stroke="#ffffff" strokeWidth="1.5" />
             </>
-          ) : (
-            coordinates.at(-1) && (
-              <circle
-                cx={coordinates.at(-1)?.x}
-                cy={coordinates.at(-1)?.netY}
-                r="4"
-                fill={(coordinates.at(-1)?.netValue ?? 0) >= 0 ? "#22c98a" : "#ff4757"}
-                className="animate-pulse"
-              />
-            )
-          )}
+          ) : coordinates.at(-1) ? (
+            <circle cx={coordinates.at(-1)?.x} cy={coordinates.at(-1)?.netY} r="4" fill={(coordinates.at(-1)?.netValue ?? 0) >= 0 ? "#22c98a" : "#ff4757"} className="animate-pulse" />
+          ) : null}
         </svg>
-
-        {/* Floating Tooltip */}
         {hovered ? (
           <div className="pointer-events-none absolute left-3 top-2 flex flex-wrap items-center gap-2 font-mono text-[11px] rounded bg-black/85 px-2.5 py-1 backdrop-blur-md border border-border/80 shadow-lg">
-            <span className="text-muted-2">{hovered.time}</span>
-            <span className="text-muted">·</span>
-            <span>
-              Mua ròng:{" "}
-              <b className={hovered.netValue > 0 ? "text-up" : hovered.netValue < 0 ? "text-down" : "text-ref"}>
-                {hovered.netValue > 0 ? "+" : ""}{formatMarketValue(hovered.netValue)}
-              </b>
-            </span>
-            <span className="text-muted">·</span>
-            <span className="text-up font-semibold">Mua: {formatMarketValue(hovered.buyValue)}</span>
-            <span className="text-muted">·</span>
-            <span className="text-down font-semibold">Bán: {formatMarketValue(hovered.sellValue)}</span>
+            <span className="text-muted-2">{hovered.time}</span><span className="text-muted">·</span>
+            <span>Mua ròng: <b className={hovered.netValue > 0 ? "text-up" : hovered.netValue < 0 ? "text-down" : "text-ref"}>{hovered.netValue > 0 ? "+" : ""}{formatMarketValue(hovered.netValue)}</b></span>
+            <span className="text-muted">·</span><span className="text-up font-semibold">Mua: {formatMarketValue(hovered.buyValue)}</span>
+            <span className="text-muted">·</span><span className="text-down font-semibold">Bán: {formatMarketValue(hovered.sellValue)}</span>
           </div>
         ) : null}
       </div>
-
-      {/* Dynamic X-axis Time Milestones based on actual elapsed session points */}
       <div className="flex items-center justify-between px-1 text-[9.5px] font-mono text-muted-2 border-t border-border/40 pt-1 select-none">
-        {timelineTicks.map((tick, i) => (
-          <span
-            key={i}
-            className={tick.isStart || tick.isEnd ? "text-foreground font-semibold" : "text-muted"}
-          >
-            {tick.time}
-          </span>
-        ))}
+        {timelineTicks.map((tick, i) => <span key={i} className={tick.isStart || tick.isEnd ? "text-foreground font-semibold" : "text-muted"}>{tick.time}</span>)}
       </div>
     </div>
   )
 })
 
 function AllTradesIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M4 6h16" />
-      <path d="M4 12h16" />
-      <path d="M4 18h16" />
-    </svg>
-  )
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>
 }
 
 function SmallFishIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.46-3.44 6-7 6s-7.56-2.54-8.5-6Z" />
-      <path d="M18 12v.5" />
-      <path d="M16 17.93a9.77 9.77 0 0 1 0-11.86" />
-      <path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33" />
-      <circle cx="17" cy="10" r="1" fill="currentColor" />
-    </svg>
-  )
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.46-3.44 6-7 6s-7.56-2.54-8.5-6Z" /><path d="M18 12v.5" /><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86" /><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33" /><circle cx="17" cy="10" r="1" fill="currentColor" /></svg>
 }
 
 function SharkIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M2 13c1.5-3.5 5.5-6 10-6 3 0 5 1.2 7 3L22 8l-2 5 2 5-3-2c-2 1.8-4 3-7 3-4.5 0-8.5-2.5-10-6Z" />
-      <path d="M11 7 14 2l1.5 5" />
-      <path d="M8 17l2.5 4" />
-      <circle cx="17" cy="11.5" r="1.2" fill="currentColor" />
-    </svg>
-  )
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 13c1.5-3.5 5.5-6 10-6 3 0 5 1.2 7 3L22 8l-2 5 2 5-3-2c-2 1.8-4 3-7 3-4.5 0-8.5-2.5-10-6Z" /><path d="M11 7 14 2l1.5 5" /><path d="M8 17l2.5 4" /><circle cx="17" cy="11.5" r="1.2" fill="currentColor" /></svg>
 }
 
 function TapeLoadingSkeleton() {
   return (
     <div className="flex flex-col flex-1 space-y-2.5">
-      {/* Connecting banner with spinner */}
       <div className="flex items-center justify-between rounded-lg border border-border/80 bg-[#121313] px-3.5 py-2.5 font-mono text-xs text-muted-2">
         <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand" />
-          </span>
-          <span className="text-foreground font-semibold">Đang kết nối Realtime WebSocket DNSE...</span>
+          <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand" /></span>
+          <span className="text-foreground font-semibold">Đang kết nối realtime tập trung...</span>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-muted">
-          <RefreshCw className="h-3.5 w-3.5 animate-spin text-brand" />
-          <span>Đồng bộ khớp lệnh</span>
-        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted"><RefreshCw className="h-3.5 w-3.5 animate-spin text-brand" /><span>Đồng bộ khớp lệnh</span></div>
       </div>
-
-      {/* Shimmer 2-column Layout Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-2.5 flex-1 min-h-0">
         <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col p-3 space-y-2.5">
-          <div className="grid grid-cols-[1.2fr_1.1fr_0.75fr] gap-x-2 border-b border-border/60 pb-2">
-            <div className="h-3 w-14 bg-[#1f2122] rounded animate-pulse" />
-            <div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse ml-auto" />
-            <div className="h-3 w-10 bg-[#1f2122] rounded animate-pulse ml-auto" />
-          </div>
-
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="grid grid-cols-[1.2fr_1.1fr_0.75fr] gap-x-2 items-center py-1 border-b border-border/20 last:border-0">
-              <div className="h-3.5 w-16 bg-[#181a1b] rounded animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
-              <div className="h-3.5 w-14 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
-              <div className="h-3.5 w-10 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} />
-            </div>
-          ))}
+          <div className="grid grid-cols-[1.2fr_1.1fr_0.75fr] gap-x-2 border-b border-border/60 pb-2"><div className="h-3 w-14 bg-[#1f2122] rounded animate-pulse" /><div className="h-3 w-16 bg-[#1f2122] rounded animate-pulse ml-auto" /><div className="h-3 w-10 bg-[#1f2122] rounded animate-pulse ml-auto" /></div>
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="grid grid-cols-[1.2fr_1.1fr_0.75fr] gap-x-2 items-center py-1 border-b border-border/20 last:border-0"><div className="h-3.5 w-16 bg-[#181a1b] rounded animate-pulse" style={{ animationDelay: `${i * 80}ms` }} /><div className="h-3.5 w-14 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} /><div className="h-3.5 w-10 bg-[#181a1b] rounded animate-pulse ml-auto" style={{ animationDelay: `${i * 80}ms` }} /></div>)}
         </div>
-
         <div className="rounded-lg border border-border/80 bg-[#121313] p-3 space-y-2.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
-            <div className="h-3.5 w-24 bg-[#1f2122] rounded animate-pulse" />
-            <div className="h-3 w-12 bg-[#1f2122] rounded animate-pulse" />
-          </div>
-          <div className="h-14 bg-[#181a1b] rounded-lg animate-pulse" />
-          <div className="h-16 bg-[#181a1b] rounded-lg animate-pulse" />
-          <div className="h-10 bg-[#181a1b] rounded-lg animate-pulse" />
+          <div className="flex items-center justify-between border-b border-border/50 pb-1.5"><div className="h-3.5 w-24 bg-[#1f2122] rounded animate-pulse" /><div className="h-3 w-12 bg-[#1f2122] rounded animate-pulse" /></div>
+          <div className="h-14 bg-[#181a1b] rounded-lg animate-pulse" /><div className="h-16 bg-[#181a1b] rounded-lg animate-pulse" /><div className="h-10 bg-[#181a1b] rounded-lg animate-pulse" />
         </div>
       </div>
     </div>
   )
 }
 
-function WidgetSectionHeader({
-  icon: Icon,
-  title,
-  subtitle,
-  iconTheme = "cyan",
-  rightSlot,
-}: {
-  icon: React.ElementType
-  title: string
-  subtitle?: string
-  iconTheme?: "cyan" | "emerald" | "violet" | "amber" | "blue"
-  rightSlot?: React.ReactNode
-}) {
+function WidgetSectionHeader({ icon: Icon, title, subtitle, iconTheme = "cyan", rightSlot }: { icon: React.ElementType; title: string; subtitle?: string; iconTheme?: "cyan" | "emerald" | "violet" | "amber" | "blue"; rightSlot?: React.ReactNode }) {
   const themeStyles = {
     cyan: "border-cyan-400/30 bg-cyan-500/15 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.2)]",
     emerald: "border-emerald-400/30 bg-emerald-500/15 text-emerald-300 shadow-[0_0_10px_rgba(34,201,138,0.2)]",
@@ -1884,458 +1567,116 @@ function WidgetSectionHeader({
     amber: "border-amber-400/30 bg-amber-500/15 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]",
     blue: "border-blue-400/30 bg-blue-500/15 text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.2)]",
   }[iconTheme]
-
-  return (
-    <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
-      <div className="flex items-center gap-2">
-        <div className={`flex size-6 shrink-0 items-center justify-center rounded-lg border ${themeStyles}`}>
-          <Icon className="size-3.5" />
-        </div>
-        <div className="flex flex-col">
-          <span className="font-ticker text-xs sm:text-[12.5px] font-black uppercase tracking-wide text-white">
-            {title}
-          </span>
-          {subtitle ? <span className="text-[10px] text-slate-400 font-medium">{subtitle}</span> : null}
-        </div>
-      </div>
-      {rightSlot}
-    </div>
-  )
+  return <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]"><div className="flex items-center gap-2"><div className={`flex size-6 shrink-0 items-center justify-center rounded-lg border ${themeStyles}`}><Icon className="size-3.5" /></div><div className="flex flex-col"><span className="font-ticker text-xs sm:text-[12.5px] font-black uppercase tracking-wide text-white">{title}</span>{subtitle ? <span className="text-[10px] text-slate-400 font-medium">{subtitle}</span> : null}</div></div>{rightSlot}</div>
 }
 
-function ForeignRealtimeCard({
-  foreign,
-  quotePrice,
-  foreignNetVolume,
-  foreignNetValue,
-  roomPercentage,
-  latestTradeTime,
-}: {
-  foreign?: {
-    totalBuyVolume?: number
-    totalSellVolume?: number
-    totalBuyValue?: number
-    totalSellValue?: number
-    updatedAt?: string
-  } | null
-  quotePrice?: number | null
-  foreignNetVolume?: number | null
-  foreignNetValue?: number | null
-  roomPercentage?: number | null
-  latestTradeTime?: string | number
-}) {
+function ForeignRealtimeCard({ foreign, quotePrice, foreignNetVolume, foreignNetValue, roomPercentage, latestTradeTime }: { foreign?: { totalBuyVolume?: number; totalSellVolume?: number; totalBuyValue?: number; totalSellValue?: number; updatedAt?: string } | null; quotePrice?: number | null; foreignNetVolume?: number | null; foreignNetValue?: number | null; roomPercentage?: number | null; latestTradeTime?: string | number }) {
   const buyVolFlash = useFlashAnimation(foreign?.totalBuyVolume, 1)
   const sellVolFlash = useFlashAnimation(foreign?.totalSellVolume, 1)
   const netVolFlash = useFlashAnimation(foreignNetVolume, 1)
-
   const buyVol = foreign?.totalBuyVolume ?? 0
   const sellVol = foreign?.totalSellVolume ?? 0
-
   const rawPrice = quotePrice ? (quotePrice >= 500 ? quotePrice : quotePrice * 1000) : 0
   const buyVal = foreign?.totalBuyValue ?? (buyVol && rawPrice ? buyVol * rawPrice : 0)
   const sellVal = foreign?.totalSellValue ?? (sellVol && rawPrice ? sellVol * rawPrice : 0)
-
   const netVol = foreignNetVolume ?? (buyVol - sellVol)
   const netVal = foreignNetValue ?? (buyVal - sellVal)
-
   const isNetVolPos = netVol > 0
   const isNetVolNeg = netVol < 0
   const isNetValPos = netVal > 0
   const isNetValNeg = netVal < 0
-
   const foreignUpdatedAt = foreign?.updatedAt
   const displayTime = useMemo(() => {
-    if (latestTradeTime) {
-      return timeLabel(latestTradeTime)
-    }
-    if (foreignUpdatedAt && !foreignUpdatedAt.includes("09:15:00")) {
-      return timeLabel(foreignUpdatedAt)
-    }
+    if (latestTradeTime) return timeLabel(latestTradeTime)
+    if (foreignUpdatedAt && !foreignUpdatedAt.includes("09:15:00")) return timeLabel(foreignUpdatedAt)
     return new Date().toLocaleTimeString("vi-VN", { hour12: false })
   }, [latestTradeTime, foreignUpdatedAt])
 
   return (
     <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 p-3 font-mono text-xs space-y-2.5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
-      {/* Title Header */}
-      <WidgetSectionHeader
-        icon={Globe}
-        title="GIAO DỊCH NĐTNN"
-        iconTheme="blue"
-        rightSlot={
-          <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-slate-400">
-            <Clock className="size-3 text-slate-500" />
-            <span>{displayTime}</span>
-          </div>
-        }
-      />
-
-      {/* Grid Table */}
+      <WidgetSectionHeader icon={Globe} title="GIAO DỊCH NĐTNN" iconTheme="blue" rightSlot={<div className="flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-slate-400"><Clock className="size-3 text-slate-500" /><span>{displayTime}</span></div>} />
       <div className="rounded-xl border border-white/[0.08] bg-[#11161d] overflow-hidden text-[11px] sm:text-xs shadow-inner">
-        {/* Row 1: Khối Lượng Header */}
-        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-bold text-slate-400 border-b border-white/[0.06]">
-          <span>KL Mua</span>
-          <span className="text-center">KL Bán</span>
-          <span className="text-right">KL Mua-Bán</span>
-        </div>
-
-        {/* Row 1: Khối Lượng Values */}
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-bold text-slate-400 border-b border-white/[0.06]"><span>KL Mua</span><span className="text-center">KL Bán</span><span className="text-right">KL Mua-Bán</span></div>
         <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold border-b border-white/[0.06] whitespace-nowrap">
-          <span
-            className={`text-up transition-colors ${
-              buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""
-            }`}
-          >
-            {formatVolume(foreign?.totalBuyVolume)}
-          </span>
-          <span
-            className={`text-center text-down transition-colors ${
-              sellVolFlash === "up" ? "flash-up font-black" : sellVolFlash === "down" ? "flash-down font-black" : ""
-            }`}
-          >
-            {formatVolume(foreign?.totalSellVolume)}
-          </span>
-          <span
-            className={`text-right transition-colors ${
-              isNetVolPos ? "text-up" : isNetVolNeg ? "text-down" : "text-ref"
-            } ${
-              netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
-            }`}
-          >
-            {netVol !== null && netVol !== undefined
-              ? `${netVol > 0 ? "+" : ""}${formatVolume(netVol)}`
-              : "—"}
-          </span>
+          <span className={`text-up transition-colors ${buyVolFlash === "up" ? "flash-up font-black" : buyVolFlash === "down" ? "flash-down font-black" : ""}`}>{formatVolume(foreign?.totalBuyVolume)}</span>
+          <span className={`text-center text-down transition-colors ${sellVolFlash === "up" ? "flash-up font-black" : sellVolFlash === "down" ? "flash-down font-black" : ""}`}>{formatVolume(foreign?.totalSellVolume)}</span>
+          <span className={`text-right transition-colors ${isNetVolPos ? "text-up" : isNetVolNeg ? "text-down" : "text-ref"} ${netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""}`}>{netVol !== null && netVol !== undefined ? `${netVol > 0 ? "+" : ""}${formatVolume(netVol)}` : "—"}</span>
         </div>
-
-        {/* Row 2: Giá Trị Header */}
-        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-bold text-slate-400 border-b border-white/[0.06]">
-          <span>GT Mua</span>
-          <span className="text-center">GT Bán</span>
-          <span className="text-right">GT Mua-Bán</span>
-        </div>
-
-        {/* Row 2: Giá Trị Values with GT Mua-Bán in a label pill */}
+        <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-bold text-slate-400 border-b border-white/[0.06]"><span>GT Mua</span><span className="text-center">GT Bán</span><span className="text-right">GT Mua-Bán</span></div>
         <div className="grid grid-cols-[1fr_1fr_1.1fr] items-center px-3 py-2 text-xs sm:text-[13px] font-bold whitespace-nowrap">
-          <span className="text-up font-semibold">
-            {buyVal ? formatMarketValue(buyVal) : "—"}
-          </span>
-          <span className="text-center text-down font-semibold">
-            {sellVal ? formatMarketValue(sellVal) : "—"}
-          </span>
-          <div className="flex justify-end items-center">
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-md font-bold text-xs sm:text-[12px] border whitespace-nowrap shrink-0 leading-tight transition-all duration-200 ${
-                isNetValPos
-                  ? "bg-up/15 text-up border-up/40 shadow-[0_0_8px_rgba(34,201,138,0.2)]"
-                  : isNetValNeg
-                    ? "bg-down/15 text-down border-down/40 shadow-[0_0_8px_rgba(244,63,94,0.2)]"
-                    : "bg-white/[0.05] text-ref border-white/10"
-              } ${
-                netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""
-              }`}
-            >
-              {netVal !== null && netVal !== undefined
-                ? `${netVal > 0 ? "+" : ""}${formatMarketValue(netVal)}`
-                : "—"}
-            </span>
-          </div>
+          <span className="text-up font-semibold">{buyVal ? formatMarketValue(buyVal) : "—"}</span><span className="text-center text-down font-semibold">{sellVal ? formatMarketValue(sellVal) : "—"}</span>
+          <div className="flex justify-end items-center"><span className={`inline-flex items-center px-2 py-0.5 rounded-md font-bold text-xs sm:text-[12px] border whitespace-nowrap shrink-0 leading-tight transition-all duration-200 ${isNetValPos ? "bg-up/15 text-up border-up/40 shadow-[0_0_8px_rgba(34,201,138,0.2)]" : isNetValNeg ? "bg-down/15 text-down border-down/40 shadow-[0_0_8px_rgba(244,63,94,0.2)]" : "bg-white/[0.05] text-ref border-white/10"} ${netVolFlash === "up" ? "flash-up font-black" : netVolFlash === "down" ? "flash-down font-black" : ""}`}>{netVal !== null && netVal !== undefined ? `${netVal > 0 ? "+" : ""}${formatMarketValue(netVal)}` : "—"}</span></div>
         </div>
       </div>
     </div>
   )
 }
 
-function TradeInitiativeAndMarketStatsCard({
-  symbol,
-  tradeStats,
-  quote,
-  spread,
-}: {
-  symbol: string
-  tradeStats: {
-    buyVol: number
-    sellVol: number
-    unkVol: number
-    totalTraded: number
-    buyTradedPct: number
-    sellTradedPct: number
-  }
-  quote?: StockQuote | null
-  spread?: number | null
-}) {
+function TradeInitiativeAndMarketStatsCard({ symbol, tradeStats, quote, spread }: { symbol: string; tradeStats: { buyVol: number; sellVol: number; unkVol: number; totalTraded: number; buyTradedPct: number; sellTradedPct: number }; quote?: StockQuote | null; spread?: number | null }) {
   const totalVolume = Math.max(quote?.totalVolume ?? 0, tradeStats.totalTraded)
-
   return (
     <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 p-3 font-mono text-xs space-y-4 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
-      {/* 1. Tổng KL khớp Symbol */}
       <div className="space-y-2.5">
-        <WidgetSectionHeader
-          icon={Activity}
-          title={`Tổng KL khớp ${symbol}`}
-          iconTheme="emerald"
-          rightSlot={
-            <span className="font-mono text-xs sm:text-[13px] font-black text-white">
-              {formatVolume(totalVolume)}
-            </span>
-          }
-        />
-
+        <WidgetSectionHeader icon={Activity} title={`Tổng KL khớp ${symbol}`} iconTheme="emerald" rightSlot={<span className="font-mono text-xs sm:text-[13px] font-black text-white">{formatVolume(totalVolume)}</span>} />
         <div className="rounded-xl border border-white/[0.08] bg-[#11161d] divide-y divide-white/[0.06] overflow-hidden text-[11.5px] sm:text-xs shadow-inner">
-          {/* Row 1: KL MUA chủ động */}
-          <div className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
-            <span className="text-slate-300 font-sans font-medium">
-              KL MUA chủ động
-            </span>
-            <span className="flex items-center gap-2 font-bold text-up sm:text-xs whitespace-nowrap">
-              <span>{formatVolume(tradeStats.buyVol)}</span>
-              <span className="rounded px-1.5 py-0.5 text-[9px] font-black border border-up/40 bg-up/15 text-up leading-none shadow-sm">
-                M
-              </span>
-            </span>
-          </div>
-
-          {/* Row 2: KL BÁN chủ động */}
-          <div className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
-            <span className="text-slate-300 font-sans font-medium">
-              KL BÁN chủ động
-            </span>
-            <span className="flex items-center gap-2 font-bold text-down sm:text-xs whitespace-nowrap">
-              <span>{formatVolume(tradeStats.sellVol)}</span>
-              <span className="rounded px-1.5 py-0.5 text-[9px] font-black border border-down/40 bg-down/15 text-down leading-none shadow-sm">
-                B
-              </span>
-            </span>
-          </div>
-
-          {/* Row 3: KL KHÔNG XÁC ĐỊNH */}
-          <div className="flex items-center justify-between px-3 py-2.5 bg-white/[0.02]">
-            <span className="text-slate-400 font-sans font-medium">
-              KL KHÔNG XÁC ĐỊNH
-            </span>
-            <span className="font-bold text-slate-200 sm:text-xs whitespace-nowrap">
-              {formatVolume(tradeStats.unkVol)}
-            </span>
-          </div>
+          <div className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"><span className="text-slate-300 font-sans font-medium">KL MUA chủ động</span><span className="flex items-center gap-2 font-bold text-up sm:text-xs whitespace-nowrap"><span>{formatVolume(tradeStats.buyVol)}</span><span className="rounded px-1.5 py-0.5 text-[9px] font-black border border-up/40 bg-up/15 text-up leading-none shadow-sm">M</span></span></div>
+          <div className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"><span className="text-slate-300 font-sans font-medium">KL BÁN chủ động</span><span className="flex items-center gap-2 font-bold text-down sm:text-xs whitespace-nowrap"><span>{formatVolume(tradeStats.sellVol)}</span><span className="rounded px-1.5 py-0.5 text-[9px] font-black border border-down/40 bg-down/15 text-down leading-none shadow-sm">B</span></span></div>
+          <div className="flex items-center justify-between px-3 py-2.5 bg-white/[0.02]"><span className="text-slate-400 font-sans font-medium">KL KHÔNG XÁC ĐỊNH</span><span className="font-bold text-slate-200 sm:text-xs whitespace-nowrap">{formatVolume(tradeStats.unkVol)}</span></div>
         </div>
       </div>
-
-      {/* 2. Thông số phiên */}
       <div className="space-y-2.5 pt-1">
-        <WidgetSectionHeader
-          icon={Layers}
-          title="THÔNG SỐ PHIÊN"
-          iconTheme="violet"
-          rightSlot={
-            <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[9.5px] font-bold text-slate-400">
-              Snapshot
-            </span>
-          }
-        />
-
+        <WidgetSectionHeader icon={Layers} title="THÔNG SỐ PHIÊN" iconTheme="violet" rightSlot={<span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[9.5px] font-bold text-slate-400">Snapshot</span>} />
         <div className="grid grid-cols-3 gap-1.5 text-center">
-          {/* Row 1: Sàn - TC - Trần */}
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-cyan-400/30 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Sàn</div>
-            <div className="text-xs sm:text-[13px] font-black text-[#22b8cf] whitespace-nowrap mt-0.5">{formatPrice(quote?.floor)}</div>
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-amber-400/30 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">TC</div>
-            <div className="text-xs sm:text-[13px] font-black text-ref whitespace-nowrap mt-0.5">{formatPrice(quote?.reference)}</div>
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-purple-400/30 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Trần</div>
-            <div className="text-xs sm:text-[13px] font-black text-ceiling whitespace-nowrap mt-0.5">{formatPrice(quote?.ceiling)}</div>
-          </div>
-
-          {/* Row 2: Thấp - TB - Cao */}
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Thấp</div>
-            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.low)}</div>
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">TB</div>
-            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.avgPrice)}</div>
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Cao</div>
-            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.high)}</div>
-          </div>
-
-          {/* Row 3: Spread - Tổng KL - Tổng GT */}
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Spread</div>
-            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div>
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Tổng KL</div>
-            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatCompactVolume(totalVolume)}</div>
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors">
-            <div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Tổng GT</div>
-            <div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">
-              {(() => {
-                const rawP = quote?.price ? (quote.price >= 500 ? quote.price : quote.price * 1000) : 0
-                if (quote?.totalValue) return formatMarketValue(quote.totalValue)
-                if (totalVolume > 0 && rawP > 0) return formatMarketValue(totalVolume * rawP)
-                return "—"
-              })()}
-            </div>
-          </div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-cyan-400/30 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Sàn</div><div className="text-xs sm:text-[13px] font-black text-[#22b8cf] whitespace-nowrap mt-0.5">{formatPrice(quote?.floor)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-amber-400/30 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">TC</div><div className="text-xs sm:text-[13px] font-black text-ref whitespace-nowrap mt-0.5">{formatPrice(quote?.reference)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-purple-400/30 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Trần</div><div className="text-xs sm:text-[13px] font-black text-ceiling whitespace-nowrap mt-0.5">{formatPrice(quote?.ceiling)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Thấp</div><div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.low)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">TB</div><div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.avgPrice)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Cao</div><div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatPrice(quote?.high)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Spread</div><div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{spread !== null && spread !== undefined && spread > 0 ? formatPrice(spread) : "—"}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Tổng KL</div><div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{formatCompactVolume(totalVolume)}</div></div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#11161d] p-2 flex flex-col justify-center hover:border-white/20 transition-colors"><div className="text-[9.5px] text-slate-400 uppercase font-bold tracking-wider">Tổng GT</div><div className="text-xs sm:text-[13px] font-black text-white whitespace-nowrap mt-0.5">{(() => { const rawP = quote?.price ? (quote.price >= 500 ? quote.price : quote.price * 1000) : 0; if (quote?.totalValue) return formatMarketValue(quote.totalValue); if (totalVolume > 0 && rawP > 0) return formatMarketValue(totalVolume * rawP); return "—" })()}</div></div>
         </div>
       </div>
     </div>
   )
 }
 
-function OrderBookDepthRow({
-  bid,
-  ask,
-  maxDepthVolume,
-  quote,
-}: {
-  bid?: DepthLevel
-  ask?: DepthLevel
-  maxDepthVolume: number
-  quote?: StockQuote | null
-}) {
+function OrderBookDepthRow({ bid, ask, maxDepthVolume, quote }: { bid?: DepthLevel; ask?: DepthLevel; maxDepthVolume: number; quote?: StockQuote | null }) {
   const bidWidthPct = bid?.volume ? (bid.volume / maxDepthVolume) * 100 : 0
   const askWidthPct = ask?.volume ? (ask.volume / maxDepthVolume) * 100 : 0
-
   const bidVolFlash = useFlashAnimation(bid?.volume, 1)
   const bidPriceFlash = usePriceFlashAnimation(bid?.price, quote?.reference)
   const askPriceFlash = usePriceFlashAnimation(ask?.price, quote?.reference)
   const askVolFlash = useFlashAnimation(ask?.volume, 1)
-
   return (
     <div className="relative grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 items-center py-1 rounded hover:bg-panel-2/40">
-      {/* Left Bid Volume bar */}
-      {bid?.volume ? (
-        <div
-          className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25 transition-all duration-300"
-          style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }}
-          aria-hidden="true"
-        />
-      ) : null}
-
-      {/* Right Ask Volume bar */}
-      {ask?.volume ? (
-        <div
-          className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25 transition-all duration-300"
-          style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }}
-          aria-hidden="true"
-        />
-      ) : null}
-
-      {/* KL Mua */}
-      <span
-        className={`relative font-bold text-foreground text-left px-2 rounded transition-colors ${
-          bidVolFlash === "up"
-            ? "flash-up text-up font-black"
-            : bidVolFlash === "down"
-              ? "flash-down text-down font-black"
-              : ""
-        }`}
-      >
-        {formatVolume(bid?.volume)}
-      </span>
-
-      {/* Giá Mua */}
-      <span
-        className={`relative text-right font-bold px-2 rounded transition-colors ${getPriceColorClass(
-          bid?.price,
-          quote?.reference,
-          quote?.ceiling,
-          quote?.floor
-        )} ${
-          bidPriceFlash === "up"
-            ? "flash-text-up"
-            : bidPriceFlash === "down"
-              ? "flash-text-down"
-              : bidPriceFlash === "ref"
-                ? "flash-text-ref"
-                : ""
-        }`}
-      >
-        {formatPrice(bid?.price)}
-      </span>
-
-      {/* Giá Bán */}
-      <span
-        className={`relative text-left font-bold px-2 rounded transition-colors ${getPriceColorClass(
-          ask?.price,
-          quote?.reference,
-          quote?.ceiling,
-          quote?.floor
-        )} ${
-          askPriceFlash === "up"
-            ? "flash-text-up"
-            : askPriceFlash === "down"
-              ? "flash-text-down"
-              : askPriceFlash === "ref"
-                ? "flash-text-ref"
-                : ""
-        }`}
-      >
-        {formatPrice(ask?.price)}
-      </span>
-
-      {/* KL Bán */}
-      <span
-        className={`relative text-right font-bold text-foreground px-2 rounded transition-colors ${
-          askVolFlash === "up"
-            ? "flash-up text-up font-black"
-            : askVolFlash === "down"
-              ? "flash-down text-down font-black"
-              : ""
-        }`}
-      >
-        {formatVolume(ask?.volume)}
-      </span>
+      {bid?.volume ? <div className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25 transition-all duration-300" style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }} aria-hidden="true" /> : null}
+      {ask?.volume ? <div className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25 transition-all duration-300" style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }} aria-hidden="true" /> : null}
+      <span className={`relative font-bold text-foreground text-left px-2 rounded transition-colors ${bidVolFlash === "up" ? "flash-up text-up font-black" : bidVolFlash === "down" ? "flash-down text-down font-black" : ""}`}>{formatVolume(bid?.volume)}</span>
+      <span className={`relative text-right font-bold px-2 rounded transition-colors ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${bidPriceFlash === "up" ? "flash-text-up" : bidPriceFlash === "down" ? "flash-text-down" : bidPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(bid?.price)}</span>
+      <span className={`relative text-left font-bold px-2 rounded transition-colors ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${askPriceFlash === "up" ? "flash-text-up" : askPriceFlash === "down" ? "flash-text-down" : askPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(ask?.price)}</span>
+      <span className={`relative text-right font-bold text-foreground px-2 rounded transition-colors ${askVolFlash === "up" ? "flash-up text-up font-black" : askVolFlash === "down" ? "flash-down text-down font-black" : ""}`}>{formatVolume(ask?.volume)}</span>
     </div>
   )
 }
 
-/**
- * Main LiveOrderBookPanel Component
- */
-export function LiveOrderBookPanel({
-  stockKey,
-  symbol,
-  initialMeta,
-  index,
-  z,
-  onClose,
-  onFocus,
-}: {
-  stockKey: string
-  symbol: string
-  initialMeta?: StockInitialMeta
-  index: number
-  z: number
-  onClose: () => void
-  onFocus: () => void
-}) {
+export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, onClose, onFocus }: { stockKey: string; symbol: string; initialMeta?: StockInitialMeta; index: number; z: number; onClose: () => void; onFocus: () => void }) {
   const [minimized, setMinimized] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
   const [activityTab, setActivityTab] = useState<ActivityTab>("trades")
   const [tradeFilter, setTradeFilter] = useState<"all" | "large" | "whale">("all")
   const [reconnectKey, setReconnectKey] = useState(0)
 
-  // Window sizing & positioning
   const [size, setSize] = useState<{ width: number; height: number }>(() => {
     if (typeof window === "undefined") return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT }
-    return {
-      width: Math.min(DEFAULT_WIDTH, Math.max(340, window.innerWidth - 32)),
-      height: Math.min(DEFAULT_HEIGHT, Math.max(400, window.innerHeight - 64)),
-    }
+    return { width: Math.min(DEFAULT_WIDTH, Math.max(340, window.innerWidth - 32)), height: Math.min(DEFAULT_HEIGHT, Math.max(400, window.innerHeight - 64)) }
   })
   const [pos, setPos] = useState(() => {
     if (typeof window === "undefined") return { x: 32, y: 50 }
     const initialW = Math.min(DEFAULT_WIDTH, window.innerWidth - 32)
     const initialH = Math.min(DEFAULT_HEIGHT, window.innerHeight - 64)
-    const centerX = Math.max(16, Math.floor((window.innerWidth - initialW) / 2) + (index % 4) * 24)
-    const centerY = Math.max(40, Math.floor((window.innerHeight - initialH) / 2) + (index % 4) * 20)
-    return { x: centerX, y: centerY }
+    return { x: Math.max(16, Math.floor((window.innerWidth - initialW) / 2) + (index % 4) * 24), y: Math.max(40, Math.floor((window.innerHeight - initialH) / 2) + (index % 4) * 20) }
   })
 
   const panelRef = useRef<HTMLElement>(null)
@@ -2347,157 +1688,59 @@ export function LiveOrderBookPanel({
   const quote = stream.quote
   const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
 
-  // Confetti and Lottie for whale trades
   const confetti = useWhaleConfetti()
   const [isWhaleGlow, setIsWhaleGlow] = useState(false)
   const sessionCountdown = useSessionCountdown()
 
-  useEffect(() => {
-    unlockAudioContext()
-  }, [])
+  useEffect(() => { unlockAudioContext() }, [])
 
-  // High-performance Drag-to-Move with window listener + requestAnimationFrame (0ms latency, zero re-renders while moving)
-  const onHeaderPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLElement>) => {
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
-      if (isMaximized) return
-      onFocus()
+  const onHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
+    if (isMaximized) return
+    onFocus()
+    const startX = event.clientX, startY = event.clientY, startPosX = pos.x, startPosY = pos.y
+    let curX = startPosX, curY = startPosY, rafId: number | null = null
+    isInteractingRef.current = true
+    setIsInteracting(true)
+    const handlePointerMove = (ev: PointerEvent) => {
+      curX = Math.max(0, Math.min(window.innerWidth - 200, startPosX + ev.clientX - startX))
+      curY = Math.max(0, Math.min(window.innerHeight - 50, startPosY + ev.clientY - startY))
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => { if (panelRef.current) { panelRef.current.style.left = `${curX}px`; panelRef.current.style.top = `${curY}px` } })
+    }
+    const handlePointerUp = () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener("pointermove", handlePointerMove); window.removeEventListener("pointerup", handlePointerUp); window.removeEventListener("pointercancel", handlePointerUp)
+      isInteractingRef.current = false; setIsInteracting(false); setPos({ x: curX, y: curY })
+    }
+    window.addEventListener("pointermove", handlePointerMove, { passive: true }); window.addEventListener("pointerup", handlePointerUp); window.addEventListener("pointercancel", handlePointerUp)
+  }, [onFocus, pos.x, pos.y, isMaximized])
 
-      const startX = event.clientX
-      const startY = event.clientY
-      const startPosX = pos.x
-      const startPosY = pos.y
-      let curX = startPosX
-      let curY = startPosY
-      let rafId: number | null = null
+  const startResize = useCallback((e: React.PointerEvent, handle: "se" | "e" | "s") => {
+    e.preventDefault(); e.stopPropagation(); onFocus()
+    const startX = e.clientX, startY = e.clientY, startW = size.width, startH = size.height
+    let curW = startW, curH = startH, rafId: number | null = null
+    isInteractingRef.current = true; setIsInteracting(true)
+    const handlePointerMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY
+      if (handle === "se" || handle === "e") curW = Math.max(MIN_WIDTH, Math.min(window.innerWidth - pos.x - 12, startW + dx))
+      if (handle === "se" || handle === "s") curH = Math.max(MIN_HEIGHT, Math.min(window.innerHeight - pos.y - 12, startH + dy))
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => { if (panelRef.current) { if (handle === "se" || handle === "e") panelRef.current.style.width = `${curW}px`; if (handle === "se" || handle === "s") panelRef.current.style.height = `${curH}px` } })
+    }
+    const handlePointerUp = () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener("pointermove", handlePointerMove); window.removeEventListener("pointerup", handlePointerUp); window.removeEventListener("pointercancel", handlePointerUp)
+      isInteractingRef.current = false; setIsInteracting(false); setSize({ width: curW, height: curH })
+    }
+    window.addEventListener("pointermove", handlePointerMove, { passive: true }); window.addEventListener("pointerup", handlePointerUp); window.addEventListener("pointercancel", handlePointerUp)
+  }, [onFocus, size.width, size.height, pos.x, pos.y])
 
-      isInteractingRef.current = true
-      setIsInteracting(true)
+  const onPanelPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => { const target = event.target instanceof HTMLElement ? event.target : null; if (target?.closest("[data-orderbook-action]")) return; onFocus() }, [onFocus])
+  const closeOnPointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => { event.preventDefault(); event.stopPropagation(); if (closeRequested.current) return; closeRequested.current = true; onClose() }, [onClose])
+  const closeOnClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => { event.preventDefault(); event.stopPropagation(); if (closeRequested.current) return; closeRequested.current = true; onClose() }, [onClose])
 
-      const handlePointerMove = (ev: PointerEvent) => {
-        const dx = ev.clientX - startX
-        const dy = ev.clientY - startY
-        curX = Math.max(0, Math.min(window.innerWidth - 200, startPosX + dx))
-        curY = Math.max(0, Math.min(window.innerHeight - 50, startPosY + dy))
-
-        if (rafId) cancelAnimationFrame(rafId)
-        rafId = requestAnimationFrame(() => {
-          if (panelRef.current) {
-            panelRef.current.style.left = `${curX}px`
-            panelRef.current.style.top = `${curY}px`
-          }
-        })
-      }
-
-      const handlePointerUp = () => {
-        if (rafId) cancelAnimationFrame(rafId)
-        window.removeEventListener("pointermove", handlePointerMove)
-        window.removeEventListener("pointerup", handlePointerUp)
-        window.removeEventListener("pointercancel", handlePointerUp)
-        isInteractingRef.current = false
-        setIsInteracting(false)
-        setPos({ x: curX, y: curY })
-      }
-
-      window.addEventListener("pointermove", handlePointerMove, { passive: true })
-      window.addEventListener("pointerup", handlePointerUp)
-      window.addEventListener("pointercancel", handlePointerUp)
-    },
-    [onFocus, pos.x, pos.y, isMaximized],
-  )
-
-  // High-performance Drag-to-Resize with window listener + requestAnimationFrame (0ms latency, zero re-renders while resizing)
-  const startResize = useCallback(
-    (e: React.PointerEvent, handle: "se" | "e" | "s") => {
-      e.preventDefault()
-      e.stopPropagation()
-      onFocus()
-
-      const startX = e.clientX
-      const startY = e.clientY
-      const startW = size.width
-      const startH = size.height
-      let curW = startW
-      let curH = startH
-      let rafId: number | null = null
-
-      isInteractingRef.current = true
-      setIsInteracting(true)
-
-      const handlePointerMove = (ev: PointerEvent) => {
-        const dx = ev.clientX - startX
-        const dy = ev.clientY - startY
-
-        if (handle === "se" || handle === "e") {
-          curW = Math.max(MIN_WIDTH, Math.min(window.innerWidth - pos.x - 12, startW + dx))
-        }
-        if (handle === "se" || handle === "s") {
-          curH = Math.max(MIN_HEIGHT, Math.min(window.innerHeight - pos.y - 12, startH + dy))
-        }
-
-        if (rafId) cancelAnimationFrame(rafId)
-        rafId = requestAnimationFrame(() => {
-          if (panelRef.current) {
-            if (handle === "se" || handle === "e") {
-              panelRef.current.style.width = `${curW}px`
-            }
-            if (handle === "se" || handle === "s") {
-              panelRef.current.style.height = `${curH}px`
-            }
-          }
-        })
-      }
-
-      const handlePointerUp = () => {
-        if (rafId) cancelAnimationFrame(rafId)
-        window.removeEventListener("pointermove", handlePointerMove)
-        window.removeEventListener("pointerup", handlePointerUp)
-        window.removeEventListener("pointercancel", handlePointerUp)
-        isInteractingRef.current = false
-        setIsInteracting(false)
-        setSize({ width: curW, height: curH })
-      }
-
-      window.addEventListener("pointermove", handlePointerMove, { passive: true })
-      window.addEventListener("pointerup", handlePointerUp)
-      window.addEventListener("pointercancel", handlePointerUp)
-    },
-    [onFocus, size.width, size.height, pos.x, pos.y],
-  )
-
-  const onPanelPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLElement>) => {
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest("[data-orderbook-action]")) return
-      onFocus()
-    },
-    [onFocus],
-  )
-
-  const closeOnPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      event.preventDefault()
-      event.stopPropagation()
-      if (closeRequested.current) return
-      closeRequested.current = true
-      onClose()
-    },
-    [onClose],
-  )
-
-  const closeOnClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.preventDefault()
-      event.stopPropagation()
-      if (closeRequested.current) return
-      closeRequested.current = true
-      onClose()
-    },
-    [onClose],
-  )
-
-  // Top 3 orderbook ladder rows
   const topBids = stream.bids.slice(0, 3)
   const topAsks = stream.asks.slice(0, 3)
   const bidTotal = stream.bids.reduce((sum, row) => sum + row.volume, 0)
@@ -2506,177 +1749,79 @@ export function LiveOrderBookPanel({
   const buyPct = depthTotal > 0 ? (bidTotal / depthTotal) * 100 : 50
   const sellPct = 100 - buyPct
   const maxDepthVolume = Math.max(1, ...topBids.map((b) => b.volume), ...topAsks.map((a) => a.volume))
+  const rows = useMemo(() => Array.from({ length: 3 }, (_, i) => ({ bid: stream.bids[i], ask: stream.asks[i] })), [stream.bids, stream.asks])
 
-  const rows = useMemo(
-    () => Array.from({ length: 3 }, (_, i) => ({ bid: stream.bids[i], ask: stream.asks[i] })),
-    [stream.bids, stream.asks],
-  )
-
-  // Clustered & filtered trades (Gộp lệnh cùng mức giá, cùng chiều nếu cùng giây hoặc cách nhau <= 1s)
-  const clusteredTrades = useMemo(() => {
-    return clusterTrades(stream.trades)
-  }, [stream.trades])
-  const realtimeWhaleTrades = useMemo(
-    () => clusteredTrades.filter((t) => t.source === "DNSE_LIVE"),
-    [clusteredTrades],
-  )
-
+  const clusteredTrades = useMemo(() => clusterTrades(stream.trades), [stream.trades])
+  const realtimeWhaleTrades = useMemo(() => clusteredTrades.filter((t) => t.source === "DNSE_LIVE"), [clusteredTrades])
   const bestBidPrice = stream.bids[0]?.price
   const bestAskPrice = stream.asks[0]?.price
   const spread = bestBidPrice && bestAskPrice ? Number((bestAskPrice - bestBidPrice).toFixed(2)) : null
-
-  // Dynamic whale threshold based on price tick size & spread (spread 0.05 -> >=50k, spread 0.1 -> >=30k)
   const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price, spread), [quote?.price, spread])
   const whaleLabel = useMemo(() => getWhaleLabel(quote?.price, spread), [quote?.price, spread])
 
-  // Reliable Realtime Whale Lottie, Sound & Glow Trigger.
-  // Only DNSE WebSocket executions can create realtime behavior; history/snapshots are display/backfill only.
+  // Only live DNSE executions from the centralized fanout can create realtime whale behavior.
   const seenWhaleIdsRef = useRef<Set<string>>(new Set())
   const didInitializeWhaleBaselineRef = useRef(false)
-
+  useEffect(() => { seenWhaleIdsRef.current.clear(); didInitializeWhaleBaselineRef.current = false }, [symbol])
   useEffect(() => {
-    seenWhaleIdsRef.current.clear()
-    didInitializeWhaleBaselineRef.current = false
-  }, [symbol])
-
-  useEffect(() => {
-    // Baseline cached DNSE-live executions when reopening a popup so stale events do not replay.
-    if (!didInitializeWhaleBaselineRef.current) {
-      for (const t of realtimeWhaleTrades) {
-        seenWhaleIdsRef.current.add(t.id)
-      }
-      didInitializeWhaleBaselineRef.current = true
-      return
-    }
-
+    if (!didInitializeWhaleBaselineRef.current) { for (const t of realtimeWhaleTrades) seenWhaleIdsRef.current.add(t.id); didInitializeWhaleBaselineRef.current = true; return }
     for (const t of realtimeWhaleTrades) {
       if (isAtoTradeTime(t.time) || isAtcTradeTime(t.time)) continue
       if (t.volume < whaleThreshold || seenWhaleIdsRef.current.has(t.id)) continue
-
       seenWhaleIdsRef.current.add(t.id)
       const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
-      confetti.fire(side, t.volume, t.price)
-      playWhaleSound(side)
-      setIsWhaleGlow(true)
-      setTimeout(() => setIsWhaleGlow(false), 2800)
+      confetti.fire(side, t.volume, t.price); playWhaleSound(side); setIsWhaleGlow(true); setTimeout(() => setIsWhaleGlow(false), 2800)
     }
   }, [realtimeWhaleTrades, whaleThreshold, confetti])
 
-  // Tape filtering
   const visibleTrades = useMemo(() => {
     if (tradeFilter === "large") return clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
-    if (tradeFilter === "whale") {
-      return clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold)
-    }
+    if (tradeFilter === "whale") return clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold)
     return clusteredTrades
   }, [tradeFilter, clusteredTrades, whaleThreshold])
-
   const largeTradeCount = useMemo(() => clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME).length, [clusteredTrades])
-  const whaleTradeCount = useMemo(() => {
-    return clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold).length
-  }, [clusteredTrades, whaleThreshold])
+  const whaleTradeCount = useMemo(() => clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold).length, [clusteredTrades, whaleThreshold])
 
-  // Active Buy vs Sell volume breakdown from trades
   const tradeStats = useMemo(() => {
-    let buyVol = 0
-    let sellVol = 0
-    let unkVol = 0
-    for (const t of stream.trades) {
-      if (t.side === "BUY") buyVol += t.volume
-      else if (t.side === "SELL") sellVol += t.volume
-      else unkVol += t.volume
-    }
+    let buyVol = 0, sellVol = 0, unkVol = 0
+    for (const t of stream.trades) { if (t.side === "BUY") buyVol += t.volume; else if (t.side === "SELL") sellVol += t.volume; else unkVol += t.volume }
     const totalTraded = buyVol + sellVol + unkVol
-    const buyTradedPct = totalTraded > 0 ? (buyVol / totalTraded) * 100 : 50
-    const sellTradedPct = totalTraded > 0 ? (sellVol / totalTraded) * 100 : 50
-    return { buyVol, sellVol, unkVol, totalTraded, buyTradedPct, sellTradedPct }
+    return { buyVol, sellVol, unkVol, totalTraded, buyTradedPct: totalTraded > 0 ? (buyVol / totalTraded) * 100 : 50, sellTradedPct: totalTraded > 0 ? (sellVol / totalTraded) * 100 : 50 }
   }, [stream.trades])
 
-  // Realtime active price: synchronized across latest Tape trade -> stream.quote.price -> stream.quote.reference
   const latestTradePrice = stream.trades[0]?.price && stream.trades[0].price > 0 ? stream.trades[0].price : null
   const activePrice = latestTradePrice ?? quote?.price ?? quote?.reference ?? null
   const reference = quote?.reference ? (normalizeMarketPrice(quote.reference, activePrice || 0) ?? quote.reference) : undefined
   const changePercent = reference && reference > 0 && activePrice != null ? Math.round(((activePrice - reference) / reference) * 10000) / 100 : (quote?.changePercent ?? 0)
-
   const quotePrice = activePrice ?? undefined
+  const foreignTimeline = useMemo(() => buildForeignTimeline(stream.trades, stream.foreign, quotePrice), [stream.trades, stream.foreign, quotePrice])
 
-  // Foreign Flow Timeline (Biến động GT mua bán của NN từ đầu phiên 09:15:00 tới hiện tại)
-  const foreignTimeline = useMemo(() => {
-    return buildForeignTimeline(stream.trades, stream.foreign, quotePrice)
-  }, [stream.trades, stream.foreign, quotePrice])
-
-  // Volume Profile (Volume distribution by price level across all session trades matching Image 3)
   const volumeProfile = useMemo(() => {
-    const profileMap = new Map<
-      number,
-      { price: number; buyVol: number; sellVol: number; atoVol: number; atcVol: number; totalVol: number }
-    >()
-    let totalSessionVol = 0
-    let sessionBuyVol = 0
-    let sessionSellVol = 0
-    let sessionAtoVol = 0
-    let sessionAtcVol = 0
-
+    const profileMap = new Map<number, { price: number; buyVol: number; sellVol: number; atoVol: number; atcVol: number; totalVol: number }>()
+    let totalSessionVol = 0, sessionBuyVol = 0, sessionSellVol = 0, sessionAtoVol = 0, sessionAtcVol = 0
     for (const t of stream.trades) {
-      const rawPrice = t.price
-      if (!rawPrice || rawPrice <= 0) continue
-      const price = Number((rawPrice >= 1000 ? rawPrice / 1000 : rawPrice).toFixed(2))
+      if (!t.price || t.price <= 0) continue
+      const price = Number((t.price >= 1000 ? t.price / 1000 : t.price).toFixed(2))
       const cur = profileMap.get(price) || { price, buyVol: 0, sellVol: 0, atoVol: 0, atcVol: 0, totalVol: 0 }
-
-      const timeStr = String(t.time ?? "").trim()
-      const isAto = timeStr.startsWith("09:15") || timeStr.toUpperCase().includes("ATO")
-      const isAtc = timeStr.startsWith("14:45") || timeStr.toUpperCase().includes("ATC")
-
-      if (isAto) {
-        cur.atoVol += t.volume
-        sessionAtoVol += t.volume
-      } else if (isAtc) {
-        cur.atcVol += t.volume
-        sessionAtcVol += t.volume
-      } else if (t.side === "BUY") {
-        cur.buyVol += t.volume
-        sessionBuyVol += t.volume
-      } else if (t.side === "SELL") {
-        cur.sellVol += t.volume
-        sessionSellVol += t.volume
-      } else {
-        cur.buyVol += t.volume
-        sessionBuyVol += t.volume
-      }
-
-      cur.totalVol += t.volume
-      totalSessionVol += t.volume
-      profileMap.set(price, cur)
+      const timeStr = String(t.time ?? "").trim(), isAto = timeStr.startsWith("09:15") || timeStr.toUpperCase().includes("ATO"), isAtc = timeStr.startsWith("14:45") || timeStr.toUpperCase().includes("ATC")
+      if (isAto) { cur.atoVol += t.volume; sessionAtoVol += t.volume }
+      else if (isAtc) { cur.atcVol += t.volume; sessionAtcVol += t.volume }
+      else if (t.side === "BUY") { cur.buyVol += t.volume; sessionBuyVol += t.volume }
+      else if (t.side === "SELL") { cur.sellVol += t.volume; sessionSellVol += t.volume }
+      else { cur.buyVol += t.volume; sessionBuyVol += t.volume }
+      cur.totalVol += t.volume; totalSessionVol += t.volume; profileMap.set(price, cur)
     }
-
     const profileRows = [...profileMap.values()].sort((a, b) => b.price - a.price)
-    const maxVol = Math.max(1, ...profileRows.map((r) => r.totalVol))
-    return {
-      rows: profileRows,
-      maxVol,
-      totalSessionVol: totalSessionVol || 1,
-      sessionBuyVol,
-      sessionSellVol,
-      sessionAtoVol,
-      sessionAtcVol,
-    }
+    return { rows: profileRows, maxVol: Math.max(1, ...profileRows.map((r) => r.totalVol)), totalSessionVol: totalSessionVol || 1, sessionBuyVol, sessionSellVol, sessionAtoVol, sessionAtcVol }
   }, [stream.trades, quotePrice])
 
-  const quoteCeiling = quote?.ceiling
-  const quoteFloor = quote?.floor
+  const quoteCeiling = quote?.ceiling, quoteFloor = quote?.floor
   const tone = useMemo(() => {
     if (!activePrice) return "ref"
     const price = activePrice
     const ceil = quoteCeiling ? normalizeMarketPrice(quoteCeiling, price) ?? quoteCeiling : (reference ? Math.round(reference * 1.07 * 100) / 100 : undefined)
     const flr = quoteFloor ? normalizeMarketPrice(quoteFloor, price) ?? quoteFloor : (reference ? Math.round(reference * 0.93 * 100) / 100 : undefined)
-
-    const baseTone = marketToneFromPrice({
-      price,
-      reference,
-      ceiling: ceil,
-      floor: flr,
-      changePercent,
-    })
+    const baseTone = marketToneFromPrice({ price, reference, ceiling: ceil, floor: flr, changePercent })
     if (baseTone === "ceiling" || baseTone === "floor") return baseTone
     if (ceil && Math.abs(price - ceil) < 0.05) return "ceiling"
     if (flr && Math.abs(price - flr) < 0.05) return "floor"
@@ -2687,904 +1832,121 @@ export function LiveOrderBookPanel({
   const color = activePrice ? marketToneText(tone) : "text-muted-2"
   const headerPriceFlash = usePriceFlashAnimation(activePrice, reference)
 
-  // Foreign statistics calculations
   const foreignNetVolume = stream.foreign ? stream.foreign.totalBuyVolume - stream.foreign.totalSellVolume : null
-  const foreignNetValue =
-    stream.foreign?.totalBuyValue || stream.foreign?.totalSellValue
-      ? stream.foreign.totalBuyValue - stream.foreign.totalSellValue
-      : foreignNetVolume && quote?.price
-        ? foreignNetVolume * quote.price
-        : null
-
+  const foreignNetValue = stream.foreign?.totalBuyValue || stream.foreign?.totalSellValue ? stream.foreign.totalBuyValue - stream.foreign.totalSellValue : foreignNetVolume && quote?.price ? foreignNetVolume * quote.price : null
   const foreignRoom = stream.foreign?.availableRoom ?? initialMeta?.foreignRoom ?? getEodForeignRoom(symbol)
   const { percent: roomPercentage } = calculateForeignRoomPercent(foreignRoom, symbol, stream.foreign?.listedShare)
-
-  // Foreign live flash animations
   const foreignBuyVolFlash = useFlashAnimation(stream.foreign?.totalBuyVolume, 1)
   const foreignSellVolFlash = useFlashAnimation(stream.foreign?.totalSellVolume, 1)
   const foreignNetVolFlash = useFlashAnimation(foreignNetVolume, 1)
   const foreignRoomFlash = useFlashAnimation(foreignRoom, 1)
 
-  // Clean CSS styles with zero transition lag while interacting
-  const panelStyle = isMaximized
-    ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 }
-    : {
-        left: `${pos.x}px`,
-        top: `${pos.y}px`,
-        width: `${Math.min(size.width, window.innerWidth - 16)}px`,
-        height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`,
-        zIndex: z,
-      }
+  const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`, zIndex: z }
 
   return (
-    <section
-      ref={panelRef}
-      className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border bg-[#0b0f14]/94 backdrop-blur-2xl will-change-[width,height,left,top] ${
-        isWhaleGlow
-          ? "border-amber-400/90 shadow-[0_0_40px_rgba(251,191,36,0.35),0_25px_70px_rgba(0,0,0,0.95)] ring-2 ring-amber-400/60"
-          : "border-white/[0.12] shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)]"
-      } ${
-        isMaximized ? "fixed" : ""
-      } ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`}
-      style={panelStyle}
-      onPointerDown={onPanelPointerDown}
-      data-orderbook={stockKey}
-    >
-      {/* Whale trade Lottie animation celebration */}
+    <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border bg-[#0b0f14]/94 backdrop-blur-2xl will-change-[width,height,left,top] ${isWhaleGlow ? "border-amber-400/90 shadow-[0_0_40px_rgba(251,191,36,0.35),0_25px_70px_rgba(0,0,0,0.95)] ring-2 ring-amber-400/60" : "border-white/[0.12] shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)]"} ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
       <ConfettiOverlay active={confetti.active} side={confetti.side} volume={confetti.alert?.volume} />
-
-      {/* HEADER / DRAG HANDLE */}
-      <header
-        className="relative flex cursor-grab select-none items-center justify-between gap-3 overflow-hidden border-b border-white/[0.14] bg-gradient-to-b from-[#182330]/95 via-[#101824]/90 to-[#0c121b]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),inset_0_-1px_0_0_rgba(0,0,0,0.4),0_6px_24px_-4px_rgba(0,0,0,0.6)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/35 before:to-transparent"
-        onPointerDown={onHeaderPointerDown}
-      >
-        {/* Left: Ticker, Logo, Exchange, Price & Change */}
+      <header className="relative flex cursor-grab select-none items-center justify-between gap-3 overflow-hidden border-b border-white/[0.14] bg-gradient-to-b from-[#182330]/95 via-[#101824]/90 to-[#0c121b]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),inset_0_-1px_0_0_rgba(0,0,0,0.4),0_6px_24px_-4px_rgba(0,0,0,0.6)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/35 before:to-transparent" onPointerDown={onHeaderPointerDown}>
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
           <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
-          <StockLogo
-            symbol={symbol}
-            size={32}
-            className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-          />
-          <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-1 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">
-            {symbol}
-          </span>
-          {stream.company?.exchange ? (
-            <span className="hidden sm:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">
-              {stream.company.exchange}
-            </span>
-          ) : null}
-
-          {/* Live Price & Change Pill right beside ticker */}
+          <StockLogo symbol={symbol} size={32} className="shrink-0 rounded-full border-white/40 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]" />
+          <span className="font-ticker text-xl sm:text-2xl font-extrabold italic bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent pr-1 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)] tracking-tight shrink-0 select-none">{symbol}</span>
+          {stream.company?.exchange ? <span className="hidden sm:inline-flex rounded-full bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 text-[9.5px] font-bold text-white/70 uppercase tracking-wider shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">{stream.company.exchange}</span> : null}
           <div className="flex items-center gap-1.5 shrink-0 ml-1">
-            <span
-              className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${color} ${
-                headerPriceFlash === "up"
-                  ? "flash-text-up font-black"
-                  : headerPriceFlash === "down"
-                    ? "flash-text-down font-black"
-                    : headerPriceFlash === "ref"
-                      ? "flash-text-ref font-black"
-                      : ""
-              }`}
-            >
-              {formatPrice(activePrice)}
-            </span>
+            <span className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${color} ${headerPriceFlash === "up" ? "flash-text-up font-black" : headerPriceFlash === "down" ? "flash-text-down font-black" : headerPriceFlash === "ref" ? "flash-text-ref font-black" : ""}`}>{formatPrice(activePrice)}</span>
             {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact decimals={2} /> : null}
           </div>
         </div>
-
-        {/* Right: Insight Action & Window Controls */}
         <div className="flex items-center gap-2 shrink-0">
-          <a
-            data-orderbook-action
-            href={`/insights?ticker=${symbol}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Mở phân tích Insight ${symbol} (tab mới)`}
-            title="Mở phân tích Insight trong tab mới"
-            onClick={(event) => event.stopPropagation()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 font-ticker text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-200 transition-all shadow-[0_0_10px_rgba(34,201,138,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] group"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
-            <span>Insight</span>
-            <ExternalLink className="h-3 w-3 text-emerald-400/80 group-hover:text-emerald-300 transition-colors" />
-          </a>
-
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"}
-            title={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsMaximized((v) => !v)
-            }}
-            className="rounded p-1 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors"
-          >
-            {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </button>
-
-          <button
-            data-orderbook-action
-            type="button"
-            aria-label="Đóng sổ lệnh"
-            title="Đóng"
-            onPointerDown={closeOnPointerDown}
-            onClick={closeOnClick}
-            className="rounded p-1 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <a data-orderbook-action href={`/insights?ticker=${symbol}`} target="_blank" rel="noopener noreferrer" aria-label={`Mở phân tích Insight ${symbol} (tab mới)`} title="Mở phân tích Insight trong tab mới" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 font-ticker text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-200 transition-all shadow-[0_0_10px_rgba(34,201,138,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] group"><Sparkles className="h-3.5 w-3.5 text-emerald-400 group-hover:scale-110 transition-transform" /><span>Insight</span><ExternalLink className="h-3 w-3 text-emerald-400/80 group-hover:text-emerald-300 transition-colors" /></a>
+          <button data-orderbook-action type="button" aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"} title={isMaximized ? "Khôi phục kích thước" : "Phóng to"} onClick={(event) => { event.stopPropagation(); setIsMaximized((v) => !v) }} className="rounded p-1 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors">{isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
+          <button data-orderbook-action type="button" aria-label="Đóng sổ lệnh" title="Đóng" onPointerDown={closeOnPointerDown} onClick={closeOnClick} className="rounded p-1 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"><X className="h-4 w-4" /></button>
         </div>
       </header>
 
-      {/* FLOATING PUT-THROUGH DEAL TOAST ALERT */}
-      {stream.latestPtAlert && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => {
-            setActivityTab("putthrough")
-            stream.setLatestPtAlert(null)
-          }}
-          className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-amber-500/50 bg-[#161a20]/95 px-4 py-2 text-xs font-mono shadow-[0_12px_36px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(245,158,11,0.3)] backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 cursor-pointer hover:bg-[#1f242d] hover:border-amber-400 transition-all select-none"
-          title="Bấm để chuyển sang tab Thỏa thuận"
-        >
-          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0 text-[11px]">
-            🤝
-          </div>
-          <div className="flex items-center gap-1.5 text-foreground font-sans">
-            <span className="font-bold text-amber-300">Thỏa thuận mới:</span>
-            <span className="font-mono font-bold text-foreground">{formatVolume(stream.latestPtAlert.volume)} CP</span>
-            <span className="text-muted-2">@</span>
-            <span className="font-mono font-bold text-up">{formatPrice(stream.latestPtAlert.price)}</span>
-            <span className="rounded bg-amber-500/20 border border-amber-500/35 px-1.5 py-0.2 text-[11px] font-bold text-amber-300 font-mono">
-              {formatMarketValue(stream.latestPtAlert.value)}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              stream.setLatestPtAlert(null)
-            }}
-            className="ml-1 text-muted-2 hover:text-foreground text-[10px] p-0.5 rounded-full hover:bg-white/10 transition-colors"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {stream.latestPtAlert && <div role="button" tabIndex={0} onClick={() => { setActivityTab("putthrough"); stream.setLatestPtAlert(null) }} className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-amber-500/50 bg-[#161a20]/95 px-4 py-2 text-xs font-mono shadow-[0_12px_36px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(245,158,11,0.3)] backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 cursor-pointer hover:bg-[#1f242d] hover:border-amber-400 transition-all select-none" title="Bấm để chuyển sang tab Thỏa thuận"><div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0 text-[11px]">🤝</div><div className="flex items-center gap-1.5 text-foreground font-sans"><span className="font-bold text-amber-300">Thỏa thuận mới:</span><span className="font-mono font-bold text-foreground">{formatVolume(stream.latestPtAlert.volume)} CP</span><span className="text-muted-2">@</span><span className="font-mono font-bold text-up">{formatPrice(stream.latestPtAlert.price)}</span><span className="rounded bg-amber-500/20 border border-amber-500/35 px-1.5 py-0.2 text-[11px] font-bold text-amber-300 font-mono">{formatMarketValue(stream.latestPtAlert.value)}</span></div><button type="button" onClick={(e) => { e.stopPropagation(); stream.setLatestPtAlert(null) }} className="ml-1 text-muted-2 hover:text-foreground text-[10px] p-0.5 rounded-full hover:bg-white/10 transition-colors">✕</button></div>}
 
       {!minimized ? (
         <div className="min-h-0 flex-1 overflow-y-auto flex flex-col bg-[#121313]">
-          {/* SECTION 1: ORDERBOOK DEPTH LADDER (3 Levels) */}
           <div className="border-b border-border/80 px-4 py-2.5 bg-[#151616]">
-            {/* Depth Ladder Table */}
             <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5 shadow-inner">
-              <div className="grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1.5">
-                <span className="text-left px-2">KL Mua</span>
-                <span className="text-right px-2">Giá Mua</span>
-                <span className="text-left px-2">Giá Bán</span>
-                <span className="text-right px-2">KL Bán</span>
-              </div>
-
-              <div className="mt-1 space-y-0.5 font-mono text-[13px]">
-                {rows.map(({ bid, ask }, rowIndex) => (
-                  <OrderBookDepthRow
-                    key={rowIndex}
-                    bid={bid}
-                    ask={ask}
-                    maxDepthVolume={maxDepthVolume}
-                    quote={quote}
-                  />
-                ))}
-              </div>
-
-              {/* ACCUMULATION / DISTRIBUTION RATIO BAR */}
+              <div className="grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1.5"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
+              <div className="mt-1 space-y-0.5 font-mono text-[13px]">{rows.map(({ bid, ask }, rowIndex) => <OrderBookDepthRow key={rowIndex} bid={bid} ask={ask} maxDepthVolume={maxDepthVolume} quote={quote} />)}</div>
               <div className="mt-2.5 pt-2.5 border-t border-white/[0.08]">
-                {/* Upper stats row */}
                 <div className="flex items-center justify-between mb-1.5">
-                  {/* Left: Mua */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
-                    <span className="text-xs font-bold text-slate-300">Mua</span>
-                    <span className="font-ticker font-extrabold text-sm sm:text-base text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.35)]">
-                      {depthTotal > 0 ? `${buyPct.toFixed(1)}%` : "50.0%"}
-                    </span>
-                  </div>
-
-                  {/* Center: ATO / ATC Countdown Timer */}
-                  {sessionCountdown ? (
-                    <div className="flex items-center justify-center">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse">
-                        <Clock className="h-3.5 w-3.5 text-amber-400" />
-                        <span>{sessionCountdown.type}: {sessionCountdown.label}</span>
-                      </span>
-                    </div>
-                  ) : null}
-
-                  {/* Right: Bán */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-ticker font-extrabold text-sm sm:text-base text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.35)]">
-                      {depthTotal > 0 ? `${sellPct.toFixed(1)}%` : "50.0%"}
-                    </span>
-                    <span className="text-xs font-bold text-slate-300">Bán</span>
-                    <span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)] shrink-0" />
-                  </div>
+                  <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" /><span className="text-xs font-bold text-slate-300">Mua</span><span className="font-ticker font-extrabold text-sm sm:text-base text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.35)]">{depthTotal > 0 ? `${buyPct.toFixed(1)}%` : "50.0%"}</span></div>
+                  {sessionCountdown ? <div className="flex items-center justify-center"><span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse"><Clock className="h-3.5 w-3.5 text-amber-400" /><span>{sessionCountdown.type}: {sessionCountdown.label}</span></span></div> : null}
+                  <div className="flex items-center gap-1.5"><span className="font-ticker font-extrabold text-sm sm:text-base text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.35)]">{depthTotal > 0 ? `${sellPct.toFixed(1)}%` : "50.0%"}</span><span className="text-xs font-bold text-slate-300">Bán</span><span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)] shrink-0" /></div>
                 </div>
-
-                {/* The Progress Bar with White Gradient Transition in the Middle */}
-                <div
-                  className="relative h-2 w-full rounded-full overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6),inset_0_1px_2px_rgba(0,0,0,0.8)] transition-all duration-300"
-                  style={{
-                    background: depthTotal > 0
-                      ? `linear-gradient(to right, #10b981 0%, #22c98a ${Math.max(0, buyPct - 2.5)}%, #ffffff ${buyPct}%, #f43f5e ${Math.min(100, buyPct + 2.5)}%, #ff4757 100%)`
-                      : "linear-gradient(to right, #22c98a 0%, #ffffff 50%, #ff4757 100%)",
-                  }}
-                />
-
-                {/* Sub-footer below bar: Volume stats */}
-                <div className="flex items-center justify-between mt-1 text-[10.5px] font-mono">
-                  <span className="text-emerald-400/90 font-medium">
-                    VOL: +{formatCompactVolume(bidTotal)}
-                  </span>
-                  <span className="text-rose-400/90 font-medium">
-                    VOL: -{formatCompactVolume(askTotal)}
-                  </span>
-                </div>
+                <div className="relative h-2 w-full rounded-full overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6),inset_0_1px_2px_rgba(0,0,0,0.8)] transition-all duration-300" style={{ background: depthTotal > 0 ? `linear-gradient(to right, #10b981 0%, #22c98a ${Math.max(0, buyPct - 2.5)}%, #ffffff ${buyPct}%, #f43f5e ${Math.min(100, buyPct + 2.5)}%, #ff4757 100%)` : "linear-gradient(to right, #22c98a 0%, #ffffff 50%, #ff4757 100%)" }} />
+                <div className="flex items-center justify-between mt-1 text-[10.5px] font-mono"><span className="text-emerald-400/90 font-medium">VOL: +{formatCompactVolume(bidTotal)}</span><span className="text-rose-400/90 font-medium">VOL: -{formatCompactVolume(askTotal)}</span></div>
               </div>
             </div>
           </div>
 
-          {/* SECTION 2: TABBED ACTIVITY VIEWS */}
           <div className="px-4 py-3 flex-1 flex flex-col">
-            {/* Tabs Header */}
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
               <div className="flex items-center gap-1 bg-[#0c1015]/90 p-1 rounded-xl border border-white/[0.08] shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
-                <button
-                  type="button"
-                  disabled={!isWsReady}
-                  onClick={() => setActivityTab("trades")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
-                    activityTab === "trades"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(34,201,138,0.15)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
-                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
-                >
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  <span>Khớp lệnh</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={!isWsReady}
-                  onClick={() => setActivityTab("foreign")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
-                    activityTab === "foreign"
-                      ? "bg-blue-500/20 text-blue-300 border border-blue-400/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
-                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
-                >
-                  <PieChart className="h-3.5 w-3.5" />
-                  <span>Khối ngoại</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={!isWsReady}
-                  onClick={() => setActivityTab("profile")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
-                    activityTab === "profile"
-                      ? "bg-purple-500/20 text-purple-300 border border-purple-400/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
-                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
-                >
-                  <Layers className="h-3.5 w-3.5" />
-                  <span>Bước giá</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={!isWsReady}
-                  onClick={() => setActivityTab("putthrough")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
-                    activityTab === "putthrough"
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-400/30 shadow-[0_0_10px_rgba(245,158,11,0.15)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
-                  } ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
-                >
-                  <Handshake className="h-3.5 w-3.5" />
-                  <span>Thỏa thuận</span>
-                  {stream.putThroughDeals.length > 0 && (
-                    <span className="rounded-full bg-amber-500/30 px-1.5 py-0.2 text-[10px] text-amber-300 font-mono font-bold">
-                      {stream.putThroughDeals.length}
-                    </span>
-                  )}
-                </button>
+                {([[
+                  "trades", BarChart3, "Khớp lệnh", "emerald"
+                ], ["foreign", PieChart, "Khối ngoại", "blue"], ["profile", Layers, "Bước giá", "purple"], ["putthrough", Handshake, "Thỏa thuận", "amber"]] as const).map(([tab, Icon, label, theme]) => (
+                  <button key={tab} type="button" disabled={!isWsReady} onClick={() => setActivityTab(tab)} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${activityTab === tab ? `bg-${theme}-500/20 text-${theme}-300 border border-${theme}-400/30` : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"} ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}><Icon className="h-3.5 w-3.5" /><span>{label}</span>{tab === "putthrough" && stream.putThroughDeals.length > 0 ? <span className="rounded-full bg-amber-500/30 px-1.5 py-0.2 text-[10px] text-amber-300 font-mono font-bold">{stream.putThroughDeals.length}</span> : null}</button>
+                ))}
               </div>
-
-              {/* Tape Sub-filters */}
-              {activityTab === "trades" && (
-                <div className={`flex items-center gap-1 bg-[#0c1015]/90 p-1 rounded-xl border border-white/[0.08] text-xs shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${!isWsReady ? "opacity-50 pointer-events-none" : ""}`}>
-                  <button
-                    type="button"
-                    disabled={!isWsReady}
-                    onClick={() => setTradeFilter("all")}
-                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-150 ${
-                      tradeFilter === "all"
-                        ? "bg-white/[0.12] text-white shadow-sm border border-white/[0.15]"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
-                    }`}
-                    title={stream.trades.length > clusteredTrades.length ? `Gốc: ${stream.trades.length.toLocaleString("vi-VN")} lệnh` : undefined}
-                  >
-                    <AllTradesIcon className="h-3.5 w-3.5" />
-                    <span>Tất cả ({isWsReady ? clusteredTrades.length : "..."})</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!isWsReady}
-                    onClick={() => setTradeFilter("large")}
-                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all duration-150 ${
-                      tradeFilter === "large"
-                        ? "border-amber-400/40 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                        : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
-                    }`}
-                  >
-                    <SmallFishIcon className="h-3.5 w-3.5" />
-                    <span>Cá con ≥10K</span>
-                    {isWsReady && largeTradeCount > 0 && <span className="rounded-full bg-amber-400/30 px-1.5 py-0.2 text-[10px] font-black text-amber-300">{largeTradeCount}</span>}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!isWsReady}
-                    onClick={() => setTradeFilter("whale")}
-                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all duration-150 ${
-                      tradeFilter === "whale"
-                        ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(34,201,138,0.2)]"
-                        : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
-                    }`}
-                  >
-                    <SharkIcon className="h-3.5 w-3.5" />
-                    <span>Cá mập {whaleLabel}</span>
-                    {isWsReady && whaleTradeCount > 0 && <span className="rounded-full bg-emerald-400/30 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">{whaleTradeCount}</span>}
-                  </button>
-                </div>
-              )}
+              {activityTab === "trades" && <div className={`flex items-center gap-1 bg-[#0c1015]/90 p-1 rounded-xl border border-white/[0.08] text-xs shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${!isWsReady ? "opacity-50 pointer-events-none" : ""}`}>
+                <button type="button" disabled={!isWsReady} onClick={() => setTradeFilter("all")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold border ${tradeFilter === "all" ? "bg-white/[0.12] text-white border-white/[0.15]" : "border-transparent text-slate-400"}`}><AllTradesIcon /><span>Tất cả ({isWsReady ? clusteredTrades.length : "..."})</span></button>
+                <button type="button" disabled={!isWsReady} onClick={() => setTradeFilter("large")} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${tradeFilter === "large" ? "border-amber-400/40 bg-amber-500/20 text-amber-300" : "border-transparent text-slate-400"}`}><SmallFishIcon /><span>Cá con ≥10K</span>{isWsReady && largeTradeCount > 0 ? <span className="rounded-full bg-amber-400/30 px-1.5 py-0.2 text-[10px] font-black text-amber-300">{largeTradeCount}</span> : null}</button>
+                <button type="button" disabled={!isWsReady} onClick={() => setTradeFilter("whale")} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${tradeFilter === "whale" ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-300" : "border-transparent text-slate-400"}`}><SharkIcon /><span>Cá mập {whaleLabel}</span>{isWsReady && whaleTradeCount > 0 ? <span className="rounded-full bg-emerald-400/30 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">{whaleTradeCount}</span> : null}</button>
+              </div>}
             </div>
 
-            {/* TAB CONTENT: SHOW SKELETON LOADING UNTIL DNSE WS IS LIVE */}
             {!isWsReady ? (
               stream.state === "ERROR" ? (
-                <div className="flex flex-col items-center justify-center flex-1 rounded-lg border border-down/40 bg-down/5 p-6 text-center text-xs">
-                  <AlertCircle className="h-7 w-7 text-down mb-2" />
-                  <span className="font-bold text-foreground">Không thể kết nối DNSE WebSocket</span>
-                  <span className="text-muted text-[11px] mt-1 mb-3">{stream.error || "Lỗi kết nối tới máy chủ dữ liệu"}</span>
-                  <button
-                    type="button"
-                    onClick={() => setReconnectKey((k) => k + 1)}
-                    className="flex items-center gap-1.5 rounded-md bg-panel-2 border border-border px-3 py-1.5 font-bold text-foreground hover:bg-border transition-colors"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Thử lại kết nối
-                  </button>
-                </div>
-              ) : (
-                <TapeLoadingSkeleton />
-              )
+                <div className="flex flex-col items-center justify-center flex-1 rounded-lg border border-down/40 bg-down/5 p-6 text-center text-xs"><AlertCircle className="h-7 w-7 text-down mb-2" /><span className="font-bold text-foreground">Không thể kết nối realtime tập trung</span><span className="text-muted text-[11px] mt-1 mb-3">{stream.error || "Lỗi kết nối tới dịch vụ dữ liệu"}</span><button type="button" onClick={() => setReconnectKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md bg-panel-2 border border-border px-3 py-1.5 font-bold text-foreground hover:bg-border transition-colors"><RefreshCw className="h-3.5 w-3.5" />Thử lại kết nối</button></div>
+              ) : <TapeLoadingSkeleton />
             ) : (
               <>
-                {/* TAB CONTENT: KHỚP LỆNH (TAPE) */}
                 {activityTab === "trades" && (
-                  <div className="flex flex-col space-y-2.5">
-                    {/* Split 2-Panel Layout: Left = Tape (Khớp lệnh), Right = Khối ngoại NN + Lực mua/bán & Thông số */}
-                    <div className="grid grid-cols-[1.18fr_1fr] gap-2.5 items-start">
-                      {/* Left: Tape Table with height matching right column */}
-                      {visibleTrades.length ? (
-                        <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 overflow-hidden shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
-                          <div className="shrink-0 grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-white/[0.08] bg-[#11161d] px-3.5 py-2.5 text-xs font-bold text-slate-400">
-                            <span>Thời gian</span>
-                            <span className="text-right">Khối lượng</span>
-                            <span className="text-right">Giá</span>
-                          </div>
-                          <div className="overflow-y-auto px-3.5 divide-y divide-white/[0.04] max-h-[555px] min-h-[555px]">
-                            {visibleTrades.map((trade) => {
-                              const isAto = isAtoTradeTime(trade.time)
-                              const isAtc = isAtcTradeTime(trade.time)
-                              const isLarge = !isAto && !isAtc && trade.volume >= LARGE_TRADE_MIN_VOLUME
-                              const isWhale = !isAto && !isAtc && trade.volume >= whaleThreshold
-                              const pill = sidePillMeta(trade.side)
-
-                              const sideColorClass =
-                                trade.side === "BUY"
-                                  ? "text-up"
-                                  : trade.side === "SELL"
-                                    ? "text-down"
-                                    : "text-foreground"
-
-                              const sideBgClass =
-                                isAto
-                                  ? "bg-blue-950/20"
-                                  : isAtc
-                                    ? "bg-purple-950/20"
-                                    : trade.side === "BUY"
-                                      ? "bg-up/10"
-                                      : trade.side === "SELL"
-                                        ? "bg-down/10"
-                                        : "bg-ref/10"
-
-                              const tagBadgeClass =
-                                trade.side === "BUY"
-                                  ? "bg-up/25 text-up border-up/30"
-                                  : trade.side === "SELL"
-                                    ? "bg-down/25 text-down border-down/30"
-                                    : "bg-ref/25 text-ref border-ref/30"
-
-                              return (
-                                <div
-                                  key={trade.id}
-                                  className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${
-                                    isWhale || isLarge || isAto || isAtc
-                                      ? `${sideBgClass} font-bold -mx-3.5 px-3.5`
-                                      : "text-foreground"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>
-                                    {trade.count > 1 && (
-                                      <span
-                                        className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0"
-                                        title={`Gộp ${trade.count} lệnh khớp liên tiếp cùng chiều trong ≤1s`}
-                                      >
-                                        x{trade.count}
-                                      </span>
-                                    )}
-                                    {isAto ? (
-                                      <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-blue-400/50 bg-blue-950/70 text-blue-300 shadow-sm">
-                                        ATO
-                                      </span>
-                                    ) : isAtc ? (
-                                      <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-purple-400/50 bg-purple-950/70 text-purple-300 shadow-sm">
-                                        ATC
-                                      </span>
-                                    ) : isWhale ? (
-                                      <span className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
-                                        <span>🐋</span>
-                                        <span>{trade.volume >= 50_000 ? "50K+" : "30K+"}</span>
-                                      </span>
-                                    ) : isLarge ? (
-                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>
-                                        10K+
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <span
-                                    className={`text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5 ${
-                                      isWhale || isLarge ? sideColorClass : "text-foreground"
-                                    }`}
-                                  >
-                                    <span>{formatVolume(trade.volume)}</span>
-                                    <span
-                                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}
-                                    >
-                                      {pill.label}
-                                    </span>
-                                  </span>
-                                  <span
-                                    className={`text-right font-bold text-sm sm:text-[14px] ${getPriceColorClass(
-                                      trade.price,
-                                      quote?.reference,
-                                      quote?.ceiling,
-                                      quote?.floor
-                                    )}`}
-                                  >
-                                    {formatPrice(trade.price)}
-                                  </span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-xl border border-white/[0.08] bg-[#0c1015]/90 px-4 py-8 text-center text-xs text-slate-400 flex items-center justify-center max-h-[555px] min-h-[555px] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
-                          {stream.historyState === "LOADING"
-                            ? "Đang tải dữ liệu khớp lệnh..."
-                            : tradeFilter !== "all"
-                              ? "Không có lệnh thỏa mãn bộ lọc."
-                              : "Chờ dữ liệu khớp lệnh mới..."}
-                        </div>
-                      )}
-
-                      {/* Right: Stack of 2 Widgets */}
-                      <div className="flex flex-col gap-2.5">
-                        {/* Widget 1: Realtime Khối Ngoại NN */}
-                        <ForeignRealtimeCard
-                          foreign={stream.foreign}
-                          quotePrice={activePrice}
-                          foreignNetVolume={foreignNetVolume}
-                          foreignNetValue={foreignNetValue}
-                          roomPercentage={roomPercentage}
-                          latestTradeTime={stream.trades[0]?.time}
-                        />
-
-                        {/* Widget 2: Lực Mua/Bán Chủ Động & Thông số phiên (Sàn, TC, Trần, Thấp, Cao, TB, Spread, Tổng KL, Tổng GT) */}
-                        <TradeInitiativeAndMarketStatsCard
-                          symbol={symbol}
-                          tradeStats={tradeStats}
-                          quote={quote}
-                          spread={spread}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <div className="flex flex-col space-y-2.5"><div className="grid grid-cols-[1.18fr_1fr] gap-2.5 items-start">
+                    {visibleTrades.length ? <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#0c1015]/90 overflow-hidden shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]"><div className="shrink-0 grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-white/[0.08] bg-[#11161d] px-3.5 py-2.5 text-xs font-bold text-slate-400"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span></div><div className="overflow-y-auto px-3.5 divide-y divide-white/[0.04] max-h-[555px] min-h-[555px]">{visibleTrades.map((trade) => {
+                      const isAto = isAtoTradeTime(trade.time), isAtc = isAtcTradeTime(trade.time), isLarge = !isAto && !isAtc && trade.volume >= LARGE_TRADE_MIN_VOLUME, isWhale = !isAto && !isAtc && trade.volume >= whaleThreshold, pill = sidePillMeta(trade.side)
+                      const sideColorClass = trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"
+                      const sideBgClass = isAto ? "bg-blue-950/20" : isAtc ? "bg-purple-950/20" : trade.side === "BUY" ? "bg-up/10" : trade.side === "SELL" ? "bg-down/10" : "bg-ref/10"
+                      const tagBadgeClass = trade.side === "BUY" ? "bg-up/25 text-up border-up/30" : trade.side === "SELL" ? "bg-down/25 text-down border-down/30" : "bg-ref/25 text-ref border-ref/30"
+                      return <div key={trade.id} className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${isWhale || isLarge || isAto || isAtc ? `${sideBgClass} font-bold -mx-3.5 px-3.5` : "text-foreground"}`}><div className="flex items-center gap-1.5 min-w-0"><span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>{trade.count > 1 ? <span className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0">x{trade.count}</span> : null}{isAto ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-blue-400/50 bg-blue-950/70 text-blue-300">ATO</span> : isAtc ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-purple-400/50 bg-purple-950/70 text-purple-300">ATC</span> : isWhale ? <span className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}><span>🐋</span><span>{trade.volume >= 50_000 ? "50K+" : "30K+"}</span></span> : isLarge ? <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>10K+</span> : null}</div><span className={`text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5 ${isWhale || isLarge ? sideColorClass : "text-foreground"}`}><span>{formatVolume(trade.volume)}</span><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}>{pill.label}</span></span><span className={`text-right font-bold text-sm sm:text-[14px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>{formatPrice(trade.price)}</span></div>
+                    })}</div></div> : <div className="rounded-xl border border-white/[0.08] bg-[#0c1015]/90 px-4 py-8 text-center text-xs text-slate-400 flex items-center justify-center max-h-[555px] min-h-[555px] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">{stream.historyState === "LOADING" ? "Đang tải dữ liệu khớp lệnh..." : tradeFilter !== "all" ? "Không có lệnh thỏa mãn bộ lọc." : "Chờ dữ liệu khớp lệnh mới..."}</div>}
+                    <div className="flex flex-col gap-2.5"><ForeignRealtimeCard foreign={stream.foreign} quotePrice={activePrice} foreignNetVolume={foreignNetVolume} foreignNetValue={foreignNetValue} roomPercentage={roomPercentage} latestTradeTime={stream.trades[0]?.time} /><TradeInitiativeAndMarketStatsCard symbol={symbol} tradeStats={tradeStats} quote={quote} spread={spread} /></div>
+                  </div></div>
                 )}
 
-                {/* TAB CONTENT: NƯỚC NGOÀI (FOREIGN) */}
-                {activityTab === "foreign" && (
-                  <div className="flex flex-col flex-1 space-y-3">
-                    {/* 4 Summary Cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                        <div className="text-xs text-muted-2 font-semibold">NN Mua lũy kế</div>
-                        <div
-                          className={`mt-1 font-mono text-sm sm:text-base font-bold text-up transition-colors ${
-                            foreignBuyVolFlash === "up" ? "flash-up font-black" : foreignBuyVolFlash === "down" ? "flash-down font-black" : ""
-                          }`}
-                        >
-                          {formatVolume(stream.foreign?.totalBuyVolume)}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-muted font-mono">
-                          {stream.foreign?.totalBuyValue
-                            ? formatMarketValue(stream.foreign.totalBuyValue)
-                            : stream.foreign?.totalBuyVolume && quote?.price
-                              ? formatMarketValue(stream.foreign.totalBuyVolume * quote.price)
-                              : "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                        <div className="text-xs text-muted-2 font-semibold">NN Bán lũy kế</div>
-                        <div
-                          className={`mt-1 font-mono text-sm sm:text-base font-bold text-down transition-colors ${
-                            foreignSellVolFlash === "up" ? "flash-up font-black" : foreignSellVolFlash === "down" ? "flash-down font-black" : ""
-                          }`}
-                        >
-                          {formatVolume(stream.foreign?.totalSellVolume)}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-muted font-mono">
-                          {stream.foreign?.totalSellValue
-                            ? formatMarketValue(stream.foreign.totalSellValue)
-                            : stream.foreign?.totalSellVolume && quote?.price
-                              ? formatMarketValue(stream.foreign.totalSellVolume * quote.price)
-                              : "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                        <div className="text-xs text-muted-2 font-semibold">Mua / Bán Ròng</div>
-                        <div
-                          className={`mt-1 font-mono text-sm sm:text-base font-bold transition-colors ${
-                            foreignNetVolume === null
-                              ? "text-muted-2"
-                              : foreignNetVolume > 0
-                                ? "text-up"
-                                : foreignNetVolume < 0
-                                  ? "text-down"
-                                  : "text-ref"
-                          } ${
-                            foreignNetVolFlash === "up" ? "flash-up font-black" : foreignNetVolFlash === "down" ? "flash-down font-black" : ""
-                          }`}
-                        >
-                          {foreignNetVolume === null
-                            ? "—"
-                            : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-muted font-mono">
-                          {foreignNetValue !== null ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}` : "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5">
-                        <div className="text-xs text-muted-2 font-semibold">Room Ngoại còn lại</div>
-                        <div
-                          className={`mt-1 font-mono text-sm sm:text-base font-bold text-foreground transition-colors ${
-                            foreignRoomFlash === "up" ? "flash-up font-black" : foreignRoomFlash === "down" ? "flash-down font-black" : ""
-                          }`}
-                        >
-                          {foreignRoom !== null && foreignRoom !== undefined
-                            ? foreignRoom === 0
-                              ? "Hết room (0 cp)"
-                              : `${formatCompactVolume(foreignRoom)} cp`
-                            : "—"}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-muted font-mono">
-                          {roomPercentage !== null && foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
-                            ? `Còn ${roomPercentage.toFixed(1)}% VĐL`
-                            : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0
-                              ? `${formatVolume(foreignRoom)} cp khả dụng`
-                              : foreignRoom === 0
-                                ? "Khối ngoại đã hết room"
-                                : "Theo quy định VSD"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Foreign Flow Timeline Chart (Biến động GT mua bán của NN trong phiên) */}
-                    <ForeignFlowChart
-                      timeline={foreignTimeline}
-                      currentNetValue={foreignNetValue}
-                      currentBuyValue={stream.foreign?.totalBuyValue}
-                      currentSellValue={stream.foreign?.totalSellValue}
-                    />
-
-                    <div className="text-[11px] text-muted leading-relaxed">
-                      * Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.
-                    </div>
+                {activityTab === "foreign" && <div className="flex flex-col flex-1 space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5"><div className="text-xs text-muted-2 font-semibold">NN Mua lũy kế</div><div className={`mt-1 font-mono text-sm sm:text-base font-bold text-up transition-colors ${foreignBuyVolFlash === "up" ? "flash-up font-black" : foreignBuyVolFlash === "down" ? "flash-down font-black" : ""}`}>{formatVolume(stream.foreign?.totalBuyVolume)}</div><div className="mt-0.5 text-[11px] text-muted font-mono">{stream.foreign?.totalBuyValue ? formatMarketValue(stream.foreign.totalBuyValue) : stream.foreign?.totalBuyVolume && quote?.price ? formatMarketValue(stream.foreign.totalBuyVolume * quote.price) : "—"}</div></div>
+                    <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5"><div className="text-xs text-muted-2 font-semibold">NN Bán lũy kế</div><div className={`mt-1 font-mono text-sm sm:text-base font-bold text-down transition-colors ${foreignSellVolFlash === "up" ? "flash-up font-black" : foreignSellVolFlash === "down" ? "flash-down font-black" : ""}`}>{formatVolume(stream.foreign?.totalSellVolume)}</div><div className="mt-0.5 text-[11px] text-muted font-mono">{stream.foreign?.totalSellValue ? formatMarketValue(stream.foreign.totalSellValue) : stream.foreign?.totalSellVolume && quote?.price ? formatMarketValue(stream.foreign.totalSellVolume * quote.price) : "—"}</div></div>
+                    <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5"><div className="text-xs text-muted-2 font-semibold">Mua / Bán Ròng</div><div className={`mt-1 font-mono text-sm sm:text-base font-bold transition-colors ${foreignNetVolume === null ? "text-muted-2" : foreignNetVolume > 0 ? "text-up" : foreignNetVolume < 0 ? "text-down" : "text-ref"} ${foreignNetVolFlash === "up" ? "flash-up font-black" : foreignNetVolFlash === "down" ? "flash-down font-black" : ""}`}>{foreignNetVolume === null ? "—" : `${foreignNetVolume > 0 ? "+" : ""}${formatVolume(foreignNetVolume)}`}</div><div className="mt-0.5 text-[11px] text-muted font-mono">{foreignNetValue !== null ? `${foreignNetValue > 0 ? "+" : ""}${formatMarketValue(foreignNetValue)}` : "—"}</div></div>
+                    <div className="rounded-lg border border-border/80 bg-[#121313] p-2.5"><div className="text-xs text-muted-2 font-semibold">Room Ngoại còn lại</div><div className={`mt-1 font-mono text-sm sm:text-base font-bold text-foreground transition-colors ${foreignRoomFlash === "up" ? "flash-up font-black" : foreignRoomFlash === "down" ? "flash-down font-black" : ""}`}>{foreignRoom !== null && foreignRoom !== undefined ? foreignRoom === 0 ? "Hết room (0 cp)" : `${formatCompactVolume(foreignRoom)} cp` : "—"}</div><div className="mt-0.5 text-[11px] text-muted font-mono">{roomPercentage !== null && foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0 ? `Còn ${roomPercentage.toFixed(1)}% VĐL` : foreignRoom !== null && foreignRoom !== undefined && foreignRoom > 0 ? `${formatVolume(foreignRoom)} cp khả dụng` : foreignRoom === 0 ? "Khối ngoại đã hết room" : "Theo quy định VSD"}</div></div>
                   </div>
-                )}
+                  <ForeignFlowChart timeline={foreignTimeline} currentNetValue={foreignNetValue} currentBuyValue={stream.foreign?.totalBuyValue} currentSellValue={stream.foreign?.totalSellValue} />
+                  <div className="text-[11px] text-muted leading-relaxed">* Dữ liệu NĐTNN được tổng hợp trực tiếp từ sở giao dịch & feed DNSE T=f. Khối lượng và giá trị không bị suy diễn từ bảng khớp lệnh thông thường.</div>
+                </div>}
 
-                {/* TAB CONTENT: PHÂN TÍCH BƯỚC GIÁ (VOLUME PROFILE) */}
-                {activityTab === "profile" && (
-                  <div className="flex flex-col flex-1 bg-[#121313] rounded-lg border border-border/80 p-3 sm:p-4 font-mono text-xs">
-                    {/* Table Header matching Image 3 */}
-                    <div className="grid grid-cols-[60px_1fr_60px] items-center gap-2 border-b border-border/60 pb-2 mb-2 font-sans font-bold text-xs">
-                      <div className="flex items-center gap-1">
-                        <span className="text-foreground font-bold">Mức giá</span>
-                        <span className="text-muted text-[10px] font-normal sm:inline hidden">(nghìn đồng)</span>
-                      </div>
-                      <div className="text-muted-2 text-center text-[11px] font-normal">
-                        Phân bổ khối lượng ({volumeProfile.rows.length} bước giá)
-                      </div>
-                      <span className="text-foreground font-bold text-right">%</span>
-                    </div>
+                {activityTab === "profile" && <div className="flex flex-col flex-1 bg-[#121313] rounded-lg border border-border/80 p-3 sm:p-4 font-mono text-xs">
+                  <div className="grid grid-cols-[60px_1fr_60px] items-center gap-2 border-b border-border/60 pb-2 mb-2 font-sans font-bold text-xs"><div className="flex items-center gap-1"><span className="text-foreground font-bold">Mức giá</span><span className="text-muted text-[10px] font-normal sm:inline hidden">(nghìn đồng)</span></div><div className="text-muted-2 text-center text-[11px] font-normal">Phân bổ khối lượng ({volumeProfile.rows.length} bước giá)</div><span className="text-foreground font-bold text-right">%</span></div>
+                  {volumeProfile.rows.length ? <div className="flex-1 overflow-y-auto max-h-[440px] space-y-1.5 pr-1">{volumeProfile.rows.map((row) => {
+                    const totalBarWidthPct = (row.totalVol / volumeProfile.maxVol) * 82, rowVolPct = (row.totalVol / volumeProfile.totalSessionVol) * 100, atoSegmentPct = row.totalVol > 0 ? (row.atoVol / row.totalVol) * 100 : 0, buySegmentPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 0, sellSegmentPct = row.totalVol > 0 ? (row.sellVol / row.totalVol) * 100 : 0, atcSegmentPct = row.totalVol > 0 ? (row.atcVol / row.totalVol) * 100 : 0
+                    return <div key={row.price} className="grid grid-cols-[60px_1fr_60px] items-center gap-2 py-0.5 group hover:bg-panel-2/40 rounded px-1"><div className={`text-xs sm:text-[13px] ${getPriceColorClass(row.price, quote?.reference, quote?.ceiling, quote?.floor)} shrink-0`}>{formatPrice(row.price)}</div><div className="relative flex items-center min-w-0 h-6"><div className="absolute inset-0 flex justify-between pointer-events-none opacity-10"><div className="border-r border-border/60 h-full w-1/4" /><div className="border-r border-border/60 h-full w-1/4" /><div className="border-r border-border/60 h-full w-1/4" /><div className="h-full w-1/4" /></div><div className="flex h-5 rounded-sm overflow-hidden transition-all duration-300 relative z-10 shrink-0" style={{ width: `${Math.max(totalBarWidthPct, 3)}%` }}>{atoSegmentPct > 0 ? <div className="bg-[#3b4252] h-full" style={{ width: `${atoSegmentPct}%` }} /> : null}{buySegmentPct > 0 ? <div className="bg-up h-full" style={{ width: `${buySegmentPct}%` }} /> : null}{sellSegmentPct > 0 ? <div className="bg-down h-full" style={{ width: `${sellSegmentPct}%` }} /> : null}{atcSegmentPct > 0 ? <div className="bg-amber-400 h-full" style={{ width: `${atcSegmentPct}%` }} /> : null}</div><span className="ml-2 font-bold text-xs sm:text-[13px] text-foreground whitespace-nowrap z-10">{formatVolume(row.totalVol)}</span></div><div className="text-right text-xs sm:text-[13px] font-bold text-muted-2">{rowVolPct < 0.01 ? "<0.01%" : `${rowVolPct.toFixed(rowVolPct >= 10 ? 1 : 2)}%`}</div></div>
+                  })}</div> : <div className="flex-1 flex items-center justify-center p-8 text-center text-xs text-muted-2">{stream.historyState === "LOADING" ? "Đang tải dữ liệu bước giá trong phiên..." : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}</div>}
+                  <div className="mt-3 pt-2.5 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-sans"><div className="flex flex-wrap items-center gap-3 sm:gap-4"><div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#3b4252] inline-block shrink-0" /><span className="font-bold text-foreground">ATO</span><span className="text-muted">({((volumeProfile.sessionAtoVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)</span></div><div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-up inline-block shrink-0" /><span className="font-bold text-foreground">Mua chủ động</span><span className="text-muted">({((volumeProfile.sessionBuyVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)</span></div><div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-down inline-block shrink-0" /><span className="font-bold text-foreground">Bán chủ động</span><span className="text-muted">({((volumeProfile.sessionSellVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)</span></div><div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-amber-400 inline-block shrink-0" /><span className="font-bold text-foreground">ATC</span><span className="text-muted">({((volumeProfile.sessionAtcVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)</span></div></div><div className="text-muted text-[11px] font-medium">KL <span className="text-muted-2 font-bold">(CP)</span></div></div>
+                </div>}
 
-                    {/* Horizontal Stacked Bar Chart Rows */}
-                    {volumeProfile.rows.length ? (
-                      <div className="flex-1 overflow-y-auto max-h-[440px] space-y-1.5 pr-1">
-                        {volumeProfile.rows.map((row) => {
-                          const totalBarWidthPct = (row.totalVol / volumeProfile.maxVol) * 82
-                          const rowVolPct = (row.totalVol / volumeProfile.totalSessionVol) * 100
-
-                          const atoSegmentPct = row.totalVol > 0 ? (row.atoVol / row.totalVol) * 100 : 0
-                          const buySegmentPct = row.totalVol > 0 ? (row.buyVol / row.totalVol) * 100 : 0
-                          const sellSegmentPct = row.totalVol > 0 ? (row.sellVol / row.totalVol) * 100 : 0
-                          const atcSegmentPct = row.totalVol > 0 ? (row.atcVol / row.totalVol) * 100 : 0
-
-                          const priceColorClass = getPriceColorClass(
-                            row.price,
-                            quote?.reference,
-                            quote?.ceiling,
-                            quote?.floor
-                          )
-
-                          return (
-                            <div
-                              key={row.price}
-                              className="grid grid-cols-[60px_1fr_60px] items-center gap-2 py-0.5 group hover:bg-panel-2/40 rounded px-1"
-                            >
-                              {/* Left: Price Label */}
-                              <div className={`text-xs sm:text-[13px] ${priceColorClass} shrink-0`}>
-                                {formatPrice(row.price)}
-                              </div>
-
-                              {/* Middle: Horizontal Stacked Bar + Volume Label */}
-                              <div className="relative flex items-center min-w-0 h-6">
-                                {/* Subtle vertical background grid lines */}
-                                <div className="absolute inset-0 flex justify-between pointer-events-none opacity-10">
-                                  <div className="border-r border-border/60 h-full w-1/4" />
-                                  <div className="border-r border-border/60 h-full w-1/4" />
-                                  <div className="border-r border-border/60 h-full w-1/4" />
-                                  <div className="h-full w-1/4" />
-                                </div>
-
-                                {/* Stacked Bar */}
-                                <div
-                                  className="flex h-5 rounded-sm overflow-hidden transition-all duration-300 relative z-10 shrink-0"
-                                  style={{ width: `${Math.max(totalBarWidthPct, 3)}%` }}
-                                >
-                                  {atoSegmentPct > 0 && (
-                                    <div
-                                      className="bg-[#3b4252] h-full"
-                                      style={{ width: `${atoSegmentPct}%` }}
-                                      title={`ATO: ${formatVolume(row.atoVol)}`}
-                                    />
-                                  )}
-                                  {buySegmentPct > 0 && (
-                                    <div
-                                      className="bg-up h-full"
-                                      style={{ width: `${buySegmentPct}%` }}
-                                      title={`Mua CĐ: ${formatVolume(row.buyVol)}`}
-                                    />
-                                  )}
-                                  {sellSegmentPct > 0 && (
-                                    <div
-                                      className="bg-down h-full"
-                                      style={{ width: `${sellSegmentPct}%` }}
-                                      title={`Bán CĐ: ${formatVolume(row.sellVol)}`}
-                                    />
-                                  )}
-                                  {atcSegmentPct > 0 && (
-                                    <div
-                                      className="bg-amber-400 h-full"
-                                      style={{ width: `${atcSegmentPct}%` }}
-                                      title={`ATC: ${formatVolume(row.atcVol)}`}
-                                    />
-                                  )}
-                                </div>
-
-                                {/* Volume Label adjacent to stacked bar */}
-                                <span className="ml-2 font-bold text-xs sm:text-[13px] text-foreground whitespace-nowrap z-10">
-                                  {formatVolume(row.totalVol)}
-                                </span>
-                              </div>
-
-                              {/* Right: % of Total Volume */}
-                              <div className="text-right text-xs sm:text-[13px] font-bold text-muted-2">
-                                {rowVolPct < 0.01 ? "<0.01%" : `${rowVolPct.toFixed(rowVolPct >= 10 ? 1 : 2)}%`}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex items-center justify-center p-8 text-center text-xs text-muted-2">
-                        {stream.historyState === "LOADING"
-                          ? "Đang tải dữ liệu bước giá trong phiên..."
-                          : "Chưa có đủ dữ liệu khớp lệnh để vẽ phân bổ bước giá."}
-                      </div>
-                    )}
-
-                    {/* Footer Legend matching Image 3 */}
-                    <div className="mt-3 pt-2.5 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-sans">
-                      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-3 w-3 rounded-sm bg-[#3b4252] inline-block shrink-0" />
-                          <span className="font-bold text-foreground">ATO</span>
-                          <span className="text-muted">
-                            ({((volumeProfile.sessionAtoVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-3 w-3 rounded-sm bg-up inline-block shrink-0" />
-                          <span className="font-bold text-foreground">Mua chủ động</span>
-                          <span className="text-muted">
-                            ({((volumeProfile.sessionBuyVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-3 w-3 rounded-sm bg-down inline-block shrink-0" />
-                          <span className="font-bold text-foreground">Bán chủ động</span>
-                          <span className="text-muted">
-                            ({((volumeProfile.sessionSellVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-3 w-3 rounded-sm bg-amber-400 inline-block shrink-0" />
-                          <span className="font-bold text-foreground">ATC</span>
-                          <span className="text-muted">
-                            ({((volumeProfile.sessionAtcVol / volumeProfile.totalSessionVol) * 100).toFixed(1)}%)
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-muted text-[11px] font-medium">
-                        KL <span className="text-muted-2 font-bold">(CP)</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB CONTENT: GIAO DỊCH THỎA THUẬN (PUT-THROUGH) */}
-                {activityTab === "putthrough" && (
-                  <div className="flex flex-col flex-1">
-                    {/* Summary Header */}
-                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <span className="text-muted-2 font-medium">Giao dịch thỏa thuận trong ngày:</span>
-                      <div className="flex items-center gap-3 font-mono text-xs">
-                        <span className="text-muted-2">
-                          Số lệnh: <b className="text-foreground">{stream.putThroughDeals.length}</b>
-                        </span>
-                        <span className="text-muted-2">
-                          Tổng KL:{" "}
-                          <b className="text-foreground">
-                            {formatCompactVolume(stream.putThroughDeals.reduce((sum, d) => sum + d.volume, 0))}
-                          </b>
-                        </span>
-                        <span className="text-muted-2">
-                          Tổng GT:{" "}
-                          <b className="text-up font-bold">
-                            {formatMarketValue(stream.putThroughDeals.reduce((sum, d) => sum + d.value, 0))}
-                          </b>
-                        </span>
-                      </div>
-                    </div>
-
-                    {stream.putThroughDeals.length > 0 ? (
-                      <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col">
-                        <div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2">
-                          <span>Thời gian</span>
-                          <span className="text-right">Khối lượng</span>
-                          <span className="text-right">Giá TT</span>
-                          <span className="text-right">Tổng GT</span>
-                          <span className="text-right">Loại</span>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto max-h-[340px] px-3">
-                          {stream.putThroughDeals.map((deal) => {
-                            const priceColor = getPriceColorClass(deal.price, quote?.reference, quote?.ceiling, quote?.floor)
-
-                            return (
-                              <div
-                                key={deal.id}
-                                className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1 font-mono text-xs last:border-0 hover:bg-panel-2/40"
-                              >
-                                <span className="text-muted-2">{timeLabel(deal.time)}</span>
-                                <span className="text-right font-bold text-[13px] text-foreground">{formatVolume(deal.volume)}</span>
-                                <span className={`text-right font-bold text-[13px] ${priceColor}`}>{formatPrice(deal.price)}</span>
-                                <span className="text-right font-bold text-[13px] text-foreground">{formatMarketValue(deal.value)}</span>
-                                <div className="flex justify-end">
-                                  <span className="rounded px-1.5 py-0.5 text-[10px] font-bold border bg-panel-2 text-muted-2 border-border">
-                                    {deal.type || "PTM"}
-                                  </span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">
-                        {stream.historyState === "LOADING"
-                          ? "Đang tải dữ liệu giao dịch thỏa thuận..."
-                          : `Chưa có giao dịch thỏa thuận nào cho mã ${symbol} trong phiên hôm nay.`}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {activityTab === "putthrough" && <div className="flex flex-col flex-1"><div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs"><span className="text-muted-2 font-medium">Giao dịch thỏa thuận trong ngày:</span><div className="flex items-center gap-3 font-mono text-xs"><span className="text-muted-2">Số lệnh: <b className="text-foreground">{stream.putThroughDeals.length}</b></span><span className="text-muted-2">Tổng KL: <b className="text-foreground">{formatCompactVolume(stream.putThroughDeals.reduce((sum, d) => sum + d.volume, 0))}</b></span><span className="text-muted-2">Tổng GT: <b className="text-up font-bold">{formatMarketValue(stream.putThroughDeals.reduce((sum, d) => sum + d.value, 0))}</b></span></div></div>{stream.putThroughDeals.length > 0 ? <div className="flex-1 rounded-lg border border-border/80 bg-[#121313] overflow-hidden flex flex-col"><div className="grid grid-cols-[80px_1fr_90px_110px_70px] border-b border-border/60 bg-[#171819] px-3 py-1.5 text-xs font-bold text-muted-2"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá TT</span><span className="text-right">Tổng GT</span><span className="text-right">Loại</span></div><div className="flex-1 overflow-y-auto max-h-[340px] px-3">{stream.putThroughDeals.map((deal) => <div key={deal.id} className="grid grid-cols-[80px_1fr_90px_110px_70px] items-center border-b border-border/30 py-1 font-mono text-xs last:border-0 hover:bg-panel-2/40"><span className="text-muted-2">{timeLabel(deal.time)}</span><span className="text-right font-bold text-[13px] text-foreground">{formatVolume(deal.volume)}</span><span className={`text-right font-bold text-[13px] ${getPriceColorClass(deal.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>{formatPrice(deal.price)}</span><span className="text-right font-bold text-[13px] text-foreground">{formatMarketValue(deal.value)}</span><div className="flex justify-end"><span className="rounded px-1.5 py-0.5 text-[10px] font-bold border bg-panel-2 text-muted-2 border-border">{deal.type || "PTM"}</span></div></div>)}</div></div> : <div className="rounded-lg border border-border bg-panel-2/30 px-4 py-8 text-center text-xs text-muted-2">{stream.historyState === "LOADING" ? "Đang tải dữ liệu giao dịch thỏa thuận..." : `Chưa có giao dịch thỏa thuận nào cho mã ${symbol} trong phiên hôm nay.`}</div>}</div>}
               </>
             )}
           </div>
         </div>
       ) : null}
 
-      {/* RESIZE HANDLES (Interactive everywhere via window listeners with 0ms drag latency) */}
-      {!minimized && !isMaximized && (
-        <>
-          {/* Bottom-right corner resize handle - hugging the rounded corner border */}
-          <div
-            onPointerDown={(e) => startResize(e, "se")}
-            className="absolute bottom-0 right-0 h-6 w-6 cursor-se-resize flex items-end justify-end p-1 z-30 group touch-none select-none rounded-br-2xl"
-            title="Kéo để phóng to / thu nhỏ"
-          >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              className="text-white/25 group-hover:text-emerald-400 group-active:text-emerald-400 transition-colors"
-            >
-              <path
-                d="M8.5 1.5 L1.5 8.5 M8.5 5 L5 8.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-
-          {/* Right edge resize strip */}
-          <div
-            onPointerDown={(e) => startResize(e, "e")}
-            className="absolute top-0 right-0 bottom-6 w-2 cursor-e-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none"
-            title="Kéo ngang"
-          />
-
-          {/* Bottom edge resize strip */}
-          <div
-            onPointerDown={(e) => startResize(e, "s")}
-            className="absolute bottom-0 left-0 right-6 h-2 cursor-s-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none"
-            title="Kéo dọc"
-          />
-        </>
-      )}
+      {!minimized && !isMaximized && <><div onPointerDown={(e) => startResize(e, "se")} className="absolute bottom-0 right-0 h-6 w-6 cursor-se-resize flex items-end justify-end p-1 z-30 group touch-none select-none rounded-br-2xl" title="Kéo để phóng to / thu nhỏ"><svg width="10" height="10" viewBox="0 0 10 10" className="text-white/25 group-hover:text-emerald-400 group-active:text-emerald-400 transition-colors"><path d="M8.5 1.5 L1.5 8.5 M8.5 5 L5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg></div><div onPointerDown={(e) => startResize(e, "e")} className="absolute top-0 right-0 bottom-6 w-2 cursor-e-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none" title="Kéo ngang" /><div onPointerDown={(e) => startResize(e, "s")} className="absolute bottom-0 left-0 right-6 h-2 cursor-s-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none" title="Kéo dọc" /></>}
     </section>
   )
 }

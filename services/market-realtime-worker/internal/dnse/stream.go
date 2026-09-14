@@ -21,19 +21,29 @@ type Channel struct {
 }
 
 type Stream struct {
-	Name        string
-	URL         string
-	Auth        dnseauth.Auth
-	Channels    []Channel
-	OnFrame     func(map[string]any)
-	Logger      *slog.Logger
-	PingEvery   time.Duration
-	StaleAfter  time.Duration
-	StaleActive func(time.Time) bool
+	Name            string
+	URL             string
+	Auth            dnseauth.Auth
+	Channels        []Channel
+	OnFrame         func(map[string]any)
+	OnContinuityGap func()
+	Logger          *slog.Logger
+	PingEvery       time.Duration
+	StaleAfter      time.Duration
+	StaleActive     func(time.Time) bool
 }
 
 func StockChannels(tickers []string) []Channel {
 	return []Channel{{Name: "tick.G1.json", Symbols: append([]string(nil), tickers...)}}
+}
+
+func OrderbookChannels(tickers []string) []Channel {
+	symbols := append([]string(nil), tickers...)
+	return []Channel{
+		{Name: "top_price.G1.json", Symbols: append([]string(nil), symbols...)},
+		{Name: "tick_extra.G1.json", Symbols: append([]string(nil), symbols...)},
+		{Name: "foreign.G1.json", Symbols: append([]string(nil), symbols...)},
+	}
 }
 
 func IndexChannels() []Channel {
@@ -61,6 +71,10 @@ func (b *backoff) Next() time.Duration {
 	return base + time.Duration(rand.Intn(500))*time.Millisecond
 }
 
+func shouldSignalContinuityGap(authenticated bool) bool {
+	return authenticated
+}
+
 func (s *Stream) Run(ctx context.Context) error {
 	if s.OnFrame == nil {
 		return errors.New("DNSE stream OnFrame callback is required")
@@ -83,6 +97,9 @@ func (s *Stream) Run(ctx context.Context) error {
 		authenticated, err := s.runOnce(ctx)
 		if ctx.Err() != nil {
 			return nil
+		}
+		if shouldSignalContinuityGap(authenticated) && s.OnContinuityGap != nil {
+			s.OnContinuityGap()
 		}
 		if authenticated {
 			retry.Reset()

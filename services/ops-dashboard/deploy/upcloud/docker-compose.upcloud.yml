@@ -1,0 +1,37 @@
+name: qeo-ops-dashboard
+
+services:
+  ops-dashboard:
+    image: qeoindex-ops-dashboard:local
+    build:
+      context: ../../../..
+      dockerfile: services/ops-dashboard/Dockerfile
+    env_file:
+      - /opt/qeoindex/env/ops-dashboard.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      QEO_OPS_HOST: 0.0.0.0
+      QEO_OPS_PORT: "8787"
+      QEO_OPS_PUBLIC_DIR: /app/public
+      QEO_OPS_BESZEL_URL: http://qeo-beszel-hub:8090
+    ports:
+      - "127.0.0.1:8787:8787"
+    networks:
+      - default
+      - qeo-monitoring
+    mem_limit: 160m
+    cpus: "0.20"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: node
+    restart: unless-stopped
+
+networks:
+  qeo-monitoring:
+    external: true
+    name: qeo-monitoring
