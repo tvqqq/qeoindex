@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs"
 const migrationSql = readFileSync(new URL("../supabase/migrations/20260818_orderbook_snapshots.sql", import.meta.url), "utf8")
 const hardeningSql = readFileSync(new URL("../supabase/migrations/20260821103811_harden_orderbook_rls_and_indexes.sql", import.meta.url), "utf8")
 const cronMigrationSql = readFileSync(new URL("../supabase/migrations/20260818194500_pg_cron_orderbook_sync.sql", import.meta.url), "utf8")
+const orderbookSyncSource = readFileSync(new URL("../supabase/functions/orderbook-sync/index.ts", import.meta.url), "utf8")
 
 test("base Supabase migration defines complete stock orderbook table and RLS", () => {
   assert.match(migrationSql, /CREATE TABLE IF NOT EXISTS public\.stock_orderbook_snapshots/)
@@ -66,4 +67,14 @@ test("latest orderbook cron fix dispatches provider calls only inside exact trad
   assert.match(sessionFixSql, /time '14:40'/)
   assert.match(sessionFixSql, /'sync-universe-eod-1445'/)
   assert.match(sessionFixSql, /'45 7 \* \* 1-5'/)
+})
+
+test("QEO-218 automated orderbook sync never promotes current-session price into reference", () => {
+  assert.doesNotMatch(orderbookSyncSource, /q\.r \?\? q\.closePrice \?\? \(trades\.length \? trades\[0\]\.price/)
+  assert.match(orderbookSyncSource, /from\("market_ohlcv_history"\)/)
+  assert.match(orderbookSyncSource, /\.eq\("timeframe", "1D"\)/)
+  assert.match(orderbookSyncSource, /previousTradingDateKey\(sessionDate\)/)
+  assert.match(orderbookSyncSource, /const providerReference = normalizePrice\(Number\(q\.r \?\? q\.closePrice \?\? 0\)\)/)
+  assert.match(orderbookSyncSource, /const ref = providerReference \?\? canonicalReferencePrices\.get\(ticker\) \?\? null/)
+  assert.match(orderbookSyncSource, /if \(!ref\) \{[\s\S]*?missingReference\.push\(ticker\)[\s\S]*?continue/)
 })

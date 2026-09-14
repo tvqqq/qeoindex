@@ -284,3 +284,53 @@ test("QEO-108 capacity preflight keeps a 100 MiB hard headroom before the 500 MB
   assert.match(migration, /revoke all on function public\.qeo_chart_storage_capacity\(\) from public/i)
   assert.match(migration, /grant execute on function public\.qeo_chart_storage_capacity\(\) to service_role/i)
 })
+
+test("QEO-218 canonical persistence preserves nested exchange reference instead of today's open", () => {
+  const snap = toCanonicalOrderbookSnapshot("MSN", {
+    symbol: "MSN",
+    prices: [
+      { time: 1789358100, open: 66.7, close: 66.7 },
+      { time: 1789360800, open: 66.6, close: 66.6 },
+    ],
+    trades: [
+      { id: "msn-1", time: "11:21:50", price: 66.6, volume: 400, side: "BUY" },
+    ],
+    latest_quote: {
+      reference: 66.5,
+      ceiling: 71.1,
+      floor: 61.9,
+      matchPrice: 66.6,
+      openPrice: 66.7,
+      highPrice: 67,
+      lowPrice: 66.4,
+      avgPrice: 66.65,
+      totalVolume: 1_169_300,
+      bids: [{ price: 66.5, volume: 96_500 }],
+      asks: [{ price: 66.6, volume: 33_700 }],
+    },
+  })
+
+  assert.equal(snap.referencePrice, 66.5)
+  assert.equal(snap.latestPrice, 66.6)
+  assert.equal(snap.ceilingPrice, 71.1)
+  assert.equal(snap.floorPrice, 61.9)
+  assert.equal(snap.latestQuote.openPrice, 66.7)
+  assert.equal(snap.latestQuote.highPrice, 67)
+  assert.equal(snap.latestQuote.lowPrice, 66.4)
+  assert.deepEqual(snap.latestQuote.bids, [{ price: 66.5, volume: 96_500 }])
+  assert.deepEqual(snap.latestQuote.asks, [{ price: 66.6, volume: 33_700 }])
+})
+
+test("QEO-218 canonical persistence never invents reference from the current-session open or trade", () => {
+  const snap = toCanonicalOrderbookSnapshot("MSN", {
+    symbol: "MSN",
+    prices: [{ time: 1789358100, open: 66.7, close: 66.7 }],
+    trades: [{ id: "msn-1", time: "09:15:01", price: 66.7, volume: 1_000, side: "BUY" }],
+    latest_quote: { matchPrice: 66.7, openPrice: 66.7 },
+  })
+
+  assert.equal(snap.referencePrice, null)
+  assert.equal(snap.ceilingPrice, null)
+  assert.equal(snap.floorPrice, null)
+  assert.equal(snap.latestPrice, 66.7)
+})

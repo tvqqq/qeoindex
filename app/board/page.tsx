@@ -92,10 +92,10 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
     }
 
     const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
-    const firstBarOpen = intraday.length > 0 ? ((intraday[0] as any)?.open ?? (intraday[0] as any)?.o ?? intraday[0]?.close) : null
 
-    const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose || firstBarOpen
-    const ref = live?.reference || snap?.reference_price || cachedRow?.reference || firstBarOpen || latestPrice
+    const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose
+    // Reference is exchange metadata (previous-session close), never today's open/current price.
+    const ref = live?.reference ?? snap?.reference_price ?? cachedRow?.reference ?? null
 
     if (latestPrice && latestPrice > 0 && ref && ref > 0) {
       const change = live?.change ?? (latestPrice - ref)
