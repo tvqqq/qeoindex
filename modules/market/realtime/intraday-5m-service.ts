@@ -145,7 +145,9 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
     const dnsePoints = await fetchDnseFiveMinutePoints(symbol, now)
     if (dnsePoints && dnsePoints.length > 0) {
       const live = liveBatchResult[symbol]
-      const reference = live?.reference ?? dnsePoints[0]?.close ?? null
+      // A session reference must come from explicit exchange quote metadata.
+      // Current-session candles are never a valid substitute for previous-session close.
+      const reference = live?.reference ?? null
       const price = dnsePoints.at(-1)?.close ?? live?.price ?? null
       const change = price !== null && reference !== null ? price - reference : null
       const changePercent = price !== null && reference !== null && reference > 0 ? ((price - reference) / reference) * 100 : null
@@ -196,10 +198,10 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
   const enhancedRows = rows.map((row) => {
     const live = liveBatchResult[row.symbol]
     if (!live || !live.price) return row
-    const reference = live.reference ?? row.reference ?? live.price
+    const reference = live.reference ?? row.reference ?? null
     const price = live.price
-    const change = live.change ?? (reference > 0 ? price - reference : 0)
-    const changePercent = live.changePercent ?? (reference > 0 ? ((price - reference) / reference) * 100 : 0)
+    const change = live.change ?? (reference !== null && reference > 0 ? price - reference : null)
+    const changePercent = live.changePercent ?? (reference !== null && reference > 0 ? ((price - reference) / reference) * 100 : null)
 
     let points = row.points
     if (points.length > 0 && price > 0 && shouldAcceptRealtimeMiniChart(Math.floor(now.getTime() / 1000))) {
