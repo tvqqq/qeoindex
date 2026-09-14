@@ -83,7 +83,6 @@ test("QEO-172 authoritative HOT-only hour fills an unarchived derived gap withou
     derived,
     cold: [],
     hot,
-    allowHotOnlyBuckets: true,
   })
 
   assert.equal(overlay.unresolvedHotOverlap, false)
@@ -98,7 +97,7 @@ test("QEO-172 authoritative HOT-only hour fills an unarchived derived gap withou
   })
 })
 
-test("QEO-172 HOT without COLD never replaces an existing derived bucket even with source coverage proof", () => {
+test("QEO-172 HOT without COLD never replaces an existing derived bucket", () => {
   const derived = [{
     time: epoch("2026-09-07T09:00:00+07:00"),
     open: 100,
@@ -115,7 +114,6 @@ test("QEO-172 HOT without COLD never replaces an existing derived bucket even wi
     derived,
     cold: [],
     hot,
-    allowHotOnlyBuckets: true,
   })
 
   assert.equal(overlay.unresolvedHotOverlap, true)
