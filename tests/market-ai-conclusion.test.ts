@@ -4,6 +4,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { buildMarketAiEvidencePacket, hashMarketAiEvidence, validateMarketAiConclusion } from "../modules/research/market-insight/ai-conclusion.ts"
 import { buildMarketAiEvidencePacket as buildEdgePacket, hashMarketAiEvidence as hashEdgeEvidence } from "../supabase/functions/_shared/market-ai-conclusion.ts"
+import { planMarketAiCostGuard } from "../supabase/functions/_shared/market-ai-cost-guard.ts"
 
 function fixture() {
   return {
@@ -12,6 +13,23 @@ function fixture() {
     indexes: [{ indexCode: "VNINDEX", value: 1200, change: 2, changePct: 0.2, reference: 1198, open: null, high: null, low: null, matchedVolume: 1, tradedValue: 1200, previousValueChangePct: null, advances: 200, unchanged: 50, declines: 100, ceilings: 2, floors: 1, marketPe: 12, foreignBuyValue: null, foreignSellValue: null, foreignNetValue: null, qualityStatus: "healthy", evidenceRefs: [], asOf: "2026-08-31T08:00:00.000Z" }], sectors: [], leaders: [], observations: [], history: [], marketInsightProvenance: { syncRunId: "run-1", payloadChecksum: "a".repeat(64), contractVersion: 2, endpointCoverage: {}, publishedCounts: {} },
   } as any
 }
+
+function fixtureWithExpandedLeadership() {
+  const data = fixture()
+  const categories = ["index_down", "index_up", "top_volume"] as const
+  data.leaders = categories.flatMap((category, categoryIndex) => Array.from({ length: 10 }, (_, index) => ({
+    category,
+    rank: index + 1,
+    ticker: `${["D", "U", "V"][categoryIndex]}${String(index + 1).padStart(2, "0")}`,
+    metricValue: (categoryIndex + 1) * 100 + index,
+    metricLabel: category,
+    price: 10 + index,
+    asOf: data.asOf,
+    evidenceRefs: [],
+  })))
+  return data
+}
+
 test("market evidence hash is order-independent and citations are bounded", () => {
   const packet = buildMarketAiEvidencePacket(fixture())
   const reordered = { ...packet, facts: [...packet.facts].reverse() }
@@ -20,6 +38,7 @@ test("market evidence hash is order-independent and citations are bounded", () =
   const result = validateMarketAiConclusion({ packet, evidenceHash: hash, payload: { schemaVersion: "market-ai-conclusion-v2", confidence: "medium", headline: "Bằng chứng chưa đủ.", sessionDate: packet.sessionDate, asOf: packet.asOf, snapshotId: packet.snapshotId, evidenceHash: hash, policyVersion: packet.policyVersion, promptVersion: packet.promptVersion, framework: "canslim_4m_inspired", posture: "insufficient_evidence", conclusion: "Bằng chứng chưa đủ.", risks: [], missingEvidence: ["leadership", "sector_rotation"], effortResult: { effort: "GTGD", effortEvidenceRefs: ["total_traded_value"], result: "VNINDEX", resultEvidenceRefs: ["vnindex_change_pct"], interpretation: "Thanh khoản và chỉ số snapshot." }, dimensions: [{ key: "index_breadth", stance: "unknown", summary: "Có chỉ số.", evidenceRefs: ["vnindex_close"] }, { key: "liquidity_flow", stance: "unknown", summary: "Có thanh khoản.", evidenceRefs: ["total_traded_value"] }, { key: "ma_health", stance: "unknown", summary: "Có MA.", evidenceRefs: ["above_ma20_pct"] }, { key: "sector_rotation", stance: "unknown", summary: "Thiếu.", evidenceRefs: [] }, { key: "leadership", stance: "unknown", summary: "Thiếu.", evidenceRefs: [] }], citations: [{ factId: "vnindex_close", claim: "conclusion", interpretation: "Giá đóng cửa snapshot." }, { factId: "total_traded_value", claim: "effort_result", interpretation: "Thanh khoản snapshot." }] } })
   assert.equal(result.valid, true, result.errors.join(", "))
 })
+
 test("market evidence rejects mixed asOf", () => {
   const data = fixture(); data.indexes[0].asOf = "2026-08-30T08:00:00.000Z"
   assert.throws(() => buildMarketAiEvidencePacket(data), /asOf-aligned/)
@@ -39,6 +58,51 @@ test("app and Edge evidence packet/hash fixtures stay byte-equivalent", async ()
   })
   assert.deepEqual(edgePacket, appPacket)
   assert.equal(await hashEdgeEvidence(edgePacket), hashMarketAiEvidence(appPacket))
+})
+
+test("market evidence keeps expanded leadership category-balanced and bounded", async () => {
+  const data = fixtureWithExpandedLeadership()
+  const appPacket = buildMarketAiEvidencePacket(data)
+  const edgePacket = await buildEdgePacket({
+    sessionDate: data.sessionDate,
+    asOf: data.asOf,
+    qualityStatus: data.qualityStatus,
+    marketInsightProvenance: data.marketInsightProvenance,
+    daily: { sentimentScore: 55, riskScore: 0.3, aboveMa20Pct: 60, totalTradedValue: 1200, foreignNetValue: 10, proprietaryNetValue: 2, missingFields: [] },
+    indexes: [{ indexCode: "VNINDEX", value: 1200, changePct: 0.2, advances: 200, unchanged: 50, declines: 100, asOf: data.asOf }],
+    sectors: [],
+    leaders: data.leaders.map((leader: any) => ({
+      category: leader.category,
+      rank: leader.rank,
+      ticker: leader.ticker,
+      metricValue: leader.metricValue,
+      metricLabel: leader.metricLabel,
+      price: leader.price,
+      asOf: leader.asOf,
+    })),
+    observations: [],
+  })
+  const leaderIds = appPacket.facts.filter((fact) => fact.id.startsWith("leader:")).map((fact) => fact.id)
+  assert.equal(leaderIds.length, 12)
+  for (const category of ["index_down", "index_up", "top_volume"]) {
+    assert.equal(leaderIds.filter((id) => id.startsWith(`leader:${category}:`)).length, 4)
+  }
+  assert.deepEqual(edgePacket, appPacket)
+})
+
+test("market AI cost planner preserves the $0.03 cap by shrinking output allowance", () => {
+  const plan = planMarketAiCostGuard({
+    promptChars: 13_359,
+    requestedMaxOutputTokens: 1_800,
+    inputTokenReserve: 700,
+    maxCostUsd: 0.03,
+    pricing: { inputRate: 2, outputRate: 12 },
+  })
+  assert.equal(plan.promptTokenEstimate, 4_453)
+  assert.equal(plan.guardedInputTokens, 5_153)
+  assert.equal(plan.maxOutputTokens, 1_641)
+  assert.ok(plan.estimatedCostUsd <= 0.03)
+  assert.ok(plan.maxOutputTokens >= 1_200)
 })
 
 test("market AI migration is private, idempotent and lease-claimed", () => {
