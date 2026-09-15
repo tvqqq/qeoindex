@@ -12,8 +12,8 @@ import (
 
 const (
 	maxClientTopics           = 3
-	relayPublishSampleEvery   = int64(100)
-	relaySlowPublishThreshold = 10 * time.Millisecond
+	relayPublishSampleEvery   int64 = 100
+	relaySlowPublishThreshold       = 10 * time.Millisecond
 )
 
 type client struct {
