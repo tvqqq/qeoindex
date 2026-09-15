@@ -24,6 +24,13 @@ func TestPlanOrderbookShardsBoundsTwoHundredSymbolsAcrossFourSockets(t *testing.
 		if len(shard) != 50 {
 			t.Fatalf("shard %d expected 50 symbols, got %d", index, len(shard))
 		}
+		memberships := len(shard) * orderbookSupplementalFeedsPerSymbol
+		if memberships > maxOrderbookMembershipsPerSocket {
+			t.Fatalf("shard %d uses %d provider memberships, max is %d", index, memberships, maxOrderbookMembershipsPerSocket)
+		}
+		if memberships != 200 {
+			t.Fatalf("shard %d expected 200 memberships for 50 symbols x 4 feeds, got %d", index, memberships)
+		}
 		for _, symbol := range shard {
 			if seen[symbol] {
 				t.Fatalf("duplicate symbol %s", symbol)
