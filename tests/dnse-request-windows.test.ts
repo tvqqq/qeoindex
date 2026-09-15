@@ -284,3 +284,17 @@ test("QEO-216 private Broadcast authorization is scoped to authenticated orderbo
   assert.match(migration, /extension[\s\S]*broadcast/i)
   assert.doesNotMatch(migration, /for\s+insert[\s\S]*to\s+authenticated/i)
 })
+
+test("QEO-223 keeps backend provider topology private in Market Board status UI", () => {
+  const boardSource = readFileSync("components/live-market-board.tsx", "utf8")
+  const statusStart = boardSource.indexOf("const FloatingMarketStatus")
+  const statusEnd = boardSource.indexOf("function extractInitialRefs")
+  assert.ok(statusStart >= 0 && statusEnd > statusStart, "FloatingMarketStatus component must exist")
+  const statusSource = boardSource.slice(statusStart, statusEnd)
+
+  assert.match(statusSource, /REALTIME LIVE/)
+  assert.doesNotMatch(statusSource, /DNSE LIVE/)
+  assert.doesNotMatch(statusSource, /Nguồn dữ liệu:/)
+  assert.doesNotMatch(statusSource, /Yahoo 5m \+ DNSE via Supabase/)
+  assert.doesNotMatch(statusSource, /UPCLOUD RELAY LIVE/)
+})
