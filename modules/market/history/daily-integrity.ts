@@ -107,7 +107,7 @@ async function loadUnclassifiedZeroDates(supabase: SupabaseClient, tickers: stri
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
 
-    let data = compatRead.data
+    let data: StoredZeroVolumeRow[] | null = compatRead.data
     let error = compatRead.error
     if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
       const legacyRead = await supabase
@@ -156,7 +156,7 @@ async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: strin
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
 
-    let data = compatRead.data
+    let data: StoredLegacyYahooRow[] | null = compatRead.data
     let error = compatRead.error
     if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
       const legacyRead = await supabase
