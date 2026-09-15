@@ -67,6 +67,9 @@ async function discoverRanges(supabase: SupabaseClient, ticker: string): Promise
     to: hotBars.at(-1)!.time,
   }
   if (cold.to >= hot.from) throw new Error(`QEO-231 COLD/HOT boundary overlaps for ${ticker}`)
+  if (manifests.some((manifest) => manifest.rangeStart <= hot.to && manifest.rangeEnd >= hot.from)) {
+    throw new Error(`QEO-231 verified COLD overlaps HOT audit session for ${ticker}`)
+  }
 
   return {
     cold,
@@ -93,6 +96,7 @@ export async function runProductionChartStorageAudit(
 ): Promise<ChartStorageAuditResult> {
   const coldStorage = createSupabaseColdOhlcvStorage(supabase)
   const ranges = await discoverRanges(supabase, ticker)
+  const auditNow = new Date((ranges.hot.to + 4 * 3600) * 1000)
   const provider = {
     async fetch() {
       throw new Error("QEO-231 audit forbids provider fallback")
@@ -112,7 +116,7 @@ export async function runProductionChartStorageAudit(
       supabase,
       coldStorage,
       provider,
-      now: new Date(),
+      now: auditNow,
     }, {
       ticker,
       resolution: "1m",
