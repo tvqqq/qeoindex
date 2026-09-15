@@ -34,15 +34,15 @@ type HubStats struct {
 }
 
 type Hub struct {
-	epoch         string
-	sendQueue     int
-	logger        *slog.Logger
-	mu            sync.RWMutex
-	clients       map[*client]struct{}
-	topics        map[string]map[*client]struct{}
-	universe      map[string]struct{}
-	slowConsumers atomic.Int64
-	published     atomic.Int64
+	epoch          string
+	sendQueue      int
+	logger         *slog.Logger
+	mu             sync.RWMutex
+	clients        map[*client]struct{}
+	topics         map[string]map[*client]struct{}
+	universe       map[string]struct{}
+	slowConsumers  atomic.Int64
+	published      atomic.Int64
 	publishedBytes atomic.Int64
 }
 
@@ -121,18 +121,33 @@ func (h *Hub) removeClient(c *client) {
 func (h *Hub) Subscribe(c *client, topics []string) ([]string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	accepted := make([]string, 0, len(topics))
+
+	normalized := make([]string, 0, len(topics))
+	seen := make(map[string]struct{}, len(topics))
+	newTopics := 0
 	for _, raw := range topics {
 		topic := normalizeTopic(raw)
 		if topic == "" || !h.validTopicLocked(topic) {
 			return nil, errors.New("invalid topic")
 		}
+		if _, duplicate := seen[topic]; duplicate {
+			continue
+		}
+		seen[topic] = struct{}{}
+		normalized = append(normalized, topic)
+		if _, exists := c.topics[topic]; !exists {
+			newTopics++
+		}
+	}
+	if len(c.topics)+newTopics > maxClientTopics {
+		return nil, errors.New("subscription limit exceeded")
+	}
+
+	accepted := make([]string, 0, len(normalized))
+	for _, topic := range normalized {
 		if _, exists := c.topics[topic]; exists {
 			accepted = append(accepted, topic)
 			continue
-		}
-		if len(c.topics) >= maxClientTopics {
-			return nil, errors.New("subscription limit exceeded")
 		}
 		if h.topics[topic] == nil {
 			h.topics[topic] = map[*client]struct{}{}
