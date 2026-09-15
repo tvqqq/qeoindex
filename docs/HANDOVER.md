@@ -1,6 +1,6 @@
 # QeoIndex engineering handover
 
-Last updated: 2026-09-05.
+Last updated: 2026-09-15.
 
 This document is the canonical fast-start for the active production architecture. Historical architecture is preserved in Git history and explicitly historical design/plan documents; when historical material conflicts with this file, this file wins.
 
@@ -16,6 +16,37 @@ Read `AGENTS.md` first and `docs/README.md` for the complete documentation map. 
 - Canonical EOD scheduler: Supabase `pg_cron` job `qeoindex-eod-pipeline-1515-ict` (`15 8 * * 1-5`, 15:15 ICT).
 
 Scheduler dispatch is not execution success; use `system_job_runs` and `system_job_phases` for durable EOD evidence.
+
+## Active market realtime architecture — QEO-225
+
+The Market Board and popup Orderbook member hot path is centralized in the existing UpCloud Go market-realtime worker and delivered through one authenticated QeoIndex WebSocket relay per browser tab:
+
+```text
+provider sockets
+      ↓
+UpCloud Go market-realtime-worker
+      ├─ in-memory authenticated WSS relay → browser Market Board / Orderbook
+      └─ async Supabase checkpoints → bootstrap / recovery only
+```
+
+Active invariants:
+
+- Upstream provider sockets are owned only by the server worker; browser count must not multiply provider connections.
+- One browser relay socket multiplexes `market` plus bounded `orderbook:<SYMBOL>` subscriptions.
+- Browser relay access requires the existing `market_board` entitlement and a short-lived HMAC capability token minted by `POST /api/market/realtime-token`.
+- The relay token is sent as the first WebSocket application message, never in the URL/query string, and expires within 60 seconds.
+- The worker validates an exact production Origin allowlist; wildcard production origins are rejected.
+- No provider credential, provider auth payload, Supabase service-role credential, relay signing secret, UpCloud IP, or backend topology may appear in member-facing UI or browser payloads.
+- Supabase Realtime is not the live Market Board/Orderbook transport. Supabase `market_realtime_bus` and existing snapshot/session paths remain bounded bootstrap/recovery authorities.
+- Supabase checkpoint persistence is asynchronous relative to live WSS delivery. A slow/failed checkpoint request must not head-of-line block the relay.
+- Market live batches default to 100 ms; exact-symbol Orderbook batches default to 50 ms. Existing browser React paint/ranking cadence remains independently bounded.
+- Orderbook `te` executions remain ordered; state frames remain latest-wins where the Orderbook contract permits coalescing. Epoch/sequence gaps or explicit continuity gaps force recovery rather than false LIVE state.
+- Per-client relay send queues are bounded. Slow clients are disconnected and recover from authoritative state instead of blocking ingestion or silently losing ordered executions.
+- The worker container relay port is host-loopback-only. Public access requires TLS/WSS reverse proxying; the worker itself is never exposed as an unauthenticated public raw port.
+
+Production acceptance for this architecture requires green GitHub verification on the exact source head, matching server/worker signing-secret provisioning, exact allowed Origin configuration, a valid TLS/WSS front door, the exact worker commit deployed, browser cutover with no direct provider or Supabase Realtime hot-path socket, recovery smoke, and active-session latency evidence. Target Orderbook provider-event → browser-receive p95 is below 300 ms under normal load.
+
+See `docs/market-board.md` and `services/market-realtime-worker/README.md` for the detailed transport/runtime contract. A source merge alone does not prove the runtime WSS rollout.
 
 ## Active Wyckoff contract — 1D + 1W only
 
@@ -183,6 +214,8 @@ For DB-changing releases, additionally run:
 - DB safety tests/rehearsal required by the touched migration class.
 
 Production acceptance requires the verified GitHub head to be green, the Vercel production deployment to reach READY, and runtime smoke evidence from the deployed architecture.
+
+For QEO-225 specifically, source merge readiness also requires the Realtime Worker unit/vet/build/container checks. Production acceptance additionally requires the external TLS/WSS endpoint and matching runtime environment to exist before the browser transport is cut over.
 
 ## Documentation lifecycle
 
