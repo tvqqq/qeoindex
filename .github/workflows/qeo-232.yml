@@ -1,0 +1,45 @@
+name: QEO-232
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "docs/superpowers/specs/2026-09-15-qeo-232-daily-ohlcv-provenance-design.md"
+      - "docs/superpowers/plans/2026-09-15-qeo-232-daily-ohlcv-provenance-contract.md"
+      - "tests/helpers/qeo-232-daily-provenance-schema-contract.ts"
+      - "tests/qeo-232-daily-provenance-contract.cases.ts"
+      - "supabase/migrations/*_qeo233_daily_ohlcv_provenance*.sql"
+      - "modules/market/history/ohlcv-store.ts"
+      - "modules/market/history/daily-integrity.ts"
+      - "modules/eod/no-trade-repair-step.ts"
+      - "modules/market/history/ohlcv-grouped.ts"
+      - "modules/market/chart-data/daily-authority.ts"
+      - "modules/market/chart-data/service.ts"
+      - "modules/market/chart-data/maintenance.ts"
+      - "modules/market/history/daily-cold-history.ts"
+      - "modules/wyckoff/eod-ingest.ts"
+      - ".github/workflows/qeo-232.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/helpers/qeo-232-daily-provenance-schema-contract.ts"
+      - "tests/qeo-232-daily-provenance-contract.cases.ts"
+      - "supabase/migrations/*_qeo233_daily_ohlcv_provenance*.sql"
+      - ".github/workflows/qeo-232.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeo-232-daily-provenance-contract.cases.ts
