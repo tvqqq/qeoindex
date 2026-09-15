@@ -92,6 +92,8 @@ test("QEO-225 gives Market Board an authenticated relay hot path without a brows
   assert.match(streamSource, /subscribeMarketRelay/)
   assert.doesNotMatch(streamSource, /postgres_changes|\.channel\(/)
   assert.match(streamSource, /synthesizeDnseOhlcFromTickMessage/)
+  assert.match(streamSource, /for \(let index = 0; index < pending\.length; index \+= 1\)/)
+  assert.match(streamSource, /pending\.slice\(index\)/)
   assert.match(relaySource, /\/api\/market\/realtime-token/)
   assert.match(relaySource, /new WebSocket\(url\)/)
 })
