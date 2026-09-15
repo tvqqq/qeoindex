@@ -1,0 +1,42 @@
+name: QEO-228
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "modules/market/chart-data/archive-catchup-workflow-steps.ts"
+      - "workflows/chart-intraday-archive-catchup.ts"
+      - "app/api/qeoindex/chart-archive-catchup/route.ts"
+      - "modules/admin/effective-job-catalog.ts"
+      - "modules/admin/job-schedule.ts"
+      - "supabase/migrations/*qeo228*"
+      - "tests/qeo-228-chart-archive-catchup.test.ts"
+      - ".github/workflows/qeo-228.yml"
+  push:
+    branches: [main]
+    paths:
+      - "modules/market/chart-data/archive-catchup-workflow-steps.ts"
+      - "workflows/chart-intraday-archive-catchup.ts"
+      - "app/api/qeoindex/chart-archive-catchup/route.ts"
+      - "modules/admin/effective-job-catalog.ts"
+      - "modules/admin/job-schedule.ts"
+      - "supabase/migrations/*qeo228*"
+      - "tests/qeo-228-chart-archive-catchup.test.ts"
+      - ".github/workflows/qeo-228.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeo-228-chart-archive-catchup.test.ts
