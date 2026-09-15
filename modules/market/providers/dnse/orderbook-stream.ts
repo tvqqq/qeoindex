@@ -168,6 +168,7 @@ export function subscribeDnseOrderbookFrames(
   let attempts = 0
   let latestSequence = 0
   let latestEpoch = 0
+  let liveBaselineEstablished = false
   let lastMessageAtMs = Date.now()
   let latencyFrameCount = 0
   let nextLatencyReportAt = LATENCY_REPORT_EVERY
@@ -258,6 +259,7 @@ export function subscribeDnseOrderbookFrames(
     if (disposed) return
     generation += 1
     latestEpoch = 0
+    liveBaselineEstablished = false
     clearReconnectTimer()
     setState({ status: "RECOVERING", error: message })
     void removeCurrentChannel().finally(() => scheduleReconnect("RECOVERING", message))
@@ -283,18 +285,18 @@ export function subscribeDnseOrderbookFrames(
   const applyEnvelope = (envelope: OrderbookEnvelope) => {
     if (envelope.shard !== shard) return
 
-    // Continuity flags must be evaluated before duplicate-sequence suppression:
-    // after a worker crash the first new broadcast can reuse the uncheckpointed
-    // sequence and still needs to force authoritative session recovery.
+    // A checkpoint is recovery hydration and can intentionally lag the low-latency
+    // live Broadcast path. The first newer Broadcast after each join establishes
+    // live continuity; strict sequence/epoch checks apply only after that baseline.
     if (envelope.continuityGap) {
       restartForRecovery("Orderbook realtime continuity gap; refreshing session state.")
       return
     }
-    if (latestEpoch > 0 && envelope.epoch !== latestEpoch) {
+    if (liveBaselineEstablished && latestEpoch > 0 && envelope.epoch !== latestEpoch) {
       restartForRecovery("Orderbook realtime worker epoch changed; refreshing session state.")
       return
     }
-    if (latestSequence > 0 && envelope.sequence > latestSequence + 1) {
+    if (liveBaselineEstablished && latestSequence > 0 && envelope.sequence > latestSequence + 1) {
       restartForRecovery("Orderbook realtime sequence gap; refreshing session state.")
       return
     }
@@ -302,6 +304,7 @@ export function subscribeDnseOrderbookFrames(
 
     latestSequence = envelope.sequence
     latestEpoch = envelope.epoch
+    liveBaselineEstablished = true
     lastMessageAtMs = Date.now()
     recordLatency(envelope)
     emitFrames(envelope.frames)
@@ -318,6 +321,7 @@ export function subscribeDnseOrderbookFrames(
     clearReconnectTimer()
     if (disposed) return
     const thisGeneration = ++generation
+    liveBaselineEstablished = false
     setState({ status: currentState.status === "RECOVERING" ? "RECOVERING" : "CONNECTING", error: "" })
 
     try {
