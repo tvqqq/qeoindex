@@ -272,6 +272,7 @@ test("QEO-225 persists sampled browser relay telemetry for post-incident correla
 
   const relay = source("modules/market/realtime/relay-client.ts")
   const orderbook = source("modules/market/providers/dnse/orderbook-stream.ts")
+  const market = source("modules/market/providers/dnse/market-stream.ts")
   const reporter = source(reporterPath)
   const route = source(routePath)
 
@@ -279,6 +280,10 @@ test("QEO-225 persists sampled browser relay telemetry for post-incident correla
   assert.match(relay, /reportRealtimeConnectionState/)
   assert.match(orderbook, /reportRealtimeHealth/)
   assert.match(orderbook, /batchId:\s*message\.batchId/)
+  assert.match(market, /reportRealtimeHealth/)
+  assert.match(market, /stream:\s*"market"/)
+  assert.match(market, /batchId:\s*message\.batchId/)
+  assert.match(market, /delivery/)
   assert.match(reporter, /\/api\/market\/realtime-health/)
   assert.match(reporter, /keepalive:\s*true/)
   assert.match(route, /requireApiFeature\("market_board"\)/)
