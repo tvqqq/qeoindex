@@ -16,19 +16,27 @@ const (
 )
 
 type Config struct {
-	DNSEAPIKey                 string
-	DNSEAPISecret              string
-	DNSEWSURL                  string
-	SupabaseURL                string
-	SupabaseServiceRoleKey     string
-	FlushInterval              time.Duration
-	OrderbookFlushInterval     time.Duration
-	OrderbookMaxPayloadBytes   int
-	OrderbookMaxExecutionFrames int
-	UniverseRefreshInterval    time.Duration
-	PingInterval               time.Duration
-	StaleAfter                 time.Duration
-	Location                   *time.Location
+	DNSEAPIKey                   string
+	DNSEAPISecret                string
+	DNSEWSURL                    string
+	SupabaseURL                  string
+	SupabaseServiceRoleKey       string
+	FlushInterval                time.Duration
+	OrderbookFlushInterval       time.Duration
+	OrderbookMaxPayloadBytes     int
+	OrderbookMaxExecutionFrames  int
+	UniverseRefreshInterval      time.Duration
+	PingInterval                 time.Duration
+	StaleAfter                   time.Duration
+	RelayListenAddr              string
+	RelaySigningSecret           string
+	RelayAllowedOrigins          []string
+	RelayAuthTimeout             time.Duration
+	RelayPingInterval            time.Duration
+	RelaySendQueue               int
+	RelayMarketFlushInterval     time.Duration
+	RelayOrderbookFlushInterval  time.Duration
+	Location                     *time.Location
 }
 
 func Load() (Config, error) {
@@ -49,6 +57,14 @@ func Load() (Config, error) {
 		UniverseRefreshInterval:     durationMS("MARKET_UNIVERSE_REFRESH_MS", 300000, 60000, 1800000),
 		PingInterval:                durationMS("MARKET_REALTIME_PING_MS", 15000, 5000, 60000),
 		StaleAfter:                  durationMS("MARKET_REALTIME_STALE_MS", 60000, 15000, 300000),
+		RelayListenAddr:             envOrDefault("QEO_MARKET_REALTIME_LISTEN_ADDR", ":8787"),
+		RelaySigningSecret:          strings.TrimSpace(os.Getenv("QEO_MARKET_REALTIME_SIGNING_SECRET")),
+		RelayAllowedOrigins:         commaList(os.Getenv("QEO_MARKET_REALTIME_ALLOWED_ORIGINS")),
+		RelayAuthTimeout:            durationMS("QEO_MARKET_REALTIME_AUTH_TIMEOUT_MS", 5000, 1000, 15000),
+		RelayPingInterval:           durationMS("QEO_MARKET_REALTIME_PING_MS", 15000, 5000, 60000),
+		RelaySendQueue:              boundedInt("QEO_MARKET_REALTIME_SEND_QUEUE", 64, 8, 1024),
+		RelayMarketFlushInterval:    durationMS("QEO_MARKET_REALTIME_MARKET_FLUSH_MS", 100, 25, 1000),
+		RelayOrderbookFlushInterval: durationMS("QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS", 50, 20, 1000),
 		Location:                    loc,
 	}
 	if cfg.DNSEWSURL == "" {
@@ -60,7 +76,42 @@ func Load() (Config, error) {
 	if cfg.SupabaseURL == "" || cfg.SupabaseServiceRoleKey == "" {
 		return Config{}, errors.New("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
 	}
+	if cfg.RelaySigningSecret == "" {
+		return Config{}, errors.New("QEO_MARKET_REALTIME_SIGNING_SECRET is required")
+	}
+	if len(cfg.RelayAllowedOrigins) == 0 {
+		return Config{}, errors.New("QEO_MARKET_REALTIME_ALLOWED_ORIGINS is required")
+	}
+	for _, origin := range cfg.RelayAllowedOrigins {
+		if origin == "*" {
+			return Config{}, errors.New("QEO_MARKET_REALTIME_ALLOWED_ORIGINS cannot contain wildcard origin")
+		}
+	}
 	return cfg, nil
+}
+
+func envOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func commaList(raw string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func durationMS(name string, fallback, min, max int64) time.Duration {
