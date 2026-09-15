@@ -32,8 +32,10 @@ export type RealtimeConnectionReport = {
 const REPORT_URL = "/api/market/realtime-health"
 const MAX_TEXT_LENGTH = 96
 const MAX_SEQUENCE = Number.MAX_SAFE_INTEGER
+const HEALTH_REPORT_MIN_INTERVAL_MS = 15_000
 
 let lastStateFingerprint = ""
+const lastHealthReportAt = new Map<string, number>()
 
 function boundedText(value: unknown, maxLength = MAX_TEXT_LENGTH) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : ""
@@ -89,10 +91,17 @@ export function reportRealtimeHealth(report: RealtimeHealthReport) {
   const samples = finiteNonNegative(report.samples, 100_000)
   if (samples == null || samples <= 0) return
 
+  const symbol = boundedText(report.symbol, 16).toUpperCase()
+  const throttleKey = `${report.stream}:${symbol}`
+  const now = Date.now()
+  const previous = lastHealthReportAt.get(throttleKey) ?? 0
+  if (now - previous < HEALTH_REPORT_MIN_INTERVAL_MS) return
+  lastHealthReportAt.set(throttleKey, now)
+
   postTelemetry({
     event: "browser_relay_health",
     stream: report.stream,
-    symbol: boundedText(report.symbol, 16).toUpperCase(),
+    symbol,
     batchId: boundedText(report.batchId, 160),
     epoch: boundedText(report.epoch, 96),
     sequence,
