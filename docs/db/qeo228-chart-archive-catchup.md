@@ -23,7 +23,7 @@ A dedicated post-EOD workflow now:
 5. isolates one ticker's failure from unrelated tickers;
 6. records aggregate archive/prune and database-capacity metrics.
 
-The scheduler target is `15:35 ICT` on trading weekdays. The HTTP route only authenticates and dispatches the durable workflow; archive work does not run inside the request lifetime.
+The scheduler target is `16:45 ICT` on trading weekdays, intentionally after the canonical 15:01 EOD owner's 90-minute runtime envelope. The HTTP route only authenticates and dispatches the durable workflow; archive work does not run inside the request lifetime.
 
 This change does **not** authorize unverified deletion, does not change Daily `market_ohlcv_history`, and does not weaken the five-session retention proof. The legacy bounded EOD cleanup remains useful as an additional small archive pass; the dedicated workflow supplies the missing canonical-universe throughput.
 
