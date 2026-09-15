@@ -1,6 +1,9 @@
 package realtime
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestOrderbookBufferCoalescesStateButPreservesExecutionsInOrder(t *testing.T) {
 	buffer := NewOrderbookBuffer(10, 196608, 2000)
@@ -100,6 +103,49 @@ func TestOrderbookBufferMarksContinuityGapWhenExecutionQueueOverflows(t *testing
 	}
 	if buffer.GapCount() != 1 {
 		t.Fatalf("expected one recorded gap, got %d", buffer.GapCount())
+	}
+}
+
+func TestJSONBatchSizerMatchesActualJSONArrayBytes(t *testing.T) {
+	frames := []Frame{
+		{"T": "q", "symbol": "MSN", "bid": []any{map[string]any{"price": 67.0, "qtty": 100}}},
+		{"T": "te", "symbol": "MSN", "transId": "1", "matchPrice": 67.1, "matchQtty": 10},
+		{"T": "f", "symbol": "MSN", "buyVolume": 1000, "sellVolume": 500},
+	}
+	encoded, err := json.Marshal(frames)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sizer := newJSONBatchSizer(len(encoded))
+	for _, frame := range frames {
+		if !sizer.TryAdd(frame) {
+			t.Fatalf("expected frame to fit within exact JSON payload budget: %#v", frame)
+		}
+	}
+	if got := sizer.Bytes(); got != len(encoded) {
+		t.Fatalf("sizer bytes=%d want actual JSON bytes=%d", got, len(encoded))
+	}
+}
+
+func TestJSONBatchSizerRejectsOverflowWithoutChangingSize(t *testing.T) {
+	first := Frame{"T": "te", "symbol": "MSN", "transId": "1", "matchPrice": 67.1, "matchQtty": 10}
+	second := Frame{"T": "te", "symbol": "MSN", "transId": "2", "matchPrice": 67.1, "matchQtty": 10}
+	encodedFirst, err := json.Marshal([]Frame{first})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sizer := newJSONBatchSizer(len(encodedFirst))
+	if !sizer.TryAdd(first) {
+		t.Fatal("first frame should fit exact payload budget")
+	}
+	before := sizer.Bytes()
+	if sizer.TryAdd(second) {
+		t.Fatal("second frame should exceed payload budget")
+	}
+	if got := sizer.Bytes(); got != before {
+		t.Fatalf("rejected frame changed payload size: got %d want %d", got, before)
 	}
 }
 
