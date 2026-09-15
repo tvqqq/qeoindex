@@ -1,0 +1,339 @@
+# QEO-232 — Compact Daily OHLCV provenance design
+
+Date: 2026-09-15  
+Status: Approved design direction; implementation pending plan  
+Parent: QEO-227  
+Scope owner: `public.market_ohlcv_history`
+
+## 1. Problem statement
+
+`public.market_ohlcv_history` is the canonical persistent completed-Daily OHLCV store used by EOD, Wyckoff, chart Daily reads, integrity repair, and related market workflows. The table must remain the canonical Daily fact store; QEO-232 does not merge it with intraday storage and does not change price-basis semantics.
+
+The current row shape stores provenance inline on every bar:
+
+- `provider`
+- `provider_detail`
+- `source_url`
+- `fetched_at`
+
+Production audit on 2026-09-15 found:
+
+- 348,491 rows;
+- 4 distinct `provider` values;
+- 38 distinct `provider_detail` values;
+- 1,559 distinct `source_url` values;
+- only 1,560 distinct `(provider, provider_detail, source_url)` tuples;
+- no NULL/empty values in those three provenance fields;
+- max `provider_detail` length: 108 bytes;
+- max `source_url` length: 147 bytes;
+- average `provider_detail` length: ~57.5 bytes;
+- average `source_url` length: ~134.9 bytes.
+
+Therefore the long provenance strings are highly repeated. QEO-227 measured roughly 50–65 MB of repeated provenance payload as the main normalization opportunity.
+
+## 2. Goals
+
+QEO-232 defines the smallest safe data model and migration contract that allows QEO-233/QEO-234 to remove repeated `provider_detail` and `source_url` payload from each Daily row while preserving:
+
+1. exact Daily OHLCV identity and history;
+2. exact provenance auditability;
+3. existing provider-authority and integrity semantics;
+4. current grouped-RPC and chart/Wyckoff behavior during migration;
+5. safe rollback before and after cutover;
+6. bounded database-capacity risk during backfill and reclamation.
+
+## 3. Non-goals
+
+QEO-232 does not:
+
+- merge Daily and intraday provenance models;
+- change `market_ohlcv_history` primary key semantics;
+- change source-provider precedence;
+- change RAW/ADJUSTED price-basis policy;
+- prune historical Daily bars;
+- apply a production migration;
+- perform a table rewrite, `VACUUM FULL`, or any physical reclamation;
+- remove `provider` or `fetched_at` from `market_ohlcv_history`.
+
+## 4. Existing contracts that must survive
+
+### 4.1 Canonical Daily fact identity
+
+The canonical fact key remains:
+
+```text
+(ticker, timeframe, bar_time)
+```
+
+Operationally persistent history is Daily-only even though legacy schema still permits historical `1H` values. QEO-232 does not widen the active persistence contract.
+
+### 4.2 Provenance is behavior, not decoration
+
+Some readers only need OHLCV, but some runtime decisions depend on provenance. In particular, zero-volume Daily authority accepts VCI/DNSE directly and accepts the internal fallback only when:
+
+```text
+provider = 'Fallback'
+source_url = 'internal://stock_orderbook_snapshots'
+provider_detail starts with 'Verified final market-close repair'
+```
+
+Normalization must therefore preserve exact `provider`, `provider_detail`, and `source_url` values visible to those consumers.
+
+### 4.3 Grouped RPC ABI
+
+`qeo_market_ohlcv_recent_grouped(text[], integer)` currently returns a compact positional Daily tuple with width 10:
+
+```text
+[bar_time, open, high, low, close, volume,
+ provider, provider_detail, source_url, fetched_at]
+```
+
+The tuple width and order are compatibility ABI for current decoders. QEO-233/QEO-234 must preserve this ABI even if the function internally joins the provenance registry.
+
+### 4.4 Current writer inventory
+
+Known runtime write paths include:
+
+1. normal Daily history refresh (`modules/market/history/ohlcv-store.ts`);
+2. targeted Daily integrity repair (`modules/market/history/daily-integrity.ts`);
+3. EOD final/no-trade repair (`modules/eod/no-trade-repair-step.ts`).
+
+Any additional writer discovered during implementation is part of the cutover inventory and must be migrated before legacy columns can be removed.
+
+### 4.5 Current provenance-sensitive reader inventory
+
+Known provenance-sensitive paths include:
+
+- `modules/market/history/ohlcv-store.ts`;
+- `modules/market/history/daily-integrity.ts`;
+- `modules/market/chart-data/daily-authority.ts`;
+- `modules/market/chart-data/service.ts`;
+- `modules/market/chart-data/maintenance.ts`;
+- `modules/market/history/daily-cold-history.ts` (legacy/retired path still relevant to dependency audit);
+- grouped/recent SQL RPCs used by Wyckoff/EOD;
+- Wyckoff chart-series/read models that retain provider metadata.
+
+Readers that select only OHLCV/close/volume and do not select provenance do not require provenance-specific migration.
+
+## 5. Chosen design: exact provenance registry + bigint reference
+
+### 5.1 Registry
+
+Introduce a Daily-specific registry; do not reuse `chart_ohlcv_provenance_batches` because intraday provenance has different range/batch/content semantics.
+
+Conceptual schema:
+
+```sql
+create table public.market_ohlcv_provenance (
+  id bigint generated by default as identity primary key,
+  identity_version smallint not null default 1,
+  provider text not null,
+  provider_detail text not null,
+  source_url text not null,
+  created_at timestamptz not null default now(),
+  unique (identity_version, provider, provider_detail, source_url),
+  check (identity_version = 1)
+);
+```
+
+`identity_version = 1` makes identity semantics explicit. A future change in normalization rules must create a new identity version rather than silently reinterpret old registry rows.
+
+### 5.2 Daily fact reference
+
+Add only one new field to the fact table during the migration phase:
+
+```sql
+alter table public.market_ohlcv_history
+  add column provenance_id bigint null;
+```
+
+Then add a foreign key to `market_ohlcv_provenance(id)` with `ON DELETE RESTRICT` semantics.
+
+The reference begins nullable so the schema migration itself is metadata-safe and deployment-order safe. `NOT NULL` is a later gate after all writers are dual-writing and backfill is proven complete.
+
+### 5.3 Fields deliberately kept inline
+
+`provider` remains inline on `market_ohlcv_history` even after QEO-234. It is short, commonly used as an authority discriminator, and keeping it avoids unnecessary joins on high-frequency integrity paths. The registry also stores `provider` as part of the exact provenance identity, so audit queries can verify row/registry consistency.
+
+`fetched_at` remains inline because it describes the acquisition/update event of the specific fact row, not the immutable identity of a source descriptor. Production currently has 1,477 distinct `fetched_at` values; folding it into the registry would couple source identity to acquisition events and make deduplication and correction semantics worse.
+
+QEO-234 may remove only the repeated long inline fields:
+
+- `provider_detail`;
+- `source_url`.
+
+## 6. Identity and immutability rules
+
+### 6.1 Exact identity key
+
+Registry identity is byte-for-byte equality of:
+
+```text
+(identity_version, provider, provider_detail, source_url)
+```
+
+No URL canonicalization, trimming, case folding, prefix normalization, or provider-detail parsing is allowed in version 1.
+
+Reason: provenance is audit evidence. Normalizing strings for storage convenience could merge semantically distinct source evidence and make rollback lossy.
+
+### 6.2 Registry rows are immutable identities
+
+A correction to any identity component creates/reuses another registry row and changes the fact row's `provenance_id`; it does not mutate an existing registry identity in place.
+
+There is no product/runtime delete path for registry identities. The fact FK uses `ON DELETE RESTRICT`.
+
+### 6.3 Legacy columns remain authoritative during QEO-233 backfill
+
+Until the cutover gate is satisfied, existing inline fields remain present and non-null. Backfill must never replace or rewrite OHLCV values and must not infer provenance when exact legacy strings are unavailable.
+
+## 7. Write-path migration contract
+
+QEO-233 will introduce one shared application helper for Daily persistence so all writers resolve provenance consistently.
+
+For each bounded batch of rows:
+
+1. extract distinct version-1 provenance tuples;
+2. insert/get registry identities using the exact unique key;
+3. map each Daily row to its `provenance_id`;
+4. upsert `market_ohlcv_history` on the existing `(ticker,timeframe,bar_time)` conflict key;
+5. during compatibility phase, continue writing `provider`, `provider_detail`, `source_url`, and `fetched_at` exactly as today.
+
+A registry insert that succeeds while a subsequent fact upsert fails may leave a small unused registry row. That is acceptable and safer than a cross-system partial fact write; no incorrect fact is published. Cleanup of unreferenced identities is optional and out of scope for QEO-232.
+
+All known writers must use the shared helper before QEO-233 can declare dual-write complete.
+
+## 8. Read-path compatibility contract
+
+### 8.1 Stable compatibility shape
+
+QEO-233 must add a canonical compatibility read model (view/RPC/helper layer) that can expose the legacy logical fields:
+
+```text
+provider
+provider_detail
+source_url
+fetched_at
+```
+
+without requiring callers to know whether `provider_detail`/`source_url` are still inline or sourced from the registry.
+
+During QEO-233, legacy inline fields still exist. The compatibility layer must validate equivalence between inline and registry values where a `provenance_id` is present rather than silently masking mismatches.
+
+### 8.2 Grouped RPC remains ABI-compatible
+
+`qeo_market_ohlcv_recent_grouped` remains width 10 and preserves field order. Before legacy columns are dropped, QEO-233 updates its implementation to source provenance through the compatibility model/join. Callers and TypeScript decoders do not change ABI.
+
+### 8.3 Provenance-sensitive direct readers migrate before drop
+
+Any direct `.from("market_ohlcv_history").select(...provider_detail,source_url...)` reader must move to the compatibility read model or an equivalent registry-aware query before QEO-234.
+
+OHLCV-only readers that do not select the long provenance fields may continue direct table reads.
+
+## 9. Backfill strategy and capacity safety
+
+QEO-233 performs backfill in two logically separate steps.
+
+### 9.1 Registry seed
+
+Seed one registry row per exact distinct provenance tuple from existing Daily history. Production currently implies about 1,560 version-1 rows, so registry storage is negligible compared with the fact table.
+
+### 9.2 Reference backfill
+
+Populate `market_ohlcv_history.provenance_id` by exact join on:
+
+```text
+provider + provider_detail + source_url
+```
+
+The update must be chunked and restartable. It must not update OHLCV, `provider`, `provider_detail`, `source_url`, or `fetched_at` values.
+
+Because updating ~348k rows creates MVCC churn before physical cleanup, production backfill is capacity-gated. QEO-233 must measure database/table size and dead tuples before starting and between batches. It must pause rather than consume unsafe headroom.
+
+QEO-228/QEO-231 storage reclamation is expected to provide additional headroom, but QEO-233 cannot assume a specific saving; it uses measured production capacity at execution time.
+
+No full shadow-table copy is allowed under the current Free-tier capacity constraint unless a later measured-capacity review explicitly proves enough headroom.
+
+## 10. Cutover gates
+
+QEO-233 may mark the provenance-reference migration ready for QEO-234 only when all gates pass:
+
+1. every current `market_ohlcv_history` row has a non-null `provenance_id`;
+2. every referenced registry row exists;
+3. zero rows have a mismatch between inline `(provider, provider_detail, source_url)` and registry identity;
+4. all known writers dual-write through the shared provenance resolver;
+5. all provenance-sensitive readers are registry-aware;
+6. grouped RPC ABI remains byte/logically equivalent for representative rows;
+7. EOD/Wyckoff/chart Daily/integrity CI contracts are green;
+8. production backfill metrics and rollback evidence are recorded;
+9. database headroom is sufficient for the chosen QEO-234 physical-reclamation method.
+
+Only after these gates may a later migration enforce `provenance_id NOT NULL` and proceed toward removing the long inline fields.
+
+## 11. QEO-234 physical cutover contract
+
+QEO-234 owns destructive/space-reclaiming work. Its logical cutover is:
+
+1. prove zero runtime dependency on inline `provider_detail`/`source_url`;
+2. make registry-backed compatibility reads canonical;
+3. drop inline `provider_detail` and `source_url` columns;
+4. preserve inline `provider` and `fetched_at`;
+5. measure logical and physical table/database size;
+6. choose a physical-reclamation method only after verifying temporary-space and lock requirements.
+
+Dropping a PostgreSQL column does not by itself guarantee immediate physical file shrinkage. QEO-234 must not blindly run `VACUUM FULL` or a copy/swap rewrite near the database quota. Physical reclamation is a separately measured, capacity-safe operation.
+
+## 12. Rollback design
+
+### 12.1 Before legacy column removal
+
+Rollback is simple:
+
+- stop using the registry-aware code path;
+- continue reads/writes against the unchanged inline provenance fields;
+- leave `provenance_id` and registry rows unused if necessary.
+
+No OHLCV or provenance data is lost because QEO-233 does not remove legacy fields.
+
+### 12.2 After QEO-234 legacy column removal
+
+Rollback remains lossless because the registry preserves the exact version-1 strings. If rollback to a legacy application build is required:
+
+1. re-add `provider_detail` and `source_url` columns;
+2. repopulate them by joining `provenance_id -> market_ohlcv_provenance`;
+3. validate zero mismatch/null rows;
+4. only then deploy the legacy reader/writer build.
+
+The rollback must not reconstruct provenance from provider names, URLs, external APIs, or heuristics.
+
+## 13. Schema and contract tests required before production implementation
+
+QEO-232 implementation must add source-level/schema contract tests that fail if the planned migration violates these rules:
+
+1. registry has bigint identity PK and explicit `identity_version = 1` semantics;
+2. exact uniqueness covers `(identity_version, provider, provider_detail, source_url)`;
+3. all identity components are non-null;
+4. `market_ohlcv_history.provenance_id` is nullable in the additive migration phase;
+5. FK is restrictive, never cascading fact deletion from provenance deletion;
+6. additive migration does not drop/change OHLCV facts or legacy provenance columns;
+7. migration does not reuse intraday provenance tables/contracts;
+8. grouped Daily RPC contract remains width 10 and preserves current tuple order;
+9. design/implementation inventory explicitly covers all known provenance writers and readers;
+10. no production migration or physical-reclamation command is bundled into QEO-232.
+
+These are contract tests for the migration design. Runtime behavior/backfill tests belong to QEO-233; physical reclaim acceptance belongs to QEO-234.
+
+## 14. Acceptance mapping
+
+QEO-232 acceptance criteria map to this design as follows:
+
+- **Inventory readers/writers:** Sections 4.4 and 4.5.
+- **Stable dedup identity and nullability/versioning:** Sections 5 and 6.
+- **Migration/backfill compatibility + rollback:** Sections 7–12.
+- **Schema-level tests before production migration:** Section 13.
+- **Do not merge Daily/intraday provenance semantics:** Sections 3 and 5.1.
+
+## 15. Decision summary
+
+Use a dedicated immutable Daily provenance dictionary keyed by the exact versioned tuple `(provider, provider_detail, source_url)` and reference it with a bigint `provenance_id` from `market_ohlcv_history`.
+
+Keep `provider` and `fetched_at` inline. Preserve legacy long provenance columns through QEO-233 for rollback and compatibility. Preserve grouped-RPC ABI. Backfill only the new reference in bounded capacity-gated batches. Remove `provider_detail`/`source_url` and reclaim physical space only in QEO-234 after all compatibility and headroom gates pass.
