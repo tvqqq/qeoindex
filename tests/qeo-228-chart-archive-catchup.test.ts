@@ -21,7 +21,7 @@ test("QEO-228 archive catch-up fans out by ticker instead of relying on one glob
   assert.match(workflow, /runChartIntradayArchiveTickerStep/)
   assert.match(steps, /getCanonicalUniverse/)
   assert.match(steps, /runChartIntradayArchiveLifecycle/)
-  assert.match(steps, /ticker:\s*ticker/)
+  assert.match(steps, /runChartIntradayArchiveLifecycle[\s\S]{0,220}ticker,/)
   assert.match(steps, /QEO228_MAX_PARTITIONS_PER_TICKER/)
   assert.doesNotMatch(workflow, /runChartIntradayArchiveLifecycle/)
 })
