@@ -126,7 +126,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		streamCtx, streamCancel := context.WithCancel(runCtx)
 		stream := newStream(orderbookStreamNames[index], cfg, auth, dnse.OrderbookChannels(symbols), onOrderbookFrame, logger)
 		stream.OnContinuityGap = orderbookBuffer.MarkContinuityGapAll
-		logger.Info("orderbook_provider_shard_start", "stream", stream.Name, "symbols", len(symbols), "memberships", len(symbols)*3)
+		logger.Info("orderbook_provider_shard_start", "stream", stream.Name, "symbols", len(symbols), "memberships", len(symbols)*4)
 		startStream(streamCtx, stream)
 		return streamCancel
 	}
@@ -275,7 +275,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			}
 			memberships := make([]int, len(orderbookPlan))
 			for index, symbols := range orderbookPlan {
-				memberships[index] = len(symbols) * 3
+				memberships[index] = len(symbols) * 4
 			}
 			logger.Info(
 				"market_realtime_worker_heartbeat",
