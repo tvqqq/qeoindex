@@ -1,5 +1,3 @@
-import "server-only"
-
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 const DAILY_PROVENANCE_IDENTITY_VERSION = 1
@@ -101,7 +99,7 @@ export async function persistDailyOhlcvRows(
     const providerDetail = String(raw.provider_detail ?? "")
     const sourceUrl = String(raw.source_url ?? "")
     if (!Number.isSafeInteger(id) || id <= 0 || identityVersion !== DAILY_PROVENANCE_IDENTITY_VERSION) continue
-    resolved.set(provenanceIdentityKey({ provider, provider_detail: providerDetail, source_url: sourceUrl } as PersistedDailyOhlcvRow), id)
+    resolved.set(provenanceIdentityKey({ provider, provider_detail: providerDetail, source_url: sourceUrl }), id)
   }
 
   if (resolved.size !== identities.size) {
