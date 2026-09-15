@@ -235,3 +235,56 @@ test("QEO-75 env example stays generic instead of publishing production coupling
   assert.doesNotMatch(example, /NOTION_[A-Z_]+_DATA_SOURCE_ID=[0-9a-f]{8}-[0-9a-f-]{27,}/i)
   assert.doesNotMatch(example, /APP_URL=https:\/\/qeoindex\.qeoqeo\.com/)
 })
+
+test("QEO-225 relay emits forensic lifecycle and publish telemetry without raw identities", () => {
+  const server = source("services/market-realtime-worker/internal/relay/server.go")
+  const hub = source("services/market-realtime-worker/internal/relay/hub.go")
+  const protocol = source("services/market-realtime-worker/internal/relay/protocol.go")
+
+  for (const event of [
+    "relay_auth_failed",
+    "relay_client_connected",
+    "relay_subscription_changed",
+    "relay_client_disconnected",
+  ]) {
+    assert.match(server, new RegExp(event))
+  }
+  assert.match(server, /connection_id/)
+  assert.match(server, /subject_hash/)
+  assert.match(server, /remote_ip_hash/)
+  assert.match(server, /lifetime_ms/)
+  assert.match(server, /hashIdentifier/)
+  assert.doesNotMatch(server, /"subject"\s*,\s*claims\.Subject/)
+  assert.doesNotMatch(server, /"remote_ip"\s*,/)
+  assert.match(hub, /relay_slow_consumer/)
+  assert.match(hub, /relay_publish/)
+  assert.match(hub, /batch_id/)
+  assert.match(hub, /queue_depth/)
+  assert.match(hub, /subscribers/)
+  assert.match(protocol, /BatchID\s+string\s+`json:"batchId"`/)
+})
+
+test("QEO-225 persists sampled browser relay telemetry for post-incident correlation", () => {
+  const reporterPath = "modules/market/realtime/health-reporter.ts"
+  const routePath = "app/api/market/realtime-health/route.ts"
+  assert.equal(existsSync(new URL(`../${reporterPath}`, import.meta.url)), true, "browser telemetry reporter must exist")
+  assert.equal(existsSync(new URL(`../${routePath}`, import.meta.url)), true, "authenticated telemetry ingest route must exist")
+
+  const relay = source("modules/market/realtime/relay-client.ts")
+  const orderbook = source("modules/market/providers/dnse/orderbook-stream.ts")
+  const reporter = source(reporterPath)
+  const route = source(routePath)
+
+  assert.match(relay, /batchId/)
+  assert.match(relay, /reportRealtimeConnectionState/)
+  assert.match(orderbook, /reportRealtimeHealth/)
+  assert.match(orderbook, /batchId:\s*message\.batchId/)
+  assert.match(reporter, /\/api\/market\/realtime-health/)
+  assert.match(reporter, /keepalive:\s*true/)
+  assert.match(route, /requireApiFeature\("market_board"\)/)
+  assert.match(route, /browser_relay_health/)
+  assert.match(route, /browser_relay_state/)
+  assert.match(route, /user_hash/)
+  assert.match(route, /createHmac/)
+  assert.doesNotMatch(route, /auth\.context\.user\.id[^\n]*console/)
+})
