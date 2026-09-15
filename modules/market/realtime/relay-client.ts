@@ -1,10 +1,13 @@
 "use client"
 
+import { reportRealtimeConnectionState } from "@/modules/market/realtime/health-reporter"
+
 export type MarketRelayTopic = "market" | `orderbook:${string}`
 export type MarketRelayFrame = Record<string, unknown>
 
 export type MarketRelayMarketMessage = {
   type: "market"
+  batchId: string
   epoch: string
   sequence: number
   publishedAt: string
@@ -14,6 +17,7 @@ export type MarketRelayMarketMessage = {
 
 export type MarketRelayOrderbookMessage = {
   type: "orderbook"
+  batchId: string
   symbol: string
   epoch: string
   sequence: number
@@ -55,8 +59,24 @@ let connectionState: MarketRelayConnectionState = {
   lastMessageAt: "",
 }
 
+function activeTopics() {
+  return [...topicListeners.entries()]
+    .filter(([, listeners]) => listeners.size > 0)
+    .map(([topic]) => topic)
+}
+
+function reportConnectionState() {
+  reportRealtimeConnectionState({
+    status: connectionState.status,
+    reconnectAttempt,
+    topicCount: activeTopics().length,
+    hasError: Boolean(connectionState.error),
+  })
+}
+
 function setState(patch: Partial<MarketRelayConnectionState>) {
   connectionState = { ...connectionState, ...patch }
+  reportConnectionState()
   for (const listener of stateListeners) listener(connectionState)
 }
 
@@ -73,12 +93,6 @@ function normalizeTopic(topic: MarketRelayTopic): MarketRelayTopic {
 function reconnectDelay(attempt: number) {
   const exponent = Math.min(Math.max(attempt - 1, 0), 5)
   return Math.min(RECONNECT_BASE_MS * 2 ** exponent, RECONNECT_MAX_MS) + Math.floor(Math.random() * 300)
-}
-
-function activeTopics() {
-  return [...topicListeners.entries()]
-    .filter(([, listeners]) => listeners.size > 0)
-    .map(([topic]) => topic)
 }
 
 function send(message: unknown) {
@@ -112,6 +126,7 @@ function parseFrames(value: unknown): MarketRelayFrame[] {
 function parseDataMessage(value: unknown): MarketRelayDataMessage | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const source = value as Record<string, unknown>
+  const batchId = typeof source.batchId === "string" ? source.batchId.trim().slice(0, 160) : ""
   const epoch = typeof source.epoch === "string" ? source.epoch : ""
   const sequence = Number(source.sequence)
   const publishedAt = typeof source.publishedAt === "string" ? source.publishedAt : ""
@@ -120,6 +135,7 @@ function parseDataMessage(value: unknown): MarketRelayDataMessage | null {
   if (source.type === "market") {
     return {
       type: "market",
+      batchId,
       epoch,
       sequence,
       publishedAt,
@@ -133,6 +149,7 @@ function parseDataMessage(value: unknown): MarketRelayDataMessage | null {
     if (!symbol) return null
     return {
       type: "orderbook",
+      batchId,
       symbol,
       epoch,
       sequence,
@@ -283,6 +300,7 @@ export function subscribeMarketRelay(
     onState(connectionState)
   }
   attachLifecycleListeners()
+  reportConnectionState()
   if (firstForTopic && connectionState.status === "READY") {
     send({ type: "subscribe", topics: [normalized] })
   }
@@ -298,6 +316,7 @@ export function subscribeMarketRelay(
         send({ type: "unsubscribe", topics: [normalized] })
       }
     }
+    reportConnectionState()
     if (activeTopics().length === 0) {
       clearReconnectTimer()
       detachSocket()
