@@ -386,7 +386,7 @@ export async function loadCachedOhlcvHistory(
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
 
-    let data = compatRead.data
+    let data: StoredOhlcvRow[] | null = compatRead.data
     let error = compatRead.error
     if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
       const legacyRead = await supabase
