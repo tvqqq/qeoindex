@@ -2,78 +2,72 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cut `market_ohlcv_history` over to compact registry-backed Daily provenance, prove production compact writes, remove repeated inline `provider_detail` / `source_url`, and reclaim physical storage only when measured production capacity gates permit it.
+**Goal:** Cut `market_ohlcv_history` over to compact registry-backed Daily provenance, prove compact writes in production, remove repeated inline `provider_detail` / `source_url`, and reclaim physical storage only when measured capacity gates permit it.
 
-**Architecture:** Ship a non-destructive registry-canonical bridge first: long legacy columns become nullable, provenance-sensitive readers/RPCs become registry-backed, and writers persist only `provider`, `fetched_at`, `provenance_id`, and OHLCV. After a machine-authenticated production canary proves that bridge, a separately authorized maintenance migration enforces `provenance_id NOT NULL`, removes only the two long columns, retires the QEO-233 backfill RPC, and preserves logical provenance APIs. Physical reclaim is a separate maintenance action: benchmark the overlapping lookup index, calculate the approved peak-space gate, and run `VACUUM FULL` only if both thresholds pass.
+**Architecture:** Ship a non-destructive bridge first: make the long legacy fields nullable, make the registry authoritative for logical provenance, relax the fact consistency trigger only enough to allow null legacy long fields, migrate SQL/application consumers, and make the shared writer persist compact facts. After a production writer canary proves the bridge, a separately authorized maintenance migration enforces `provenance_id NOT NULL`, removes only the two long columns, and retires the historical backfill RPC. Physical reclaim is a separate maintenance action guarded by lookup-index benchmarks and the approved database-capacity thresholds.
 
-**Tech Stack:** TypeScript, Next.js route handlers, Supabase/PostgreSQL migrations, `@supabase/supabase-js`, PostgreSQL `pgcrypto`, Node.js 24 test runner, pnpm 10.28.0, GitHub Actions.
+**Tech Stack:** TypeScript, Next.js route handlers, Supabase/PostgreSQL migrations, `@supabase/supabase-js`, PostgreSQL `pgcrypto`, Node.js 24, pnpm 10.28.0, GitHub Actions.
 
 **Spec:** `docs/superpowers/specs/2026-09-15-qeo-234-compact-daily-provenance-cutover-design.md`
 
 ## Global Constraints
 
-- `market_ohlcv_history` remains the canonical completed-Daily fact store keyed by `(ticker,timeframe,bar_time)`.
-- Version-1 provenance identity remains exact byte equality of `(identity_version, provider, provider_detail, source_url)`; no normalization is allowed.
-- Final fact rows retain inline `provider`, inline `fetched_at`, and `provenance_id`; remove only `provider_detail` and `source_url`.
-- Final `provenance_id` is `NOT NULL`; the FK remains `ON DELETE RESTRICT`.
-- Grouped Daily RPC ABI remains exact width 10: `[bar_time, open, high, low, close, volume, provider, provider_detail, source_url, fetched_at]`.
-- Zero-volume fallback authority remains logically equivalent to `provider='Fallback'`, `source_url='internal://stock_orderbook_snapshots'`, and `provider_detail ILIKE 'Verified final market-close repair%'`.
-- Do not change Daily OHLCV values, provider precedence, RAW/ADJUSTED basis, fact identity, or Daily retention.
+- Canonical fact key remains `(ticker,timeframe,bar_time)` in `market_ohlcv_history`.
+- Version-1 provenance identity remains exact byte equality of `(identity_version,provider,provider_detail,source_url)`; never normalize strings.
+- Final fact keeps `provider`, `fetched_at`, `provenance_id`; remove only `provider_detail`, `source_url`.
+- Final `provenance_id` is `NOT NULL`; FK remains `ON DELETE RESTRICT`.
+- Grouped Daily ABI remains width 10: `[bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at]`.
+- Preserve exact zero-volume authority semantics, Daily OHLCV values, provider precedence, RAW/ADJUSTED basis, and historical Daily retention.
 - Do not reuse intraday provenance contracts.
-- Do not use a shadow-table copy under the current production headroom unless a later measured review explicitly supersedes the approved design.
-- Do not drop `market_ohlcv_history_lookup_idx` without the approved benchmark gates.
-- `VACUUM FULL` is not part of a migration and is not automatic. It requires explicit production maintenance authorization after bridge acceptance.
-- `VACUUM FULL` is allowed only when current DB size is `<= 385000000` bytes and conservative estimated peak is `<= 470000000` bytes.
-- QeoIndex inline-only policy applies: source implementation uses GitHub; runtime verification is GitHub Actions; do not run local/remote shell commands unless explicitly authorized.
-- Production bridge migration, merge/deploy, Stage-2 maintenance cutover, and physical rewrite each remain explicit authorization gates.
+- Do not shadow-copy the Daily table under current headroom unless a later explicit capacity review supersedes the design.
+- Do not drop `market_ohlcv_history_lookup_idx` without the approved benchmark.
+- Never put `VACUUM FULL` in a migration/workflow. It requires separate production authorization.
+- `VACUUM FULL` gate: current DB `<=385000000` bytes AND estimated peak `<=470000000` bytes.
+- QeoIndex inline-only policy applies: source changes via GitHub; runtime verification via GitHub Actions; no shell/remote execution unless explicitly authorized.
+- Source-plan approval does not authorize bridge production promotion, merge/deploy, Stage-2 cutover, index drop, or `VACUUM FULL`.
 
 ---
 
 ## File Map
 
-### New files
+**Create**
+- `tests/qeo-234-daily-provenance-cutover.cases.ts`
+- `.github/workflows/qeo-234.yml`
+- `supabase/migrations/20260915193000_qeo234_daily_provenance_bridge.sql`
+- `supabase/migrations/20260915194500_qeo234_daily_provenance_cutover.sql`
+- `modules/market/history/daily-provenance-canary.ts`
+- `app/api/qeoindex/daily-provenance-canary/route.ts`
+- `docs/db/runbooks/qeo234-daily-provenance-maintenance.md`
 
-- `tests/qeo-234-daily-provenance-cutover.cases.ts` — focused source/schema/runtime contract for both bridge and final cutover.
-- `.github/workflows/qeo-234.yml` — focused Node 24 contract workflow.
-- `supabase/migrations/20260915193000_qeo234_daily_provenance_bridge.sql` — nullable-long-column bridge, registry-canonical compatibility model, registry-aware SQL consumers.
-- `supabase/migrations/20260915194500_qeo234_daily_provenance_cutover.sql` — fail-closed final schema cutover; no `VACUUM FULL`.
-- `modules/market/history/daily-provenance-canary.ts` — controlled idempotent compact-writer verification against one existing Daily fact.
-- `app/api/qeoindex/daily-provenance-canary/route.ts` — machine-only POST wrapper for the canary.
-- `docs/db/runbooks/qeo234-daily-provenance-maintenance.md` — exact production preflight, digest, writer pause, index benchmark, capacity formula, physical rewrite, rollback, and restore-writer SQL.
+**Modify**
+- `modules/market/history/daily-provenance.ts`
+- `modules/market/history/ohlcv-store.ts`
+- `modules/market/history/daily-integrity.ts`
+- `modules/market/chart-data/service.ts`
+- `modules/market/chart-data/maintenance.ts`
+- `modules/market/history/daily-cold-history.ts`
+- `modules/shared/supabase/database.types.ts` (generated candidate only)
+- `supabase/migration-preproduction.json`
 
-### Modified files
-
-- `modules/market/history/daily-provenance.ts` — remove pre-QEO-233 schema fallback and write compact fact rows only.
-- `modules/market/history/ohlcv-store.ts` — remove provenance-sensitive direct legacy fallback.
-- `modules/market/history/daily-integrity.ts` — remove provenance-sensitive direct legacy fallback.
-- `modules/market/chart-data/service.ts` — remove provenance-sensitive direct legacy fallback.
-- `modules/market/chart-data/maintenance.ts` — remove provenance-sensitive direct legacy fallback.
-- `modules/market/history/daily-cold-history.ts` — remove provenance-sensitive direct legacy fallback while leaving OHLCV-only direct reads unchanged.
-- `modules/shared/supabase/database.types.ts` — regenerate from final zero-to-latest schema through DB Drift workflow evidence.
-- `supabase/migration-preproduction.json` — register bridge and cutover migrations as reviewed repo-ahead entries until production mapping is reconciled.
-
-### Intentionally unchanged interfaces
-
-- Callers keep constructing `PersistedDailyOhlcvRow` with logical `provider_detail` and `source_url`; the shared helper uses them only to resolve provenance identity.
-- `qeo_market_ohlcv_recent(...)` keeps its logical return columns.
-- `qeo_market_ohlcv_recent_grouped(...)` keeps width/order exactly unchanged.
-- Direct OHLCV-only reads of `market_ohlcv_history` remain valid.
+**Keep stable**
+- Caller-facing `PersistedDailyOhlcvRow` still carries logical `provider_detail` / `source_url` so the helper can resolve exact registry identity.
+- `qeo_market_ohlcv_recent` logical columns stay unchanged.
+- `qeo_market_ohlcv_recent_grouped` stays width 10; its current QEO-233 implementation already reads `market_ohlcv_history_compat`, so QEO-234 does not need to redefine it unless verification proves otherwise.
+- OHLCV-only direct reads may remain on `market_ohlcv_history`.
 
 ---
 
-### Task 1: Lock the QEO-234 contract in RED
+### Task 1: Add focused RED contracts and workflow
 
 **Files:**
 - Create: `tests/qeo-234-daily-provenance-cutover.cases.ts`
 - Create: `.github/workflows/qeo-234.yml`
 
 **Interfaces:**
-- Consumes: QEO-232/QEO-233 migration contracts and the approved QEO-234 spec.
-- Produces: one focused contract suite that must fail before bridge/cutover implementation exists.
+- Consumes the QEO-232/QEO-233 contracts and approved QEO-234 spec.
+- Produces a focused source/schema guard that fails before implementation exists.
 
-- [ ] **Step 1: Add migration/source discovery helpers and RED bridge assertions.**
-
-Create `tests/qeo-234-daily-provenance-cutover.cases.ts` with the following structure:
+- [ ] **Step 1: Add migration/source helpers and bridge/final-schema RED assertions.**
 
 ```ts
 import assert from "node:assert/strict"
@@ -94,17 +88,19 @@ function migration(pattern: RegExp) {
 const bridgePattern = /_qeo234_daily_provenance_bridge\.sql$/
 const cutoverPattern = /_qeo234_daily_provenance_cutover\.sql$/
 
-test("QEO-234 bridge makes long fields nullable and registry-canonical", () => {
+test("QEO-234 bridge is nullable-long-field and registry-canonical", () => {
   const sql = migration(bridgePattern)
   assert.match(sql, /alter\s+column\s+provider_detail\s+drop\s+not\s+null/i)
   assert.match(sql, /alter\s+column\s+source_url\s+drop\s+not\s+null/i)
+  assert.match(sql, /qeo_market_ohlcv_provenance_consistency_guard/i)
+  assert.match(sql, /new\.provider_detail\s+is\s+not\s+null/i)
+  assert.match(sql, /new\.source_url\s+is\s+not\s+null/i)
   assert.match(sql, /market_ohlcv_history_compat/i)
   assert.match(sql, /registry\.provider_detail/i)
   assert.match(sql, /registry\.source_url/i)
-  assert.match(sql, /history\.provider\s*=\s*registry\.provider/i)
 })
 
-test("QEO-234 bridge migrates all live SQL provenance consumers", () => {
+test("QEO-234 bridge migrates live SQL provenance consumers", () => {
   const sql = migration(bridgePattern)
   for (const fn of [
     "qeo_market_ohlcv_recent",
@@ -113,23 +109,34 @@ test("QEO-234 bridge migrates all live SQL provenance consumers", () => {
   ]) assert.match(sql, new RegExp(fn, "i"))
   assert.match(sql, /from\s+public\.market_ohlcv_history_compat/i)
 })
+
+test("QEO-234 final cutover removes only the long inline fields", () => {
+  const sql = migration(cutoverPattern)
+  assert.match(sql, /alter\s+column\s+provenance_id\s+set\s+not\s+null/i)
+  assert.match(sql, /drop\s+column\s+provider_detail/i)
+  assert.match(sql, /drop\s+column\s+source_url/i)
+  assert.doesNotMatch(sql, /drop\s+column\s+provider\b/i)
+  assert.doesNotMatch(sql, /drop\s+column\s+fetched_at\b/i)
+  assert.match(sql, /drop\s+function\s+if\s+exists\s+public\.qeo_market_ohlcv_provenance_backfill_batch/i)
+  assert.doesNotMatch(sql, /vacuum\s+full/i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
+  assert.doesNotMatch(sql, /truncate(?:\s+table)?\s+public\.market_ohlcv_history/i)
+  assert.doesNotMatch(sql, /chart_ohlcv_provenance_batches/i)
+})
 ```
 
-- [ ] **Step 2: Add RED compact-writer, reader, canary, and final-cutover assertions.**
-
-Append:
+- [ ] **Step 2: Add RED runtime dependency/writer/canary/runbook assertions.**
 
 ```ts
-test("QEO-234 writer resolves logical provenance but persists a compact fact", () => {
+test("QEO-234 writer persists compact facts only", () => {
   const helper = source("modules/market/history/daily-provenance.ts")
   assert.doesNotMatch(helper, /legacyUpsert|qeo233SchemaUnavailable/)
-  assert.match(helper, /provenance_id/)
-  assert.match(helper, /provider_detail/)
-  assert.match(helper, /source_url/)
   assert.match(helper, /compactFacts|compactFact/)
+  assert.match(helper, /provider_detail:\s*_providerDetail|provider_detail\s*:\s*_/)
+  assert.match(helper, /source_url:\s*_sourceUrl|source_url\s*:\s*_/)
 })
 
-test("QEO-234 provenance-sensitive readers have no direct long-field fallback", () => {
+test("QEO-234 provenance-sensitive readers have no long-field fact fallback", () => {
   for (const path of [
     "modules/market/history/ohlcv-store.ts",
     "modules/market/history/daily-integrity.ts",
@@ -142,12 +149,11 @@ test("QEO-234 provenance-sensitive readers have no direct long-field fallback", 
     assert.doesNotMatch(
       text,
       /from\(["']market_ohlcv_history["']\)[\s\S]{0,500}?select\(["'][^"']*(?:provider_detail|source_url)/,
-      `${path} must not fall back to long provenance columns on the fact table`,
     )
   }
 })
 
-test("QEO-234 exposes a machine-only controlled writer canary", () => {
+test("QEO-234 canary is machine-only and cannot accept arbitrary fact payload", () => {
   const routePath = "app/api/qeoindex/daily-provenance-canary/route.ts"
   assert.equal(existsSync(new URL(`../${routePath}`, import.meta.url)), true)
   const route = source(routePath)
@@ -160,94 +166,37 @@ test("QEO-234 exposes a machine-only controlled writer canary", () => {
   assert.match(canary, /market_ohlcv_history_compat/)
 })
 
-test("QEO-234 final cutover drops only long inline provenance and retires backfill", () => {
-  const sql = migration(cutoverPattern)
-  assert.match(sql, /alter\s+column\s+provenance_id\s+set\s+not\s+null/i)
-  assert.match(sql, /drop\s+column\s+provider_detail/i)
-  assert.match(sql, /drop\s+column\s+source_url/i)
-  assert.doesNotMatch(sql, /drop\s+column\s+provider\b/i)
-  assert.doesNotMatch(sql, /drop\s+column\s+fetched_at\b/i)
-  assert.match(sql, /drop\s+function\s+if\s+exists\s+public\.qeo_market_ohlcv_provenance_backfill_batch/i)
-  assert.match(sql, /foreign key[\s\S]*on delete restrict|market_ohlcv_history_provenance_id_fkey/i)
-  assert.doesNotMatch(sql, /vacuum\s+full/i)
-  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
-  assert.doesNotMatch(sql, /truncate(?:\s+table)?\s+public\.market_ohlcv_history/i)
-  assert.doesNotMatch(sql, /chart_ohlcv_provenance_batches/i)
+test("QEO-234 preserves the existing grouped width-10 ABI", () => {
+  const qeo233 = source("supabase/migrations/20260915083500_qeo233_daily_ohlcv_provenance_compat.sql")
+  assert.match(qeo233, /jsonb_build_array\([\s\S]*?h\.bar_time[\s\S]*?h\.fetched_at/)
+  assert.match(source("modules/market/history/ohlcv-grouped.ts"), /COMPACT_DAILY_ROW_WIDTH\s*=\s*10/)
 })
 
-test("QEO-234 keeps grouped Daily tuple width/order and rollback reconstruction evidence", () => {
-  const sql = `${migration(bridgePattern)}\n${migration(cutoverPattern)}`
-  assert.match(sql, /jsonb_build_array\([\s\S]*?bar_time[\s\S]*?open[\s\S]*?high[\s\S]*?low[\s\S]*?close[\s\S]*?volume[\s\S]*?provider[\s\S]*?provider_detail[\s\S]*?source_url[\s\S]*?fetched_at/i)
-  assert.match(source("modules/market/history/ohlcv-grouped.ts"), /COMPACT_DAILY_ROW_WIDTH\s*=\s*10/)
+test("QEO-234 runbook contains capacity gates and exact rollback reconstruction", () => {
   const runbook = source("docs/db/runbooks/qeo234-daily-provenance-maintenance.md")
+  assert.match(runbook, /385000000/)
+  assert.match(runbook, /470000000/)
   assert.match(runbook, /ADD COLUMN provider_detail text/i)
   assert.match(runbook, /ADD COLUMN source_url text/i)
   assert.match(runbook, /market_ohlcv_provenance/i)
 })
 ```
 
-- [ ] **Step 3: Add focused GitHub Actions workflow.**
+- [ ] **Step 3: Add `.github/workflows/qeo-234.yml`.**
 
-Create `.github/workflows/qeo-234.yml`:
+Use Node 24 + pnpm 10.28.0 and run:
 
-```yaml
-name: QEO-234
-
-permissions:
-  contents: read
-
-on:
-  pull_request:
-    paths:
-      - "docs/superpowers/specs/2026-09-15-qeo-234-compact-daily-provenance-cutover-design.md"
-      - "docs/superpowers/plans/2026-09-15-qeo-234-compact-daily-provenance-cutover.md"
-      - "docs/db/runbooks/qeo234-daily-provenance-maintenance.md"
-      - "tests/qeo-234-daily-provenance-cutover.cases.ts"
-      - "supabase/migrations/*_qeo234_daily_provenance_*.sql"
-      - "supabase/migration-preproduction.json"
-      - "modules/market/history/daily-provenance.ts"
-      - "modules/market/history/daily-provenance-canary.ts"
-      - "modules/market/history/ohlcv-store.ts"
-      - "modules/market/history/daily-integrity.ts"
-      - "modules/eod/no-trade-repair-step.ts"
-      - "modules/market/chart-data/service.ts"
-      - "modules/market/chart-data/maintenance.ts"
-      - "modules/market/history/daily-cold-history.ts"
-      - "modules/market/history/ohlcv-grouped.ts"
-      - "app/api/qeoindex/daily-provenance-canary/route.ts"
-      - "modules/shared/supabase/database.types.ts"
-      - ".github/workflows/qeo-234.yml"
-  push:
-    branches: [main]
-    paths:
-      - "tests/qeo-234-daily-provenance-cutover.cases.ts"
-      - "supabase/migrations/*_qeo234_daily_provenance_*.sql"
-      - "modules/market/history/daily-provenance.ts"
-      - ".github/workflows/qeo-234.yml"
-
-jobs:
-  contract:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: node --test tests/qeo-232-daily-provenance-contract.cases.ts tests/qeo-233-daily-provenance-runtime.cases.ts tests/qeo-234-daily-provenance-cutover.cases.ts
+```bash
+node --test tests/qeo-232-daily-provenance-contract.cases.ts tests/qeo-233-daily-provenance-runtime.cases.ts tests/qeo-234-daily-provenance-cutover.cases.ts
 ```
 
-- [ ] **Step 4: Push the RED-only change and capture expected failure from GitHub Actions.**
+Trigger on the QEO-234 spec/plan/runbook/test/migrations, the provenance helper/readers/canary route, `database.types.ts`, migration manifest, and the workflow itself.
 
-Expected failure must be missing QEO-234 migration/runbook/canary implementation, not syntax/workflow setup failure.
+- [ ] **Step 4: Push RED and capture GitHub Actions failure.**
 
-- [ ] **Step 5: Commit the RED contract.**
+Expected RED cause: missing QEO-234 migrations/canary/runbook or still-present legacy writer/reader behavior, not workflow syntax failure.
 
-Commit message:
+- [ ] **Step 5: Commit.**
 
 ```text
 test(QEO-234): define compact Daily provenance cutover contract
@@ -255,19 +204,16 @@ test(QEO-234): define compact Daily provenance cutover contract
 
 ---
 
-### Task 2: Add the non-destructive registry-canonical bridge migration
+### Task 2: Implement Stage-1 registry-canonical bridge migration
 
 **Files:**
 - Create: `supabase/migrations/20260915193000_qeo234_daily_provenance_bridge.sql`
 - Test: `tests/qeo-234-daily-provenance-cutover.cases.ts`
 
 **Interfaces:**
-- Consumes: QEO-233 registry, `provenance_id`, compatibility view, grouped RPC.
-- Produces: nullable legacy long fields; registry-canonical compatibility reads; registry-aware recent/integrity RPCs.
+- Produces nullable legacy long fields, a trigger that accepts null long fields only when registry identity/provider is valid, registry-canonical compatibility reads, and registry-aware recent/integrity RPCs.
 
-- [ ] **Step 1: Make only the two long legacy fields nullable.**
-
-Start the migration with:
+- [ ] **Step 1: Make only the two long fields nullable.**
 
 ```sql
 begin;
@@ -277,25 +223,55 @@ alter table public.market_ohlcv_history
   alter column source_url drop not null;
 ```
 
-Do not change `provider`, `fetched_at`, OHLCV constraints, PK, FK, RLS, or permissions.
+- [ ] **Step 2: Replace QEO-233 fact consistency guard so compact writes can succeed during bridge.**
 
-- [ ] **Step 2: Harden the compatibility view around registry authority.**
+This step is required before the app stops writing the long columns. Replace the function body with:
 
-Replace the view with this logical shape:
+```sql
+create or replace function public.qeo_market_ohlcv_provenance_consistency_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  registry_row public.market_ohlcv_provenance%rowtype;
+begin
+  if new.provenance_id is null then
+    return new;
+  end if;
+
+  select * into registry_row
+  from public.market_ohlcv_provenance
+  where id = new.provenance_id;
+
+  if not found then
+    raise exception 'Daily OHLCV provenance_id % does not exist', new.provenance_id;
+  end if;
+
+  if new.provider is distinct from registry_row.provider
+    or (new.provider_detail is not null and new.provider_detail is distinct from registry_row.provider_detail)
+    or (new.source_url is not null and new.source_url is distinct from registry_row.source_url)
+  then
+    raise exception 'Daily OHLCV provenance mismatch for %.% at %', new.ticker, new.timeframe, new.bar_time;
+  end if;
+
+  return new;
+end;
+$$;
+```
+
+Keep the existing trigger event list during bridge (`provenance_id,provider,provider_detail,source_url`) so non-null legacy values are still validated exactly.
+
+- [ ] **Step 3: Redefine `market_ohlcv_history_compat`.**
 
 ```sql
 create or replace view public.market_ohlcv_history_compat
 with (security_invoker = true)
 as
 select
-  history.ticker,
-  history.timeframe,
-  history.bar_time,
-  history.open,
-  history.high,
-  history.low,
-  history.close,
-  history.volume,
+  history.ticker, history.timeframe, history.bar_time,
+  history.open, history.high, history.low, history.close, history.volume,
   history.provider,
   case when history.provenance_id is null then history.provider_detail else registry.provider_detail end as provider_detail,
   case when history.provenance_id is null then history.source_url else registry.source_url end as source_url,
@@ -309,18 +285,17 @@ select
     and (history.source_url is null or history.source_url = registry.source_url)
   ) as provenance_consistent
 from public.market_ohlcv_history history
-left join public.market_ohlcv_provenance registry
-  on registry.id = history.provenance_id;
+left join public.market_ohlcv_provenance registry on registry.id = history.provenance_id;
 
 revoke all privileges on table public.market_ohlcv_history_compat from public, anon, authenticated;
 grant select on table public.market_ohlcv_history_compat to service_role;
 ```
 
-A null `provenance_id` is now inconsistent even though the physical column remains nullable until Stage 2.
+A null `provenance_id` is now inconsistent; production QEO-233 acceptance already requires pending=0.
 
-- [ ] **Step 3: Recreate `qeo_market_ohlcv_recent` over the compatibility view without changing its return type.**
+- [ ] **Step 4: Recreate `qeo_market_ohlcv_recent` over the compatibility view without changing return shape.**
 
-Its lateral source must be:
+Its lateral source must use:
 
 ```sql
 from public.market_ohlcv_history_compat source
@@ -331,27 +306,11 @@ order by source.bar_time desc
 limit greatest(1, least(coalesce(p_limit, 260), 1700))
 ```
 
-Keep these logical output columns in the current order:
+Keep logical columns/order `ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at` and current service-role execute grants.
 
-```text
-ticker,timeframe,bar_time,open,high,low,close,volume,
-provider,provider_detail,source_url,fetched_at
-```
+- [ ] **Step 5: Recreate full/scoped Daily integrity RPCs over `market_ohlcv_history_compat`.**
 
-Retain the existing service-role-only execute grants.
-
-- [ ] **Step 4: Recreate both Daily integrity RPCs over `market_ohlcv_history_compat`.**
-
-In each function, the `daily` CTE must select the same logical fields as today but change the source to:
-
-```sql
-from public.market_ohlcv_history_compat h
-join ...
-where h.timeframe = '1D'
-  and h.provenance_consistent is true
-```
-
-Keep the exact zero-volume authority predicate unchanged:
+Change their Daily source to compatibility rows with `provenance_consistent is true`. Preserve the exact authority predicate:
 
 ```sql
 provider in ('VCI', 'DNSE')
@@ -362,13 +321,13 @@ or (
 )
 ```
 
-Do not change result columns/status semantics.
+Keep result columns/status semantics unchanged.
 
-- [ ] **Step 5: Leave grouped RPC width/order unchanged and keep QEO-233 backfill RPC present during bridge.**
+- [ ] **Step 6: Keep grouped RPC and historical backfill RPC unchanged during bridge.**
 
-The bridge is not the destructive cutover. Do not drop `qeo_market_ohlcv_provenance_backfill_batch` yet.
+Grouped RPC already reads the compatibility view. The historical QEO-233 backfill RPC is retired only in Stage 2.
 
-- [ ] **Step 6: Commit bridge migration.**
+- [ ] **Step 7: Commit.**
 
 ```text
 feat(QEO-234): add registry-canonical Daily provenance bridge
@@ -376,7 +335,7 @@ feat(QEO-234): add registry-canonical Daily provenance bridge
 
 ---
 
-### Task 3: Cut application writers/readers over and add a controlled production canary
+### Task 3: Cut application writes/reads to compact references and add controlled canary
 
 **Files:**
 - Modify: `modules/market/history/daily-provenance.ts`
@@ -387,18 +346,14 @@ feat(QEO-234): add registry-canonical Daily provenance bridge
 - Modify: `modules/market/history/daily-cold-history.ts`
 - Create: `modules/market/history/daily-provenance-canary.ts`
 - Create: `app/api/qeoindex/daily-provenance-canary/route.ts`
-- Test: `tests/qeo-234-daily-provenance-cutover.cases.ts`
 
 **Interfaces:**
-- `persistDailyOhlcvRows(supabase, rows)` still consumes complete logical provenance.
-- It now persists a compact fact object that omits `provider_detail` and `source_url`.
-- `runDailyProvenanceCanary(supabase, ticker)` rewrites one existing fact idempotently and returns verification evidence.
+- `persistDailyOhlcvRows` still accepts full logical provenance, but fact upsert omits the two long fields.
+- `runDailyProvenanceCanary(supabase,ticker)` accepts only a canonical symbol and uses an existing fact as its entire source payload.
 
-- [ ] **Step 1: Remove the pre-schema legacy writer fallback.**
+- [ ] **Step 1: Remove writer schema fallback.**
 
-Delete `qeo233SchemaUnavailable(...)`, `legacyUpsert(...)`, and the fallback branch in `persistDailyOhlcvRows`.
-
-A registry resolve failure now always throws:
+Delete `qeo233SchemaUnavailable`, `legacyUpsert`, and the fallback branch. Registry errors now fail closed:
 
 ```ts
 if (provenanceUpsert.error) {
@@ -406,9 +361,7 @@ if (provenanceUpsert.error) {
 }
 ```
 
-- [ ] **Step 2: Persist compact fact objects only.**
-
-Replace the current `facts = rows.map(...)` with:
+- [ ] **Step 2: Map resolved rows to compact fact objects.**
 
 ```ts
 const compactFacts = rows.map((row) => {
@@ -419,35 +372,27 @@ const compactFacts = rows.map((row) => {
 })
 ```
 
-Then batch `compactFacts`, not source `rows`, into the fact upsert.
+Batch/upsert `compactFacts`; do not modify the caller-facing logical input type.
 
-The caller-facing `PersistedDailyOhlcvRow` interface stays unchanged because those long fields are still required to resolve exact provenance.
+- [ ] **Step 3: Remove provenance-sensitive fact-table fallback reads.**
 
-- [ ] **Step 3: Remove direct legacy long-field reader fallbacks.**
-
-For each provenance-sensitive reader listed in the file map, remove branches that catch compatibility-view absence and then select `provider_detail`/`source_url` from `market_ohlcv_history`.
-
-The canonical pattern becomes:
+For each reader in the file map, remove only fallback branches that select `provider_detail`/`source_url` directly from `market_ohlcv_history`. Canonical pattern:
 
 ```ts
 const { data, error } = await supabase
   .from("market_ohlcv_history_compat")
   .select("...")
-
-if (error) throw new Error(`...: ${error.message}`)
+if (error) throw new Error(`Daily provenance read failed: ${error.message}`)
 assertDailyProvenanceConsistent((data || []) as Array<Record<string, unknown>>, "<context>")
 ```
 
-Do not change direct fact reads that select only non-provenance fields such as `ticker`, `bar_time`, `close`, or `volume`.
+Keep OHLCV-only direct fact reads.
 
-- [ ] **Step 4: Implement the idempotent canary helper.**
+- [ ] **Step 4: Implement bridge/final-schema canary helper.**
 
-Create `modules/market/history/daily-provenance-canary.ts` with this contract:
+`modules/market/history/daily-provenance-canary.ts` exports:
 
 ```ts
-import type { SupabaseClient } from "@supabase/supabase-js"
-import { persistDailyOhlcvRows } from "./daily-provenance"
-
 export type DailyProvenanceCanaryResult = {
   passed: boolean
   ticker: string
@@ -461,21 +406,18 @@ export type DailyProvenanceCanaryResult = {
 export async function runDailyProvenanceCanary(
   supabase: SupabaseClient,
   ticker: string,
-): Promise<DailyProvenanceCanaryResult> {
-  // 1. Load one latest consistent logical row from market_ohlcv_history_compat.
-  // 2. During bridge only, set provider_detail/source_url to NULL for exactly that PK.
-  //    If PostgREST reports those columns no longer exist, treat that as final-schema mode.
-  // 3. Call persistDailyOhlcvRows with the exact pre-canary logical OHLCV/provenance/fetched_at.
-  // 4. Re-read compact fact fields and compat logical provenance.
-  // 5. Require identical OHLCV, provider, fetched_at, logical provider_detail/source_url,
-  //    a positive provenance_id, and provenance_consistent=true.
-  // 6. Return evidence; never accept request-supplied OHLCV/provenance values.
-}
+): Promise<DailyProvenanceCanaryResult>
 ```
 
-Use an exact missing-column detector limited to `provider_detail` / `source_url`; any other update/select error throws.
+Algorithm:
+1. Load latest `provenance_consistent=true` row from `market_ohlcv_history_compat`; keep exact OHLCV + logical provenance + `fetched_at`.
+2. Attempt a PK-constrained direct update setting `provider_detail=null, source_url=null`. In bridge schema it must succeed. If and only if PostgREST reports those exact columns absent, mark final-schema mode and skip legacy nulling.
+3. Call `persistDailyOhlcvRows` with the exact pre-canary logical row; no OHLCV/fetched_at change.
+4. Read compact fact fields (`ticker,timeframe,bar_time,OHLCV,provider,fetched_at,provenance_id`) and logical compat fields.
+5. Require exact fact/logical equality, positive provenance ID, `provenance_consistent=true`; in bridge mode require both legacy long columns remain null after compact upsert.
+6. Return evidence. Never accept caller-provided OHLCV/provenance values.
 
-For bridge mode, the direct nulling mutation must be constrained by all three fact-key fields:
+Bridge nulling must match all PK fields:
 
 ```ts
 .eq("ticker", row.ticker)
@@ -483,38 +425,22 @@ For bridge mode, the direct nulling mutation must be constrained by all three fa
 .eq("bar_time", row.bar_time)
 ```
 
-The helper must never change OHLCV values.
+- [ ] **Step 5: Add machine-only POST route using the proven QEO-231 auth pattern.**
 
-- [ ] **Step 5: Add the machine-only canary route using the existing QEO-231 auth pattern.**
-
-Create `app/api/qeoindex/daily-provenance-canary/route.ts` using the same two machine-auth paths as `chart-storage-audit`:
+Create `app/api/qeoindex/daily-provenance-canary/route.ts` importing:
 
 ```ts
 import { NextRequest, NextResponse } from "next/server"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { runDailyProvenanceCanary } from "@/modules/market/history/daily-provenance-canary"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
-
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
-export const maxDuration = 60
 ```
 
-Authorize `CRON_SECRET` first, then bearer-token verification through `qeo_verify_eod_scheduler_secret`. Accept only a validated `ticker` query parameter (`^[A-Z0-9]{2,12}$`). Do not parse request JSON and do not accept caller-supplied OHLCV or provenance strings.
+Use `CRON_SECRET` machine auth, then bearer fallback through `qeo_verify_eod_scheduler_secret`. Accept only `ticker` query param matching `^[A-Z0-9]{2,12}$`; never call `request.json()`. Return 200 pass, 409 verified failure, 401 unauthorized, 400 invalid ticker, 503 missing service client, 500 unexpected error. Add `Cache-Control: private, no-store`.
 
-Return HTTP 200 when `result.passed`, 409 when the canary completed but verification failed, 401 unauthorized, 400 invalid ticker, 503 missing Supabase service client, and 500 on unexpected errors. Set `Cache-Control: private, no-store`.
+- [ ] **Step 6: Run focused workflow in GitHub Actions and require GREEN.**
 
-- [ ] **Step 6: Run focused QEO-234 workflow and standard relevant source tests in GitHub Actions.**
-
-Required focused command:
-
-```bash
-node --test tests/qeo-232-daily-provenance-contract.cases.ts tests/qeo-233-daily-provenance-runtime.cases.ts tests/qeo-234-daily-provenance-cutover.cases.ts
-```
-
-Expected: GREEN after Tasks 2–3.
-
-- [ ] **Step 7: Commit application cutover + canary.**
+- [ ] **Step 7: Commit.**
 
 ```text
 refactor(QEO-234): cut Daily provenance runtime to compact references
@@ -522,19 +448,16 @@ refactor(QEO-234): cut Daily provenance runtime to compact references
 
 ---
 
-### Task 4: Add the fail-closed final cutover migration
+### Task 4: Add fail-closed Stage-2 cutover migration
 
 **Files:**
 - Create: `supabase/migrations/20260915194500_qeo234_daily_provenance_cutover.sql`
-- Test: `tests/qeo-234-daily-provenance-cutover.cases.ts`
 
 **Interfaces:**
-- Consumes: successful QEO-233 backfill and Stage-1 bridge semantics.
-- Produces: final compact fact schema and retired historical backfill RPC.
+- Consumes bridge schema + QEO-233 completed reference backfill.
+- Produces final compact fact schema; no physical rewrite.
 
-- [ ] **Step 1: Add fail-closed pre-DDL assertions.**
-
-Start inside a transaction:
+- [ ] **Step 1: Add pre-DDL assertions inside one transaction.**
 
 ```sql
 begin;
@@ -546,9 +469,7 @@ declare
   v_provider_mismatch bigint;
   v_legacy_mismatch bigint;
 begin
-  select count(*) into v_pending
-  from public.market_ohlcv_history
-  where provenance_id is null;
+  select count(*) into v_pending from public.market_ohlcv_history where provenance_id is null;
 
   select count(*) into v_orphan
   from public.market_ohlcv_history h
@@ -574,13 +495,10 @@ end;
 $$;
 ```
 
-- [ ] **Step 2: Replace the fact consistency guard before dropping columns.**
-
-Drop/recreate the trigger so it references only `provenance_id` and `provider`:
+- [ ] **Step 2: Replace consistency trigger/function so they no longer reference soon-to-be-dropped columns.**
 
 ```sql
-drop trigger if exists qeo_market_ohlcv_provenance_consistency_guard
-on public.market_ohlcv_history;
+drop trigger if exists qeo_market_ohlcv_provenance_consistency_guard on public.market_ohlcv_history;
 
 create or replace function public.qeo_market_ohlcv_provenance_consistency_guard()
 returns trigger
@@ -588,25 +506,16 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare
-  registry_provider text;
+declare registry_provider text;
 begin
   if new.provenance_id is null then
     raise exception 'Daily OHLCV provenance_id is required';
   end if;
-
-  select provider into registry_provider
-  from public.market_ohlcv_provenance
-  where id = new.provenance_id;
-
-  if not found then
-    raise exception 'Daily OHLCV provenance_id % does not exist', new.provenance_id;
-  end if;
-
+  select provider into registry_provider from public.market_ohlcv_provenance where id = new.provenance_id;
+  if not found then raise exception 'Daily OHLCV provenance_id % does not exist', new.provenance_id; end if;
   if new.provider is distinct from registry_provider then
     raise exception 'Daily OHLCV provenance provider mismatch for %.% at %', new.ticker, new.timeframe, new.bar_time;
   end if;
-
   return new;
 end;
 $$;
@@ -614,15 +523,12 @@ $$;
 create trigger qeo_market_ohlcv_provenance_consistency_guard
 before insert or update of provenance_id, provider
 on public.market_ohlcv_history
-for each row
-execute function public.qeo_market_ohlcv_provenance_consistency_guard();
+for each row execute function public.qeo_market_ohlcv_provenance_consistency_guard();
 ```
 
-Retain the existing function privilege restrictions.
+Keep function privilege restrictions.
 
-- [ ] **Step 3: Redefine compatibility view to use registry-only long fields.**
-
-Use:
+- [ ] **Step 3: Redefine compatibility view using registry-only long fields before column drop.**
 
 ```sql
 create or replace view public.market_ohlcv_history_compat
@@ -631,21 +537,14 @@ as
 select
   h.ticker, h.timeframe, h.bar_time,
   h.open, h.high, h.low, h.close, h.volume,
-  h.provider,
-  p.provider_detail,
-  p.source_url,
-  h.fetched_at,
-  h.provenance_id,
+  h.provider, p.provider_detail, p.source_url,
+  h.fetched_at, h.provenance_id,
   (p.id is not null and h.provider = p.provider) as provenance_consistent
 from public.market_ohlcv_history h
 left join public.market_ohlcv_provenance p on p.id = h.provenance_id;
 ```
 
-This removes live view dependencies on the soon-to-be-dropped columns before the `ALTER TABLE` statement.
-
-- [ ] **Step 4: Retire historical backfill RPC, enforce reference non-null, and drop only the two long fields.**
-
-Execute in this order:
+- [ ] **Step 4: Retire backfill, enforce non-null reference, drop only long columns.**
 
 ```sql
 drop function if exists public.qeo_market_ohlcv_provenance_backfill_batch(integer, bigint);
@@ -658,24 +557,13 @@ alter table public.market_ohlcv_history
   drop column source_url;
 ```
 
-Do not include `VACUUM`, `VACUUM FULL`, DELETE/TRUNCATE, fact-row UPDATE, shadow copy, or index removal in this migration.
+- [ ] **Step 5: Assert final schema before commit.**
 
-- [ ] **Step 5: Re-assert final schema invariants before commit.**
+A final `DO` block must raise unless `provider` and `fetched_at` exist/non-null, `provenance_id` exists/non-null, long columns are absent, and `market_ohlcv_history_provenance_id_fkey` is still restrictive. Then `commit;`.
 
-Use a final `DO` block that raises unless:
+No `VACUUM`, `VACUUM FULL`, DELETE/TRUNCATE, fact UPDATE, shadow copy, or index drop belongs here.
 
-```text
-provider exists and is NOT NULL
-fetched_at exists and is NOT NULL
-provenance_id exists and is NOT NULL
-provider_detail does not exist on market_ohlcv_history
-source_url does not exist on market_ohlcv_history
-market_ohlcv_history_provenance_id_fkey exists with ON DELETE RESTRICT
-```
-
-Then `commit;`.
-
-- [ ] **Step 6: Commit final logical cutover migration.**
+- [ ] **Step 6: Commit.**
 
 ```text
 feat(QEO-234): add compact Daily provenance final cutover
@@ -683,90 +571,48 @@ feat(QEO-234): add compact Daily provenance final cutover
 
 ---
 
-### Task 5: Add the deterministic maintenance and rollback runbook
+### Task 5: Add deterministic maintenance + rollback runbook
 
 **Files:**
 - Create: `docs/db/runbooks/qeo234-daily-provenance-maintenance.md`
-- Test: `tests/qeo-234-daily-provenance-cutover.cases.ts`
 
 **Interfaces:**
-- Produces exact SQL/evidence checklist used during bridge canary and separately authorized Stage-2 maintenance.
-- Does not run automatically.
+- Produces exact production queries and hard stop gates; nothing in the runbook runs automatically.
 
-- [ ] **Step 1: Document the production authorization boundaries at the top.**
+- [ ] **Step 1: State authorization boundaries.**
 
-The runbook must state verbatim in substance:
+Document separate approvals for bridge promotion, merge/deploy, Stage-2 writer pause/destructive DDL, and physical rewrite/index drop.
 
-```text
-Applying the bridge migration requires explicit production authorization.
-Merging/deploying the compact application requires explicit authorization.
-Stage-2 writer pause / destructive cutover requires a new explicit authorization after bridge canary acceptance.
-VACUUM FULL requires the same maintenance authorization plus both capacity gates.
-```
+- [ ] **Step 2: Add exact baseline + digest query.**
 
-- [ ] **Step 2: Add exact preflight state + deterministic logical digest SQL.**
-
-Use `pgcrypto` and the compatibility view. The digest query must hash per-row canonical JSON in PK order, then hash the ordered list of row hashes:
+Production has `pgcrypto` in schema `extensions`; use that schema explicitly:
 
 ```sql
 with logical_rows as (
-  select
-    h.ticker,
-    h.timeframe,
-    h.bar_time,
-    h.open,
-    h.high,
-    h.low,
-    h.close,
-    h.volume,
-    h.provider,
-    h.provider_detail,
-    h.source_url,
-    h.fetched_at
-  from public.market_ohlcv_history_compat h
-  where h.provenance_consistent is true
+  select ticker,timeframe,bar_time,open,high,low,close,volume,
+         provider,provider_detail,source_url,fetched_at
+  from public.market_ohlcv_history_compat
+  where provenance_consistent is true
 ), row_hashes as (
-  select
-    ticker,
-    timeframe,
-    bar_time,
-    encode(
-      extensions.digest(
-        jsonb_build_array(
-          ticker,
-          timeframe,
-          to_char(bar_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-          open,
-          high,
-          low,
-          close,
-          volume,
-          provider,
-          provider_detail,
-          source_url,
-          to_char(fetched_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-        )::text,
-        'sha256'
-      ),
-      'hex'
-    ) as row_hash
+  select ticker,timeframe,bar_time,
+    encode(extensions.digest(
+      jsonb_build_array(
+        ticker,
+        timeframe,
+        to_char(bar_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        open,high,low,close,volume,provider,provider_detail,source_url,
+        to_char(fetched_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      )::text,
+      'sha256'
+    ), 'hex') as row_hash
   from logical_rows
 )
-select
-  count(*)::bigint as row_count,
-  encode(
-    extensions.digest(
-      string_agg(row_hash, '' order by ticker, timeframe, bar_time),
-      'sha256'
-    ),
-    'hex'
-  ) as logical_sha256
+select count(*)::bigint as row_count,
+       encode(extensions.digest(string_agg(row_hash, '' order by ticker,timeframe,bar_time), 'sha256'), 'hex') as logical_sha256
 from row_hashes;
 ```
 
-If the installed `digest` function resolves in another schema in zero-to-latest CI, use the generated environment's canonical schema-qualified name consistently in both pre/post queries; do not fall back to nondeterministic serialization.
-
-Also record:
+Also capture:
 
 ```sql
 select pg_database_size(current_database()) as database_bytes,
@@ -775,35 +621,31 @@ select pg_database_size(current_database()) as database_bytes,
        pg_total_relation_size('public.market_ohlcv_history') as total_bytes;
 ```
 
-- [ ] **Step 3: Add dependency-proof SQL.**
+- [ ] **Step 3: Add dependency-proof queries.**
 
-The runbook must query live view/function/trigger definitions and stop if any current runtime object still references `market_ohlcv_history.provider_detail` or `market_ohlcv_history.source_url` directly. Historical migration text is excluded from this database-object check.
+Inventory current views/functions/triggers and stop if any live runtime definition still references the fact-table long columns. Exclude historical migration/spec text from this live DB check.
 
-- [ ] **Step 4: Add exact writer pause / restore SQL.**
-
-Pause:
+- [ ] **Step 4: Add writer pause/restore commands.**
 
 ```sql
 revoke insert, update on table public.market_ohlcv_history from service_role;
 ```
 
-Restore only after all post-cutover checks pass:
+Restore only after verification:
 
 ```sql
 grant insert, update on table public.market_ohlcv_history to service_role;
 ```
 
-Document that reads remain available and that no writer permission is restored on a failed verification.
+- [ ] **Step 5: Add lookup-index baseline/transactional experiment.**
 
-- [ ] **Step 5: Add lookup-index baseline and rollbackable experiment.**
-
-Baseline representative query for at least `VCB`, `FPT`, `HPG`, `SSI`, `VNM`:
+For at least VCB/FPT/HPG/SSI/VNM:
 
 ```sql
 explain (analyze, buffers, format json)
-select ticker, timeframe, bar_time, open, high, low, close, volume, provider, fetched_at, provenance_id
+select ticker,timeframe,bar_time,open,high,low,close,volume,provider,fetched_at,provenance_id
 from public.market_ohlcv_history
-where ticker = 'VCB' and timeframe = '1D'
+where ticker='VCB' and timeframe='1D'
 order by bar_time desc
 limit 260;
 ```
@@ -813,31 +655,22 @@ Experiment:
 ```sql
 begin;
 drop index public.market_ohlcv_history_lookup_idx;
--- repeat EXPLAIN (ANALYZE, BUFFERS) for the same ticker set
+-- repeat the exact same representative EXPLAIN statements
 rollback;
 ```
 
-Permanent index removal is allowed only when every representative query avoids sequential scan, execution time is no worse than `2x` its baseline, and absolute execution time is `<20 ms`.
+Permanent drop only if every query avoids sequential scan, execution time is `<=2x` baseline, and absolute execution time is `<20 ms`.
 
-- [ ] **Step 6: Add physical capacity formula and hard gate.**
-
-The runbook computes:
+- [ ] **Step 6: Add physical capacity gate.**
 
 ```text
 estimated_rewrite_temp_bytes = estimated_compact_live_tuple_bytes * 1.6 + remaining_index_bytes * 1.25
 estimated_peak_database_bytes = current_database_bytes + estimated_rewrite_temp_bytes
 ```
 
-It must say `VACUUM FULL` is prohibited unless:
+Prohibit `VACUUM FULL` unless current DB `<=385000000` and estimated peak `<=470000000` bytes.
 
-```text
-current_database_bytes <= 385000000
-estimated_peak_database_bytes <= 470000000
-```
-
-- [ ] **Step 7: Add physical rewrite SQL as a separately authorized manual action.**
-
-The runbook may contain, but no migration/workflow may invoke:
+- [ ] **Step 7: Add separately authorized rewrite commands.**
 
 ```sql
 set statement_timeout = '8min';
@@ -845,11 +678,11 @@ vacuum full public.market_ohlcv_history;
 analyze public.market_ohlcv_history;
 ```
 
-If the SQL client does not permit `SET` + `VACUUM FULL` in one request because of transaction wrapping, execute the timeout/session setting and standalone `VACUUM FULL` using the supported production SQL interface without wrapping the vacuum in a transaction.
+Document that `VACUUM FULL` must be issued as a standalone non-transactional maintenance statement if the SQL interface wraps multi-statement requests.
 
-- [ ] **Step 8: Add exact lossless rollback reconstruction SQL.**
+- [ ] **Step 8: Add lossless rollback reconstruction.**
 
-The rollback section must begin with writers paused and include:
+With writers paused:
 
 ```sql
 alter table public.market_ohlcv_history
@@ -862,7 +695,6 @@ set provider_detail = p.provider_detail,
 from public.market_ohlcv_provenance p
 where p.id = h.provenance_id;
 
--- hard gate before NOT NULL
 select count(*) as unresolved
 from public.market_ohlcv_history
 where provider_detail is null or source_url is null;
@@ -872,9 +704,9 @@ alter table public.market_ohlcv_history
   alter column source_url set not null;
 ```
 
-Then restore QEO-233-compatible view/trigger/RPC definitions from reviewed repository migration source, verify the same logical digest + width-10 ABI, deploy a legacy-compatible application build only after those checks, and finally restore writer permissions.
+Then restore reviewed QEO-233-compatible view/trigger/RPC definitions from repository migration source, verify the same logical digest + width-10 ABI, deploy a legacy-compatible build only after verification, then restore writer permissions.
 
-- [ ] **Step 9: Commit the runbook.**
+- [ ] **Step 9: Commit.**
 
 ```text
 docs(QEO-234): add Daily provenance maintenance runbook
@@ -882,19 +714,13 @@ docs(QEO-234): add Daily provenance maintenance runbook
 
 ---
 
-### Task 6: Register migrations and regenerate final schema types through DB Drift
+### Task 6: Register migrations and regenerate final schema types via DB Drift
 
 **Files:**
 - Modify: `supabase/migration-preproduction.json`
-- Modify via generated DB artifact: `modules/shared/supabase/database.types.ts`
-- Review: existing `.github/workflows/db-drift.yml`
+- Modify only from CI-generated candidate: `modules/shared/supabase/database.types.ts`
 
-**Interfaces:**
-- Produces reviewed repo-ahead migration ledger entries and final compile-time schema types.
-
-- [ ] **Step 1: Add both QEO-234 migration records to `migration-preproduction.json`.**
-
-Append entries with these exact logical names and repository versions:
+- [ ] **Step 1: Add repo-ahead manifest entries.**
 
 ```json
 {
@@ -903,275 +729,114 @@ Append entries with these exact logical names and repository versions:
   "productionVersion": null,
   "state": "REPO_AHEAD",
   "evidence": "QEO-234 approved two-stage compact Daily provenance design and focused RED/GREEN contracts; production bridge promotion remains separately authorized",
-  "rationale": "Makes legacy provider_detail/source_url nullable, moves live provenance consumers to registry-backed logical reads, and preserves backward compatibility before compact writer deployment. No legacy column drop or physical reclaim occurs in this migration."
+  "rationale": "Makes legacy provider_detail/source_url nullable, permits compact writes only when exact registry identity/provider remains valid, moves live provenance consumers to registry-backed logical reads, and performs no destructive column drop or physical reclaim."
 },
 {
   "logicalName": "qeo234_daily_provenance_cutover",
   "repositoryVersion": "20260915194500",
   "productionVersion": null,
   "state": "REPO_AHEAD",
-  "evidence": "QEO-234 reviewed fail-closed compact cutover contract; production Stage-2 promotion requires bridge production canary and new maintenance authorization",
-  "rationale": "After fail-closed provenance assertions, enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the obsolete QEO-233 historical backfill RPC, and preserves registry-backed logical APIs. VACUUM FULL and index removal are deliberately outside this migration."
+  "evidence": "QEO-234 reviewed fail-closed compact cutover contract; production Stage-2 promotion requires bridge canary and new maintenance authorization",
+  "rationale": "After fail-closed provenance assertions, enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the obsolete QEO-233 historical backfill RPC, and preserves registry-backed logical APIs. Physical rewrite remains outside migration."
 }
 ```
 
-- [ ] **Step 2: Let DB Drift replay zero-to-latest and generate the candidate types artifact.**
+- [ ] **Step 2: Let PR-triggered DB Drift replay zero-to-latest and generate candidate types.**
 
-Do not run Supabase CLI locally under QeoIndex inline-only policy. Use the PR-triggered DB Drift workflow as the execution environment.
+Do not run Supabase CLI locally. Final generated facts must show: fact row has no long columns; fact `provenance_id` is non-null; compat view still exposes logical long fields; recent RPC still exposes logical long fields; backfill RPC is absent.
 
-Required final generated type facts:
-
-```text
-market_ohlcv_history.Row has provider, fetched_at, provenance_id: number
-market_ohlcv_history.Row has no provider_detail or source_url
-market_ohlcv_history.provenance_id is non-null in Row/Insert contract as generated by final schema
-market_ohlcv_history_compat still exposes provider_detail/source_url logical fields
-qeo_market_ohlcv_recent still exposes provider_detail/source_url
-qeo_market_ohlcv_provenance_backfill_batch no longer exists
-```
-
-- [ ] **Step 3: Commit the exact generated `modules/shared/supabase/database.types.ts` candidate produced by CI.**
-
-Do not hand-edit generated types.
-
-Commit:
+- [ ] **Step 3: Commit the exact CI-generated `database.types.ts`; do not hand-edit.**
 
 ```text
 chore(QEO-234): refresh compact Daily provenance schema types
 ```
 
-- [ ] **Step 4: Require DB Drift reconciliation GREEN on the exact head.**
-
-Verify its successful steps include zero-to-latest migration replay, generated type verification/artifact, current DB contracts, TypeScript compile, and the repository's configured DB rehearsals.
+- [ ] **Step 4: Require DB Drift GREEN on exact final head.**
 
 ---
 
-### Task 7: Exact-head source verification and bridge-release gate
+### Task 7: Exact-head verification and Stage-1 rollout gate
 
-**Files:**
-- Review all QEO-234 source/migration changes.
-- No production mutation in this task without explicit approval.
+**Files:** Review all QEO-234 changes. No production mutation without explicit authorization.
 
-**Interfaces:**
-- Produces a merge/bridge-rollout candidate with exact-head evidence.
+- [ ] **Step 1: Require focused QEO-234 GREEN on exact head.**
+- [ ] **Step 2: Require standard Verify GREEN on the same exact head, including TypeScript and production build.**
+- [ ] **Step 3: Require DB Drift GREEN on the same exact head, including zero-to-latest migration replay and generated-type verification.**
+- [ ] **Step 4: Diff-review and reject accidental provider/fetched_at drop, Daily DELETE/TRUNCATE/OHLCV rewrite, shadow copy, intraday provenance reuse, automatic vacuum/index drop, or automatic canary invocation.**
+- [ ] **Step 5: Stop for explicit Stage-1 production authorization.**
 
-- [ ] **Step 1: Run focused QEO-234 workflow on final head.**
-
-Require:
-
-```bash
-node --test tests/qeo-232-daily-provenance-contract.cases.ts tests/qeo-233-daily-provenance-runtime.cases.ts tests/qeo-234-daily-provenance-cutover.cases.ts
-```
-
-Expected: zero failures.
-
-- [ ] **Step 2: Require standard `Verify` GREEN on the same exact head.**
-
-Require repository gates including secret scans, repo hygiene/current contracts, touched lint, TypeScript, Ops dashboard build, and production build.
-
-- [ ] **Step 3: Require DB Drift GREEN on the same exact head.**
-
-Do not infer migration safety from focused source tests alone.
-
-- [ ] **Step 4: Review the final diff against destructive-safety rejects.**
-
-Reject the source candidate if it contains any of the following outside the explicitly reviewed Stage-2 migration/runbook context:
-
-```text
-DROP provider
-DROP fetched_at
-Daily-history DELETE/TRUNCATE
-OHLCV UPDATE/backfill
-shadow copy/swap
-intraday provenance reuse
-automatic VACUUM FULL
-automatic lookup-index drop
-automatic production canary invocation
-```
-
-- [ ] **Step 5: Stop for explicit bridge production authorization before any production mutation.**
-
-Because `main` deployment may happen automatically after merge, the safe rollout order is:
+Because `main` may auto-deploy immediately after merge, safe order is:
 
 ```text
 exact-head PR green
-→ explicit user authorization for Stage-1 bridge promotion
-→ apply ONLY 20260915193000_qeo234_daily_provenance_bridge.sql to production
-→ verify old QEO-233 application still reads/writes correctly on bridge schema
-→ update production migration evidence/mapping as required
-→ explicit user approval to merge
-→ merge exact head / verify production deployment SHA
-→ run production Daily provenance canary
+→ explicit bridge-production authorization
+→ apply ONLY bridge migration while old QEO-233 app is still deployed
+→ verify old app compatibility
+→ reconcile bridge mapping/evidence as required
+→ explicit merge approval
+→ merge / verify production deployment exact SHA
+→ run production compact-writer canary
 ```
 
-Do not merge compact-writer application code before the production bridge schema is present unless deployment is explicitly held back.
+Do not merge compact-writer code before bridge schema exists unless deployment is explicitly held.
 
 ---
 
 ### Task 8: Production Stage-1 bridge acceptance
 
-**Files:**
-- Operational evidence only; source changes only if acceptance reveals a real defect.
-- Update Linear QEO-234 evidence.
+**Authorization:** Requires explicit bridge-production authorization; source-plan approval is insufficient.
 
-**Authorization:** Requires explicit production bridge authorization. This task is not authorized merely by source-plan approval.
-
-- [ ] **Step 1: Re-measure pre-bridge state.**
-
-Record DB bytes, history heap/index/total bytes, row count, pending provenance rows, mismatch/orphan rows, registry count, and current logical digest.
-
-Hard stop if pending/mismatch/orphan is non-zero.
-
-- [ ] **Step 2: Apply only the bridge migration.**
-
-Promote `qeo234_daily_provenance_bridge` through Supabase migration tooling. Do not apply the final cutover migration.
-
-- [ ] **Step 3: Read back bridge schema/functions.**
-
-Verify both long columns still exist but are nullable; compat view is registry-canonical; recent/integrity RPC definitions source the compat model; grouped width remains 10.
-
-- [ ] **Step 4: Merge/deploy the exact-head compact application only after the bridge readback passes and merge/deploy approval is explicit.**
-
-Verify production deployment commit SHA matches the merged reviewed head.
-
-- [ ] **Step 5: Run machine-auth canary for at least `VCB` plus four representative tickers (`FPT`, `HPG`, `SSI`, `VNM`).**
-
-For every ticker require HTTP 200 and:
-
-```text
-passed=true
-positive provenanceId
-bridgeLegacyColumnsPresent=true
-bridgeLegacyColumnsNull=true
-logicalProvenancePreserved=true
-```
-
-Then verify production counts still show zero mismatch/orphan/compat inconsistencies.
-
-- [ ] **Step 6: Verify representative grouped/recent/integrity/chart Daily reads after canary.**
-
-Do not proceed to Stage 2 on a partially accepted bridge.
-
-- [ ] **Step 7: Record evidence in QEO-234 and stop for new Stage-2 maintenance authorization.**
-
-The bridge canary acceptance does not itself authorize writer pause, column drops, index changes, or `VACUUM FULL`.
+- [ ] **Step 1:** Re-measure DB bytes, history heap/index/total, row count, pending, mismatch/orphan, registry count, and logical digest. Stop if any provenance gate fails.
+- [ ] **Step 2:** Apply only `qeo234_daily_provenance_bridge`; do not apply final cutover.
+- [ ] **Step 3:** Read back nullable long columns, bridge guard definition, compat view, recent/integrity RPCs, grouped width 10.
+- [ ] **Step 4:** Merge/deploy exact-head app only with explicit merge/deploy approval; verify production deployment SHA.
+- [ ] **Step 5:** Run machine canary for `VCB,FPT,HPG,SSI,VNM`; require HTTP 200, positive provenance ID, `bridgeLegacyColumnsPresent=true`, `bridgeLegacyColumnsNull=true`, logical provenance preserved.
+- [ ] **Step 6:** Recheck zero mismatch/orphan/compat inconsistencies and representative grouped/recent/integrity/chart Daily reads.
+- [ ] **Step 7:** Record evidence in QEO-234 and stop for new Stage-2 maintenance authorization.
 
 ---
 
-### Task 9: Separately authorized Stage-2 maintenance cutover and physical reclaim
+### Task 9: Separately authorized Stage-2 cutover + physical reclaim
 
-**Files:**
-- Execute from reviewed migration + runbook only.
-- Update Linear QEO-234 with measured evidence.
+**Authorization:** Requires explicit user approval immediately before writer pause/destructive DDL.
 
-**Authorization:** Requires explicit user approval immediately before the maintenance window.
-
-- [ ] **Step 1: Execute runbook Preflight A exactly.**
-
-Require bridge acceptance, pending=0, mismatch/orphan=0, dependency audit clean, row count + logical SHA-256 captured, DB/relation/index bytes captured, and representative index-query baselines captured.
-
-- [ ] **Step 2: Pause Daily writers.**
-
-Run only the reviewed `REVOKE INSERT, UPDATE ... FROM service_role` and verify a service-role compact write is rejected while reads remain available.
-
-- [ ] **Step 3: Apply only the final QEO-234 cutover migration.**
-
-On any assertion/DDL failure, treat the transaction as failed, verify schema remains bridge-compatible, and keep writers paused until state is understood.
-
-- [ ] **Step 4: Verify logical cutover before any physical rewrite.**
-
-Require:
-
-```text
-row count matches pre-pause baseline
-provider_detail/source_url absent from fact schema
-provenance_id NOT NULL
-every row resolves registry
-provider == registry.provider on every row
-logical SHA-256 equals pre-cutover SHA-256
-grouped width 10
-recent RPC logical fields intact
-integrity RPCs execute with unchanged zero-volume classification semantics
-representative chart/Wyckoff Daily reads succeed
-```
-
-Digest mismatch is an absolute stop.
-
-- [ ] **Step 5: Benchmark lookup-index removal transactionally.**
-
-Use the runbook query set. Permanently drop `market_ohlcv_history_lookup_idx` only if every approved threshold passes. Index failure does not roll back the logical provenance cutover; retain the index and continue to the capacity decision.
-
-- [ ] **Step 6: Run regular `VACUUM (ANALYZE)` and calculate the physical rewrite gate.**
-
-Re-measure `current_database_bytes`, `estimated_compact_live_tuple_bytes`, and `remaining_index_bytes`, then calculate the approved conservative peak.
-
-If either threshold fails, skip `VACUUM FULL`, document capacity-based defer, and continue to post-cutover verification/restore writers.
-
-- [ ] **Step 7: Run `VACUUM FULL` only when both approved thresholds pass.**
-
-Use the runbook's standalone maintenance command with approximately 8-minute timeout. Do not automatically retry on timeout/disk/lock error.
-
-- [ ] **Step 8: Repeat the full post-reclaim verification.**
-
-Recalculate logical digest, row count, DB/heap/index/total bytes, grouped width, integrity RPCs, and representative read latency. Record actual physical delta; do not substitute the ~50 MB target for measured result.
-
-- [ ] **Step 9: Restore writer permissions only after all applicable verification passes.**
-
-Run the reviewed `GRANT INSERT, UPDATE ... TO service_role`.
-
-- [ ] **Step 10: Run post-cutover compact-writer canary.**
-
-The canary must succeed in final-schema mode (`bridgeLegacyColumnsPresent=false`) and preserve exact registry-backed logical provenance.
-
-- [ ] **Step 11: Mark QEO-234 Done only after acceptance evidence is complete.**
-
-If physical rewrite is capacity-deferred, keep physical-reclaim acceptance explicitly open unless the issue records an accepted defer outcome per the approved spec.
+- [ ] **Step 1:** Execute runbook preflight: bridge accepted; pending/mismatch/orphan zero; dependency audit clean; row count + logical SHA-256 + DB/relation/index bytes + query baselines captured.
+- [ ] **Step 2:** Revoke service-role INSERT/UPDATE and prove writes fail while reads remain available.
+- [ ] **Step 3:** Apply only final QEO-234 cutover migration. On failure, verify bridge schema and keep writers paused until understood.
+- [ ] **Step 4:** Before physical rewrite require unchanged row count/digest, absent long fact columns, non-null reference, provider/registry equality, grouped width 10, recent/integrity/chart/Wyckoff reads healthy.
+- [ ] **Step 5:** Benchmark lookup-index drop transactionally. Permanent drop only if every threshold passes; otherwise retain index.
+- [ ] **Step 6:** Regular `VACUUM (ANALYZE)`, remeasure sizes, calculate capacity formula. If either gate fails, skip/defer `VACUUM FULL`.
+- [ ] **Step 7:** If both gates pass, run standalone `VACUUM FULL` with ~8-minute timeout. Never auto-retry timeout/disk/lock failure.
+- [ ] **Step 8:** Repeat digest/row count/RPC/read verification and measure actual physical delta.
+- [ ] **Step 9:** Restore service-role INSERT/UPDATE only after applicable checks pass.
+- [ ] **Step 10:** Run canary again; final-schema mode must report `bridgeLegacyColumnsPresent=false` with exact logical provenance preserved.
+- [ ] **Step 11:** Close QEO-234 only when accepted measured physical outcome (or explicitly accepted capacity defer) is recorded.
 
 ---
 
-### Task 10: Production migration-ledger reconciliation after actual promotion
+### Task 10: Reconcile production migration ledger after actual promotions
 
 **Files:**
-- Modify after production promotion: `supabase/migration-preproduction.json`
-- Create/modify current reviewed production ledger under `docs/db/evidence/production-migration-ledger-YYYY-MM-DD.json` as required by DB Drift.
+- Modify: `supabase/migration-preproduction.json`
+- Create/update reviewed `docs/db/evidence/production-migration-ledger-YYYY-MM-DD.json`
 
-**Interfaces:**
-- Produces exact repositoryVersion → productionVersion mappings for both QEO-234 migrations after they are actually promoted.
-
-- [ ] **Step 1: Read live Supabase migration versions; never guess assigned production versions.**
-
-- [ ] **Step 2: Change only promoted QEO-234 entries from `REPO_AHEAD` to `MAPPED`.**
-
-Record exact bridge and cutover production versions independently because Stage 1 and Stage 2 are promoted at different checkpoints.
-
-- [ ] **Step 3: Add reviewed production-ledger rows required by `scripts/db/verify-migration-drift.mjs`.**
-
-Carry forward the prior reviewed subset and add only QEO-234 migrations whose production promotion has been verified. Unrelated production rows remain outside this issue-owned reviewed subset.
-
-- [ ] **Step 4: Open a focused ledger-only PR and require Verify + DB Drift GREEN on its exact head.**
-
-Do not mix new DDL/runtime behavior into reconciliation.
-
-- [ ] **Step 5: Merge ledger reconciliation only with user approval.**
+- [ ] **Step 1:** Read live Supabase migration versions; never infer assigned production versions.
+- [ ] **Step 2:** Map bridge and cutover independently from `REPO_AHEAD` to `MAPPED` only after each actual promotion.
+- [ ] **Step 3:** Carry forward prior reviewed ledger subset and add only verified QEO-234 production rows.
+- [ ] **Step 4:** Open ledger-only PR and require Verify + DB Drift GREEN on exact head.
+- [ ] **Step 5:** Merge reconciliation only with user approval.
 
 ---
 
-## Completion Checklist
+## Self-Review Results
 
-QEO-234 implementation is source-complete only when:
+- **Spec coverage:** bridge trigger nullability, registry-canonical SQL/application reads, compact writer, machine canary, destructive cutover, backfill retirement, digest, rollback, index benchmark, capacity gate, physical reclaim, authorization boundaries, and migration-ledger reconciliation all map to explicit tasks.
+- **Critical correction found during review:** compact bridge writes would fail under the QEO-233 trigger if the trigger still required non-null long fields. Task 2 now explicitly replaces the bridge consistency guard so null long fields are allowed only when `provenance_id` exists and provider matches, while any non-null legacy long value must still exactly match the registry.
+- **False contract avoided:** QEO-234 does not unnecessarily recreate `qeo_market_ohlcv_recent_grouped`; the contract verifies the existing QEO-233 width-10 implementation plus decoder instead.
+- **Digest dependency verified:** production has `pgcrypto` installed in schema `extensions`; the runbook uses `extensions.digest` explicitly.
+- **Placeholder scan:** no TBD/TODO/“implement later” steps remain.
+- **Type/interface consistency:** caller logical provenance remains unchanged; only persisted fact shape changes; canary operates in both bridge and final schema modes.
 
-- focused RED/GREEN contract exists;
-- bridge migration is non-destructive and registry-canonical;
-- compact writer no longer persists long inline provenance;
-- all provenance-sensitive readers have no direct long-field fallback;
-- machine-auth canary accepts no arbitrary fact/provenance payload;
-- final migration fails closed on null/orphan/provider/legacy mismatch;
-- final schema removes only `provider_detail` / `source_url` and makes `provenance_id` non-null;
-- grouped width-10 and ungrouped logical APIs remain stable;
-- historical QEO-233 backfill RPC is retired only in final cutover;
-- deterministic maintenance/rollback runbook exists with exact thresholds;
-- generated DB types match final schema;
-- focused QEO-234, standard Verify, and DB Drift are GREEN on the same exact source head;
-- no production action has been inferred from source approval.
+## Completion Gates
 
-Production QEO-234 is complete only after the separately authorized bridge + maintenance acceptance sequence records the measured final outcome.
+Source implementation is complete only when focused QEO-234, standard Verify, and DB Drift are GREEN on the same exact head and generated types match final schema. Production completion remains a separate, explicitly authorized bridge → canary → maintenance → measured-reclaim sequence.
