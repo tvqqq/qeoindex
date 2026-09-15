@@ -4,7 +4,7 @@ import type { MarketObservation } from "@/modules/research/market-insight/model"
 
 export const MARKET_AI_CONCLUSION_VERSION = "market-ai-conclusion-v2"
 export const MARKET_AI_POLICY_VERSION = "market-ai-policy-v2"
-export const MARKET_AI_PROMPT_VERSION = "market-ai-prompt-v9"
+export const MARKET_AI_PROMPT_VERSION = "market-ai-prompt-v10"
 export const MARKET_AI_POSTURE = ["constructive", "constructive_with_caution", "neutral", "defensive", "insufficient_evidence"] as const
 export type MarketAiPosture = typeof MARKET_AI_POSTURE[number]
 
@@ -88,6 +88,29 @@ function fact(id: string, field: string, value: string | number | null, unit: st
   return { id, field, value, unit, asOf: data.asOf, source: "market_insight_published" }
 }
 
+function selectBalancedMarketAiLeaders<T extends { category: string; rank: number; ticker: string }>(leaders: T[], limit = 12) {
+  const sorted = [...leaders].sort((a, b) => a.category.localeCompare(b.category) || a.rank - b.rank || a.ticker.localeCompare(b.ticker))
+  const categories = [...new Set(sorted.map((leader) => leader.category))]
+  if (categories.length === 0 || limit <= 0) return []
+  const quota = Math.max(1, Math.floor(limit / categories.length))
+  const selected: T[] = []
+  const chosen = new Set<T>()
+
+  for (const category of categories) {
+    if (selected.length >= limit) break
+    for (const leader of sorted.filter((item) => item.category === category).slice(0, quota)) {
+      if (selected.length >= limit) break
+      selected.push(leader)
+      chosen.add(leader)
+    }
+  }
+  for (const leader of sorted) {
+    if (selected.length >= limit) break
+    if (!chosen.has(leader)) selected.push(leader)
+  }
+  return selected
+}
+
 export function buildMarketAiEvidencePacket(data: MarketCloseDashboardData): MarketAiEvidencePacket {
   if (!data.sessionDate || !data.asOf || !data.qualityStatus) throw new Error("Market AI evidence requires session, asOf and quality")
   if (!data.marketInsightProvenance) throw new Error("Market AI evidence requires published snapshot provenance")
@@ -113,7 +136,7 @@ export function buildMarketAiEvidencePacket(data: MarketCloseDashboardData): Mar
       fact(`sector:${sector.sectorKey}:result`, "sector_result_pct", sector.resultPct, "%", data),
       fact(`sector:${sector.sectorKey}:rotation`, "sector_rotation_state", sector.rotationState, "state", data),
     ]),
-    ...data.leaders.slice().sort((a, b) => a.category.localeCompare(b.category) || a.rank - b.rank || a.ticker.localeCompare(b.ticker)).slice(0, 20).map((leader) => fact(`leader:${leader.category}:${leader.rank}:${leader.ticker}`, leader.metricLabel || leader.category, leader.metricValue, null, data)),
+    ...selectBalancedMarketAiLeaders(data.leaders).map((leader) => fact(`leader:${leader.category}:${leader.rank}:${leader.ticker}`, leader.metricLabel || leader.category, leader.metricValue, null, data)),
   ].sort((a, b) => a.id.localeCompare(b.id))
   const missingFields = facts.filter((item) => item.value == null).map((item) => item.field)
   const mandatoryDimensions = {
