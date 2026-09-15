@@ -21,10 +21,33 @@ alter table public.market_ohlcv_history
   on delete restrict;
 
 alter table public.market_ohlcv_provenance enable row level security;
-revoke all privileges on table public.market_ohlcv_provenance from public, anon, authenticated;
-grant all privileges on table public.market_ohlcv_provenance to service_role;
-
+revoke all privileges on table public.market_ohlcv_provenance from public, anon, authenticated, service_role;
+grant select, insert, update on table public.market_ohlcv_provenance to service_role;
 grant usage, select on sequence public.market_ohlcv_provenance_id_seq to service_role;
+
+create or replace function public.qeo_market_ohlcv_provenance_identity_immutable_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.identity_version is distinct from old.identity_version
+    or new.provider is distinct from old.provider
+    or new.provider_detail is distinct from old.provider_detail
+    or new.source_url is distinct from old.source_url
+  then
+    raise exception 'Daily OHLCV provenance identities are immutable';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger qeo_market_ohlcv_provenance_identity_immutable_guard
+before update of identity_version, provider, provider_detail, source_url
+on public.market_ohlcv_provenance
+for each row
+execute function public.qeo_market_ohlcv_provenance_identity_immutable_guard();
 
 create or replace function public.qeo_market_ohlcv_provenance_consistency_guard()
 returns trigger
@@ -65,6 +88,7 @@ on public.market_ohlcv_history
 for each row
 execute function public.qeo_market_ohlcv_provenance_consistency_guard();
 
+revoke all on function public.qeo_market_ohlcv_provenance_identity_immutable_guard() from public, anon, authenticated;
 revoke all on function public.qeo_market_ohlcv_provenance_consistency_guard() from public, anon, authenticated;
 
 commit;
