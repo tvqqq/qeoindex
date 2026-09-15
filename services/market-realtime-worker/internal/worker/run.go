@@ -38,16 +38,12 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("load current market_realtime_bus sequence: %w", err)
 	}
 	orderbookSequences := make([]int64, orderbookFanoutShards)
-	hasPreviousOrderbookState := false
 	for shard := 0; shard < orderbookFanoutShards; shard++ {
 		sequence, err := client.CurrentSequenceFor(runCtx, orderbookCheckpointStream(shard))
 		if err != nil {
 			return fmt.Errorf("load orderbook shard %d checkpoint sequence: %w", shard, err)
 		}
 		orderbookSequences[shard] = sequence
-		if sequence > 0 {
-			hasPreviousOrderbookState = true
-		}
 	}
 
 	tickers, err := client.Universe(runCtx)
@@ -69,11 +65,10 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	)
 	buffer := realtime.NewBuffer(maxRealtimePayloadBytes)
 	orderbookBuffer := realtime.NewOrderbookBuffer(orderbookFanoutShards, cfg.OrderbookMaxPayloadBytes, cfg.OrderbookMaxExecutionFrames)
-	if hasPreviousOrderbookState {
-		// A worker restart can hide provider frames between processes. Force the
-		// next shard payload to trigger authoritative browser recovery.
-		orderbookBuffer.MarkContinuityGapAll()
-	}
+	// Every process start is a continuity boundary, including a crash before the
+	// first asynchronous checkpoint. The first payload per shard must therefore
+	// force browser recovery instead of allowing a restarted sequence to look live.
+	orderbookBuffer.MarkContinuityGapAll()
 	publisher := newOrderbookPublisher(runCtx, client, logger, orderbookSequences, defaultOrderbookPublisherOptions())
 	auth := dnseauth.New(cfg.DNSEAPIKey, cfg.DNSEAPISecret)
 	onBoardFrame := func(frame map[string]any) { buffer.Push(realtime.Frame(frame)) }
