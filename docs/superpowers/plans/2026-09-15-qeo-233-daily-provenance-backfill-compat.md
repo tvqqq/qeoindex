@@ -24,6 +24,10 @@
 - Production backfill is not executed until QEO-228/QEO-230 acceptance and measured database headroom are reviewed.
 - Under QeoIndex inline-only policy, verification is performed through GitHub Actions, not local shell execution.
 
+## Production Rollout Authorization — 2026-09-15
+
+The user explicitly authorized applying the additive QEO-233 migrations and deploying the QEO-233 application code to production. This authorization does **not** waive the separate capacity gate for the historical provenance backfill RPC: production backfill remains bounded, measured, and deferred until QEO-228/QEO-230 headroom acceptance is reviewed.
+
 ---
 
 ### Task 1: Add failing QEO-233 runtime/schema contract tests
