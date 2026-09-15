@@ -29,6 +29,37 @@ type OrderbookBuffer struct {
 	gapCount           int64
 }
 
+type jsonBatchSizer struct {
+	maxBytes int
+	bytes    int
+	count    int
+}
+
+func newJSONBatchSizer(maxBytes int) *jsonBatchSizer {
+	return &jsonBatchSizer{maxBytes: maxBytes, bytes: 2}
+}
+
+func (s *jsonBatchSizer) TryAdd(frame Frame) bool {
+	encoded, err := json.Marshal(frame)
+	if err != nil {
+		return false
+	}
+	extra := len(encoded)
+	if s.count > 0 {
+		extra++
+	}
+	if s.bytes+extra > s.maxBytes {
+		return false
+	}
+	s.bytes += extra
+	s.count++
+	return true
+}
+
+func (s *jsonBatchSizer) Bytes() int {
+	return s.bytes
+}
+
 func NewOrderbookBuffer(shardCount, maxPayloadBytes, maxExecutionFrames int) *OrderbookBuffer {
 	if shardCount <= 0 {
 		shardCount = 10
@@ -113,14 +144,14 @@ func (b *OrderbookBuffer) DrainShard(shardIndex int) OrderbookBatch {
 	}
 
 	frames := make([]Frame, 0, len(shard.state)+len(shard.executions))
+	sizer := newJSONBatchSizer(b.maxPayloadBytes)
 	selectedStateKeys := make([]string, 0, len(shard.stateOrder))
 	for _, key := range shard.stateOrder {
 		frame, ok := shard.state[key]
 		if !ok {
 			continue
 		}
-		candidate := append(append([]Frame(nil), frames...), frame)
-		if payloadFits(candidate, b.maxPayloadBytes) {
+		if sizer.TryAdd(frame) {
 			frames = append(frames, frame)
 			selectedStateKeys = append(selectedStateKeys, key)
 		}
@@ -128,8 +159,7 @@ func (b *OrderbookBuffer) DrainShard(shardIndex int) OrderbookBatch {
 
 	executionCount := 0
 	for _, frame := range shard.executions {
-		candidate := append(append([]Frame(nil), frames...), frame)
-		if !payloadFits(candidate, b.maxPayloadBytes) {
+		if !sizer.TryAdd(frame) {
 			break
 		}
 		frames = append(frames, frame)
@@ -239,11 +269,6 @@ func (b *OrderbookBuffer) markGapLocked(shard *orderbookShardBuffer) {
 	shard.continuityGap = true
 	shard.epoch++
 	b.gapCount++
-}
-
-func payloadFits(frames []Frame, maxBytes int) bool {
-	encoded, err := json.Marshal(frames)
-	return err == nil && len(encoded) <= maxBytes
 }
 
 func cloneFrame(frame Frame) Frame {

@@ -15,28 +15,12 @@ import (
 )
 
 const (
-	maxRealtimePayloadBytes = 524288
-	orderbookFanoutShards   = 10
+	maxRealtimePayloadBytes        = 524288
+	orderbookFanoutShards          = 10
+	orderbookWorkerReceivedAtField = "_qeoWorkerReceivedAt"
 )
 
 var orderbookStreamNames = []string{"orderbook-0", "orderbook-1", "orderbook-2", "orderbook-3"}
-
-type orderbookEnvelope struct {
-	Version       int              `json:"version"`
-	Shard         int              `json:"shard"`
-	Sequence      int64            `json:"sequence"`
-	Epoch         int64            `json:"epoch"`
-	ContinuityGap bool             `json:"continuityGap"`
-	PublishedAt   string           `json:"publishedAt"`
-	Frames        []map[string]any `json:"frames"`
-}
-
-type pendingOrderbookPublish struct {
-	sequence    int64
-	batch       realtime.OrderbookBatch
-	envelope    orderbookEnvelope
-	broadcasted bool
-}
 
 func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	_, windowEnd, active := cfg.Window(time.Now())
@@ -54,16 +38,12 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("load current market_realtime_bus sequence: %w", err)
 	}
 	orderbookSequences := make([]int64, orderbookFanoutShards)
-	hasPreviousOrderbookState := false
 	for shard := 0; shard < orderbookFanoutShards; shard++ {
 		sequence, err := client.CurrentSequenceFor(runCtx, orderbookCheckpointStream(shard))
 		if err != nil {
 			return fmt.Errorf("load orderbook shard %d checkpoint sequence: %w", shard, err)
 		}
 		orderbookSequences[shard] = sequence
-		if sequence > 0 {
-			hasPreviousOrderbookState = true
-		}
 	}
 
 	tickers, err := client.Universe(runCtx)
@@ -85,18 +65,18 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	)
 	buffer := realtime.NewBuffer(maxRealtimePayloadBytes)
 	orderbookBuffer := realtime.NewOrderbookBuffer(orderbookFanoutShards, cfg.OrderbookMaxPayloadBytes, cfg.OrderbookMaxExecutionFrames)
-	if hasPreviousOrderbookState {
-		// A worker restart can hide provider frames between processes. Force the
-		// next shard payload to trigger authoritative browser recovery.
-		orderbookBuffer.MarkContinuityGapAll()
-	}
+	// Every process start is a continuity boundary, including a crash before the
+	// first asynchronous checkpoint. The first payload per shard must therefore
+	// force browser recovery instead of allowing a restarted sequence to look live.
+	orderbookBuffer.MarkContinuityGapAll()
+	publisher := newOrderbookPublisher(runCtx, client, logger, orderbookSequences, defaultOrderbookPublisherOptions())
 	auth := dnseauth.New(cfg.DNSEAPIKey, cfg.DNSEAPISecret)
 	onBoardFrame := func(frame map[string]any) { buffer.Push(realtime.Frame(frame)) }
 	onTickFrame := func(frame map[string]any) {
 		buffer.Push(realtime.Frame(frame))
-		orderbookBuffer.Push(realtime.Frame(frame))
+		orderbookBuffer.Push(stampOrderbookFrame(frame))
 	}
-	onOrderbookFrame := func(frame map[string]any) { orderbookBuffer.Push(realtime.Frame(frame)) }
+	onOrderbookFrame := func(frame map[string]any) { orderbookBuffer.Push(stampOrderbookFrame(frame)) }
 
 	var wg sync.WaitGroup
 	startStream := func(streamCtx context.Context, stream *dnse.Stream) {
@@ -148,17 +128,17 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			shardCancel()
 		}
 		cancel()
+		publisher.Close()
 		wg.Wait()
 	}()
 
-	pendingOrderbook := make([]*pendingOrderbookPublish, orderbookFanoutShards)
 	lastFlushFrames := 0
 	lastOrderbookFlushFrames := 0
 
 	for {
 		select {
 		case <-runCtx.Done():
-			logger.Info("market_realtime_worker_stop", "reason", contextReason(runCtx), "last_sequence", lastSequence, "orderbook_sequences", orderbookSequences)
+			logger.Info("market_realtime_worker_stop", "reason", contextReason(runCtx), "last_sequence", lastSequence, "orderbook_sequences", publisher.Sequences())
 			return nil
 		case <-flushTicker.C:
 			frames := buffer.Drain()
@@ -175,50 +155,20 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			lastSequence = nextSequence
 			lastFlushFrames = len(frames)
 		case <-orderbookFlushTicker.C:
-			publishedFrames := 0
+			submittedFrames := 0
 			for shard := 0; shard < orderbookFanoutShards; shard++ {
-				pending := pendingOrderbook[shard]
-				if pending == nil {
-					batch := orderbookBuffer.DrainShard(shard)
-					if len(batch.Frames) == 0 {
-						continue
-					}
-					plainFrames := framesToMaps(batch.Frames)
-					sequence := orderbookSequences[shard] + 1
-					pending = &pendingOrderbookPublish{
-						sequence: sequence,
-						batch:    batch,
-						envelope: orderbookEnvelope{
-							Version:       1,
-							Shard:         shard,
-							Sequence:      sequence,
-							Epoch:         batch.Epoch,
-							ContinuityGap: batch.ContinuityGap,
-							PublishedAt:   time.Now().UTC().Format(time.RFC3339Nano),
-							Frames:        plainFrames,
-						},
-					}
-					pendingOrderbook[shard] = pending
-				}
-
-				if !pending.broadcasted {
-					if err := client.PublishPrivateBroadcast(runCtx, orderbookBroadcastTopic(shard), "orderbook", pending.envelope); err != nil {
-						logger.Error("orderbook_broadcast_publish_failed", "shard", shard, "sequence", pending.sequence, "frames", len(pending.batch.Frames), "error", err.Error())
-						continue
-					}
-					pending.broadcasted = true
-				}
-
-				if err := client.PublishCheckpoint(runCtx, orderbookCheckpointStream(shard), pending.sequence, pending.envelope.Frames); err != nil {
-					logger.Error("orderbook_checkpoint_publish_failed", "shard", shard, "sequence", pending.sequence, "error", err.Error())
+				batch := orderbookBuffer.DrainShard(shard)
+				if len(batch.Frames) == 0 {
 					continue
 				}
-				orderbookSequences[shard] = pending.sequence
-				publishedFrames += len(pending.batch.Frames)
-				pendingOrderbook[shard] = nil
+				if !publisher.Submit(shard, batch) {
+					orderbookBuffer.RequeueShard(shard, batch)
+					continue
+				}
+				submittedFrames += len(batch.Frames)
 			}
-			if publishedFrames > 0 {
-				lastOrderbookFlushFrames = publishedFrames
+			if submittedFrames > 0 {
+				lastOrderbookFlushFrames = submittedFrames
 			}
 		case <-universeTicker.C:
 			next, err := client.Universe(runCtx)
@@ -267,16 +217,11 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			}
 			logger.Info("canonical_universe_subscription_refreshed", "tickers", len(tickers), "orderbook_provider_shards", len(orderbookPlan))
 		case <-heartbeatTicker.C:
-			pendingCount := 0
-			for _, pending := range pendingOrderbook {
-				if pending != nil {
-					pendingCount++
-				}
-			}
 			memberships := make([]int, len(orderbookPlan))
 			for index, symbols := range orderbookPlan {
 				memberships[index] = len(symbols) * 4
 			}
+			publisherStats := publisher.Stats()
 			logger.Info(
 				"market_realtime_worker_heartbeat",
 				"sequence", lastSequence,
@@ -285,10 +230,13 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 				"tickers", len(tickers),
 				"provider_socket_target", 2+len(orderbookPlan),
 				"orderbook_memberships", memberships,
-				"orderbook_sequences", orderbookSequences,
+				"orderbook_sequences", publisher.Sequences(),
 				"orderbook_last_flush_frames", lastOrderbookFlushFrames,
 				"orderbook_buffered_frames", orderbookBuffer.Len(),
-				"orderbook_pending_shards", pendingCount,
+				"orderbook_pending_shards", publisherStats.QueueDepth,
+				"orderbook_checkpoint_pending", publisherStats.CheckpointPending,
+				"orderbook_broadcast_failures", publisherStats.BroadcastFailures,
+				"orderbook_checkpoint_failures", publisherStats.CheckpointFailures,
 				"orderbook_continuity_gaps", orderbookBuffer.GapCount(),
 			)
 		}
@@ -302,20 +250,21 @@ func newStream(name string, cfg config.Config, auth dnseauth.Auth, channels []dn
 	}
 }
 
+func stampOrderbookFrame(frame map[string]any) realtime.Frame {
+	stamped := make(realtime.Frame, len(frame)+1)
+	for key, value := range frame {
+		stamped[key] = value
+	}
+	stamped[orderbookWorkerReceivedAtField] = time.Now().UnixMilli()
+	return stamped
+}
+
 func framesToMaps(frames []realtime.Frame) []map[string]any {
 	plain := make([]map[string]any, len(frames))
 	for index, frame := range frames {
 		plain[index] = map[string]any(frame)
 	}
 	return plain
-}
-
-func orderbookCheckpointStream(shard int) string {
-	return fmt.Sprintf("orderbook-v1-%02d", shard)
-}
-
-func orderbookBroadcastTopic(shard int) string {
-	return fmt.Sprintf("orderbook:v1:%02d", shard)
 }
 
 func orderbookShardAt(plan [][]string, index int) []string {
