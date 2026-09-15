@@ -40,6 +40,22 @@ func TestOrderbookBufferCoalescesStateButPreservesExecutionsInOrder(t *testing.T
 	}
 }
 
+func TestOrderbookBufferCoalescesExpectedPriceAsLatestState(t *testing.T) {
+	buffer := NewOrderbookBuffer(10, 196608, 2000)
+	buffer.Push(Frame{"T": "e", "symbol": "MSN", "expectedTradePrice": 66.1, "expectedTradeQuantity": 100})
+	buffer.Push(Frame{"T": "e", "symbol": "MSN", "expectedTradePrice": 66.2, "expectedTradeQuantity": 250})
+
+	shard := FanoutShard("MSN", 10)
+	batch := buffer.DrainShard(shard)
+	if len(batch.Frames) != 1 {
+		t.Fatalf("expected one coalesced expected-price frame, got %d", len(batch.Frames))
+	}
+	frame := batch.Frames[0]
+	if frame["T"] != "e" || frame["expectedTradePrice"] != 66.2 || frame["expectedTradeQuantity"] != 250 {
+		t.Fatalf("expected latest auction indication, got %#v", frame)
+	}
+}
+
 func TestOrderbookBufferRequeueKeepsOlderExecutionsBeforeNewerFrames(t *testing.T) {
 	buffer := NewOrderbookBuffer(10, 196608, 2000)
 	buffer.Push(Frame{"T": "te", "symbol": "VCB", "transId": "1"})
@@ -55,6 +71,19 @@ func TestOrderbookBufferRequeueKeepsOlderExecutionsBeforeNewerFrames(t *testing.
 	}
 	if retry.Frames[0]["transId"] != "1" || retry.Frames[1]["transId"] != "2" {
 		t.Fatalf("requeue reordered executions: %#v", retry.Frames)
+	}
+}
+
+func TestOrderbookBufferRequeueRestoresExpectedPriceState(t *testing.T) {
+	buffer := NewOrderbookBuffer(10, 196608, 2000)
+	buffer.Push(Frame{"T": "e", "symbol": "MSN", "expectedTradePrice": 66.1, "expectedTradeQuantity": 100})
+	shard := FanoutShard("MSN", 10)
+	failed := buffer.DrainShard(shard)
+
+	buffer.RequeueShard(shard, failed)
+	retry := buffer.DrainShard(shard)
+	if len(retry.Frames) != 1 || retry.Frames[0]["T"] != "e" {
+		t.Fatalf("expected auction state to survive requeue, got %#v", retry.Frames)
 	}
 }
 
