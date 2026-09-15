@@ -22,8 +22,10 @@ test("QEO-233 additive migrations satisfy the approved QEO-232 schema contract",
   assert.doesNotThrow(() => assertQeo232DailyProvenanceSchema(sql))
 })
 
-test("QEO-233 exposes an exact provenance compatibility model and consistency guard", () => {
+test("QEO-233 exposes immutable exact provenance identities and a consistency guard", () => {
   const sql = qeo233MigrationSource()
+  assert.match(sql, /qeo_market_ohlcv_provenance_identity_immutable_guard/i)
+  assert.match(sql, /provenance identities are immutable/i)
   assert.match(sql, /create(?: or replace)? view public\.market_ohlcv_history_compat/i)
   assert.match(sql, /provenance_consistent/i)
   assert.match(sql, /history\.provider\s*=\s*registry\.provider/i)
@@ -38,7 +40,7 @@ test("QEO-233 backfill is bounded, capacity-gated, restartable, and changes only
   assert.match(sql, /qeo_market_ohlcv_provenance_backfill_batch/i)
   assert.match(sql, /p_limit/i)
   assert.match(sql, /greatest\(1,\s*least\(p_limit,\s*5000\)\)/i)
-  assert.match(sql, /pg_database_size\(current_database\(\)\)/i)
+  assert.match(sql, /(?:pg_catalog\.)?pg_database_size\((?:pg_catalog\.)?current_database\(\)\)/i)
   assert.match(sql, /p_max_database_bytes/i)
   assert.match(sql, /set\s+provenance_id\s*=/i)
   assert.doesNotMatch(sql, /set\s+(?:open|high|low|close|volume|provider|provider_detail|source_url|fetched_at)\s*=/i)
@@ -70,6 +72,7 @@ test("QEO-233 centralizes exact dual-write behavior for all approved Daily write
 
 test("QEO-233 provenance-sensitive direct readers use the compatibility view", () => {
   for (const path of [
+    "modules/market/history/ohlcv-store.ts",
     "modules/market/history/daily-integrity.ts",
     "modules/market/chart-data/service.ts",
     "modules/market/chart-data/maintenance.ts",
