@@ -10,11 +10,12 @@ A stateless Go worker owns the canonical DNSE Market Board feed and the centrali
 - DNSE sockets 3–6: up to four deterministic 50-symbol supplemental shards carrying `top_price.G1.json`, `tick_extra.G1.json`, `foreign.G1.json`, and `expected_price.G1.json` (maximum 200 memberships/socket); QEO-222 adds the auction expected-price feed so ATO/ATC indicative price and quantity survive centralization;
 - no supplemental `ohlc.1.json` subscription is created; popup mini-chart motion is synthesized from canonical ticks;
 - Market Board latest frame per `(T, symbol/index)` remains coalesced at approximately 1 Hz;
-- QEO-224 orderbook fanout maps symbols deterministically into ten private topics `orderbook:v1:00` through `orderbook:v1:09` and flushes at **150 ms by default** (bounded 100–1000 ms);
+- QEO-224 orderbook fanout maps symbols deterministically into ten private topics `orderbook:v1:00` through `orderbook:v1:09` and flushes at **200 ms by default** (bounded 100–1000 ms); 200 ms is intentionally used instead of a more aggressive 100–150 ms cadence while the current Realtime capacity gate remains unresolved;
 - live orderbook Broadcast is independent from checkpoint persistence: active shard Broadcast requests can overlap with a global maximum of four, while each shard retains strict sequence order;
 - recovery checkpoints are coalesced per shard and persisted asynchronously at approximately 1 Hz; a slow/failed checkpoint cannot head-of-line block another shard's live Broadcast;
 - orderbook `t/q/f/e` frames are latest-wins while `te` executions remain ordered in a bounded queue; queue truncation/restart is exposed as a continuity gap so browsers recover from the session/snapshot authority;
 - orderbook checkpoint keys are `orderbook-v1-00` through `orderbook-v1-09`; live sequences advance only after successful Broadcast, while checkpoints may intentionally lag the live sequence because they are recovery-only;
+- the browser treats checkpoint sequence as hydration only; the first newer Broadcast after a join establishes the live sequence baseline, then strict gap/epoch checks resume so an intentionally lagging checkpoint does not cause a reconnect loop;
 - payload-size accounting encodes each candidate frame once instead of repeatedly serializing the growing batch;
 - worker ingress stamps orderbook frames with internal `_qeoWorkerReceivedAt`; the browser combines that stamp, provider event time, envelope `publishedAt`, and browser receive time to report rolling p50/p95/p99 latency for `providerToWorker`, `workerQueue`, `delivery`, and `endToEnd` in developer console only;
 - universe membership refreshes periodically; changed supplemental shards restart independently while healthy index/tick streams remain isolated;
