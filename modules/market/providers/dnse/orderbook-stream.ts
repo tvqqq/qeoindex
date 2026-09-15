@@ -1,6 +1,9 @@
 "use client"
 
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
+import {
+  subscribeMarketRelay,
+  type MarketRelayOrderbookMessage,
+} from "@/modules/market/realtime/relay-client"
 import { getAuthenticatedSupabaseRealtimeClient } from "@/modules/shared/supabase/authenticated-realtime"
 
 export type DnseOrderbookFrame = Record<string, unknown>
@@ -12,16 +15,6 @@ export type DnseOrderbookStreamState = {
   sequence: number
 }
 
-type OrderbookEnvelope = {
-  version: number
-  shard: number
-  sequence: number
-  epoch: number
-  continuityGap: boolean
-  publishedAt: string
-  frames: DnseOrderbookFrame[]
-}
-
 type OrderbookCheckpointRow = {
   sequence?: unknown
   frames?: unknown
@@ -31,8 +24,6 @@ type OrderbookCheckpointRow = {
 
 const FANOUT_SHARDS = 10
 const STALE_AFTER_MS = 45_000
-const RECONNECT_BASE_MS = 750
-const RECONNECT_MAX_MS = 10_000
 
 export function orderbookFanoutShard(symbol: string): number {
   let hash = 0x811c9dc5
@@ -49,37 +40,8 @@ function parseFrame(value: unknown): DnseOrderbookFrame | null {
   return value as DnseOrderbookFrame
 }
 
-function parseEnvelope(value: unknown): OrderbookEnvelope | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  const source = value as Record<string, unknown>
-  const version = Number(source.version)
-  const shard = Number(source.shard)
-  const sequence = Number(source.sequence)
-  const epoch = Number(source.epoch ?? 0)
-  if (version !== 1 || !Number.isInteger(shard) || shard < 0 || shard >= FANOUT_SHARDS) return null
-  if (!Number.isSafeInteger(sequence) || sequence <= 0) return null
-  if (!Number.isSafeInteger(epoch) || epoch < 0) return null
-  const frames = Array.isArray(source.frames)
-    ? source.frames.map(parseFrame).filter((frame): frame is DnseOrderbookFrame => Boolean(frame))
-    : []
-  return {
-    version,
-    shard,
-    sequence,
-    epoch,
-    continuityGap: source.continuityGap === true,
-    publishedAt: String(source.publishedAt ?? ""),
-    frames,
-  }
-}
-
 function frameSymbol(frame: DnseOrderbookFrame) {
   return String(frame.symbol ?? "").trim().toUpperCase()
-}
-
-function reconnectDelay(attempt: number) {
-  const exponent = Math.min(Math.max(attempt - 1, 0), 4)
-  return Math.min(RECONNECT_BASE_MS * 2 ** exponent, RECONNECT_MAX_MS) + Math.floor(Math.random() * 400)
 }
 
 export function subscribeDnseOrderbookFrames(
@@ -90,17 +52,17 @@ export function subscribeDnseOrderbookFrames(
   const upper = symbol.trim().toUpperCase()
   const shard = orderbookFanoutShard(upper)
   const shardId = String(shard).padStart(2, "0")
-  const topic = `orderbook:v1:${shardId}`
   const checkpointStream = `orderbook-v1-${shardId}`
+  const relayTopic = `orderbook:${upper}` as const
 
   let disposed = false
   let generation = 0
-  let channel: RealtimeChannel | null = null
-  let channelClient: SupabaseClient | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let attempts = 0
-  let latestSequence = 0
-  let latestEpoch = 0
+  let relayUnsubscribe: (() => void) | null = null
+  let recoveryPromise: Promise<void> | null = null
+  let checkpointSequence = 0
+  let liveSequence = 0
+  let liveEpoch = ""
+  let liveBaselineEstablished = false
   let lastMessageAtMs = Date.now()
   let currentState: DnseOrderbookStreamState = {
     status: "CONNECTING",
@@ -120,49 +82,17 @@ export function subscribeDnseOrderbookFrames(
     }
   }
 
-  const clearReconnectTimer = () => {
-    if (reconnectTimer) clearTimeout(reconnectTimer)
-    reconnectTimer = null
-  }
-
-  const removeCurrentChannel = async () => {
-    const current = channel
-    const client = channelClient
-    channel = null
-    channelClient = null
-    if (!current || !client) return
-    try {
-      await client.removeChannel(current)
-    } catch {
-      // Cleanup failure must not prevent a fresh authenticated join.
-    }
-  }
-
-  const scheduleReconnect = (status: DnseOrderbookStreamStatus, message: string) => {
-    if (disposed || reconnectTimer) return
-    attempts += 1
-    setState({ status, error: message })
-    const delay = reconnectDelay(attempts)
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null
-      void connect()
-    }, delay)
-  }
-
-  const restartForRecovery = (message: string) => {
-    if (disposed) return
-    generation += 1
-    latestEpoch = 0
-    clearReconnectTimer()
-    setState({ status: "RECOVERING", error: message })
-    void removeCurrentChannel().finally(() => scheduleReconnect("RECOVERING", message))
+  const resetLiveBaseline = () => {
+    liveSequence = 0
+    liveEpoch = ""
+    liveBaselineEstablished = false
   }
 
   const applyCheckpoint = (row: OrderbookCheckpointRow | null | undefined) => {
     if (!row) return
     const sequence = Number(row.sequence ?? 0)
-    if (!Number.isSafeInteger(sequence) || sequence <= 0) return
-    latestSequence = sequence
+    if (!Number.isSafeInteger(sequence) || sequence <= checkpointSequence) return
+    checkpointSequence = sequence
     const frames = Array.isArray(row.frames)
       ? row.frames.map(parseFrame).filter((frame): frame is DnseOrderbookFrame => Boolean(frame))
       : []
@@ -175,114 +105,105 @@ export function subscribeDnseOrderbookFrames(
     setState({ sequence, lastMessageAt: updatedAt || currentState.lastMessageAt })
   }
 
-  const applyEnvelope = (envelope: OrderbookEnvelope) => {
-    if (envelope.shard !== shard) return
+  const bootstrapCheckpoint = async (expectedGeneration: number) => {
+    const supabase = await getAuthenticatedSupabaseRealtimeClient()
+    if (disposed || expectedGeneration !== generation) return
+    const { data, error } = await supabase
+      .from("market_realtime_bus")
+      .select("sequence,frames,source_updated_at,updated_at")
+      .eq("stream", checkpointStream)
+      .maybeSingle()
+    if (disposed || expectedGeneration !== generation) return
+    if (error) throw new Error(`Orderbook realtime bootstrap failed: ${error.message}`)
+    applyCheckpoint(data as OrderbookCheckpointRow | null)
+  }
 
-    // Continuity flags must be evaluated before duplicate-sequence suppression:
-    // after a worker crash the first new broadcast can reuse the uncheckpointed
-    // sequence and still needs to force authoritative session recovery.
-    if (envelope.continuityGap) {
-      restartForRecovery("Orderbook realtime continuity gap; refreshing session state.")
+  const applyRelayMessage = (message: MarketRelayOrderbookMessage) => {
+    if (message.symbol !== upper) return
+    if (message.continuityGap) {
+      void recover("Orderbook realtime continuity gap; refreshing session state.")
       return
     }
-    if (latestEpoch > 0 && envelope.epoch !== latestEpoch) {
-      restartForRecovery("Orderbook realtime worker epoch changed; refreshing session state.")
-      return
+    if (liveBaselineEstablished) {
+      if (message.epoch !== liveEpoch) {
+        void recover("Orderbook realtime worker epoch changed; refreshing session state.")
+        return
+      }
+      if (message.sequence !== liveSequence + 1) {
+        void recover("Orderbook realtime sequence gap; refreshing session state.")
+        return
+      }
     }
-    if (latestSequence > 0 && envelope.sequence > latestSequence + 1) {
-      restartForRecovery("Orderbook realtime sequence gap; refreshing session state.")
-      return
-    }
-    if (envelope.sequence <= latestSequence) return
 
-    latestSequence = envelope.sequence
-    latestEpoch = envelope.epoch
+    liveEpoch = message.epoch
+    liveSequence = message.sequence
+    liveBaselineEstablished = true
     lastMessageAtMs = Date.now()
-    emitFrames(envelope.frames)
-    attempts = 0
+    emitFrames(message.frames)
     setState({
       status: "LIVE",
       error: "",
-      lastMessageAt: envelope.publishedAt || new Date(lastMessageAtMs).toISOString(),
-      sequence: latestSequence,
+      lastMessageAt: message.publishedAt || new Date(lastMessageAtMs).toISOString(),
+      sequence: message.sequence,
     })
   }
 
-  const connect = async () => {
-    clearReconnectTimer()
-    if (disposed) return
-    const thisGeneration = ++generation
-    setState({ status: currentState.status === "RECOVERING" ? "RECOVERING" : "CONNECTING", error: "" })
-
-    try {
-      const supabase = await getAuthenticatedSupabaseRealtimeClient()
-      if (disposed || thisGeneration !== generation) return
-
-      const { data, error } = await supabase
-        .from("market_realtime_bus")
-        .select("sequence,frames,source_updated_at,updated_at")
-        .eq("stream", checkpointStream)
-        .maybeSingle()
-      if (disposed || thisGeneration !== generation) return
-      if (error) throw new Error(`Orderbook realtime bootstrap failed: ${error.message}`)
-      applyCheckpoint(data as OrderbookCheckpointRow | null)
-
-      const nextChannel = supabase
-        .channel(topic, { config: { private: true } })
-        .on("broadcast", { event: "orderbook" }, (message) => {
-          if (disposed || thisGeneration !== generation || channel !== nextChannel) return
-          const payload = message && typeof message === "object" && "payload" in message
-            ? (message as { payload?: unknown }).payload
-            : message
-          const envelope = parseEnvelope(payload)
-          if (envelope) applyEnvelope(envelope)
-        })
-
-      if (disposed || thisGeneration !== generation) {
-        void supabase.removeChannel(nextChannel)
-        return
-      }
-      channelClient = supabase
-      channel = nextChannel
-      nextChannel.subscribe((status) => {
-        if (disposed || thisGeneration !== generation || channel !== nextChannel) return
-        if (status === "SUBSCRIBED") {
-          attempts = 0
-          // A checkpoint is hydration, not proof that the producer is currently
-          // live. Only a fresh Broadcast envelope transitions the popup to LIVE.
+  const subscribeRelay = (expectedGeneration: number) => {
+    relayUnsubscribe?.()
+    relayUnsubscribe = subscribeMarketRelay(
+      relayTopic,
+      (message) => {
+        if (disposed || expectedGeneration !== generation || message.type !== "orderbook") return
+        applyRelayMessage(message)
+      },
+      (state) => {
+        if (disposed || expectedGeneration !== generation) return
+        if (state.status === "ERROR") {
+          setState({ status: currentState.status === "RECOVERING" ? "RECOVERING" : "ERROR", error: state.error })
+        } else if (state.status === "CLOSED") {
+          setState({ status: "CLOSED", error: "" })
+        } else if ((state.status === "CONNECTING" || state.status === "AUTHENTICATING") && currentState.status !== "RECOVERING") {
           setState({ status: "CONNECTING", error: "" })
-          return
         }
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          generation += 1
-          void removeCurrentChannel().finally(() => {
-            scheduleReconnect("ERROR", `Orderbook realtime channel ${status.toLowerCase()}.`)
-          })
-          return
-        }
-        if (status === "CLOSED") {
-          generation += 1
-          void removeCurrentChannel().finally(() => {
-            scheduleReconnect("CLOSED", "Orderbook realtime channel closed; reconnecting.")
-          })
-        }
-      })
+      },
+    )
+  }
+
+  async function connect(status: DnseOrderbookStreamStatus = "CONNECTING") {
+    if (disposed) return
+    const expectedGeneration = ++generation
+    resetLiveBaseline()
+    setState({ status, error: "" })
+    try {
+      await bootstrapCheckpoint(expectedGeneration)
     } catch (error) {
-      if (disposed || thisGeneration !== generation) return
-      generation += 1
-      await removeCurrentChannel()
-      scheduleReconnect("ERROR", error instanceof Error ? error.message : String(error))
+      if (disposed || expectedGeneration !== generation) return
+      setState({ status, error: error instanceof Error ? error.message : String(error) })
     }
+    if (disposed || expectedGeneration !== generation) return
+    subscribeRelay(expectedGeneration)
+  }
+
+  async function recover(message: string) {
+    if (disposed) return
+    if (recoveryPromise) return recoveryPromise
+    setState({ status: "RECOVERING", error: message })
+    relayUnsubscribe?.()
+    relayUnsubscribe = null
+    recoveryPromise = connect("RECOVERING").finally(() => {
+      recoveryPromise = null
+    })
+    return recoveryPromise
   }
 
   const recoverIfStale = () => {
     if (disposed || document.visibilityState !== "visible") return
-    if (Date.now() - lastMessageAtMs <= STALE_AFTER_MS && channel) return
+    if (Date.now() - lastMessageAtMs <= STALE_AFTER_MS && liveBaselineEstablished) return
     setState({ status: "STALE", error: "Orderbook realtime stale; reconnecting." })
-    restartForRecovery("Orderbook realtime stale; refreshing session state.")
+    void recover("Orderbook realtime stale; refreshing session state.")
   }
   const onVisibilityChange = () => recoverIfStale()
-  const onOnline = () => recoverIfStale()
+  const onOnline = () => void recover("Network resumed; refreshing orderbook session state.")
 
   document.addEventListener("visibilitychange", onVisibilityChange)
   window.addEventListener("online", onOnline)
@@ -292,9 +213,9 @@ export function subscribeDnseOrderbookFrames(
   return () => {
     disposed = true
     generation += 1
-    clearReconnectTimer()
+    relayUnsubscribe?.()
+    relayUnsubscribe = null
     document.removeEventListener("visibilitychange", onVisibilityChange)
     window.removeEventListener("online", onOnline)
-    void removeCurrentChannel()
   }
 }
