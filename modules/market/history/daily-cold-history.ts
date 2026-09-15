@@ -10,10 +10,7 @@ import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"
 import { isCanonicalDailyHotRowUsable } from "@/modules/market/chart-data/daily-authority"
 import { DAILY_BACKFILL_DAYS } from "@/modules/market/history/contract"
 import { fetchDailyMarketHistoryWindow, type DailyHistoryBarPolicy } from "@/modules/market/history/index"
-import {
-  assertDailyProvenanceConsistent,
-  isDailyProvenanceCompatibilityUnavailable,
-} from "./daily-provenance"
+import { assertDailyProvenanceConsistent } from "./daily-provenance"
 
 const DAY_MS = 86_400_000
 const DAILY_DEEP_CHUNK_DAYS = 4 * 366
@@ -182,7 +179,7 @@ async function loadTerminalStatus(supabase: SupabaseClient, ticker: string): Pro
 
 export async function archiveExpiredDailyHotHistory(supabase: SupabaseClient, ticker: string, now = new Date()) {
   const cutoff = new Date(now.getTime() - DAILY_BACKFILL_DAYS * DAY_MS)
-  const compatRead = await supabase
+  const { data, error } = await supabase
     .from("market_ohlcv_history_compat")
     .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,provenance_consistent")
     .eq("ticker", ticker)
@@ -191,21 +188,8 @@ export async function archiveExpiredDailyHotHistory(supabase: SupabaseClient, ti
     .order("bar_time", { ascending: true })
     .limit(HOT_ARCHIVE_READ_LIMIT)
 
-  let rows = (compatRead.data || []) as StoredDailyRow[]
-  let error = compatRead.error
-  if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
-    const legacyRead = await supabase
-      .from("market_ohlcv_history")
-      .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
-      .eq("ticker", ticker)
-      .eq("timeframe", "1D")
-      .lt("bar_time", cutoff.toISOString())
-      .order("bar_time", { ascending: true })
-      .limit(HOT_ARCHIVE_READ_LIMIT)
-    rows = (legacyRead.data || []) as StoredDailyRow[]
-    error = legacyRead.error
-  }
   if (error) throw new Error(`Load expired Daily hot rows failed for ${ticker}: ${error.message}`)
+  const rows = (data || []) as StoredDailyRow[]
   assertDailyProvenanceConsistent(rows as Array<Record<string, unknown>>, `Load expired Daily hot rows for ${ticker}`)
 
   const parsedRows = rows.map((row) => ({ row, bar: toBar(row) }))

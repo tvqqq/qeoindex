@@ -10,7 +10,6 @@ import {
 } from "./contract.ts"
 import {
   assertDailyProvenanceConsistent,
-  isDailyProvenanceCompatibilityUnavailable,
   persistDailyOhlcvRows,
 } from "./daily-provenance.ts"
 import type { OhlcvBar } from "../../shared/technical/indicators.ts"
@@ -378,27 +377,13 @@ export async function loadCachedOhlcvHistory(
   const rows: StoredOhlcvRow[] = []
   const pageSize = 1000
   for (let offset = 0; ; offset += pageSize) {
-    const compatRead = await supabase
+    const { data, error } = await supabase
       .from("market_ohlcv_history_compat")
       .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at,provenance_consistent")
       .eq("ticker", ticker)
       .eq("timeframe", "1D")
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
-
-    let data: StoredOhlcvRow[] | null = compatRead.data
-    let error = compatRead.error
-    if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
-      const legacyRead = await supabase
-        .from("market_ohlcv_history")
-        .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at")
-        .eq("ticker", ticker)
-        .eq("timeframe", "1D")
-        .order("bar_time", { ascending: true })
-        .range(offset, offset + pageSize - 1)
-      data = legacyRead.data
-      error = legacyRead.error
-    }
 
     if (error) throw new Error(`OHLCV cache read failed for ${ticker} 1D: ${error.message}`)
     const page = (data || []) as StoredOhlcvRow[]

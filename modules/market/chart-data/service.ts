@@ -6,10 +6,7 @@ import {
   isVietnamSecuritiesTradingDateKey,
   vietnamDateKey,
 } from "@/modules/market/calendar"
-import {
-  assertDailyProvenanceConsistent,
-  isDailyProvenanceCompatibilityUnavailable,
-} from "@/modules/market/history/daily-provenance"
+import { assertDailyProvenanceConsistent } from "@/modules/market/history/daily-provenance"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { createSupabaseColdOhlcvStorage, type ColdOhlcvStorage } from "./cold-store"
 import type {
@@ -167,7 +164,7 @@ function validDailyTradingBar(bar: CanonicalOhlcvBar) {
 async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOhlcvRequest) {
   const rows: Array<Record<string, unknown>> = []
   for (let offset = 0; ; offset += DAILY_READ_PAGE_SIZE) {
-    const compatRead = await supabase
+    const { data, error } = await supabase
       .from("market_ohlcv_history_compat")
       .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url,provenance_consistent")
       .eq("ticker", request.ticker)
@@ -177,23 +174,8 @@ async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOh
       .order("bar_time", { ascending: true })
       .range(offset, offset + DAILY_READ_PAGE_SIZE - 1)
 
-    let page = (compatRead.data || []) as Array<Record<string, unknown>>
-    let error = compatRead.error
-    if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
-      const legacyRead = await supabase
-        .from("market_ohlcv_history")
-        .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
-        .eq("ticker", request.ticker)
-        .eq("timeframe", "1D")
-        .gte("bar_time", new Date(request.from * 1000).toISOString())
-        .lte("bar_time", new Date(request.to * 1000).toISOString())
-        .order("bar_time", { ascending: true })
-        .range(offset, offset + DAILY_READ_PAGE_SIZE - 1)
-      page = (legacyRead.data || []) as Array<Record<string, unknown>>
-      error = legacyRead.error
-    }
-
     if (error) throw new ChartDataUnavailableError("Canonical Daily PostgreSQL storage unavailable")
+    const page = (data || []) as Array<Record<string, unknown>>
     assertDailyProvenanceConsistent(page, `Canonical Daily chart read for ${request.ticker}`)
     rows.push(...page)
     if (page.length < DAILY_READ_PAGE_SIZE) break

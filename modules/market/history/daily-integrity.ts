@@ -5,7 +5,6 @@ import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/modules/mar
 import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"
 import {
   assertDailyProvenanceConsistent,
-  isDailyProvenanceCompatibilityUnavailable,
   persistDailyOhlcvRows,
 } from "./daily-provenance"
 
@@ -97,7 +96,7 @@ async function loadUnclassifiedZeroDates(supabase: SupabaseClient, tickers: stri
   let offset = 0
   const pageSize = 1000
   while (true) {
-    const compatRead = await supabase
+    const { data, error } = await supabase
       .from("market_ohlcv_history_compat")
       .select("ticker,bar_time,provider,source_url,provider_detail,provenance_consistent")
       .eq("timeframe", "1D")
@@ -106,22 +105,6 @@ async function loadUnclassifiedZeroDates(supabase: SupabaseClient, tickers: stri
       .order("ticker", { ascending: true })
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
-
-    let data: StoredZeroVolumeRow[] | null = compatRead.data
-    let error = compatRead.error
-    if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
-      const legacyRead = await supabase
-        .from("market_ohlcv_history")
-        .select("ticker,bar_time,provider,source_url,provider_detail")
-        .eq("timeframe", "1D")
-        .eq("volume", 0)
-        .in("ticker", tickers)
-        .order("ticker", { ascending: true })
-        .order("bar_time", { ascending: true })
-        .range(offset, offset + pageSize - 1)
-      data = legacyRead.data
-      error = legacyRead.error
-    }
 
     if (error) throw new Error(`Load zero-volume Daily rows failed: ${error.message}`)
     const page = (data || []) as StoredZeroVolumeRow[]
@@ -146,7 +129,7 @@ async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: strin
   let offset = 0
   const pageSize = 1000
   while (true) {
-    const compatRead = await supabase
+    const { data, error } = await supabase
       .from("market_ohlcv_history_compat")
       .select("ticker,bar_time,provider,source_url,provider_detail,volume,provenance_consistent")
       .eq("timeframe", "1D")
@@ -155,22 +138,6 @@ async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: strin
       .order("ticker", { ascending: true })
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
-
-    let data: StoredLegacyYahooRow[] | null = compatRead.data
-    let error = compatRead.error
-    if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
-      const legacyRead = await supabase
-        .from("market_ohlcv_history")
-        .select("ticker,bar_time,provider,source_url,provider_detail,volume")
-        .eq("timeframe", "1D")
-        .eq("provider", "Fallback")
-        .in("ticker", tickers)
-        .order("ticker", { ascending: true })
-        .order("bar_time", { ascending: true })
-        .range(offset, offset + pageSize - 1)
-      data = legacyRead.data
-      error = legacyRead.error
-    }
 
     if (error) throw new Error(`Load legacy Yahoo Daily rows failed: ${error.message}`)
     const page = (data || []) as StoredLegacyYahooRow[]
