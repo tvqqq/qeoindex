@@ -1,6 +1,10 @@
 package relay
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 const ProtocolVersion = 1
 
@@ -30,6 +34,7 @@ type errorMessage struct {
 
 type MarketMessage struct {
 	Type          string           `json:"type"`
+	BatchID       string           `json:"batchId"`
 	Epoch         string           `json:"epoch"`
 	Sequence      int64            `json:"sequence"`
 	PublishedAt   string           `json:"publishedAt"`
@@ -39,6 +44,7 @@ type MarketMessage struct {
 
 type OrderbookMessage struct {
 	Type          string           `json:"type"`
+	BatchID       string           `json:"batchId"`
 	Symbol        string           `json:"symbol"`
 	Epoch         string           `json:"epoch"`
 	Sequence      int64            `json:"sequence"`
@@ -50,6 +56,7 @@ type OrderbookMessage struct {
 func NewMarketMessage(epoch string, sequence int64, continuityGap bool, frames []map[string]any) MarketMessage {
 	return MarketMessage{
 		Type:          "market",
+		BatchID:       fmt.Sprintf("%s:market:%d", epoch, sequence),
 		Epoch:         epoch,
 		Sequence:      sequence,
 		PublishedAt:   time.Now().UTC().Format(time.RFC3339Nano),
@@ -59,9 +66,11 @@ func NewMarketMessage(epoch string, sequence int64, continuityGap bool, frames [
 }
 
 func NewOrderbookMessage(epoch, symbol string, sequence int64, continuityGap bool, frames []map[string]any) OrderbookMessage {
+	normalizedSymbol := strings.ToUpper(strings.TrimSpace(symbol))
 	return OrderbookMessage{
 		Type:          "orderbook",
-		Symbol:        symbol,
+		BatchID:       fmt.Sprintf("%s:orderbook:%s:%d", epoch, normalizedSymbol, sequence),
+		Symbol:        normalizedSymbol,
 		Epoch:         epoch,
 		Sequence:      sequence,
 		PublishedAt:   time.Now().UTC().Format(time.RFC3339Nano),
