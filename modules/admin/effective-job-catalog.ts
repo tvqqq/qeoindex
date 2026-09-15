@@ -59,10 +59,10 @@ const QEO228_CHART_ARCHIVE_CATCHUP_JOB: AdminJobDefinition = {
   label: "Chart 1m Archive Catch-up",
   description: "QEO-228 post-EOD canonical-universe fan-out that archives verified old 1m HOT sessions to private Storage and prunes only after checksum/readback/content-retention proof.",
   group: "market",
-  scheduleUtc: "35 8 * * 1-5",
-  scheduleIct: "15:35 T2-T6",
+  scheduleUtc: "45 9 * * 1-5",
+  scheduleIct: "16:45 T2-T6",
   scheduleKind: "workflow",
-  schedulerName: "qeoindex-chart-archive-catchup-1535-ict",
+  schedulerName: "qeoindex-chart-archive-catchup-1645-ict",
   scheduleDays: "weekdays",
   evidenceSource: "none",
   manualPolicy: "disabled",
@@ -225,7 +225,7 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
  *
  * EOD v4 remains the sole EOD orchestration owner. QEO-150 is a separate,
  * narrowly scoped chart-data maintenance workflow at 14:50 ICT; QEO-228 is a
- * post-EOD verified HOT/COLD archive catch-up at 15:35 ICT. Neither runs
+ * post-EOD verified HOT/COLD archive catch-up at 16:45 ICT. Neither runs
  * market-close collection, EOD publishing, Wyckoff, or AI phases.
  */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
