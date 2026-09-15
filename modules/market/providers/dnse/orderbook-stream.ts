@@ -24,6 +24,7 @@ type OrderbookCheckpointRow = {
 
 const FANOUT_SHARDS = 10
 const STALE_AFTER_MS = 45_000
+const RECOVERY_RETRY_MS = 1_500
 
 export function orderbookFanoutShard(symbol: string): number {
   let hash = 0x811c9dc5
@@ -59,6 +60,7 @@ export function subscribeDnseOrderbookFrames(
   let generation = 0
   let relayUnsubscribe: (() => void) | null = null
   let recoveryPromise: Promise<void> | null = null
+  let recoveryRetryTimer: ReturnType<typeof setTimeout> | null = null
   let checkpointSequence = 0
   let liveSequence = 0
   let liveEpoch = ""
@@ -86,6 +88,19 @@ export function subscribeDnseOrderbookFrames(
     liveSequence = 0
     liveEpoch = ""
     liveBaselineEstablished = false
+  }
+
+  const clearRecoveryRetry = () => {
+    if (recoveryRetryTimer) clearTimeout(recoveryRetryTimer)
+    recoveryRetryTimer = null
+  }
+
+  const scheduleRecoveryRetry = (message: string) => {
+    if (disposed || recoveryRetryTimer) return
+    recoveryRetryTimer = setTimeout(() => {
+      recoveryRetryTimer = null
+      void recover(message)
+    }, RECOVERY_RETRY_MS)
   }
 
   const applyCheckpoint = (row: OrderbookCheckpointRow | null | undefined) => {
@@ -170,27 +185,36 @@ export function subscribeDnseOrderbookFrames(
   }
 
   async function connect(status: DnseOrderbookStreamStatus = "CONNECTING") {
-    if (disposed) return
+    if (disposed) return false
+    clearRecoveryRetry()
     const expectedGeneration = ++generation
+    checkpointSequence = 0
     resetLiveBaseline()
     setState({ status, error: "" })
     try {
       await bootstrapCheckpoint(expectedGeneration)
     } catch (error) {
-      if (disposed || expectedGeneration !== generation) return
-      setState({ status, error: error instanceof Error ? error.message : String(error) })
+      if (disposed || expectedGeneration !== generation) return false
+      const message = error instanceof Error ? error.message : String(error)
+      setState({ status: status === "RECOVERING" ? "RECOVERING" : "ERROR", error: message })
+      scheduleRecoveryRetry(message)
+      return false
     }
-    if (disposed || expectedGeneration !== generation) return
+    if (disposed || expectedGeneration !== generation) return false
     subscribeRelay(expectedGeneration)
+    return true
   }
 
   async function recover(message: string) {
     if (disposed) return
     if (recoveryPromise) return recoveryPromise
     setState({ status: "RECOVERING", error: message })
+    clearRecoveryRetry()
     relayUnsubscribe?.()
     relayUnsubscribe = null
-    recoveryPromise = connect("RECOVERING").finally(() => {
+    recoveryPromise = connect("RECOVERING").then((connected) => {
+      if (!connected) scheduleRecoveryRetry(message)
+    }).finally(() => {
       recoveryPromise = null
     })
     return recoveryPromise
@@ -213,6 +237,7 @@ export function subscribeDnseOrderbookFrames(
   return () => {
     disposed = true
     generation += 1
+    clearRecoveryRetry()
     relayUnsubscribe?.()
     relayUnsubscribe = null
     document.removeEventListener("visibilitychange", onVisibilityChange)
