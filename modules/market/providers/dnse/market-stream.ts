@@ -350,7 +350,6 @@ export async function restartDnseMarketStream() {
   checkpointSequence = 0
   relayWasReady = false
   resetLiveBaseline()
-  resetMarketDeliveryTelemetry()
   setStreamState({ status: "CONNECTING", error: "" })
   restartMarketRelay()
   ensureRelay()
