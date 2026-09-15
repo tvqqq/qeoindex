@@ -91,18 +91,18 @@
     {
       "logicalName": "qeo233_daily_ohlcv_provenance_schema",
       "repositoryVersion": "20260915083000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-232 approved provenance identity contract; QEO-233 TDD RED run 34946802440 and focused GREEN run 34948023655",
-      "rationale": "QEO-233 adds an additive immutable Daily provenance registry and nullable restrictive provenance_id reference only. It preserves all legacy provenance columns and Daily facts, adds exact consistency enforcement, and remains repo-ahead until zero-to-latest replay, generated types, full Verify, merge approval and measured production headroom are complete."
+      "productionVersion": "20260915090954",
+      "state": "MAPPED",
+      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: focused QEO-232/QEO-233 contracts, Verify 34950444143, DB Drift 34950444002, merge SHA 5c6ea378eeab3bda9cd15abd804ccbfea4f67682, production migration 20260915090954, and live schema/FK/nullability readback",
+      "rationale": "Supabase assigned production version 20260915090954 while repository replay keeps reviewed version 20260915083000. Production readback confirms the additive immutable Daily provenance registry exists, market_ohlcv_history.provenance_id remains nullable, the reference is ON DELETE RESTRICT, and no historical backfill or legacy-column removal was performed during rollout."
     },
     {
       "logicalName": "qeo233_daily_ohlcv_provenance_compat",
       "repositoryVersion": "20260915083500",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-233 focused GREEN run 34948023655; additive compatibility/backfill contract preserves QEO-232 width-10 ABI",
-      "rationale": "QEO-233 adds a service-role compatibility view, exact consistency-aware grouped Daily RPC, and a bounded restartable capacity-gated backfill RPC that updates provenance_id only. The migration never invokes backfill automatically and remains repo-ahead until migration replay, generated types, full Verify and explicit production rollout approval are complete."
+      "productionVersion": "20260915091036",
+      "state": "MAPPED",
+      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: Verify 34950444143, DB Drift 34950444002, production migration 20260915091036, width-10 grouped RPC readback with mismatch_rows=0, and Vercel READY deployment dpl_DhvT8RZMZ7JaHs9awVdYAvYdRVs6 on merge SHA 5c6ea378eeab3bda9cd15abd804ccbfea4f67682",
+      "rationale": "Supabase assigned production version 20260915091036 while repository replay keeps reviewed version 20260915083500. Production readback confirms the compatibility view and bounded capacity-gated backfill RPC are present, grouped Daily output preserves the width-10 ABI, mismatch_rows is zero, and the historical provenance backfill remains separately gated rather than being invoked by migration."
     }
   ]
 }
