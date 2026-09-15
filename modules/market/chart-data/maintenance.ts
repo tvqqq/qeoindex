@@ -2,6 +2,10 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import {
+  assertDailyProvenanceConsistent,
+  isDailyProvenanceCompatibilityUnavailable,
+} from "../history/daily-provenance"
 import { chartHotSessionRetentionCutoff } from "./history-policy"
 import {
   abandonChartIntradayRange,
@@ -158,18 +162,34 @@ async function readExpectedDailyEvidence(
   expectedSession: string,
 ) {
   const bounds = dayBounds(expectedSession)
-  const { data, error } = await supabase
-    .from("market_ohlcv_history")
-    .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
+  const compatRead = await supabase
+    .from("market_ohlcv_history_compat")
+    .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,provenance_consistent")
     .in("ticker", tickers)
     .eq("timeframe", "1D")
     .gte("bar_time", bounds.from)
     .lt("bar_time", bounds.to)
     .order("bar_time", { ascending: false })
+
+  let rows = (compatRead.data || []) as Array<Record<string, unknown>>
+  let error = compatRead.error
+  if (error && isDailyProvenanceCompatibilityUnavailable(error.message)) {
+    const legacyRead = await supabase
+      .from("market_ohlcv_history")
+      .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
+      .in("ticker", tickers)
+      .eq("timeframe", "1D")
+      .gte("bar_time", bounds.from)
+      .lt("bar_time", bounds.to)
+      .order("bar_time", { ascending: false })
+    rows = (legacyRead.data || []) as Array<Record<string, unknown>>
+    error = legacyRead.error
+  }
   if (error) throw new Error(`QEO-150 Daily evidence read failed: ${error.message}`)
+  assertDailyProvenanceConsistent(rows, "QEO-150 Daily evidence read")
 
   const byTicker = new Map<string, Qeo150DailyEvidence>()
-  for (const row of (data || []) as Array<Record<string, unknown>>) {
+  for (const row of rows) {
     const ticker = validTicker(String(row.ticker || ""))
     if (byTicker.has(ticker)) continue
     const open = finiteNumber(row.open)
