@@ -30,11 +30,13 @@ type MarketRealtimeBusRow = {
 }
 
 const STREAM_KEY = "dnse-market"
+const BOOTSTRAP_RETRY_MS = 1_500
 const frameListeners = new Set<DnseMarketFrameListener>()
 const stateListeners = new Set<DnseMarketStreamStateListener>()
 
 let relayUnsubscribe: (() => void) | null = null
 let bootstrapStarted = false
+let bootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
 let startupGeneration = 0
 let checkpointSequence = 0
 let relaySequence = 0
@@ -104,6 +106,19 @@ function resetLiveBaseline() {
   liveBaselineEstablished = false
 }
 
+function clearBootstrapRetry() {
+  if (bootstrapRetryTimer) clearTimeout(bootstrapRetryTimer)
+  bootstrapRetryTimer = null
+}
+
+function scheduleBootstrapRetry() {
+  if (bootstrapRetryTimer || frameListeners.size + stateListeners.size === 0) return
+  bootstrapRetryTimer = setTimeout(() => {
+    bootstrapRetryTimer = null
+    ensureRelay()
+  }, BOOTSTRAP_RETRY_MS)
+}
+
 function applyRelayMessage(message: MarketRelayMarketMessage) {
   if (liveBaselineEstablished) {
     if (message.epoch !== relayEpoch || message.sequence !== relaySequence + 1) {
@@ -126,7 +141,9 @@ function applyRelayMessage(message: MarketRelayMarketMessage) {
 async function startRelay() {
   if (relayUnsubscribe || bootstrapStarted) return
   bootstrapStarted = true
+  clearBootstrapRetry()
   const generation = ++startupGeneration
+  checkpointSequence = 0
   setStreamState({ status: "CONNECTING", error: "" })
 
   try {
@@ -135,7 +152,10 @@ async function startRelay() {
     await bootstrapCurrentRow(supabase)
   } catch (error) {
     if (generation !== startupGeneration) return
+    bootstrapStarted = false
     setStreamState({ status: "ERROR", error: error instanceof Error ? error.message : String(error) })
+    scheduleBootstrapRetry()
+    return
   }
   if (generation !== startupGeneration) return
 
@@ -181,9 +201,11 @@ export function subscribeDnseMarketStreamState(listener: DnseMarketStreamStateLi
 
 export async function restartDnseMarketStream() {
   startupGeneration += 1
+  clearBootstrapRetry()
   relayUnsubscribe?.()
   relayUnsubscribe = null
   bootstrapStarted = false
+  checkpointSequence = 0
   resetLiveBaseline()
   setStreamState({ status: "CONNECTING", error: "" })
   restartMarketRelay()
