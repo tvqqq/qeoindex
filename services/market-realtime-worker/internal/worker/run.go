@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -14,9 +15,9 @@ import (
 )
 
 const (
-	maxRealtimePayloadBytes          = 524288
-	orderbookFanoutShards            = 10
-	orderbookWorkerReceivedAtField   = "_qeoWorkerReceivedAt"
+	maxRealtimePayloadBytes        = 524288
+	orderbookFanoutShards          = 10
+	orderbookWorkerReceivedAtField = "_qeoWorkerReceivedAt"
 )
 
 var orderbookStreamNames = []string{"orderbook-0", "orderbook-1", "orderbook-2", "orderbook-3"}
