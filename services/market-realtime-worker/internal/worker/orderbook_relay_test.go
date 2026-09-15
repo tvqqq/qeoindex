@@ -9,17 +9,10 @@ import (
 func TestGroupOrderbookRelayFramesPropagatesShardGapToQuietSymbols(t *testing.T) {
 	const shardCount = orderbookFanoutShards
 	active := "MSN"
+	quiet := "HAG"
 	shard := realtime.FanoutShard(active, shardCount)
-
-	quiet := ""
-	for _, candidate := range []string{"FPT", "VCB", "HPG", "VNM", "SSI", "MBB", "TCB", "MWG", "VIC", "VHM", "GAS", "CTG", "BID", "STB", "HDB", "ACB", "VPB"} {
-		if candidate != active && realtime.FanoutShard(candidate, shardCount) == shard {
-			quiet = candidate
-			break
-		}
-	}
-	if quiet == "" {
-		t.Fatal("test fixture needs a second symbol in MSN's fanout shard")
+	if realtime.FanoutShard(quiet, shardCount) != shard {
+		t.Fatalf("fixture drift: %s and %s must share fanout shard", active, quiet)
 	}
 
 	frames := []realtime.Frame{{"T": "q", "symbol": active, "bidPrice1": 67.0}}
@@ -42,7 +35,7 @@ func TestGroupOrderbookRelayFramesDoesNotFanOutQuietSymbolsWithoutGap(t *testing
 	shard := realtime.FanoutShard(active, shardCount)
 	frames := []realtime.Frame{{"T": "q", "symbol": active}}
 
-	grouped := groupOrderbookRelayFrames(frames, []string{active, "FPT", "VCB"}, shard, false)
+	grouped := groupOrderbookRelayFrames(frames, []string{active, "HAG"}, shard, false)
 	if len(grouped) != 1 {
 		t.Fatalf("group count = %d, want only active symbol", len(grouped))
 	}
