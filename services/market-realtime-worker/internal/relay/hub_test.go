@@ -33,6 +33,24 @@ func TestHubValidatesTopicsAndFansOut(t *testing.T) {
 	}
 }
 
+func TestHubSubscribeRejectsBatchAtomically(t *testing.T) {
+	hub := NewHub("epoch-1", 4, nil)
+	hub.SetUniverse([]string{"MSN"})
+	client := hub.newClient("user-1", nil)
+	hub.addClient(client)
+	defer hub.removeClient(client)
+
+	if _, err := hub.Subscribe(client, []string{"market", "orderbook:UNKNOWN"}); err == nil {
+		t.Fatal("expected invalid mixed subscription batch to be rejected")
+	}
+	if len(client.topics) != 0 {
+		t.Fatalf("rejected subscription mutated client topics: %#v", client.topics)
+	}
+	if len(hub.topics) != 0 {
+		t.Fatalf("rejected subscription mutated hub topics: %#v", hub.topics)
+	}
+}
+
 func TestHubDisconnectsSlowConsumerWithoutBlockingPublisher(t *testing.T) {
 	hub := NewHub("epoch-1", 1, nil)
 	hub.SetUniverse([]string{"MSN"})
