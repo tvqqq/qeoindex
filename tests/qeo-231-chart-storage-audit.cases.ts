@@ -98,6 +98,15 @@ test("QEO-231 production adapter compares verified cold objects plus HOT rows ag
   assert.match(server, /QEO-231 audit forbids provider fallback/)
 })
 
+test("QEO-231 production adapter proves source isolation and forces a closed-session canonical read", () => {
+  if (!existsSync(serverUrl)) return
+  const server = source("modules/market/chart-data/storage-audit-server.ts")
+  assert.match(server, /QEO-231 verified COLD overlaps HOT audit session/)
+  assert.match(server, /auditNow/)
+  assert.match(server, /ranges\.hot\.to\s*\+\s*4\s*\*\s*3600/)
+  assert.match(server, /now:\s*auditNow/)
+})
+
 test("QEO-231 audit route is scheduler-authenticated, read-only, and returns conflict on failed equivalence", () => {
   if (!existsSync(routeUrl)) return
   const route = source("app/api/qeoindex/chart-storage-audit/route.ts")
