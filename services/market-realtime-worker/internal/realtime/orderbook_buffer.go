@@ -62,7 +62,7 @@ func FanoutShard(symbol string, shardCount int) int {
 func (b *OrderbookBuffer) Push(frame Frame) {
 	typ, _ := frame["T"].(string)
 	typ = strings.TrimSpace(typ)
-	if typ != "t" && typ != "q" && typ != "f" && typ != "te" {
+	if typ != "t" && typ != "q" && typ != "f" && typ != "e" && typ != "te" {
 		return
 	}
 	symbol, _ := frame["symbol"].(string)
@@ -187,7 +187,7 @@ func (b *OrderbookBuffer) RequeueShard(shardIndex int, batch OrderbookBatch) {
 			olderExecutions = append(olderExecutions, cloneFrame(frame))
 			continue
 		}
-		if (typ != "t" && typ != "q" && typ != "f") || symbol == "" {
+		if (typ != "t" && typ != "q" && typ != "f" && typ != "e") || symbol == "" {
 			continue
 		}
 		key := typ + ":" + symbol
