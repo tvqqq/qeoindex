@@ -87,6 +87,22 @@
       "state": "REPO_AHEAD",
       "evidence": "QEO-228 production retention evidence identified the 48-partition EOD throughput cap; PR #501 focused archive catch-up contract and exact-head preproduction gates",
       "rationale": "QEO-228 adds a dedicated 16:45 ICT post-EOD scheduler that dispatches bounded durable canonical-universe catch-up through the existing verified fail-closed 1m archive lifecycle. It does not weaken checksum/readback/content-retention proof or authorize uncovered deletion. The migration remains repo-ahead until exact-head Verify and zero-to-latest DB replay pass, then production promotion and scheduler/readback acceptance are completed."
+    },
+    {
+      "logicalName": "qeo233_daily_ohlcv_provenance_schema",
+      "repositoryVersion": "20260915083000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-232 approved provenance identity contract; QEO-233 TDD RED run 34946802440 and focused GREEN run 34948023655",
+      "rationale": "QEO-233 adds an additive immutable Daily provenance registry and nullable restrictive provenance_id reference only. It preserves all legacy provenance columns and Daily facts, adds exact consistency enforcement, and remains repo-ahead until zero-to-latest replay, generated types, full Verify, merge approval and measured production headroom are complete."
+    },
+    {
+      "logicalName": "qeo233_daily_ohlcv_provenance_compat",
+      "repositoryVersion": "20260915083500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-233 focused GREEN run 34948023655; additive compatibility/backfill contract preserves QEO-232 width-10 ABI",
+      "rationale": "QEO-233 adds a service-role compatibility view, exact consistency-aware grouped Daily RPC, and a bounded restartable capacity-gated backfill RPC that updates provenance_id only. The migration never invokes backfill automatically and remains repo-ahead until migration replay, generated types, full Verify and explicit production rollout approval are complete."
     }
   ]
 }

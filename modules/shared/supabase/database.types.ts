@@ -2503,6 +2503,7 @@ export type Database = {
           high: number
           low: number
           open: number
+          provenance_id: number | null
           provider: string
           provider_detail: string
           source_url: string
@@ -2517,6 +2518,7 @@ export type Database = {
           high: number
           low: number
           open: number
+          provenance_id?: number | null
           provider: string
           provider_detail: string
           source_url: string
@@ -2531,12 +2533,48 @@ export type Database = {
           high?: number
           low?: number
           open?: number
+          provenance_id?: number | null
           provider?: string
           provider_detail?: string
           source_url?: string
           ticker?: string
           timeframe?: string
           volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_ohlcv_history_provenance_id_fkey"
+            columns: ["provenance_id"]
+            isOneToOne: false
+            referencedRelation: "market_ohlcv_provenance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_ohlcv_provenance: {
+        Row: {
+          created_at: string
+          id: number
+          identity_version: number
+          provider: string
+          provider_detail: string
+          source_url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          identity_version?: number
+          provider: string
+          provider_detail: string
+          source_url: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          identity_version?: number
+          provider?: string
+          provider_detail?: string
+          source_url?: string
         }
         Relationships: []
       }
@@ -4813,6 +4851,33 @@ export type Database = {
       }
     }
     Views: {
+      market_ohlcv_history_compat: {
+        Row: {
+          bar_time: string | null
+          close: number | null
+          fetched_at: string | null
+          high: number | null
+          low: number | null
+          open: number | null
+          provenance_consistent: boolean | null
+          provenance_id: number | null
+          provider: string | null
+          provider_detail: string | null
+          source_url: string | null
+          ticker: string | null
+          timeframe: string | null
+          volume: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_ohlcv_history_provenance_id_fkey"
+            columns: ["provenance_id"]
+            isOneToOne: false
+            referencedRelation: "market_ohlcv_provenance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wyckoff_latest_by_timeframe: {
         Row: {
           aggregation_version: string | null
@@ -5159,6 +5224,19 @@ export type Database = {
           row_count: number
           ticker: string
           timeframe: string
+        }[]
+      }
+      qeo_market_ohlcv_provenance_backfill_batch: {
+        Args: { p_limit?: number; p_max_database_bytes?: number }
+        Returns: {
+          database_bytes_after: number
+          database_bytes_before: number
+          dead_tuples_after: number
+          mismatch_rows: number
+          paused: boolean
+          remaining_rows: number
+          table_bytes_after: number
+          updated_rows: number
         }[]
       }
       qeo_market_ohlcv_recent: {

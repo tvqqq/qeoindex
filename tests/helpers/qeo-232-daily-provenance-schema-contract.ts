@@ -68,6 +68,6 @@ export function assertQeo232DailyProvenanceSchema(sql: string) {
   assert.doesNotMatch(source, /vacuum\s+full/i)
   assert.doesNotMatch(
     source,
-    /create table[\s\S]*?as\s+select[\s\S]*?from public\.market_ohlcv_history/i,
+    /create table[^;]*?\bas\s+select\b[^;]*?from public\.market_ohlcv_history/i,
   )
 }
