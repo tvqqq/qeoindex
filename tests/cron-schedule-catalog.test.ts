@@ -36,7 +36,7 @@ test("catalog matches vercel.json cron schedules exactly", () => {
   assert.equal(signalsDef.scheduleDays, "weekdays")
 })
 
-test("source catalog retains historical pg_cron definitions while effective catalog reflects QEO-64/QEO-85/QEO-150 cutovers", () => {
+test("source catalog retains historical pg_cron definitions while effective catalog reflects QEO-64/QEO-85/QEO-150/QEO-228 cutovers", () => {
   const syncOrderbookMigration = readTextFile("supabase/migrations/20260901152000_fix_orderbook_trading_session_windows.sql")
   assert.match(syncOrderbookMigration, /'sync-universe-5m'/)
   assert.match(syncOrderbookMigration, /'\*\/5 2-4 \* \* 1-5'/)
@@ -110,6 +110,17 @@ test("source catalog retains historical pg_cron definitions while effective cata
   assert.equal(chartMaintenance.scheduleKind, "workflow")
   assert.equal(chartMaintenance.maxDurationMinutes, 30)
 
+  const chartArchiveMigration = readTextFile("supabase/migrations/20260915073500_qeo228_chart_archive_catchup.sql")
+  assert.match(chartArchiveMigration, /'qeoindex-chart-archive-catchup-1645-ict'/)
+  assert.match(chartArchiveMigration, /'45 9 \* \* 1-5'/)
+  const chartArchiveCatchup = EFFECTIVE_ADMIN_JOB_CATALOG.find((j) => j.key === "qeoindex.chart_archive_catchup")
+  assert.ok(chartArchiveCatchup)
+  assert.equal(chartArchiveCatchup.schedulerName, "qeoindex-chart-archive-catchup-1645-ict")
+  assert.equal(chartArchiveCatchup.scheduleUtc, "45 9 * * 1-5")
+  assert.equal(chartArchiveCatchup.scheduleIct, "16:45 T2-T6")
+  assert.equal(chartArchiveCatchup.scheduleKind, "workflow")
+  assert.equal(chartArchiveCatchup.maxDurationMinutes, 90)
+
   const researchMigration = readTextFile("supabase/migrations/20260904193000_qeo80_research_reports.sql")
   assert.match(researchMigration, /'research-reports-daily-0705-ict'/)
   assert.match(researchMigration, /'5 0 \* \* \*'/)
@@ -121,10 +132,11 @@ test("source catalog retains historical pg_cron definitions while effective cata
   assert.equal(research.schedulePolicy?.kind, "fixed_time")
 })
 
-test("pg_cron dictionary remains readable while active forward ownership includes QEO-150 and Research Reports", () => {
+test("pg_cron dictionary remains readable while active forward ownership includes QEO-150, QEO-228 and Research Reports", () => {
   assert.deepEqual(PG_CRON_NAME_TO_JOB_KEY, {
     "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
     "qeoindex-chart-intraday-maintenance-1450-ict": "qeoindex.chart_intraday_maintenance",
+    "qeoindex-chart-archive-catchup-1645-ict": "qeoindex.chart_archive_catchup",
     "research-reports-daily-0705-ict": "research_reports.daily",
     "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
     "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
@@ -137,6 +149,7 @@ test("pg_cron dictionary remains readable while active forward ownership include
   })
 
   assert.equal(getJobKeyForPgCron("qeoindex-chart-intraday-maintenance-1450-ict"), "qeoindex.chart_intraday_maintenance")
+  assert.equal(getJobKeyForPgCron("qeoindex-chart-archive-catchup-1645-ict"), "qeoindex.chart_archive_catchup")
   assert.equal(getJobKeyForPgCron("research-reports-daily-0705-ict"), "research_reports.daily")
   assert.equal(getJobKeyForPgCron("sync-universe-5m"), "market.sync_5m")
   assert.equal(getJobKeyForPgCron("sync-universe-5m-afternoon"), "market.sync_5m")
@@ -145,6 +158,7 @@ test("pg_cron dictionary remains readable while active forward ownership include
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-0710-ict"), "kfsp.ttai_history")
   assert.equal(getPgCronNameForJobKey("qeoindex.eod_pipeline"), undefined)
   assert.equal(getPgCronNameForJobKey("qeoindex.chart_intraday_maintenance"), "qeoindex-chart-intraday-maintenance-1450-ict")
+  assert.equal(getPgCronNameForJobKey("qeoindex.chart_archive_catchup"), "qeoindex-chart-archive-catchup-1645-ict")
   assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
   assert.equal(getPgCronNameForJobKey("market.sync_5m"), "sync-universe-5m")
   assert.equal(getPgCronNameForJobKey("market.sync_eod"), undefined)
@@ -164,7 +178,7 @@ test("source manual jobs are distinguished from scheduled jobs", () => {
   }
 })
 
-test("effective QEO-150 catalog has no legacy market EOD overlap", () => {
+test("effective QEO-150/QEO-228 catalog has no legacy market EOD overlap", () => {
   const conflicts = findScheduleConflicts(EFFECTIVE_ADMIN_JOB_CATALOG)
   assert.equal(conflicts.length, 0)
 })
@@ -196,10 +210,10 @@ test("detects legacy 14:50 ICT overlap conflict for historical catalog inputs", 
   assert.match(conflicts[0].reason, /14:50 ICT/)
 })
 
-test("effective catalog has complete structured ICT schedule policies after QEO-150", () => {
-  assert.equal(new Set(EFFECTIVE_ADMIN_JOB_CATALOG.map((job) => job.key)).size, 15)
+test("effective catalog has complete structured ICT schedule policies after QEO-228", () => {
+  assert.equal(new Set(EFFECTIVE_ADMIN_JOB_CATALOG.map((job) => job.key)).size, 16)
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 10)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 5)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 6)
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => !isValidSchedulePolicy(job.schedulePolicy)).length, 0)
 
   const ingest = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "wyckoff.ingest")
@@ -224,6 +238,16 @@ test("effective catalog has complete structured ICT schedule policies after QEO-
     timezone: "Asia/Ho_Chi_Minh",
     cadence: "weekdays",
     minuteOfDay: 14 * 60 + 50,
+    graceMinutes: 30,
+  })
+
+  const chartArchiveCatchup = EFFECTIVE_ADMIN_JOB_CATALOG.find((job) => job.key === "qeoindex.chart_archive_catchup")
+  assert.ok(chartArchiveCatchup)
+  assert.deepEqual(chartArchiveCatchup.schedulePolicy, {
+    kind: "fixed_time",
+    timezone: "Asia/Ho_Chi_Minh",
+    cadence: "weekdays",
+    minuteOfDay: 16 * 60 + 45,
     graceMinutes: 30,
   })
 
