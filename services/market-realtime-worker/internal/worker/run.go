@@ -221,7 +221,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 				plainFrames := framesToMaps(batch.Frames)
 				orderbookSequences[shard]++
 				checkpointWriter.Submit(orderbookCheckpointStream(shard), orderbookSequences[shard], plainFrames)
-				for symbol, symbolFrames := range groupOrderbookFrames(batch.Frames) {
+				for symbol, symbolFrames := range groupOrderbookRelayFrames(batch.Frames, tickers, shard, batch.ContinuityGap) {
 					orderbookRelaySequences[symbol]++
 					hub.Publish("orderbook:"+symbol, relay.NewOrderbookMessage(epoch, symbol, orderbookRelaySequences[symbol], batch.ContinuityGap, symbolFrames))
 				}
@@ -320,6 +320,23 @@ func framesToMaps(frames []realtime.Frame) []map[string]any {
 		plain[index] = map[string]any(frame)
 	}
 	return plain
+}
+
+func groupOrderbookRelayFrames(frames []realtime.Frame, tickers []string, shard int, continuityGap bool) map[string][]map[string]any {
+	grouped := groupOrderbookFrames(frames)
+	if !continuityGap {
+		return grouped
+	}
+	for _, rawSymbol := range tickers {
+		symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+		if symbol == "" || realtime.FanoutShard(symbol, orderbookFanoutShards) != shard {
+			continue
+		}
+		if _, exists := grouped[symbol]; !exists {
+			grouped[symbol] = nil
+		}
+	}
+	return grouped
 }
 
 func groupOrderbookFrames(frames []realtime.Frame) map[string][]map[string]any {
