@@ -29,11 +29,12 @@ type errorMessage struct {
 }
 
 type MarketMessage struct {
-	Type        string           `json:"type"`
-	Epoch       string           `json:"epoch"`
-	Sequence    int64            `json:"sequence"`
-	PublishedAt string           `json:"publishedAt"`
-	Frames      []map[string]any `json:"frames"`
+	Type          string           `json:"type"`
+	Epoch         string           `json:"epoch"`
+	Sequence      int64            `json:"sequence"`
+	PublishedAt   string           `json:"publishedAt"`
+	ContinuityGap bool             `json:"continuityGap"`
+	Frames        []map[string]any `json:"frames"`
 }
 
 type OrderbookMessage struct {
@@ -46,10 +47,25 @@ type OrderbookMessage struct {
 	Frames        []map[string]any `json:"frames"`
 }
 
-func NewMarketMessage(epoch string, sequence int64, frames []map[string]any) MarketMessage {
-	return MarketMessage{Type: "market", Epoch: epoch, Sequence: sequence, PublishedAt: time.Now().UTC().Format(time.RFC3339Nano), Frames: frames}
+func NewMarketMessage(epoch string, sequence int64, continuityGap bool, frames []map[string]any) MarketMessage {
+	return MarketMessage{
+		Type:          "market",
+		Epoch:         epoch,
+		Sequence:      sequence,
+		PublishedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		ContinuityGap: continuityGap,
+		Frames:        frames,
+	}
 }
 
 func NewOrderbookMessage(epoch, symbol string, sequence int64, continuityGap bool, frames []map[string]any) OrderbookMessage {
-	return OrderbookMessage{Type: "orderbook", Symbol: symbol, Epoch: epoch, Sequence: sequence, PublishedAt: time.Now().UTC().Format(time.RFC3339Nano), ContinuityGap: continuityGap, Frames: frames}
+	return OrderbookMessage{
+		Type:          "orderbook",
+		Symbol:        symbol,
+		Epoch:         epoch,
+		Sequence:      sequence,
+		PublishedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		ContinuityGap: continuityGap,
+		Frames:        frames,
+	}
 }
