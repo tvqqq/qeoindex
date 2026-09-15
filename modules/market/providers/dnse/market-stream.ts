@@ -3,6 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { DnseMarketFrame } from "@/modules/market/realtime/index-candles"
 import { synthesizeDnseOhlcFromTickMessage } from "@/modules/market/board/dnse-subscriptions"
+import { reportRealtimeHealth } from "@/modules/market/realtime/health-reporter"
 import {
   restartMarketRelay,
   subscribeMarketRelay,
@@ -33,6 +34,9 @@ type MarketRealtimeBusRow = {
 const STREAM_KEY = "dnse-market"
 const BOOTSTRAP_RETRY_MS = 1_500
 const MAX_RECOVERY_QUEUE = 256
+const MARKET_DELIVERY_SAMPLE_LIMIT = 512
+const MARKET_DELIVERY_REPORT_EVERY = 100
+const MAX_REASONABLE_LATENCY_MS = 5 * 60_000
 const frameListeners = new Set<DnseMarketFrameListener>()
 const stateListeners = new Set<DnseMarketStreamStateListener>()
 
@@ -48,6 +52,9 @@ let relayWasReady = false
 let recoveryRequired = false
 let recoveryPromise: Promise<void> | null = null
 let recoveryQueue: MarketRelayMarketMessage[] = []
+let marketDeliveryMessageCount = 0
+let nextMarketDeliveryReportAt = MARKET_DELIVERY_REPORT_EVERY
+const marketDeliverySamples: number[] = []
 let streamState: DnseMarketStreamState = {
   status: "CLOSED",
   error: "",
@@ -79,6 +86,54 @@ function emitFrameWithSyntheticOhlc(frame: DnseMarketFrame) {
   } catch {
     // Ignore malformed synthetic frames. The original provider frame still flows.
   }
+}
+
+function percentile(values: number[], percent: number): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((left, right) => left - right)
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((percent / 100) * sorted.length) - 1))
+  return Math.round(sorted[index] * 10) / 10
+}
+
+function summarizeDelivery(values: number[]) {
+  return {
+    n: values.length,
+    p50: percentile(values, 50),
+    p95: percentile(values, 95),
+    p99: percentile(values, 99),
+  }
+}
+
+function resetMarketDeliveryTelemetry() {
+  marketDeliveryMessageCount = 0
+  nextMarketDeliveryReportAt = MARKET_DELIVERY_REPORT_EVERY
+  marketDeliverySamples.length = 0
+}
+
+function recordMarketDelivery(message: MarketRelayMarketMessage) {
+  const publishedAt = Date.parse(message.publishedAt)
+  if (!Number.isFinite(publishedAt)) return
+
+  const delivery = Date.now() - publishedAt
+  if (!Number.isFinite(delivery) || delivery < 0 || delivery > MAX_REASONABLE_LATENCY_MS) return
+
+  marketDeliverySamples.push(Math.round(delivery * 10) / 10)
+  marketDeliveryMessageCount += 1
+  if (marketDeliverySamples.length > MARKET_DELIVERY_SAMPLE_LIMIT) {
+    marketDeliverySamples.splice(0, marketDeliverySamples.length - MARKET_DELIVERY_SAMPLE_LIMIT)
+  }
+  if (marketDeliveryMessageCount < nextMarketDeliveryReportAt) return
+
+  reportRealtimeHealth({
+    stream: "market",
+    batchId: message.batchId,
+    epoch: message.epoch,
+    sequence: message.sequence,
+    samples: marketDeliverySamples.length,
+    delivery: summarizeDelivery(marketDeliverySamples),
+  })
+  nextMarketDeliveryReportAt =
+    Math.floor(marketDeliveryMessageCount / MARKET_DELIVERY_REPORT_EVERY + 1) * MARKET_DELIVERY_REPORT_EVERY
 }
 
 function applyBusRow(row: MarketRealtimeBusRow | null | undefined) {
@@ -147,6 +202,7 @@ function applyRelayMessage(message: MarketRelayMarketMessage) {
   relayEpoch = message.epoch
   relaySequence = message.sequence
   liveBaselineEstablished = true
+  recordMarketDelivery(message)
   for (const frame of message.frames) {
     const parsed = parseFrame(frame)
     if (parsed) emitFrameWithSyntheticOhlc(parsed)
@@ -228,6 +284,7 @@ async function startRelay() {
   recoveryRequired = false
   recoveryQueue = []
   resetLiveBaseline()
+  resetMarketDeliveryTelemetry()
   setStreamState({ status: "CONNECTING", error: "" })
 
   try {
