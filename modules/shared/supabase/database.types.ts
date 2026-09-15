@@ -2505,8 +2505,8 @@ export type Database = {
           open: number
           provenance_id: number | null
           provider: string
-          provider_detail: string
-          source_url: string
+          provider_detail: string | null
+          source_url: string | null
           ticker: string
           timeframe: string
           volume: number
@@ -2520,8 +2520,8 @@ export type Database = {
           open: number
           provenance_id?: number | null
           provider: string
-          provider_detail: string
-          source_url: string
+          provider_detail?: string | null
+          source_url?: string | null
           ticker: string
           timeframe: string
           volume: number
@@ -2535,8 +2535,8 @@ export type Database = {
           open?: number
           provenance_id?: number | null
           provider?: string
-          provider_detail?: string
-          source_url?: string
+          provider_detail?: string | null
+          source_url?: string | null
           ticker?: string
           timeframe?: string
           volume?: number
