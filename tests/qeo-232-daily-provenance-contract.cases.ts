@@ -69,6 +69,7 @@ test("QEO-232 rejects schema changes that violate additive/rollback safety", () 
     `${SAFE_ADDITIVE_SQL}\nselect * from public.chart_ohlcv_provenance_batches;`,
     `${SAFE_ADDITIVE_SQL}\nvacuum full public.market_ohlcv_history;`,
     `${SAFE_ADDITIVE_SQL}\ndelete from public.market_ohlcv_history;`,
+    `${SAFE_ADDITIVE_SQL}\ncreate table public.market_ohlcv_history_shadow as select * from public.market_ohlcv_history;`,
   ]
 
   for (const sql of unsafe) {
