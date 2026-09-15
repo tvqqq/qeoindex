@@ -6,9 +6,11 @@ import (
 )
 
 const (
-	maxOrderbookSupplementalSockets = 4
-	maxOrderbookSymbolsPerSocket     = 50
-	maxOrderbookUniverse             = maxOrderbookSupplementalSockets * maxOrderbookSymbolsPerSocket
+	maxOrderbookSupplementalSockets     = 4
+	orderbookSupplementalFeedsPerSymbol = 4
+	maxOrderbookMembershipsPerSocket    = 200
+	maxOrderbookSymbolsPerSocket        = 50
+	maxOrderbookUniverse                = maxOrderbookSupplementalSockets * maxOrderbookSymbolsPerSocket
 )
 
 func PlanOrderbookShards(symbols []string) ([][]string, error) {

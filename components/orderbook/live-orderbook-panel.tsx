@@ -57,6 +57,12 @@ export type StockQuote = {
   totalValue?: number
   updatedAt: string
 }
+type AuctionExpected = {
+  phase: "ATO" | "ATC"
+  price: number
+  quantity: number
+  updatedAt: string
+}
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type ActivityTab = "trades" | "foreign" | "profile" | "putthrough"
 type HistoryState = "LOADING" | "READY" | "PARTIAL" | "ERROR"
@@ -505,6 +511,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const [bids, setBids] = useState<DepthLevel[]>(() => cachedInitial?.bids ?? [])
   const [asks, setAsks] = useState<DepthLevel[]>(() => cachedInitial?.asks ?? [])
   const [trades, setTrades] = useState<StreamTrade[]>(() => cachedInitial?.trades ?? [])
+  const [auctionExpected, setAuctionExpected] = useState<AuctionExpected | null>(null)
   const [foreign, setForeign] = useState<ForeignSnapshot | null>(() => {
     if (cachedInitial?.foreign) return cachedInitial.foreign
     const eodRoom = initialMeta?.foreignRoom ?? getEodForeignRoom(symbol)
@@ -565,6 +572,10 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const lastMiniChartBucket = useRef<number | null>(null)
 
   useEffect(() => {
+    setAuctionExpected(null)
+  }, [symbol])
+
+  useEffect(() => {
     const resetSession = () => {
       sessionOrderBookCache.clear()
       depthRef.current = { bids: [], asks: [] }
@@ -574,6 +585,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setBids([])
       setAsks([])
       setTrades([])
+      setAuctionExpected(null)
       setPriceHistory([])
       setForeign(null)
       setForeignEvents([])
@@ -1051,6 +1063,26 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
         const ticker = String(data?.symbol ?? "").toUpperCase()
         if (ticker !== symbol) return
 
+        if (data?.T === "e") {
+          const rawPrice = number(data?.expectedTradePrice)
+          const price = rawPrice > 1000 ? rawPrice / 1000 : rawPrice
+          const quantity = number(data?.expectedTradeQuantity) * ORDERBOOK_VOLUME_MULTIPLIER
+          const time = normalizeTime(data?.time)
+          if (price > 0 || quantity > 0) {
+            setAuctionExpected({
+              phase: parseTradeSeconds(time) >= 14 * 60 * 60 ? "ATC" : "ATO",
+              price,
+              quantity,
+              updatedAt: time,
+            })
+          } else {
+            setAuctionExpected(null)
+          }
+          setUpdatedAt(new Date().toISOString())
+          setError("")
+          return
+        }
+
         if (data?.T === "q") {
           const nextBids = normalizeDepth(data?.bid).sort((a, b) => b.price - a.price)
           const nextAsks = normalizeDepth(data?.offer).sort((a, b) => a.price - b.price)
@@ -1266,6 +1298,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     bids,
     asks,
     trades,
+    auctionExpected,
     foreign,
     foreignEvents,
     foreignTimeline,
@@ -1691,6 +1724,9 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const confetti = useWhaleConfetti()
   const [isWhaleGlow, setIsWhaleGlow] = useState(false)
   const sessionCountdown = useSessionCountdown()
+  const activeAuctionExpected = sessionCountdown && stream.auctionExpected?.phase === sessionCountdown.type
+    ? stream.auctionExpected
+    : null
 
   useEffect(() => { unlockAudioContext() }, [])
 
@@ -1875,7 +1911,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
               <div className="mt-2.5 pt-2.5 border-t border-white/[0.08]">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" /><span className="text-xs font-bold text-slate-300">Mua</span><span className="font-ticker font-extrabold text-sm sm:text-base text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.35)]">{depthTotal > 0 ? `${buyPct.toFixed(1)}%` : "50.0%"}</span></div>
-                  {sessionCountdown ? <div className="flex items-center justify-center"><span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse"><Clock className="h-3.5 w-3.5 text-amber-400" /><span>{sessionCountdown.type}: {sessionCountdown.label}</span></span></div> : null}
+                  {sessionCountdown ? <div className="flex flex-col items-center justify-center gap-1"><span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse"><Clock className="h-3.5 w-3.5 text-amber-400" /><span>{sessionCountdown.type}: {sessionCountdown.label}</span></span><span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-black/20 px-2 py-0.5 font-mono text-[10px]"><span className="text-slate-400">Dự khớp</span><span className={activeAuctionExpected ? getPriceColorClass(activeAuctionExpected.price, quote?.reference, quote?.ceiling, quote?.floor) : "font-bold text-slate-500"}>{activeAuctionExpected ? formatPrice(activeAuctionExpected.price) : "—"}</span><span className="text-slate-600">·</span><span className="text-slate-400">KL dự khớp</span><span className="font-bold text-slate-100">{activeAuctionExpected ? formatVolume(activeAuctionExpected.quantity) : "—"}</span></span></div> : null}
                   <div className="flex items-center gap-1.5"><span className="font-ticker font-extrabold text-sm sm:text-base text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.35)]">{depthTotal > 0 ? `${sellPct.toFixed(1)}%` : "50.0%"}</span><span className="text-xs font-bold text-slate-300">Bán</span><span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)] shrink-0" /></div>
                 </div>
                 <div className="relative h-2 w-full rounded-full overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6),inset_0_1px_2px_rgba(0,0,0,0.8)] transition-all duration-300" style={{ background: depthTotal > 0 ? `linear-gradient(to right, #10b981 0%, #22c98a ${Math.max(0, buyPct - 2.5)}%, #ffffff ${buyPct}%, #f43f5e ${Math.min(100, buyPct + 2.5)}%, #ff4757 100%)` : "linear-gradient(to right, #22c98a 0%, #ffffff 50%, #ff4757 100%)" }} />

@@ -43,6 +43,7 @@ func OrderbookChannels(tickers []string) []Channel {
 		{Name: "top_price.G1.json", Symbols: append([]string(nil), symbols...)},
 		{Name: "tick_extra.G1.json", Symbols: append([]string(nil), symbols...)},
 		{Name: "foreign.G1.json", Symbols: append([]string(nil), symbols...)},
+		{Name: "expected_price.G1.json", Symbols: append([]string(nil), symbols...)},
 	}
 }
 

@@ -238,3 +238,21 @@ test("calculateSessionCountdown handles ATO (09:00 - 09:15) and ATC (14:30 - 14:
   const dSunday = new Date("2026-08-16T02:05:00.000Z")
   assert.equal(calculateSessionCountdown(dSunday), null)
 })
+
+test("QEO-222 renders auction expected match state without overwriting the last matched quote", () => {
+  const source = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
+  const expectedPriceBlock = source.match(/if \(data\?\.T === "e"\)[\s\S]*?return\n\s*}/)?.[0] ?? ""
+
+  assert.ok(expectedPriceBlock, "expected a dedicated DNSE expected-price reducer")
+  assert.match(expectedPriceBlock, /expectedTradePrice/)
+  assert.match(expectedPriceBlock, /expectedTradeQuantity/)
+  assert.match(expectedPriceBlock, /setAuctionExpected/)
+  assert.doesNotMatch(
+    expectedPriceBlock,
+    /setQuote\(/,
+    "indicative ATO/ATC price must not overwrite the actual matched quote/header price",
+  )
+  assert.match(source, /setAuctionExpected\(null\)/, "session reset must clear stale auction indication")
+  assert.match(source, /Dự khớp/)
+  assert.match(source, /KL dự khớp/)
+})
