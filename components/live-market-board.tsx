@@ -425,10 +425,6 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
 
           <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
             <div className="flex justify-between">
-              <span>Nguồn dữ liệu:</span>
-              <span className="text-foreground font-sans">Yahoo 5m + DNSE via Supabase</span>
-            </div>
-            <div className="flex justify-between">
               <span>Độ rộng TT:</span>
               <span>
                 <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
@@ -542,7 +538,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
             {isLunch
               ? "Giờ nghỉ trưa"
               : streamState === "LIVE"
-                ? "DNSE LIVE"
+                ? "REALTIME LIVE"
                 : streamState === "CONNECTING"
                   ? "Đang kết nối"
                   : streamState === "CLOSED" || !sessionOpen
