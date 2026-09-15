@@ -79,6 +79,14 @@
       "state": "MAPPED",
       "evidence": "QEO-220 PR #489 exact-head Verify #3980 and DB Drift #1355; production migration 20260914102101; live function-definition readback; 2026-09-11 replay succeeded within the $0.03 cap",
       "rationale": "Supabase assigned production version 20260914102101 while repository replay keeps reviewed version 20260914102000. Production readback confirms mark_market_ai_completion_unknown preserves the sanitized p_error_code while retaining completion_unknown terminal semantics and the model_started_at guard. A retryable 2026-09-11 Market Synthesis replay then succeeded on attempt 2 using gpt-5.6-terra at $0.02621 estimated cost, proving the QEO-219 cost-bound path is cleared."
+    },
+    {
+      "logicalName": "qeo228_chart_archive_catchup",
+      "repositoryVersion": "20260915073500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-228 production retention evidence identified the 48-partition EOD throughput cap; PR #501 focused archive catch-up contract and exact-head preproduction gates",
+      "rationale": "QEO-228 adds a dedicated 16:45 ICT post-EOD scheduler that dispatches bounded durable canonical-universe catch-up through the existing verified fail-closed 1m archive lifecycle. It does not weaken checksum/readback/content-retention proof or authorize uncovered deletion. The migration remains repo-ahead until exact-head Verify and zero-to-latest DB replay pass, then production promotion and scheduler/readback acceptance are completed."
     }
   ]
 }
