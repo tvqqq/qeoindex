@@ -349,6 +349,7 @@ test("central realtime bus preserves the provider budget and tick-driven mini ch
   assert.doesNotMatch(boardSource, /new WebSocket\(/)
   assert.doesNotMatch(boardSource, /\/api\/market\/stream-auth/)
   assert.match(marketStreamSource, /market_realtime_bus/)
-  assert.match(marketStreamSource, /postgres_changes/)
+  assert.match(marketStreamSource, /subscribeMarketRelay/)
+  assert.doesNotMatch(marketStreamSource, /postgres_changes|\.channel\(/)
   assert.match(marketStreamSource, /synthesizeDnseOhlcFromTickMessage/)
 })

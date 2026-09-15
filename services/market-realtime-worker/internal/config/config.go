@@ -28,6 +28,14 @@ type Config struct {
 	UniverseRefreshInterval     time.Duration
 	PingInterval                time.Duration
 	StaleAfter                  time.Duration
+	RelayListenAddr             string
+	RelaySigningSecret          string
+	RelayAllowedOrigins         []string
+	RelayAuthTimeout            time.Duration
+	RelayPingInterval           time.Duration
+	RelaySendQueue              int
+	RelayMarketFlushInterval    time.Duration
+	RelayOrderbookFlushInterval time.Duration
 	Location                    *time.Location
 }
 
@@ -49,6 +57,14 @@ func Load() (Config, error) {
 		UniverseRefreshInterval:     durationMS("MARKET_UNIVERSE_REFRESH_MS", 300000, 60000, 1800000),
 		PingInterval:                durationMS("MARKET_REALTIME_PING_MS", 15000, 5000, 60000),
 		StaleAfter:                  durationMS("MARKET_REALTIME_STALE_MS", 60000, 15000, 300000),
+		RelayListenAddr:             envOr("QEO_MARKET_REALTIME_LISTEN_ADDR", ":8787"),
+		RelaySigningSecret:          strings.TrimSpace(os.Getenv("QEO_MARKET_REALTIME_SIGNING_SECRET")),
+		RelayAllowedOrigins:         csvValues(os.Getenv("QEO_MARKET_REALTIME_ALLOWED_ORIGINS")),
+		RelayAuthTimeout:            durationMS("QEO_MARKET_REALTIME_AUTH_TIMEOUT_MS", 5000, 1000, 15000),
+		RelayPingInterval:           durationMS("QEO_MARKET_REALTIME_PING_MS", 15000, 5000, 60000),
+		RelaySendQueue:              boundedInt("QEO_MARKET_REALTIME_SEND_QUEUE", 64, 8, 1024),
+		RelayMarketFlushInterval:    durationMS("QEO_MARKET_REALTIME_MARKET_FLUSH_MS", 100, 25, 1000),
+		RelayOrderbookFlushInterval: durationMS("QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS", 50, 20, 500),
 		Location:                    loc,
 	}
 	if cfg.DNSEWSURL == "" {
@@ -60,6 +76,14 @@ func Load() (Config, error) {
 	if cfg.SupabaseURL == "" || cfg.SupabaseServiceRoleKey == "" {
 		return Config{}, errors.New("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
 	}
+	if cfg.RelaySigningSecret == "" || len(cfg.RelayAllowedOrigins) == 0 {
+		return Config{}, errors.New("QEO_MARKET_REALTIME_SIGNING_SECRET and QEO_MARKET_REALTIME_ALLOWED_ORIGINS are required")
+	}
+	for _, origin := range cfg.RelayAllowedOrigins {
+		if origin == "*" {
+			return Config{}, errors.New("QEO_MARKET_REALTIME_ALLOWED_ORIGINS cannot contain wildcard")
+		}
+	}
 	return cfg, nil
 }
 
@@ -70,49 +94,46 @@ func durationMS(name string, fallback, min, max int64) time.Duration {
 			value = parsed
 		}
 	}
-	if value < min {
-		value = min
-	}
-	if value > max {
-		value = max
-	}
+	if value < min { value = min }
+	if value > max { value = max }
 	return time.Duration(value) * time.Millisecond
 }
 
 func boundedInt(name string, fallback, min, max int) int {
 	value := fallback
 	if raw := strings.TrimSpace(os.Getenv(name)); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			value = parsed
-		}
+		if parsed, err := strconv.Atoi(raw); err == nil { value = parsed }
 	}
-	if value < min {
-		value = min
-	}
-	if value > max {
-		value = max
-	}
+	if value < min { value = min }
+	if value > max { value = max }
 	return value
+}
+
+func envOr(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" { return value }
+	return fallback
+}
+
+func csvValues(raw string) []string {
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" { values = append(values, value) }
+	}
+	return values
 }
 
 func (c Config) Window(now time.Time) (time.Time, time.Time, bool) {
 	local := now.In(c.Location)
-	if local.Weekday() == time.Saturday || local.Weekday() == time.Sunday {
-		return time.Time{}, time.Time{}, false
-	}
+	if local.Weekday() == time.Saturday || local.Weekday() == time.Sunday { return time.Time{}, time.Time{}, false }
 	start := time.Date(local.Year(), local.Month(), local.Day(), 8, 55, 0, 0, c.Location)
 	end := time.Date(local.Year(), local.Month(), local.Day(), 14, 50, 0, 0, c.Location)
-	active := !local.Before(start) && local.Before(end)
-	return start, end, active
+	return start, end, !local.Before(start) && local.Before(end)
 }
 
 func (c Config) StaleWatchActive(now time.Time) bool {
 	local := now.In(c.Location)
-	if local.Weekday() == time.Saturday || local.Weekday() == time.Sunday {
-		return false
-	}
+	if local.Weekday() == time.Saturday || local.Weekday() == time.Sunday { return false }
 	minutes := local.Hour()*60 + local.Minute()
-	morning := minutes >= 9*60 && minutes < 11*60+30
-	afternoon := minutes >= 13*60 && minutes < 14*60+50
-	return morning || afternoon
+	return (minutes >= 9*60 && minutes < 11*60+30) || (minutes >= 13*60 && minutes < 14*60+50)
 }
