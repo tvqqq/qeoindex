@@ -10,7 +10,11 @@ import (
 	"time"
 )
 
-const maxClientTopics = 3
+const (
+	maxClientTopics           = 3
+	relayPublishSampleEvery   = int64(100)
+	relaySlowPublishThreshold = 10 * time.Millisecond
+)
 
 type client struct {
 	connectionID string
@@ -234,7 +238,9 @@ func (h *Hub) Publish(topic string, message any) {
 	}
 
 	batchID, sequence, frames := relayMessageTelemetry(message)
-	if len(targets) > 0 {
+	publishElapsed := time.Since(started)
+	publishSampled := sequence == 1 || (sequence > 0 && sequence%relayPublishSampleEvery == 0)
+	if len(targets) > 0 && (publishSampled || publishElapsed >= relaySlowPublishThreshold) {
 		h.logger.Info(
 			"relay_publish",
 			"batch_id", batchID,
@@ -243,7 +249,8 @@ func (h *Hub) Publish(topic string, message any) {
 			"frames", frames,
 			"subscribers", len(targets),
 			"payload_bytes", len(payload),
-			"publish_ms", float64(time.Since(started).Microseconds())/1000,
+			"publish_ms", float64(publishElapsed.Microseconds())/1000,
+			"slow_publish", publishElapsed >= relaySlowPublishThreshold,
 		)
 	}
 }
