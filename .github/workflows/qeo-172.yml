@@ -41,14 +41,14 @@ jobs:
         run: node --test tests/qeo172/*.test.ts
 
   production-browser:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'qa/qeo172-production-acceptance-20260911')
     needs: contract
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       QEO172_BASE_URL: https://qeoindex.qeoqeo.com
-      QEO172_BENCHMARK_MODE: ${{ inputs.benchmark_mode }}
-      QEO172_WORKFLOW_SHA: ${{ github.sha }}
+      QEO172_BENCHMARK_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_mode || 'acceptance' }}
+      QEO172_WORKFLOW_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.pull_request.base.sha }}
       QEO171_TEST_EMAIL: ${{ secrets.QEO171_TEST_EMAIL }}
       QEO171_TEST_PASSWORD: ${{ secrets.QEO171_TEST_PASSWORD }}
     steps:
@@ -93,7 +93,7 @@ jobs:
         if: always() && steps.auth.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: qeo172-production-performance-${{ inputs.benchmark_mode }}
+          name: qeo172-production-performance-${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_mode || 'acceptance' }}
           path: |
             test-results/qeo172-performance.json
             playwright-report/
