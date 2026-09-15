@@ -158,12 +158,12 @@ function applyRelayMessage(message: MarketRelayMarketMessage) {
 function drainRecoveryQueue() {
   const pending = recoveryQueue
   recoveryQueue = []
-  for (const message of pending) {
+  for (let index = 0; index < pending.length; index += 1) {
     if (recoveryRequired || recoveryPromise) {
-      queueRecoveryMessage(message)
+      for (const remaining of pending.slice(index)) queueRecoveryMessage(remaining)
       return
     }
-    applyRelayMessage(message)
+    applyRelayMessage(pending[index])
   }
 }
 
