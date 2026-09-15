@@ -7,16 +7,17 @@ import { EFFECTIVE_ADMIN_JOB_CATALOG } from "../modules/admin/effective-job-cata
 
 const rows = EXPECTED_SUPABASE_SCHEDULERS.map((mapping, index) => ({ jobId: index + 1, jobName: mapping.schedulerName, schedule: mapping.schedule, active: true, lastStatus: "succeeded", lastStartedAt: null, lastFinishedAt: null }))
 
-test("four exact Supabase physical mappings remain live verified after QEO-197 moves EOD ownership to UpCloud", () => {
+test("five exact Supabase physical mappings remain live verified after QEO-228 adds post-EOD archive catch-up", () => {
   const result = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(result.aggregate.expected, 5)
-  assert.equal(result.physicalMappings.length, 5)
-  assert.equal(result.aggregate.liveVerified, 4)
+  assert.equal(result.aggregate.expected, 6)
+  assert.equal(result.physicalMappings.length, 6)
+  assert.equal(result.aggregate.liveVerified, 5)
   assert.equal(result.aggregate.expectedMappingsVerified, true)
   assert.equal(result.aggregate.inventoryClean, true)
   assert.deepEqual(result.mappings.filter((mapping) => mapping.jobKey === "market.sync_5m").map((mapping) => mapping.mappingId), ["supabase:sync-universe-5m-am", "supabase:sync-universe-5m-pm"])
   assert.deepEqual(result.logical.find((mapping) => mapping.jobKey === "market.sync_5m")?.childMappingIds, ["supabase:sync-universe-5m-am", "supabase:sync-universe-5m-pm"])
   assert.equal(result.logical.find((mapping) => mapping.jobKey === "qeoindex.chart_intraday_maintenance")?.status, "live_verified")
+  assert.equal(result.logical.find((mapping) => mapping.jobKey === "qeoindex.chart_archive_catchup")?.status, "live_verified")
   assert.equal(result.logical.find((mapping) => mapping.jobKey === "research_reports.daily")?.status, "live_verified")
   assert.equal(result.logical.some((mapping) => mapping.jobKey === "kfsp.rating_daily"), false)
   assert.equal(result.logical.some((mapping) => mapping.jobKey === "kfsp.ttai_history"), false)
@@ -33,32 +34,34 @@ test("PM mapping keeps exact-string semantics while normalizing only whitespace"
 
 test("scheduler reconciliation flags an active legacy EOD owner but ignores the inactive rollback row", () => {
   const chartMaintenance = rows.find((row) => row.jobName === "qeoindex-chart-intraday-maintenance-1450-ict")!
+  const chartArchiveCatchup = rows.find((row) => row.jobName === "qeoindex-chart-archive-catchup-1645-ict")!
   const research = rows.find((row) => row.jobName === "research-reports-daily-0705-ict")!
   const am = rows.find((row) => row.jobName === "sync-universe-5m")!
   const pm = rows.find((row) => row.jobName === "sync-universe-5m-afternoon")!
   const rollback = { jobId: 99, jobName: "qeoindex-eod-pipeline-1515-ict", schedule: "15 8 * * 1-5", active: false, lastStatus: "succeeded", lastStartedAt: null, lastFinishedAt: null }
 
-  const clean = reconcileSupabaseSchedulers({ availability: "available", rows: [chartMaintenance, research, am, pm, rollback] })
+  const clean = reconcileSupabaseSchedulers({ availability: "available", rows: [chartMaintenance, chartArchiveCatchup, research, am, pm, rollback] })
   assert.deepEqual(clean.extraUnmapped, [])
   assert.equal(clean.aggregate.inventoryClean, true)
 
-  const duplicateOwner = reconcileSupabaseSchedulers({ availability: "available", rows: [chartMaintenance, research, am, pm, { ...rollback, active: true }] })
+  const duplicateOwner = reconcileSupabaseSchedulers({ availability: "available", rows: [chartMaintenance, chartArchiveCatchup, research, am, pm, { ...rollback, active: true }] })
   assert.deepEqual(duplicateOwner.extraUnmapped, ["qeoindex-eod-pipeline-1515-ict"])
   assert.equal(duplicateOwner.aggregate.inventoryClean, false)
 })
 
 test("empty and unavailable scheduler evidence stay distinct and never infer execution", () => {
   const empty = reconcileSupabaseSchedulers({ availability: "available", rows: [] })
-  assert.equal(empty.aggregate.missing, 4)
+  assert.equal(empty.aggregate.missing, 5)
   assert.equal(empty.aggregate.unavailable, 0)
   const unavailable = reconcileSupabaseSchedulers({ availability: "unavailable", reason: "rpc_error" })
-  assert.equal(unavailable.aggregate.unavailable, 4)
+  assert.equal(unavailable.aggregate.unavailable, 5)
   assert.equal(unavailable.aggregate.missing, 0)
   const now = new Date()
   const views = buildAdminJobViews(EFFECTIVE_ADMIN_JOB_CATALOG, { systemJobRuns: [{ id: "dispatch", job_key: "scanner.run", trigger: "external", status: "running", started_at: new Date(now.getTime() - 60_000).toISOString() }], cronSnapshots: [], kfspRatingRuns: [], kfspTtaiRuns: [], orderbookStats: null, schedulerReconciliation: unavailable }, [], now)
   assert.equal(views.jobs.find((job) => job.key === "scanner.run")?.executionStatus, "in_progress")
   assert.equal(views.jobs.find((job) => job.key === "qeoindex.eod_pipeline")?.schedulerEvidence?.availability, "unavailable")
   assert.equal(views.jobs.find((job) => job.key === "qeoindex.chart_intraday_maintenance")?.schedulerEvidence?.availability, "unavailable")
+  assert.equal(views.jobs.find((job) => job.key === "qeoindex.chart_archive_catchup")?.schedulerEvidence?.availability, "unavailable")
 })
 
 test("Vercel scheduler is configuration-only and never live verified by Supabase rows", () => {
