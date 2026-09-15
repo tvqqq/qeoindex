@@ -261,6 +261,8 @@ test("QEO-225 relay emits forensic lifecycle and publish telemetry without raw i
   assert.match(hub, /batch_id/)
   assert.match(hub, /queue_depth/)
   assert.match(hub, /subscribers/)
+  assert.match(hub, /relayPublishSampleEvery/)
+  assert.match(hub, /relaySlowPublishThreshold/)
   assert.match(protocol, /BatchID\s+string\s+`json:"batchId"`/)
 })
 
@@ -286,6 +288,8 @@ test("QEO-225 persists sampled browser relay telemetry for post-incident correla
   assert.match(market, /delivery/)
   assert.match(reporter, /\/api\/market\/realtime-health/)
   assert.match(reporter, /keepalive:\s*true/)
+  assert.match(reporter, /HEALTH_REPORT_MIN_INTERVAL_MS/)
+  assert.match(reporter, /lastHealthReportAt/)
   assert.match(route, /requireApiFeature\("market_board"\)/)
   assert.match(route, /browser_relay_health/)
   assert.match(route, /browser_relay_state/)
