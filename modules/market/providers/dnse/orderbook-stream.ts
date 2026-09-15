@@ -29,10 +29,23 @@ type OrderbookCheckpointRow = {
   updated_at?: unknown
 }
 
+type OrderbookLatencySample = {
+  providerToWorker: number | null
+  workerQueue: number | null
+  delivery: number | null
+  endToEnd: number | null
+}
+
+type OrderbookLatencyMetric = keyof OrderbookLatencySample
+
 const FANOUT_SHARDS = 10
 const STALE_AFTER_MS = 45_000
 const RECONNECT_BASE_MS = 750
 const RECONNECT_MAX_MS = 10_000
+const WORKER_RECEIVED_AT_FIELD = "_qeoWorkerReceivedAt"
+const LATENCY_SAMPLE_LIMIT = 512
+const LATENCY_REPORT_EVERY = 100
+const MAX_REASONABLE_LATENCY_MS = 5 * 60_000
 
 export function orderbookFanoutShard(symbol: string): number {
   let hash = 0x811c9dc5
@@ -77,6 +90,60 @@ function frameSymbol(frame: DnseOrderbookFrame) {
   return String(frame.symbol ?? "").trim().toUpperCase()
 }
 
+function timestampValueMs(value: unknown): number | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const source = value as Record<string, unknown>
+    const seconds = Number(source.Seconds ?? source.seconds)
+    const nanos = Number(source.Nanos ?? source.nanos ?? 0)
+    if (Number.isFinite(seconds) && seconds > 0 && Number.isFinite(nanos)) {
+      return seconds * 1000 + nanos / 1_000_000
+    }
+  }
+
+  const numeric = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN
+  if (Number.isFinite(numeric) && numeric > 0) {
+    if (numeric >= 1e17) return numeric / 1_000_000
+    if (numeric >= 1e12) return numeric
+    if (numeric >= 1e9) return numeric * 1000
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function providerTimestampMs(frame: DnseOrderbookFrame): number | null {
+  return timestampValueMs(frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime)
+}
+
+function latencyBetween(start: number | null, end: number | null): number | null {
+  if (start == null || end == null) return null
+  const delta = end - start
+  if (!Number.isFinite(delta) || delta < 0 || delta > MAX_REASONABLE_LATENCY_MS) return null
+  return Math.round(delta * 10) / 10
+}
+
+function percentile(values: number[], percent: number): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((left, right) => left - right)
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((percent / 100) * sorted.length) - 1))
+  return Math.round(sorted[index] * 10) / 10
+}
+
+function summarizeLatency(samples: OrderbookLatencySample[], metric: OrderbookLatencyMetric) {
+  const values = samples
+    .map((sample) => sample[metric])
+    .filter((value): value is number => value != null && Number.isFinite(value))
+  return {
+    n: values.length,
+    p50: percentile(values, 50),
+    p95: percentile(values, 95),
+    p99: percentile(values, 99),
+  }
+}
+
 function reconnectDelay(attempt: number) {
   const exponent = Math.min(Math.max(attempt - 1, 0), 4)
   return Math.min(RECONNECT_BASE_MS * 2 ** exponent, RECONNECT_MAX_MS) + Math.floor(Math.random() * 400)
@@ -102,6 +169,9 @@ export function subscribeDnseOrderbookFrames(
   let latestSequence = 0
   let latestEpoch = 0
   let lastMessageAtMs = Date.now()
+  let latencyFrameCount = 0
+  let nextLatencyReportAt = LATENCY_REPORT_EVERY
+  const latencySamples: OrderbookLatencySample[] = []
   let currentState: DnseOrderbookStreamState = {
     status: "CONNECTING",
     error: "",
@@ -118,6 +188,41 @@ export function subscribeDnseOrderbookFrames(
     for (const frame of frames) {
       if (frameSymbol(frame) === upper) onFrame(frame)
     }
+  }
+
+  const recordLatency = (envelope: OrderbookEnvelope) => {
+    const browserReceivedAt = Date.now()
+    const publishedAt = timestampValueMs(envelope.publishedAt)
+    let added = 0
+    for (const frame of envelope.frames) {
+      if (frameSymbol(frame) !== upper) continue
+      const workerReceivedAt = timestampValueMs(frame[WORKER_RECEIVED_AT_FIELD])
+      const providerAt = providerTimestampMs(frame)
+      latencySamples.push({
+        providerToWorker: latencyBetween(providerAt, workerReceivedAt),
+        workerQueue: latencyBetween(workerReceivedAt, publishedAt),
+        delivery: latencyBetween(publishedAt, browserReceivedAt),
+        endToEnd: latencyBetween(providerAt, browserReceivedAt),
+      })
+      added += 1
+    }
+    if (!added) return
+
+    latencyFrameCount += added
+    if (latencySamples.length > LATENCY_SAMPLE_LIMIT) {
+      latencySamples.splice(0, latencySamples.length - LATENCY_SAMPLE_LIMIT)
+    }
+    if (latencyFrameCount < nextLatencyReportAt) return
+
+    console.info("[orderbook-latency]", {
+      symbol: upper,
+      samples: latencySamples.length,
+      providerToWorker: summarizeLatency(latencySamples, "providerToWorker"),
+      workerQueue: summarizeLatency(latencySamples, "workerQueue"),
+      delivery: summarizeLatency(latencySamples, "delivery"),
+      endToEnd: summarizeLatency(latencySamples, "endToEnd"),
+    })
+    nextLatencyReportAt = Math.floor(latencyFrameCount / LATENCY_REPORT_EVERY + 1) * LATENCY_REPORT_EVERY
   }
 
   const clearReconnectTimer = () => {
@@ -198,6 +303,7 @@ export function subscribeDnseOrderbookFrames(
     latestSequence = envelope.sequence
     latestEpoch = envelope.epoch
     lastMessageAtMs = Date.now()
+    recordLatency(envelope)
     emitFrames(envelope.frames)
     attempts = 0
     setState({
