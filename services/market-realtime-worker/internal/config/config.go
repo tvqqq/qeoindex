@@ -43,7 +43,7 @@ func Load() (Config, error) {
 		SupabaseURL:                 strings.TrimRight(strings.TrimSpace(os.Getenv("SUPABASE_URL")), "/"),
 		SupabaseServiceRoleKey:      strings.TrimSpace(os.Getenv("SUPABASE_SERVICE_ROLE_KEY")),
 		FlushInterval:               durationMS("MARKET_REALTIME_FLUSH_MS", 1000, 250, 5000),
-		OrderbookFlushInterval:      durationMS("ORDERBOOK_REALTIME_FLUSH_MS", 150, 100, 1000),
+		OrderbookFlushInterval:      durationMS("ORDERBOOK_REALTIME_FLUSH_MS", 200, 100, 1000),
 		OrderbookMaxPayloadBytes:    boundedInt("ORDERBOOK_REALTIME_MAX_PAYLOAD_BYTES", 196608, 65536, 262144),
 		OrderbookMaxExecutionFrames: boundedInt("ORDERBOOK_REALTIME_MAX_EXECUTION_FRAMES", 2000, 100, 10000),
 		UniverseRefreshInterval:     durationMS("MARKET_UNIVERSE_REFRESH_MS", 300000, 60000, 1800000),
