@@ -103,6 +103,22 @@
       "state": "MAPPED",
       "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: Verify 34950444143, DB Drift 34950444002, production migration 20260915091036, width-10 grouped RPC readback with mismatch_rows=0, and Vercel READY deployment dpl_DhvT8RZMZ7JaHs9awVdYAvYdRVs6 on merge SHA 5c6ea378eeab3bda9cd15abd804ccbfea4f67682",
       "rationale": "Supabase assigned production version 20260915091036 while repository replay keeps reviewed version 20260915083500. Production readback confirms the compatibility view and bounded capacity-gated backfill RPC are present, grouped Daily output preserves the width-10 ABI, mismatch_rows is zero, and the historical provenance backfill remains separately gated rather than being invoked by migration."
+    },
+    {
+      "logicalName": "qeo234_daily_provenance_bridge",
+      "repositoryVersion": "20260915193000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-234 approved two-stage compact Daily provenance design and focused RED/GREEN contracts; production bridge promotion remains separately authorized",
+      "rationale": "Makes legacy provider_detail/source_url nullable, permits compact writes only when exact registry identity/provider remains valid, moves live provenance consumers to registry-backed logical reads, and performs no destructive column drop or physical reclaim."
+    },
+    {
+      "logicalName": "qeo234_daily_provenance_cutover",
+      "repositoryVersion": "20260915194500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-234 reviewed fail-closed compact cutover contract; production Stage-2 promotion requires bridge canary and new maintenance authorization",
+      "rationale": "After fail-closed provenance assertions, enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the obsolete QEO-233 historical backfill RPC, and preserves registry-backed logical APIs. Physical rewrite remains outside migration."
     }
   ]
 }

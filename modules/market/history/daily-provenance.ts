@@ -30,10 +30,6 @@ function provenanceIdentityKey(row: Pick<PersistedDailyOhlcvRow, "provider" | "p
   return JSON.stringify([1, row.provider, row.provider_detail, row.source_url])
 }
 
-function qeo233SchemaUnavailable(message: string) {
-  return /market_ohlcv_provenance.*(?:does not exist|not found)|could not find the table.*market_ohlcv_provenance|schema cache/i.test(message)
-}
-
 export function isDailyProvenanceCompatibilityUnavailable(message: string) {
   return /market_ohlcv_history_compat.*(?:does not exist|not found)|could not find the table.*market_ohlcv_history_compat|schema cache/i.test(message)
 }
@@ -44,17 +40,6 @@ export function assertDailyProvenanceConsistent(rows: Array<Record<string, unkno
   const ticker = String(inconsistent.ticker || "unknown")
   const barTime = String(inconsistent.bar_time || "unknown")
   throw new Error(`${context} failed Daily provenance consistency for ${ticker} at ${barTime}`)
-}
-
-async function legacyUpsert(supabase: SupabaseClient, rows: PersistedDailyOhlcvRow[]) {
-  for (let offset = 0; offset < rows.length; offset += DAILY_FACT_UPSERT_CHUNK_SIZE) {
-    const chunk = rows.slice(offset, offset + DAILY_FACT_UPSERT_CHUNK_SIZE)
-    if (!chunk.length) continue
-    const { error } = await supabase
-      .from("market_ohlcv_history")
-      .upsert(chunk, { onConflict: "ticker,timeframe,bar_time" })
-    if (error) throw new Error(`Daily OHLCV legacy upsert failed: ${error.message}`)
-  }
 }
 
 export async function persistDailyOhlcvRows(
@@ -84,10 +69,6 @@ export async function persistDailyOhlcvRows(
     .select("id,identity_version,provider,provider_detail,source_url")
 
   if (provenanceUpsert.error) {
-    if (qeo233SchemaUnavailable(provenanceUpsert.error.message)) {
-      await legacyUpsert(supabase, rows)
-      return
-    }
     throw new Error(`Daily provenance resolve failed: ${provenanceUpsert.error.message}`)
   }
 
@@ -106,14 +87,15 @@ export async function persistDailyOhlcvRows(
     throw new Error(`Daily provenance resolve incomplete: ${resolved.size}/${identities.size}`)
   }
 
-  const facts = rows.map((row) => {
+  const compactFacts = rows.map((row) => {
     const provenanceId = resolved.get(provenanceIdentityKey(row))
     if (!provenanceId) throw new Error(`Daily provenance id missing for ${row.ticker} at ${row.bar_time}`)
-    return { ...row, provenance_id: provenanceId }
+    const { provider_detail: _providerDetail, source_url: _sourceUrl, ...fact } = row
+    return { ...fact, provenance_id: provenanceId }
   })
 
-  for (let offset = 0; offset < facts.length; offset += DAILY_FACT_UPSERT_CHUNK_SIZE) {
-    const chunk = facts.slice(offset, offset + DAILY_FACT_UPSERT_CHUNK_SIZE)
+  for (let offset = 0; offset < compactFacts.length; offset += DAILY_FACT_UPSERT_CHUNK_SIZE) {
+    const chunk = compactFacts.slice(offset, offset + DAILY_FACT_UPSERT_CHUNK_SIZE)
     if (!chunk.length) continue
     const { error } = await supabase
       .from("market_ohlcv_history")
