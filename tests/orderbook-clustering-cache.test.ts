@@ -160,23 +160,20 @@ test("centralized DNSE live trades use stable provider identity instead of rando
   )
 })
 
-test("centralized orderbook realtime ignores stale channel generations and recovers stale transport", () => {
+test("centralized orderbook realtime ignores stale relay generations and recovers stale transport", () => {
   const source = readFileSync(new URL("../modules/market/providers/dnse/orderbook-stream.ts", import.meta.url), "utf8")
 
   assert.match(source, /let generation = 0/)
-  assert.match(source, /const thisGeneration = \+\+generation/)
+  assert.match(source, /const expectedGeneration = \+\+generation/)
   assert.match(
     source,
-    /disposed \|\| thisGeneration !== generation/,
-    "an obsolete authenticated bootstrap must not join another private channel",
+    /disposed \|\| expectedGeneration !== generation/,
+    "an obsolete authenticated bootstrap must not attach a relay subscription",
   )
-  assert.match(
-    source,
-    /channel !== nextChannel/,
-    "callbacks from an obsolete Supabase channel must not mutate orderbook state or reconnect",
-  )
+  assert.match(source, /subscribeMarketRelay/)
+  assert.match(source, /expectedGeneration !== generation/)
   assert.match(source, /const recoverIfStale = \(\) =>/)
-  assert.match(source, /restartForRecovery\("Orderbook realtime stale; refreshing session state\."\)/)
+  assert.match(source, /restartMarketRelay\(\)/)
   assert.doesNotMatch(source, /new WebSocket\(/, "the browser transport must stay off direct DNSE WebSockets")
 })
 
@@ -275,7 +272,10 @@ test("QEO-224 keeps centralized orderbook fanout low-latency, bounded, and obser
   assert.match(buffer, /newJSONBatchSizer/)
   assert.doesNotMatch(buffer, /payloadFits\(/)
   assert.match(transport, /let liveBaselineEstablished = false/)
-  assert.match(transport, /liveBaselineEstablished && latestSequence/)
+  assert.match(transport, /let checkpointSequence = 0/)
+  assert.match(transport, /let liveSequence = 0/)
+  assert.match(transport, /message\.sequence !== liveSequence \+ 1/)
+  assert.match(transport, /message\.epoch !== liveEpoch/)
   assert.match(transport, /providerToWorker/)
   assert.match(transport, /workerQueue/)
   assert.match(transport, /delivery/)
