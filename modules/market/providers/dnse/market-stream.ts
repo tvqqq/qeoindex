@@ -1,10 +1,15 @@
 "use client"
 
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import type { DnseMarketFrame } from "@/modules/market/realtime/index-candles"
 import { synthesizeDnseOhlcFromTickMessage } from "@/modules/market/board/dnse-subscriptions"
+import {
+  restartMarketRelay,
+  subscribeMarketRelay,
+  type MarketRelayConnectionState,
+  type MarketRelayMarketMessage,
+} from "@/modules/market/realtime/relay-client"
 import { getAuthenticatedSupabaseRealtimeClient } from "@/modules/shared/supabase/authenticated-realtime"
-import { getSupabaseBrowserClient } from "@/modules/shared/supabase/client"
 
 export type DnseMarketStreamStatus = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 export type DnseMarketStreamState = {
@@ -26,14 +31,23 @@ type MarketRealtimeBusRow = {
 }
 
 const STREAM_KEY = "dnse-market"
-const CHANNEL_NAME = "market-realtime-bus"
+const BOOTSTRAP_RETRY_MS = 1_500
+const MAX_RECOVERY_QUEUE = 256
 const frameListeners = new Set<DnseMarketFrameListener>()
 const stateListeners = new Set<DnseMarketStreamStateListener>()
 
-let realtimeChannel: RealtimeChannel | null = null
+let relayUnsubscribe: (() => void) | null = null
 let bootstrapStarted = false
+let bootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
 let startupGeneration = 0
-let latestSequence = 0
+let checkpointSequence = 0
+let relaySequence = 0
+let relayEpoch = ""
+let liveBaselineEstablished = false
+let relayWasReady = false
+let recoveryRequired = false
+let recoveryPromise: Promise<void> | null = null
+let recoveryQueue: MarketRelayMarketMessage[] = []
 let streamState: DnseMarketStreamState = {
   status: "CLOSED",
   error: "",
@@ -70,15 +84,15 @@ function emitFrameWithSyntheticOhlc(frame: DnseMarketFrame) {
 function applyBusRow(row: MarketRealtimeBusRow | null | undefined) {
   if (!row) return
   const sequence = Number(row.sequence ?? 0)
-  if (!Number.isFinite(sequence) || sequence <= latestSequence) return
+  if (!Number.isSafeInteger(sequence) || sequence <= checkpointSequence) return
   const frames = Array.isArray(row.frames) ? row.frames : []
   const accepted = frames.map(parseFrame).filter((frame): frame is DnseMarketFrame => Boolean(frame))
   if (!accepted.length) return
 
-  latestSequence = sequence
+  checkpointSequence = sequence
   const updatedAt = String(row.source_updated_at ?? row.updated_at ?? new Date().toISOString())
   for (const frame of accepted) emitFrameWithSyntheticOhlc(frame)
-  setStreamState({ status: "LIVE", error: "", lastMessageAt: updatedAt, sequence })
+  setStreamState({ lastMessageAt: updatedAt })
 }
 
 async function bootstrapCurrentRow(supabase: SupabaseClient) {
@@ -88,54 +102,166 @@ async function bootstrapCurrentRow(supabase: SupabaseClient) {
     .eq("stream", STREAM_KEY)
     .maybeSingle()
 
-  if (error) {
-    setStreamState({ status: "ERROR", error: `Supabase realtime bootstrap failed: ${error.message}` })
-    return
-  }
+  if (error) throw new Error(`Market realtime bootstrap failed: ${error.message}`)
   applyBusRow(data as MarketRealtimeBusRow | null)
 }
 
-async function startSupabaseRealtime() {
-  if (realtimeChannel || bootstrapStarted) return
+function resetLiveBaseline() {
+  relaySequence = 0
+  relayEpoch = ""
+  liveBaselineEstablished = false
+}
+
+function clearBootstrapRetry() {
+  if (bootstrapRetryTimer) clearTimeout(bootstrapRetryTimer)
+  bootstrapRetryTimer = null
+}
+
+function scheduleBootstrapRetry() {
+  if (bootstrapRetryTimer || frameListeners.size + stateListeners.size === 0) return
+  bootstrapRetryTimer = setTimeout(() => {
+    bootstrapRetryTimer = null
+    ensureRelay()
+  }, BOOTSTRAP_RETRY_MS)
+}
+
+function queueRecoveryMessage(message: MarketRelayMarketMessage) {
+  recoveryQueue.push(message)
+  if (recoveryQueue.length > MAX_RECOVERY_QUEUE) {
+    recoveryQueue.splice(0, recoveryQueue.length - MAX_RECOVERY_QUEUE)
+  }
+}
+
+function applyRelayMessage(message: MarketRelayMarketMessage) {
+  if (message.continuityGap) {
+    void recoverFromCheckpoint("Market realtime continuity gap; refreshing checkpoint.")
+    return
+  }
+  if (liveBaselineEstablished) {
+    if (message.epoch !== relayEpoch || message.sequence !== relaySequence + 1) {
+      void recoverFromCheckpoint("Market realtime sequence changed; refreshing checkpoint.")
+      return
+    }
+  }
+
+  relayEpoch = message.epoch
+  relaySequence = message.sequence
+  liveBaselineEstablished = true
+  for (const frame of message.frames) {
+    const parsed = parseFrame(frame)
+    if (parsed) emitFrameWithSyntheticOhlc(parsed)
+  }
+  const lastMessageAt = message.publishedAt || new Date().toISOString()
+  setStreamState({ status: "LIVE", error: "", lastMessageAt, sequence: message.sequence })
+}
+
+function drainRecoveryQueue() {
+  const pending = recoveryQueue
+  recoveryQueue = []
+  for (const message of pending) {
+    if (recoveryRequired || recoveryPromise) {
+      queueRecoveryMessage(message)
+      return
+    }
+    applyRelayMessage(message)
+  }
+}
+
+async function recoverFromCheckpoint(message: string) {
+  if (!relayUnsubscribe) return
+  recoveryRequired = true
+  resetLiveBaseline()
+  setStreamState({ status: "CONNECTING", error: message })
+  if (recoveryPromise) return recoveryPromise
+
+  const generation = startupGeneration
+  recoveryPromise = (async () => {
+    try {
+      const supabase = await getAuthenticatedSupabaseRealtimeClient()
+      if (generation !== startupGeneration) return
+      await bootstrapCurrentRow(supabase)
+      if (generation !== startupGeneration) return
+      recoveryRequired = false
+      recoveryPromise = null
+      drainRecoveryQueue()
+    } catch (error) {
+      if (generation !== startupGeneration) return
+      recoveryPromise = null
+      bootstrapStarted = false
+      setStreamState({ status: "ERROR", error: error instanceof Error ? error.message : String(error) })
+      scheduleBootstrapRetry()
+    }
+  })()
+  return recoveryPromise
+}
+
+function handleRelayState(state: MarketRelayConnectionState) {
+  if (state.status === "READY") {
+    if (relayWasReady && recoveryRequired) {
+      void recoverFromCheckpoint("Market realtime reconnected; refreshing checkpoint.")
+    }
+    relayWasReady = true
+    return
+  }
+
+  if (relayWasReady) {
+    recoveryRequired = true
+    resetLiveBaseline()
+    recoveryQueue = []
+  }
+  if (state.status === "ERROR") {
+    setStreamState({ status: "ERROR", error: state.error })
+  } else if (state.status === "CLOSED") {
+    setStreamState({ status: "CLOSED", error: "" })
+  } else {
+    setStreamState({ status: "CONNECTING", error: "" })
+  }
+}
+
+async function startRelay() {
+  if (relayUnsubscribe || bootstrapStarted) return
   bootstrapStarted = true
+  clearBootstrapRetry()
   const generation = ++startupGeneration
+  checkpointSequence = 0
+  relayWasReady = false
+  recoveryRequired = false
+  recoveryQueue = []
+  resetLiveBaseline()
   setStreamState({ status: "CONNECTING", error: "" })
 
   try {
     const supabase = await getAuthenticatedSupabaseRealtimeClient()
     if (generation !== startupGeneration) return
-
     await bootstrapCurrentRow(supabase)
-    if (generation !== startupGeneration) return
-
-    realtimeChannel = supabase
-      .channel(CHANNEL_NAME)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "market_realtime_bus", filter: `stream=eq.${STREAM_KEY}` },
-        (payload) => applyBusRow(payload.new as MarketRealtimeBusRow),
-      )
-      .subscribe((status) => {
-        if (generation !== startupGeneration) return
-        if (status === "SUBSCRIBED") {
-          setStreamState({ status: latestSequence > 0 ? "LIVE" : "CONNECTING", error: "" })
-          return
-        }
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setStreamState({ status: "ERROR", error: `Supabase realtime channel ${status.toLowerCase()}.` })
-          return
-        }
-        if (status === "CLOSED") setStreamState({ status: "CLOSED" })
-      })
   } catch (error) {
     if (generation !== startupGeneration) return
     bootstrapStarted = false
     setStreamState({ status: "ERROR", error: error instanceof Error ? error.message : String(error) })
+    scheduleBootstrapRetry()
+    return
   }
+  if (generation !== startupGeneration) return
+
+  relayUnsubscribe = subscribeMarketRelay(
+    "market",
+    (message) => {
+      if (generation !== startupGeneration || message.type !== "market") return
+      if (recoveryRequired || recoveryPromise) {
+        queueRecoveryMessage(message)
+        return
+      }
+      applyRelayMessage(message)
+    },
+    (state) => {
+      if (generation !== startupGeneration) return
+      handleRelayState(state)
+    },
+  )
 }
 
-function ensureSupabaseRealtime() {
-  void startSupabaseRealtime()
+function ensureRelay() {
+  void startRelay()
 }
 
 export function publishDnseMarketFrame(frame: DnseMarketFrame) {
@@ -144,32 +270,30 @@ export function publishDnseMarketFrame(frame: DnseMarketFrame) {
 
 export function subscribeDnseMarketFrames(listener: DnseMarketFrameListener) {
   frameListeners.add(listener)
-  ensureSupabaseRealtime()
+  ensureRelay()
   return () => frameListeners.delete(listener)
 }
 
 export function subscribeDnseMarketStreamState(listener: DnseMarketStreamStateListener) {
   stateListeners.add(listener)
   listener(streamState)
-  ensureSupabaseRealtime()
+  ensureRelay()
   return () => stateListeners.delete(listener)
 }
 
 export async function restartDnseMarketStream() {
-  const supabase = getSupabaseBrowserClient()
-  const channel = realtimeChannel
   startupGeneration += 1
-  realtimeChannel = null
+  clearBootstrapRetry()
+  relayUnsubscribe?.()
+  relayUnsubscribe = null
   bootstrapStarted = false
+  recoveryPromise = null
+  recoveryRequired = false
+  recoveryQueue = []
+  checkpointSequence = 0
+  relayWasReady = false
+  resetLiveBaseline()
   setStreamState({ status: "CONNECTING", error: "" })
-
-  if (supabase && channel) {
-    try {
-      await supabase.removeChannel(channel)
-    } catch {
-      // A failed cleanup must not prevent a fresh subscription attempt.
-    }
-  }
-
-  ensureSupabaseRealtime()
+  restartMarketRelay()
+  ensureRelay()
 }
