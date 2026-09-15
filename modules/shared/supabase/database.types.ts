@@ -2503,10 +2503,8 @@ export type Database = {
           high: number
           low: number
           open: number
-          provenance_id: number | null
+          provenance_id: number
           provider: string
-          provider_detail: string | null
-          source_url: string | null
           ticker: string
           timeframe: string
           volume: number
@@ -2518,10 +2516,8 @@ export type Database = {
           high: number
           low: number
           open: number
-          provenance_id?: number | null
+          provenance_id: number
           provider: string
-          provider_detail?: string | null
-          source_url?: string | null
           ticker: string
           timeframe: string
           volume: number
@@ -2533,10 +2529,8 @@ export type Database = {
           high?: number
           low?: number
           open?: number
-          provenance_id?: number | null
+          provenance_id?: number
           provider?: string
-          provider_detail?: string | null
-          source_url?: string | null
           ticker?: string
           timeframe?: string
           volume?: number
@@ -5224,19 +5218,6 @@ export type Database = {
           row_count: number
           ticker: string
           timeframe: string
-        }[]
-      }
-      qeo_market_ohlcv_provenance_backfill_batch: {
-        Args: { p_limit?: number; p_max_database_bytes?: number }
-        Returns: {
-          database_bytes_after: number
-          database_bytes_before: number
-          dead_tuples_after: number
-          mismatch_rows: number
-          paused: boolean
-          remaining_rows: number
-          table_bytes_after: number
-          updated_rows: number
         }[]
       }
       qeo_market_ohlcv_recent: {
