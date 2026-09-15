@@ -35,7 +35,7 @@ function migrationSource() {
   return readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
 }
 
-test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85 and QEO-150 remain independent", () => {
+test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85, QEO-150 and QEO-228 remain independent", () => {
   for (const [jobKey] of RETIRED_ACTIVE_SCHEDULERS) {
     const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
     assert.ok(job, `${jobKey} must remain visible as operational/historical catalog evidence`)
@@ -71,8 +71,14 @@ test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85 a
   assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
   assert.equal(chartMaintenance.scheduleUtc, "50 7 * * 1-5")
 
+  const chartArchiveCatchup = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "qeoindex.chart_archive_catchup")
+  assert.ok(chartArchiveCatchup)
+  assert.equal(chartArchiveCatchup.schedulePolicy?.kind, "fixed_time")
+  assert.equal(chartArchiveCatchup.schedulerName, "qeoindex-chart-archive-catchup-1645-ict")
+  assert.equal(chartArchiveCatchup.scheduleUtc, "45 9 * * 1-5")
+
   assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 10)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 5)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 6)
 })
 
 test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", () => {
@@ -148,6 +154,7 @@ test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forw
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-1am-ict"), "kfsp.ttai_history")
   assert.equal(getJobKeyForPgCron("sync-universe-eod-1450"), "market.sync_eod")
   assert.equal(getPgCronNameForJobKey("qeoindex.chart_intraday_maintenance"), "qeoindex-chart-intraday-maintenance-1450-ict")
+  assert.equal(getPgCronNameForJobKey("qeoindex.chart_archive_catchup"), "qeoindex-chart-archive-catchup-1645-ict")
   assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
 })
 
@@ -156,6 +163,7 @@ test("scheduler reconciliation leaves EOD to UpCloud and verifies the remaining 
     EXPECTED_SUPABASE_SCHEDULERS.map((mapping) => mapping.schedulerName),
     [
       "qeoindex-chart-intraday-maintenance-1450-ict",
+      "qeoindex-chart-archive-catchup-1645-ict",
       "research-reports-daily-0705-ict",
       "sync-universe-5m",
       "sync-universe-5m-afternoon",
@@ -172,14 +180,14 @@ test("scheduler reconciliation leaves EOD to UpCloud and verifies the remaining 
     lastFinishedAt: null,
   }))
   const reconciled = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(reconciled.aggregate.expected, 5, "four Supabase schedules + one Vercel config-only schedule")
-  assert.equal(reconciled.aggregate.liveVerified, 4)
+  assert.equal(reconciled.aggregate.expected, 6, "five Supabase schedules + one Vercel config-only schedule")
+  assert.equal(reconciled.aggregate.liveVerified, 5)
   assert.equal(reconciled.aggregate.missing, 0)
   assert.equal(reconciled.aggregate.inventoryClean, true)
   assert.equal(reconciled.aggregate.expectedMappingsVerified, true)
   assert.deepEqual(
     reconciled.logical.map((mapping) => mapping.jobKey),
-    ["qeoindex.chart_intraday_maintenance", "research_reports.daily", "market.sync_5m", "signals.daily"],
+    ["qeoindex.chart_intraday_maintenance", "qeoindex.chart_archive_catchup", "research_reports.daily", "market.sync_5m", "signals.daily"],
   )
 })
 

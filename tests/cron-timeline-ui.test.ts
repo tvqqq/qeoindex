@@ -11,7 +11,7 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance, research automation, recovery, and retired maintenance", () => {
+test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance/archive, research automation, recovery, and retired maintenance", () => {
   const { jobs } = buildAdminJobViews(
     EFFECTIVE_ADMIN_JOB_CATALOG,
     [
@@ -42,6 +42,15 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
         lastStatus: "succeeded",
         lastStartedAt: "2026-09-03T07:50:00.000Z",
         lastFinishedAt: "2026-09-03T07:50:02.000Z",
+      },
+      {
+        jobId: 23,
+        jobName: "qeoindex-chart-archive-catchup-1645-ict",
+        schedule: "45 9 * * 1-5",
+        active: true,
+        lastStatus: "succeeded",
+        lastStartedAt: "2026-09-03T09:45:00.000Z",
+        lastFinishedAt: "2026-09-03T09:45:02.000Z",
       },
       {
         jobId: 21,
@@ -81,6 +90,12 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(chartMaintenance.daysLabel, "T2-T6")
   assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
 
+  const chartArchiveCatchup = timeline.lanes[1].jobs.find((j) => j.key === "qeoindex.chart_archive_catchup")
+  assert.ok(chartArchiveCatchup)
+  assert.equal(chartArchiveCatchup.timeIctLabel, "16:45 ICT")
+  assert.equal(chartArchiveCatchup.daysLabel, "T2-T6")
+  assert.equal(chartArchiveCatchup.schedulerName, "qeoindex-chart-archive-catchup-1645-ict")
+
   const eodJob = timeline.lanes[2].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodJob)
   assert.equal(eodJob.timeIctLabel, "15:01 ICT")
@@ -104,7 +119,7 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "market.sync_eod"), false)
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.rating_daily"), false)
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.ttai_history"), false)
-  assert.equal(timeline.totalScheduled, 5, "signals + research reports + chart maintenance + canonical EOD + intraday market sync")
+  assert.equal(timeline.totalScheduled, 6, "signals + research reports + chart maintenance + chart archive + canonical EOD + intraday market sync")
 
   const recoveryKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
   assert.deepEqual(recoveryKeys, [
