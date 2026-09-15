@@ -6,6 +6,7 @@ import {
   type MarketRelayConnectionState,
   type MarketRelayOrderbookMessage,
 } from "@/modules/market/realtime/relay-client"
+import { reportRealtimeHealth } from "@/modules/market/realtime/health-reporter"
 import { getAuthenticatedSupabaseRealtimeClient } from "@/modules/shared/supabase/authenticated-realtime"
 
 export type DnseOrderbookFrame = Record<string, unknown>
@@ -184,13 +185,30 @@ export function subscribeDnseOrderbookFrames(
     }
     if (latencyFrameCount < nextLatencyReportAt) return
 
+    const providerToWorker = summarizeLatency(latencySamples, "providerToWorker")
+    const workerQueue = summarizeLatency(latencySamples, "workerQueue")
+    const delivery = summarizeLatency(latencySamples, "delivery")
+    const endToEnd = summarizeLatency(latencySamples, "endToEnd")
     console.info("[orderbook-latency]", {
       symbol: upper,
+      batchId: message.batchId,
       samples: latencySamples.length,
-      providerToWorker: summarizeLatency(latencySamples, "providerToWorker"),
-      workerQueue: summarizeLatency(latencySamples, "workerQueue"),
-      delivery: summarizeLatency(latencySamples, "delivery"),
-      endToEnd: summarizeLatency(latencySamples, "endToEnd"),
+      providerToWorker,
+      workerQueue,
+      delivery,
+      endToEnd,
+    })
+    reportRealtimeHealth({
+      stream: "orderbook",
+      symbol: upper,
+      batchId: message.batchId,
+      epoch: message.epoch,
+      sequence: message.sequence,
+      samples: latencySamples.length,
+      providerToWorker,
+      workerQueue,
+      delivery,
+      endToEnd,
     })
     nextLatencyReportAt = Math.floor(latencyFrameCount / LATENCY_REPORT_EVERY + 1) * LATENCY_REPORT_EVERY
   }
