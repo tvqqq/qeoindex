@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,8 +32,6 @@ type Server struct {
 	logger   *slog.Logger
 	origins  map[string]struct{}
 	upgrader websocket.Upgrader
-	server   *http.Server
-	mu       sync.Mutex
 }
 
 func NewServer(cfg ServerConfig, hub *Hub, logger *slog.Logger) *Server {
@@ -77,9 +74,6 @@ func (s *Server) Run(ctx context.Context) error {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	httpServer := &http.Server{Addr: s.cfg.ListenAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	s.mu.Lock()
-	s.server = httpServer
-	s.mu.Unlock()
 
 	listener, err := net.Listen("tcp", s.cfg.ListenAddr)
 	if err != nil {
@@ -129,10 +123,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := s.hub.newClient(claims.Subject, func() {
-		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "slow consumer"), time.Now().Add(writeTimeout))
-		_ = conn.Close()
-	})
+	client := s.hub.newClient(claims.Subject, func() { _ = conn.Close() })
 	s.hub.addClient(client)
 	defer s.hub.removeClient(client)
 
