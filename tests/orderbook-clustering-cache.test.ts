@@ -160,24 +160,25 @@ test("centralized DNSE live trades use stable provider identity instead of rando
   )
 })
 
-test("centralized orderbook realtime ignores stale channel generations and recovers stale transport", () => {
+test("centralized orderbook relay ignores stale generations and recovers continuity gaps", () => {
   const source = readFileSync(new URL("../modules/market/providers/dnse/orderbook-stream.ts", import.meta.url), "utf8")
 
   assert.match(source, /let generation = 0/)
-  assert.match(source, /const thisGeneration = \+\+generation/)
+  assert.match(source, /const expectedGeneration = \+\+generation/)
   assert.match(
     source,
-    /disposed \|\| thisGeneration !== generation/,
-    "an obsolete authenticated bootstrap must not join another private channel",
+    /disposed \|\| expectedGeneration !== generation/,
+    "an obsolete checkpoint bootstrap must not attach a relay subscription",
   )
-  assert.match(
-    source,
-    /channel !== nextChannel/,
-    "callbacks from an obsolete Supabase channel must not mutate orderbook state or reconnect",
-  )
+  assert.match(source, /subscribeMarketRelay/)
+  assert.match(source, /message\.continuityGap/)
+  assert.match(source, /message\.epoch !== liveEpoch/)
+  assert.match(source, /message\.sequence !== liveSequence \+ 1/)
   assert.match(source, /const recoverIfStale = \(\) =>/)
-  assert.match(source, /restartForRecovery\("Orderbook realtime stale; refreshing session state\."\)/)
-  assert.doesNotMatch(source, /new WebSocket\(/, "the browser transport must stay off direct DNSE WebSockets")
+  assert.match(source, /recover\("Orderbook realtime stale; refreshing session state\."\)/)
+  assert.match(source, /checkpointSequence = 0/, "recovery must re-apply the authoritative checkpoint")
+  assert.doesNotMatch(source, /private:\s*true|broadcast|\.channel\(/)
+  assert.doesNotMatch(source, /new WebSocket\(/, "physical WebSocket ownership belongs to the shared relay client")
 })
 
 test("QEO-216 preserves the QEO-218 session-reference invariant across centralized live frames", () => {
