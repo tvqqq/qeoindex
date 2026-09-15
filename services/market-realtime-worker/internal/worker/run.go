@@ -2,15 +2,20 @@ package worker
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tvqqq/qeoindex/services/market-realtime-worker/internal/config"
 	"github.com/tvqqq/qeoindex/services/market-realtime-worker/internal/dnse"
 	"github.com/tvqqq/qeoindex/services/market-realtime-worker/internal/dnseauth"
 	"github.com/tvqqq/qeoindex/services/market-realtime-worker/internal/realtime"
+	"github.com/tvqqq/qeoindex/services/market-realtime-worker/internal/relay"
 	"github.com/tvqqq/qeoindex/services/market-realtime-worker/internal/supabase"
 )
 
@@ -54,31 +59,78 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("plan orderbook provider shards: %w", err)
 	}
+	epoch, err := newRelayEpoch()
+	if err != nil {
+		return fmt.Errorf("create realtime relay epoch: %w", err)
+	}
+
+	hub := relay.NewHub(epoch, cfg.RelaySendQueue, logger)
+	hub.SetUniverse(tickers)
+	relayServer := relay.NewServer(relay.ServerConfig{
+		ListenAddr:     cfg.RelayListenAddr,
+		SigningSecret:  cfg.RelaySigningSecret,
+		AllowedOrigins: cfg.RelayAllowedOrigins,
+		AuthTimeout:    cfg.RelayAuthTimeout,
+		PingInterval:   cfg.RelayPingInterval,
+	}, hub, logger)
 
 	logger.Info(
 		"market_realtime_worker_start",
 		"tickers", len(tickers),
-		"flush_ms", cfg.FlushInterval.Milliseconds(),
-		"orderbook_flush_ms", cfg.OrderbookFlushInterval.Milliseconds(),
+		"checkpoint_flush_ms", cfg.FlushInterval.Milliseconds(),
+		"relay_market_flush_ms", cfg.RelayMarketFlushInterval.Milliseconds(),
+		"relay_orderbook_flush_ms", cfg.RelayOrderbookFlushInterval.Milliseconds(),
 		"provider_socket_target", 2+len(orderbookPlan),
 		"window_end", windowEnd.Format(time.RFC3339),
 	)
-	buffer := realtime.NewBuffer(maxRealtimePayloadBytes)
+
+	checkpointBuffer := realtime.NewBuffer(maxRealtimePayloadBytes)
+	marketRelayBuffer := realtime.NewBuffer(maxRealtimePayloadBytes)
 	orderbookBuffer := realtime.NewOrderbookBuffer(orderbookFanoutShards, cfg.OrderbookMaxPayloadBytes, cfg.OrderbookMaxExecutionFrames)
-	// Every process start is a continuity boundary, including a crash before the
-	// first asynchronous checkpoint. The first payload per shard must therefore
-	// force browser recovery instead of allowing a restarted sequence to look live.
+	orderbookRelayState := newOrderbookRelayState(tickers)
+	checkpointWriter := newCheckpointWriter(runCtx, client, logger, time.Second)
+
+	// A process restart and any provider reconnect are continuity boundaries for
+	// orderbook executions. The relay state keeps the marker sticky per symbol
+	// until that symbol next publishes.
 	orderbookBuffer.MarkContinuityGapAll()
-	publisher := newOrderbookPublisher(runCtx, client, logger, orderbookSequences, defaultOrderbookPublisherOptions())
+	orderbookRelayState.MarkContinuityGapAll()
+	var marketContinuityGap atomic.Bool
+
 	auth := dnseauth.New(cfg.DNSEAPIKey, cfg.DNSEAPISecret)
-	onBoardFrame := func(frame map[string]any) { buffer.Push(realtime.Frame(frame)) }
+	stampAndPushMarket := func(frame map[string]any) realtime.Frame {
+		stamped := stampOrderbookFrame(frame)
+		checkpointBuffer.Push(stamped)
+		marketRelayBuffer.Push(stamped)
+		return stamped
+	}
+	onBoardFrame := func(frame map[string]any) {
+		stampAndPushMarket(frame)
+	}
 	onTickFrame := func(frame map[string]any) {
-		buffer.Push(realtime.Frame(frame))
+		stamped := stampAndPushMarket(frame)
+		orderbookBuffer.Push(stamped)
+	}
+	onOrderbookFrame := func(frame map[string]any) {
 		orderbookBuffer.Push(stampOrderbookFrame(frame))
 	}
-	onOrderbookFrame := func(frame map[string]any) { orderbookBuffer.Push(stampOrderbookFrame(frame)) }
+	markOrderbookGap := func() {
+		orderbookBuffer.MarkContinuityGapAll()
+		orderbookRelayState.MarkContinuityGapAll()
+	}
+	markStockGap := func() {
+		marketContinuityGap.Store(true)
+		markOrderbookGap()
+	}
 
 	var wg sync.WaitGroup
+	relayErrCh := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		relayErrCh <- relayServer.Run(runCtx)
+	}()
+
 	startStream := func(streamCtx context.Context, stream *dnse.Stream) {
 		wg.Add(1)
 		go func() {
@@ -90,12 +142,13 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 
 	indexStream := newStream("indexes", cfg, auth, dnse.IndexChannels(), onBoardFrame, logger)
+	indexStream.OnContinuityGap = func() { marketContinuityGap.Store(true) }
 	startStream(runCtx, indexStream)
 
 	startStockStream := func(symbols []string) context.CancelFunc {
 		streamCtx, streamCancel := context.WithCancel(runCtx)
 		stockStream := newStream("ticks", cfg, auth, dnse.StockChannels(symbols), onTickFrame, logger)
-		stockStream.OnContinuityGap = orderbookBuffer.MarkContinuityGapAll
+		stockStream.OnContinuityGap = markStockGap
 		startStream(streamCtx, stockStream)
 		return streamCancel
 	}
@@ -105,7 +158,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	startOrderbookShard := func(index int, symbols []string) context.CancelFunc {
 		streamCtx, streamCancel := context.WithCancel(runCtx)
 		stream := newStream(orderbookStreamNames[index], cfg, auth, dnse.OrderbookChannels(symbols), onOrderbookFrame, logger)
-		stream.OnContinuityGap = orderbookBuffer.MarkContinuityGapAll
+		stream.OnContinuityGap = markOrderbookGap
 		logger.Info("orderbook_provider_shard_start", "stream", stream.Name, "symbols", len(symbols), "memberships", len(symbols)*4)
 		startStream(streamCtx, stream)
 		return streamCancel
@@ -114,12 +167,14 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		orderbookCancels[index] = startOrderbookShard(index, symbols)
 	}
 
-	flushTicker := time.NewTicker(cfg.FlushInterval)
-	orderbookFlushTicker := time.NewTicker(cfg.OrderbookFlushInterval)
+	checkpointTicker := time.NewTicker(cfg.FlushInterval)
+	marketRelayTicker := time.NewTicker(cfg.RelayMarketFlushInterval)
+	orderbookRelayTicker := time.NewTicker(cfg.RelayOrderbookFlushInterval)
 	universeTicker := time.NewTicker(cfg.UniverseRefreshInterval)
 	heartbeatTicker := time.NewTicker(30 * time.Second)
-	defer flushTicker.Stop()
-	defer orderbookFlushTicker.Stop()
+	defer checkpointTicker.Stop()
+	defer marketRelayTicker.Stop()
+	defer orderbookRelayTicker.Stop()
 	defer universeTicker.Stop()
 	defer heartbeatTicker.Stop()
 	defer func() {
@@ -128,47 +183,79 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			shardCancel()
 		}
 		cancel()
-		publisher.Close()
+		checkpointWriter.Close()
 		wg.Wait()
 	}()
 
-	lastFlushFrames := 0
-	lastOrderbookFlushFrames := 0
+	marketRelaySequence := int64(0)
+	lastCheckpointFrames := 0
+	lastMarketRelayFrames := 0
+	lastOrderbookRelayFrames := 0
 
 	for {
 		select {
 		case <-runCtx.Done():
-			logger.Info("market_realtime_worker_stop", "reason", contextReason(runCtx), "last_sequence", lastSequence, "orderbook_sequences", publisher.Sequences())
+			logger.Info(
+				"market_realtime_worker_stop",
+				"reason", contextReason(runCtx),
+				"last_checkpoint_sequence", lastSequence,
+				"orderbook_checkpoint_sequences", orderbookSequences,
+			)
 			return nil
-		case <-flushTicker.C:
-			frames := buffer.Drain()
+		case relayErr := <-relayErrCh:
+			if relayErr == nil {
+				return fmt.Errorf("realtime relay server stopped unexpectedly")
+			}
+			return fmt.Errorf("realtime relay server failed: %w", relayErr)
+		case <-marketRelayTicker.C:
+			frames := marketRelayBuffer.Drain()
+			if len(frames) == 0 {
+				continue
+			}
+			marketRelaySequence++
+			hub.Publish(
+				"market",
+				relay.NewMarketMessage(epoch, marketRelaySequence, marketContinuityGap.Swap(false), framesToMaps(frames)),
+			)
+			lastMarketRelayFrames = len(frames)
+		case <-checkpointTicker.C:
+			frames := checkpointBuffer.Drain()
 			if len(frames) == 0 {
 				continue
 			}
 			nextSequence := realtime.NextSequence(lastSequence, time.Now())
-			plainFrames := framesToMaps(frames)
-			if err := client.Publish(runCtx, nextSequence, plainFrames); err != nil {
-				buffer.Requeue(frames)
-				logger.Error("realtime_bus_publish_failed", "error", err.Error(), "frames", len(frames))
-				continue
-			}
+			checkpointWriter.Submit("dnse-market", nextSequence, framesToMaps(frames))
 			lastSequence = nextSequence
-			lastFlushFrames = len(frames)
-		case <-orderbookFlushTicker.C:
-			submittedFrames := 0
+			lastCheckpointFrames = len(frames)
+		case <-orderbookRelayTicker.C:
+			publishedFrames := 0
 			for shard := 0; shard < orderbookFanoutShards; shard++ {
 				batch := orderbookBuffer.DrainShard(shard)
 				if len(batch.Frames) == 0 {
 					continue
 				}
-				if !publisher.Submit(shard, batch) {
-					orderbookBuffer.RequeueShard(shard, batch)
-					continue
+
+				plainFrames := framesToMaps(batch.Frames)
+				orderbookSequences[shard]++
+				checkpointWriter.Submit(orderbookCheckpointStream(shard), orderbookSequences[shard], plainFrames)
+
+				if batch.ContinuityGap {
+					orderbookRelayState.MarkContinuityGapAll()
 				}
-				submittedFrames += len(batch.Frames)
+				for symbol, symbolFrames := range groupOrderbookFrames(batch.Frames) {
+					sequence, continuityGap, ok := orderbookRelayState.Next(symbol)
+					if !ok {
+						continue
+					}
+					hub.Publish(
+						"orderbook:"+symbol,
+						relay.NewOrderbookMessage(epoch, symbol, sequence, continuityGap, symbolFrames),
+					)
+				}
+				publishedFrames += len(batch.Frames)
 			}
-			if submittedFrames > 0 {
-				lastOrderbookFlushFrames = submittedFrames
+			if publishedFrames > 0 {
+				lastOrderbookRelayFrames = publishedFrames
 			}
 		case <-universeTicker.C:
 			next, err := client.Universe(runCtx)
@@ -185,6 +272,11 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 				continue
 			}
 
+			// Refreshing the canonical stock socket can miss events across the
+			// hand-off. Make that boundary explicit before exposing the new universe.
+			markStockGap()
+			hub.SetUniverse(next)
+			orderbookRelayState.SetUniverse(next)
 			stockCancel()
 			tickers = next
 			stockCancel = startStockStream(tickers)
@@ -211,9 +303,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			}
 			orderbookPlan = nextOrderbookPlan
 			if planChanged {
-				// Supplemental reconnects can miss execution events. Make the loss
-				// explicit so browser clients recover from the session authority.
-				orderbookBuffer.MarkContinuityGapAll()
+				markOrderbookGap()
 			}
 			logger.Info("canonical_universe_subscription_refreshed", "tickers", len(tickers), "orderbook_provider_shards", len(orderbookPlan))
 		case <-heartbeatTicker.C:
@@ -221,23 +311,29 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			for index, symbols := range orderbookPlan {
 				memberships[index] = len(symbols) * 4
 			}
-			publisherStats := publisher.Stats()
+			relayStats := hub.Stats()
 			logger.Info(
 				"market_realtime_worker_heartbeat",
-				"sequence", lastSequence,
-				"last_flush_frames", lastFlushFrames,
-				"buffered_frames", buffer.Len(),
+				"checkpoint_sequence", lastSequence,
+				"last_checkpoint_frames", lastCheckpointFrames,
+				"checkpoint_buffered_frames", checkpointBuffer.Len(),
+				"checkpoint_pending_streams", checkpointWriter.Pending(),
+				"checkpoint_failures", checkpointWriter.Failures(),
 				"tickers", len(tickers),
 				"provider_socket_target", 2+len(orderbookPlan),
 				"orderbook_memberships", memberships,
-				"orderbook_sequences", publisher.Sequences(),
-				"orderbook_last_flush_frames", lastOrderbookFlushFrames,
+				"orderbook_checkpoint_sequences", orderbookSequences,
+				"orderbook_last_relay_frames", lastOrderbookRelayFrames,
 				"orderbook_buffered_frames", orderbookBuffer.Len(),
-				"orderbook_pending_shards", publisherStats.QueueDepth,
-				"orderbook_checkpoint_pending", publisherStats.CheckpointPending,
-				"orderbook_broadcast_failures", publisherStats.BroadcastFailures,
-				"orderbook_checkpoint_failures", publisherStats.CheckpointFailures,
 				"orderbook_continuity_gaps", orderbookBuffer.GapCount(),
+				"market_last_relay_frames", lastMarketRelayFrames,
+				"market_relay_buffered_frames", marketRelayBuffer.Len(),
+				"relay_clients", relayStats.Clients,
+				"relay_market_topics", relayStats.MarketTopics,
+				"relay_orderbook_topics", relayStats.OrderbookTopics,
+				"relay_slow_consumers", relayStats.SlowConsumers,
+				"relay_published_batches", relayStats.Published,
+				"relay_published_bytes", relayStats.PublishedBytes,
 			)
 		}
 	}
@@ -248,6 +344,14 @@ func newStream(name string, cfg config.Config, auth dnseauth.Auth, channels []dn
 		Name: name, URL: cfg.DNSEWSURL, Auth: auth, Channels: channels, OnFrame: onFrame, Logger: logger,
 		PingEvery: cfg.PingInterval, StaleAfter: cfg.StaleAfter, StaleActive: cfg.StaleWatchActive,
 	}
+}
+
+func newRelayEpoch() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value[:]), nil
 }
 
 func stampOrderbookFrame(frame map[string]any) realtime.Frame {
@@ -265,6 +369,19 @@ func framesToMaps(frames []realtime.Frame) []map[string]any {
 		plain[index] = map[string]any(frame)
 	}
 	return plain
+}
+
+func groupOrderbookFrames(frames []realtime.Frame) map[string][]map[string]any {
+	grouped := make(map[string][]map[string]any)
+	for _, frame := range frames {
+		symbol, _ := frame["symbol"].(string)
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		if symbol == "" {
+			continue
+		}
+		grouped[symbol] = append(grouped[symbol], map[string]any(frame))
+	}
+	return grouped
 }
 
 func orderbookShardAt(plan [][]string, index int) []string {
