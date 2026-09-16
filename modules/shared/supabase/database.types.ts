@@ -5268,6 +5268,10 @@ export type Database = {
         Args: { p_new_run_id: string }
         Returns: Json
       }
+      qeo_prune_daily_ohlcv_history: {
+        Args: { p_reference_at?: string }
+        Returns: Json
+      }
       qeo_prune_noncanonical_orderbook_snapshots: {
         Args: { p_run_id: string }
         Returns: number
