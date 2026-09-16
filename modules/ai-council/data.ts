@@ -309,12 +309,17 @@ async function loadCouncilHistory(supabase: SupabaseClient, tickers: string[]) {
 
 export async function getAiCouncilData(
   supabase: SupabaseClient,
-  options: { includeHistory?: boolean; includePromptEvidence?: boolean; ratingDate?: string } = {},
+  options: { includeHistory?: boolean; includePromptEvidence?: boolean; ratingDate?: string; tickers?: string[] } = {},
 ): Promise<AiCouncilData> {
   const generatedAt = new Date().toISOString()
   const universe = await getCanonicalUniverse()
-  const universeTickers = universe.stocks.map((stock) => stock.ticker)
-  const rankByTicker = new Map(universe.stocks.map((stock) => [stock.ticker, stock.rank] as const))
+  const requestedTickers = options.tickers?.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean)
+  const requestedSet = requestedTickers?.length ? new Set(requestedTickers) : null
+  const universeStocks = requestedSet
+    ? universe.stocks.filter((stock) => requestedSet.has(stock.ticker))
+    : universe.stocks
+  const universeTickers = universeStocks.map((stock) => stock.ticker)
+  const rankByTicker = new Map(universeStocks.map((stock) => [stock.ticker, stock.rank] as const))
   let ratingDate = options.ratingDate?.trim() || ""
 
   if (!universeTickers.length) {
