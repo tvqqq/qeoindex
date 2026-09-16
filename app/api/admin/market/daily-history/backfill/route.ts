@@ -16,6 +16,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: false,
     code: DAILY_DEEP_COLD_RETIRED,
-    error: "Daily deep-cold history is retired. market_ohlcv_history uses a bounded ~8Y bootstrap followed by incremental EOD refresh.",
+    error: "Daily deep-cold history is retired. market_ohlcv_history uses a bounded ~5Y bootstrap followed by incremental EOD refresh.",
   }, { status: 410 })
 }
