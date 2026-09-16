@@ -110,6 +110,22 @@ type StockCouncilOutcomeRow = {
   direction_correct_5d: boolean | null
 }
 
+type StockDetailBootstrapStage = "research" | "scanner" | "daily" | "councilRuntime" | "aiHistory" | "rating"
+type StockDetailBootstrapTimings = Partial<Record<StockDetailBootstrapStage | "total", number>>
+
+async function measureStockDetailBootstrapStage<T>(
+  timings: StockDetailBootstrapTimings,
+  stage: StockDetailBootstrapStage,
+  load: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now()
+  try {
+    return await load()
+  } finally {
+    timings[stage] = Number((performance.now() - startedAt).toFixed(1))
+  }
+}
+
 function nullableNumber(value: unknown) {
   if (value == null || value === "") return null
   const parsed = Number(value)
@@ -244,18 +260,20 @@ export async function fetchStockDetailData(
     decoded = "HPG"
   }
 
-  const councilRuntimePromise = supabase
+  const bootstrapStartedAt = performance.now()
+  const bootstrapTimings: StockDetailBootstrapTimings = {}
+  const councilRuntimePromise = measureStockDetailBootstrapStage(bootstrapTimings, "councilRuntime", () => supabase
     ? getStockDetailCouncilRuntime(supabase).catch(() => null)
-    : Promise.resolve(null)
-  const aiHistoryPromise = supabase
+    : Promise.resolve(null))
+  const aiHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "aiHistory", () => supabase
     ? getTickerAiCouncilHistory(supabase, decoded).catch(() => [] as AiCouncilHistoryEntry[])
-    : Promise.resolve([] as AiCouncilHistoryEntry[])
-  const ratingRowPromise = supabase
+    : Promise.resolve([] as AiCouncilHistoryEntry[]))
+  const ratingRowPromise = measureStockDetailBootstrapStage(bootstrapTimings, "rating", () => supabase
     ? getInsightsRatingForTicker(supabase, decoded).catch(() => null)
-    : Promise.resolve(null)
-  const dailyHistoryPromise = supabase
+    : Promise.resolve(null))
+  const dailyHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "daily", () => supabase
     ? getCanonicalDailySeed(supabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
-    : getCachedDailyHistory(decoded)
+    : getCachedDailyHistory(decoded))
   // Stock-detail navigation must not block on external intraday providers. The chart
   // owns 1H/4H loading through the canonical /api/market/ohlcv path after render.
   const hourlyHistoryPromise = supabase
@@ -263,8 +281,8 @@ export async function fetchStockDetailData(
     : getCachedHourlyHistory(decoded)
 
   const [researchData, scannerData, dailyHistory, hourlyHistory, councilRuntime, aiHistory, loadedRatingRow] = await Promise.all([
-    getCachedResearchData(),
-    getCachedScannerData(),
+    measureStockDetailBootstrapStage(bootstrapTimings, "research", () => getCachedResearchData()),
+    measureStockDetailBootstrapStage(bootstrapTimings, "scanner", () => getCachedScannerData()),
     dailyHistoryPromise,
     hourlyHistoryPromise,
     councilRuntimePromise,
@@ -357,7 +375,7 @@ export async function fetchStockDetailData(
     })
   }
 
-  return {
+  const result: StockDetailData = {
     ticker: decoded,
     companyName: resolvedCompanyName,
     exchange: universeItem?.rank ? "HOSE" : "HNX",
@@ -390,6 +408,10 @@ export async function fetchStockDetailData(
     watchlist,
     ratingRow,
   }
+
+  bootstrapTimings.total = Number((performance.now() - bootstrapStartedAt).toFixed(1))
+  console.info("[qeo172-stock-detail-bootstrap]", JSON.stringify({ ticker: decoded, stageMs: bootstrapTimings }))
+  return result
 }
 
 export function buildFallbackRatingRow(data: {
