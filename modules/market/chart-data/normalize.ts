@@ -31,6 +31,25 @@ function barsEqual(a: CanonicalOhlcvBar, b: CanonicalOhlcvBar) {
     && a.volume === b.volume
 }
 
+/**
+ * A successful live-tail fetch is also the correction source persisted back to
+ * HOT. Remove only the stale same-timestamp HOT copy before normalization so
+ * the response and the subsequent HOT write observe one correction handoff.
+ * Other sources remain in the set and continue to produce integrity evidence.
+ */
+export function reconcileLiveTailProviderBars(
+  inputs: SourceTaggedBar[],
+  freshProviderBars: CanonicalOhlcvBar[],
+): SourceTaggedBar[] {
+  const validFreshTimes = new Set(
+    freshProviderBars.filter(validBar).map((bar) => bar.time),
+  )
+  return [
+    ...inputs.filter((input) => input.source !== "hot" || !validFreshTimes.has(input.bar.time)),
+    ...freshProviderBars.map((bar) => ({ source: "provider" as const, bar })),
+  ]
+}
+
 export function normalizeCanonicalBars(inputs: SourceTaggedBar[]) {
   const byTime = new Map<number, SourceTaggedBar>()
   const issueByKey = new Map<string, ChartDataIntegrityIssue>()
