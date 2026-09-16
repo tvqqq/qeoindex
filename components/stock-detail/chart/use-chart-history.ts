@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { chartHistoryFloor } from "@/modules/market/chart-data/history-policy"
 import type { ChartTimeframe } from "./stock-chart-types"
 import {
+  deriveChartBarsFromDailySeed,
   loadInitialChartHistory,
   mergeChartBars,
   olderChartHistoryRange,
@@ -46,8 +47,12 @@ export function useChartHistory({
   preparedInitial = null,
 }: UseChartHistoryOptions) {
   const exactPrepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
-  const hasUsableDailySeed = timeframe === "1D" && seedDailyBars.length > 0
-  const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : []))
+  const seedBars = useMemo(
+    () => deriveChartBarsFromDailySeed(seedDailyBars, timeframe),
+    [seedDailyBars, timeframe],
+  )
+  const hasUsableDailySeed = seedBars.length > 0
+  const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? seedBars)
   const [loading, setLoading] = useState(() => !exactPrepared && !hasUsableDailySeed)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +77,7 @@ export function useChartHistory({
     const generation = ++generationRef.current
     const controller = new AbortController()
     const prepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
-    const initialBars = prepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : [])
+    const initialBars = prepared?.result.bars ?? seedBars
     barsRef.current = initialBars
     historyCursorRef.current = prepared?.range.from ?? null
     setBars(initialBars)
@@ -91,8 +96,8 @@ export function useChartHistory({
     }
 
     if (hasUsableDailySeed) {
-      const horizonTo = seedDailyBars.at(-1)?.time ?? null
-      const historyCursor = seedDailyBars.at(0)?.time ?? null
+      const horizonTo = seedDailyBars.at(-1)?.time ?? seedBars.at(-1)?.time ?? null
+      const historyCursor = seedDailyBars.at(0)?.time ?? seedBars.at(0)?.time ?? null
       horizonToRef.current = horizonTo
       historyCursorRef.current = historyCursor
       setHasMore(Boolean(
@@ -132,7 +137,7 @@ export function useChartHistory({
       })
 
     return () => controller.abort()
-  }, [hasUsableDailySeed, preparedInitial, seedDailyBars, ticker, timeframe])
+  }, [hasUsableDailySeed, preparedInitial, seedBars, seedDailyBars, ticker, timeframe])
 
   const loadOlder = useCallback(async () => {
     if (olderRequestRef.current || !hasMore) return
