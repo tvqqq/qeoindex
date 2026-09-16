@@ -112,7 +112,7 @@ test("getMarketSessionStatus returns accurate session phase, live flag, and cach
   assert.equal(weekendStatus.phase, "EOD_CLOSED")
   assert.equal(weekendStatus.isLiveSession, false)
   assert.equal(weekendStatus.cacheBucketKey, "eod_closed")
-  assert.ok(eodStatus.ttlSeconds > 3600)
+  assert.ok(weekendStatus.ttlSeconds > 86400)
 })
 
 test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", () => {
