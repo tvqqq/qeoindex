@@ -4,6 +4,7 @@ import {
   chartHistoryFloor,
   maxChartHistorySeconds,
 } from "../../../modules/market/chart-data/history-policy.ts"
+import { aggregateChartTimeframe } from "../../../modules/market/chart-data/timeframes.ts"
 import type { ChartTimeframe } from "./stock-chart-types"
 
 const CLOSED_RANGE_CACHE_TTL_MS = 10 * 60 * 1000
@@ -102,6 +103,13 @@ export function mergeChartBars(existing: OhlcvBar[], incoming: OhlcvBar[]) {
   for (const bar of existing) byTime.set(bar.time, bar)
   for (const bar of incoming) byTime.set(bar.time, bar)
   return [...byTime.values()].sort((a, b) => a.time - b.time)
+}
+
+export function deriveChartBarsFromDailySeed(
+  dailyBars: OhlcvBar[],
+  timeframe: ChartTimeframe,
+): OhlcvBar[] {
+  return aggregateChartTimeframe(dailyBars, timeframe)
 }
 
 /**
