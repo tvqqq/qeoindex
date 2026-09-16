@@ -13,25 +13,44 @@ function retentionMigration() {
   return source(`supabase/migrations/${name}`)
 }
 
-test("active EOD retention is Supabase-first and never deletes canonical raw Daily OHLCV", () => {
+function dailyRetentionMigration() {
+  const migrations = readdirSync(new URL("../supabase/migrations/", import.meta.url))
+  const name = migrations.find((entry) => entry.endsWith("_qeo236_daily_5y_retention.sql"))
+  assert.ok(name, "QEO-236 rolling 5Y Daily retention migration must exist")
+  return source(`supabase/migrations/${name}`)
+}
+
+test("active EOD retention is Supabase-first and prunes canonical Daily OHLCV to rolling five calendar years", () => {
   const archive = source("modules/eod/archive.ts")
   const step = source("modules/eod/retention-step.ts")
-  const sql = retentionMigration()
+  const contract = source("modules/market/history/contract.ts")
+  const route = source("app/api/admin/market/daily-history/backfill/route.ts")
+  const originalSql = retentionMigration()
+  const activeSql = dailyRetentionMigration()
 
   assert.match(archive, /qeo_run_safe_retention_cleanup/)
-  assert.match(archive, /Canonical Daily OHLCV remains bounded at approximately 8 years in PostgreSQL/i)
-  assert.match(archive, /no Daily deep-cold age-prune is active/i)
+  assert.doesNotMatch(archive, /qeo_prune_daily_ohlcv_history/)
+  assert.match(archive, /rolling 5 calendar years/i)
+  assert.match(contract, /DAILY_BACKFILL_DAYS\s*=\s*5\s*\*\s*366/)
+  assert.match(route, /bounded ~5Y bootstrap followed by incremental EOD refresh/i)
   assert.match(archive, /five-trading-session retention cutoff/i)
   assert.doesNotMatch(archive, /31-day retention cutoff/i)
   assert.doesNotMatch(archive, /\.from\("market_ohlcv_history"\)[\s\S]*?\.delete\(/i)
-  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history/i)
-  assert.doesNotMatch(sql, /truncate\s+(table\s+)?public\.market_ohlcv_history/i)
+  assert.doesNotMatch(originalSql, /delete\s+from\s+public\.market_ohlcv_history/i)
+  assert.match(activeSql, /create or replace function public\.qeo_run_safe_retention_cleanup/i)
+  assert.match(activeSql, /Asia\/Ho_Chi_Minh/)
+  assert.match(activeSql, /interval\s+'5 years'/i)
+  assert.match(activeSql, /delete\s+from\s+public\.market_ohlcv_history/i)
+  assert.match(activeSql, /timeframe\s*=\s*'1D'/i)
+  assert.match(activeSql, /bar_time\s*<\s*v_daily_cutoff/i)
+  assert.match(activeSql, /rolling 5 calendar years/i)
+  assert.match(activeSql, /grant execute on function public\.qeo_run_safe_retention_cleanup\(timestamptz\) to service_role/i)
   assert.match(step, /runEodRetentionCleanup/)
   assert.doesNotMatch(step, /runEodDriveArchive|archiveEodRunToNotion|notionArchive/)
 })
 
 test("safe retention prunes only terminal/transient evidence and preserves in-flight AI work", () => {
-  const sql = retentionMigration()
+  const sql = dailyRetentionMigration()
 
   assert.match(sql, /delete\s+from\s+public\.ai_council_llm_evidence[\s\S]*?captured_at\s*</i)
   assert.match(sql, /delete\s+from\s+public\.ai_council_llm_research_contexts[\s\S]*?captured_at\s*</i)
@@ -46,7 +65,7 @@ test("safe retention prunes only terminal/transient evidence and preserves in-fl
 })
 
 test("safe retention deletes terminal orphan parents only when canonical evidence is absent", () => {
-  const sql = retentionMigration()
+  const sql = dailyRetentionMigration()
 
   assert.match(sql, /delete\s+from\s+public\.wyckoff_scan_runs[\s\S]*?not exists[\s\S]*?wyckoff_analysis_snapshots[\s\S]*?not exists[\s\S]*?wyckoff_chart_series/i)
   assert.match(sql, /delete\s+from\s+public\.ai_council_runs[\s\S]*?not exists[\s\S]*?ai_council_outcomes[\s\S]*?not exists[\s\S]*?ai_council_confirmations[\s\S]*?not exists[\s\S]*?ai_council_votes/i)

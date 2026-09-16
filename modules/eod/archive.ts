@@ -17,9 +17,18 @@ type RetentionCleanupResult = {
   durationMs?: number
   tables?: Array<{ table?: string; cutoff?: string; deletedRows?: number; oldestRetainedAt?: string | null; policy?: string }>
 }
+type DailyHistoryRetentionResult = {
+  status?: string
+  table?: string
+  cutoff?: string
+  deletedRows?: number
+  oldestRetainedAt?: string | null
+  policy?: string
+  detail?: string
+}
 type SafeRetentionCleanupResult = RetentionCleanupResult & {
   monitoring?: Record<string, unknown>
-  rawHistoryRetention?: { status?: string; table?: string; detail?: string }
+  rawHistoryRetention?: DailyHistoryRetentionResult
 }
 export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   safeCleanup?: SafeRetentionCleanupResult
@@ -27,44 +36,58 @@ export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   buildArtifactCleanup?: RetentionCleanupResult
   chartIntradayArchive?: ChartIntradayArchiveMetrics
   chartIntradayArchiveError?: string
-  rawHistoryRetention?: { status: "blocked"; detail: string }
+  rawHistoryRetention?: DailyHistoryRetentionResult
 }
 
 /**
  * Safe telemetry/staging retention is operational and Supabase-only.
+ * Canonical Daily OHLCV is permanently bounded to rolling 5 calendar years.
  * QEO-57 removes Drive; QEO-62 removes Notion from this dependency boundary.
- * Canonical Daily stays bounded in PostgreSQL; QEO-103 separately archives only
- * chart raw 1m history after immutable object checksum/readback verification.
+ * QEO-103 separately archives only chart raw 1m history after immutable object
+ * checksum/readback verification.
  */
 export async function runEodRetentionCleanup(
   supabase: SupabaseClient,
   input: { tradingDate: string },
 ): Promise<EodRetentionCleanupCheckpoint> {
-  const rawHistoryDetail = "Canonical Daily OHLCV remains bounded at approximately 8 years in PostgreSQL with incremental EOD refresh; no Daily deep-cold age-prune is active."
   const referenceAt = new Date(`${input.tradingDate}T23:59:59.999+07:00`).toISOString()
+
   const cleanup = await supabase.rpc("qeo_run_safe_retention_cleanup", { p_reference_at: referenceAt })
-  if (cleanup.error) return { status: "error", detail: `Safe telemetry/staging retention failed: ${cleanup.error.message}. ${rawHistoryDetail}`, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail } }
+  if (cleanup.error) return {
+    status: "error",
+    detail: `Safe telemetry/staging + Daily OHLCV retention failed: ${cleanup.error.message}`,
+  }
 
   const safeCleanup = cleanup.data as SafeRetentionCleanupResult | null
   if (!safeCleanup || safeCleanup.status !== "succeeded") return {
-    status: "error", detail: `Safe telemetry/staging retention returned invalid status=${safeCleanup?.status || "missing"}. ${rawHistoryDetail}`,
-    safeCleanup: safeCleanup || undefined, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    status: "error",
+    detail: `Safe telemetry/staging + Daily OHLCV retention returned invalid status=${safeCleanup?.status || "missing"}.`,
+    safeCleanup: safeCleanup || undefined,
   }
 
+  const rawHistoryRetention = safeCleanup.rawHistoryRetention
+  if (!rawHistoryRetention || rawHistoryRetention.status !== "succeeded") return {
+    status: "error",
+    detail: `Daily OHLCV rolling 5 calendar years retention returned invalid status=${rawHistoryRetention?.status || "missing"}.`,
+    safeCleanup,
+    rawHistoryRetention,
+  }
+  const rawHistoryDetail = `Canonical Daily OHLCV is retained for rolling 5 calendar years; cutoff=${rawHistoryRetention.cutoff || "unknown"}, deleted=${rawHistoryRetention.deletedRows ?? 0}.`
+
   const jobTelemetry = await supabase.rpc("qeo_run_job_telemetry_cleanup", { p_reference_at: referenceAt })
-  if (jobTelemetry.error) return { status: "error", detail: `Job telemetry retention failed: ${jobTelemetry.error.message}. ${rawHistoryDetail}`, safeCleanup, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail } }
+  if (jobTelemetry.error) return { status: "error", detail: `Job telemetry retention failed: ${jobTelemetry.error.message}. ${rawHistoryDetail}`, safeCleanup, rawHistoryRetention }
   const jobTelemetryCleanup = jobTelemetry.data as RetentionCleanupResult | null
   if (!jobTelemetryCleanup || jobTelemetryCleanup.status !== "succeeded") return {
     status: "error", detail: `Job telemetry retention returned invalid status=${jobTelemetryCleanup?.status || "missing"}. ${rawHistoryDetail}`,
-    safeCleanup, jobTelemetryCleanup: jobTelemetryCleanup || undefined, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    safeCleanup, jobTelemetryCleanup: jobTelemetryCleanup || undefined, rawHistoryRetention,
   }
 
   const artifactCleanup = await supabase.rpc("qeo_run_wyckoff_build_artifact_cleanup", { p_reference_at: referenceAt })
-  if (artifactCleanup.error) return { status: "error", detail: `Wyckoff build-artifact retention failed: ${artifactCleanup.error.message}. ${rawHistoryDetail}`, safeCleanup, jobTelemetryCleanup, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail } }
+  if (artifactCleanup.error) return { status: "error", detail: `Wyckoff build-artifact retention failed: ${artifactCleanup.error.message}. ${rawHistoryDetail}`, safeCleanup, jobTelemetryCleanup, rawHistoryRetention }
   const buildArtifactCleanup = artifactCleanup.data as RetentionCleanupResult | null
   if (!buildArtifactCleanup || buildArtifactCleanup.status !== "succeeded") return {
     status: "error", detail: `Wyckoff build-artifact retention returned invalid status=${buildArtifactCleanup?.status || "missing"}. ${rawHistoryDetail}`,
-    safeCleanup, jobTelemetryCleanup, buildArtifactCleanup: buildArtifactCleanup || undefined, rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    safeCleanup, jobTelemetryCleanup, buildArtifactCleanup: buildArtifactCleanup || undefined, rawHistoryRetention,
   }
 
   let chartIntradayArchive: ChartIntradayArchiveMetrics
@@ -79,7 +102,7 @@ export async function runEodRetentionCleanup(
       jobTelemetryCleanup,
       buildArtifactCleanup,
       chartIntradayArchiveError,
-      rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+      rawHistoryRetention,
     }
   }
 
@@ -91,11 +114,11 @@ export async function runEodRetentionCleanup(
 
   return {
     status: chartIntradayArchive.status === "partial" ? "partial" : "archived",
-    detail: `Safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed. ${chartDetail} ${rawHistoryDetail}`,
+    detail: `Daily OHLCV rolling 5 calendar years retention, safe telemetry/staging retention, bounded job telemetry retention, and terminal Wyckoff build-artifact retention completed. ${chartDetail} ${rawHistoryDetail}`,
     safeCleanup,
     jobTelemetryCleanup,
     buildArtifactCleanup,
     chartIntradayArchive,
-    rawHistoryRetention: { status: "blocked", detail: rawHistoryDetail },
+    rawHistoryRetention,
   }
 }
