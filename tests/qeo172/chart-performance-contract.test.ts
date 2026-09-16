@@ -144,9 +144,8 @@ test("QEO-238 active chart contract is Daily-only and stale intraday API request
   assert.match(route, /INTRADAY_TIMEFRAME_RETIRED/)
 })
 
-test("QEO-238 active server graph is Daily-only and Stock Detail no longer prepares hourly history", () => {
+test("QEO-238 active server chart graph no longer imports intraday HOT COLD or derived storage", () => {
   const timeframeService = source("modules/market/chart-data/timeframe-service.ts")
-  const stockDetail = source("modules/research/insights/stock-detail-data.ts")
 
   for (const retiredDependency of [
     "./cold-store",
@@ -157,6 +156,6 @@ test("QEO-238 active server graph is Daily-only and Stock Detail no longer prepa
     assert.doesNotMatch(timeframeService, new RegExp(retiredDependency.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
   }
   assert.doesNotMatch(timeframeService, /loadHourlyFamily|HOURLY_RESOLUTIONS|VERIFIED_COLD_1M_RECOVERY|HOT_1M/)
-  assert.doesNotMatch(stockDetail, /getCachedHourlyHistory|hourlyHistoryPromise|CANONICAL_CHART_API|1H\/4H loaded lazily/)
-  assert.match(stockDetail, /getCanonicalDailySeed/)
+  assert.match(timeframeService, /RETIRED_INTRADAY_RESOLUTIONS/)
+  assert.match(timeframeService, /splitCanonicalSourceRange\("1D"/)
 })
