@@ -8,22 +8,20 @@ function source(path: string) {
 
 test("QEO-172 initial Stock Detail SSR uses a chart-critical bootstrap instead of full ancillary data", () => {
   const page = source("app/insights/[ticker]/page.tsx")
-  const data = source("modules/research/insights/stock-detail-data.ts")
+  const critical = source("modules/research/insights/stock-detail-critical-data.ts")
 
   assert.match(page, /fetchStockDetailCriticalData\(decoded, auth\.supabase\)/)
   assert.doesNotMatch(page, /fetchStockDetailData\(decoded, auth\.supabase\)/)
-  assert.match(data, /export async function fetchStockDetailCriticalData/)
-  assert.match(data, /qeo172-critical-bootstrap/)
+  assert.match(page, /<StockDetailWorkstation data=\{stockDetailData\} hydrateInitialData \/>/)
+  assert.match(critical, /export async function fetchStockDetailCriticalData/)
+  assert.match(critical, /qeo172-critical-bootstrap/)
 })
 
-test("QEO-172 critical SSR path excludes scanner research AI and rating cold loads", () => {
-  const data = source("modules/research/insights/stock-detail-data.ts")
-  const start = data.indexOf("export async function fetchStockDetailCriticalData")
-  const end = data.indexOf("export function buildFallbackRatingRow", start)
-  assert.ok(start >= 0 && end > start, "critical bootstrap function must be present before fallback rating builder")
-  const critical = data.slice(start, end)
+test("QEO-172 isolated critical SSR module excludes scanner research AI and rating cold loads", () => {
+  const critical = source("modules/research/insights/stock-detail-critical-data.ts")
 
-  assert.match(critical, /getCanonicalDailySeed/)
+  assert.match(critical, /getChartOhlcv/)
+  assert.match(critical, /resolution:\s*"1D"/)
   for (const blockingDependency of [
     "getCachedResearchData",
     "getCachedScannerData",
@@ -31,7 +29,7 @@ test("QEO-172 critical SSR path excludes scanner research AI and rating cold loa
     "getTickerAiCouncilHistory",
     "getInsightsRatingForTicker",
   ]) {
-    assert.doesNotMatch(critical, new RegExp(`\\b${blockingDependency}\\b`), `${blockingDependency} must stay off the chart-critical SSR path`)
+    assert.doesNotMatch(critical, new RegExp(`\\b${blockingDependency}\\b`), `${blockingDependency} must stay off the chart-critical SSR module`)
   }
 })
 
