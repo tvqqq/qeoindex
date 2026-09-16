@@ -13,7 +13,7 @@ function epoch(value: string) {
   return Math.floor(new Date(value).getTime() / 1000)
 }
 
-test("QEO-172 partial old-range reads reuse only positively-ready existing derived manifests", () => {
+test("QEO-238 keeps historical derived-readiness helpers auditable but removes them from the active chart graph", () => {
   const readyRange = source("modules/market/chart-data/derived-hourly-ready-range.ts")
   const timeframe = source("modules/market/chart-data/timeframe-service.ts")
 
@@ -23,19 +23,11 @@ test("QEO-172 partial old-range reads reuse only positively-ready existing deriv
   assert.match(readyRange, /readReadyDerivedHourlyRange[\s\S]*?validateDerivedHourlyManifestReadiness/)
   assert.match(readyRange, /postRead[\s\S]*?ready !== true/)
 
-  assert.match(timeframe, /derivedHourlyExistingManifestsReady/)
-  assert.match(timeframe, /readReadyDerivedHourlyRange/)
-  assert.match(timeframe, /const derivedCoverage:[\s\S]*?derivedHourlyExistingManifestsReady/)
-
-  const hourlyStart = timeframe.indexOf("async function loadHourlyFamily")
-  const hourlyEnd = timeframe.indexOf("export async function getChartOhlcv", hourlyStart)
-  const hourly = timeframe.slice(hourlyStart, hourlyEnd)
-  const sourceCoverageCheck = hourly.indexOf("oldSourceCoverageComplete = await measured")
-  const cacheReadinessCheck = hourly.indexOf("cacheReady = await measured")
-  assert.ok(sourceCoverageCheck >= 0, "full source coverage must remain an independent truthfulness proof")
-  assert.ok(cacheReadinessCheck >= 0, "existing derived-manifest readiness must still be checked fail-closed")
-  assert.ok(sourceCoverageCheck < cacheReadinessCheck, "freeze source completeness before serving a partial derived snapshot")
-  assert.match(hourly, /oldCoverageProven:\s*oldSourceCoverageComplete/)
+  assert.doesNotMatch(timeframe, /derivedHourlyExistingManifestsReady/)
+  assert.doesNotMatch(timeframe, /readReadyDerivedHourlyRange/)
+  assert.doesNotMatch(timeframe, /loadHourlyFamily/)
+  assert.match(timeframe, /RETIRED_INTRADAY_RESOLUTIONS/)
+  assert.match(timeframe, /splitCanonicalSourceRange\("1D"/)
 })
 
 test("QEO-172 full derived coverage still requires every requested trading session to have verified RAW", () => {
@@ -79,11 +71,7 @@ test("QEO-172 authoritative HOT-only hour fills an unarchived derived gap withou
     { time: epoch("2026-09-07T09:16:00+07:00"), open: 110.5, high: 112, low: 110, close: 111.5, volume: 20 },
   ]
 
-  const overlay = overlayHourlyHotOnDerived({
-    derived,
-    cold: [],
-    hot,
-  })
+  const overlay = overlayHourlyHotOnDerived({ derived, cold: [], hot })
 
   assert.equal(overlay.unresolvedHotOverlap, false)
   assert.equal(overlay.bars.length, 2)
@@ -110,11 +98,7 @@ test("QEO-172 HOT without COLD never replaces an existing derived bucket", () =>
     { time: epoch("2026-09-07T09:15:00+07:00"), open: 110, high: 111, low: 109, close: 110.5, volume: 10 },
   ]
 
-  const overlay = overlayHourlyHotOnDerived({
-    derived,
-    cold: [],
-    hot,
-  })
+  const overlay = overlayHourlyHotOnDerived({ derived, cold: [], hot })
 
   assert.equal(overlay.unresolvedHotOverlap, true)
   assert.deepEqual(overlay.bars, derived)

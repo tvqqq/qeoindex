@@ -1,6 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { expect, test, type APIRequestContext, type Page, type Response as PlaywrightResponse } from "@playwright/test"
-import { isVietnamSecuritiesTradingDay, vietnamDateKey } from "../../modules/market/calendar"
 
 const BASE_URL = process.env.QEO172_BASE_URL ?? "https://qeoindex.qeoqeo.com"
 const TEST_EMAIL = process.env.QEO171_TEST_EMAIL
@@ -21,16 +20,16 @@ const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024
 
 const MATRIX = [
   ["VIC", "1D"],
-  ["VIC", "4h"],
-  ["VIC", "1h"],
-  ["VIC", "15m"],
+  ["VIC", "3D"],
+  ["VIC", "1W"],
+  ["VIC", "1M"],
   ["VCB", "1D"],
-  ["VCB", "4h"],
-  ["VCB", "1h"],
-  ["VCB", "15m"],
+  ["VCB", "3D"],
+  ["VCB", "1W"],
+  ["VCB", "1M"],
 ] as const
-const QUICK_TIMEFRAMES = new Set<MatrixTimeframe>(["15m", "1h", "1D"])
-const ANY_TIMEFRAME = "(?:1m|15m|30m|1h|2h|4h|1D|3D|1W|1M|1Q|1Y)"
+const QUICK_TIMEFRAMES = new Set<MatrixTimeframe>(["1D", "1W", "1M"])
+const ANY_TIMEFRAME = "(?:1D|3D|1W|1M|1Q|1Y)"
 
 type MatrixTicker = (typeof MATRIX)[number][0]
 type MatrixTimeframe = (typeof MATRIX)[number][1]
@@ -62,7 +61,7 @@ type CurrentTailEvidence = {
   reason: string | null
   cases: Array<{
     ticker: MatrixTicker
-    timeframe: "1h"
+    timeframe: MatrixTimeframe
     samples: ApiSample[]
     summary: Summary
   }>
@@ -100,17 +99,14 @@ function writeBenchmarkArtifact(artifact: unknown) {
   writeFileSync("test-results/qeo172-performance.json", `${JSON.stringify(artifact, null, 2)}\n`)
 }
 
-function rangeFor(timeframe: MatrixTimeframe, now: number) {
+function rangeFor(_timeframe: MatrixTimeframe, now: number) {
   const day = 86_400
-  if (timeframe === "1D") return { from: 1, to: now }
-  if (timeframe === "4h") return { from: now - 186 * day, to: now }
-  if (timeframe === "1h") return { from: now - 90 * day, to: now }
-  return { from: now - 21 * day, to: now }
+  return { from: Math.max(1, now - 5 * 366 * day), to: now }
 }
 
 function alternateTimeframe(target: MatrixTimeframe): MatrixTimeframe {
-  if (target === "1D") return "1h"
-  if (target === "1h") return "4h"
+  if (target === "1D") return "1W"
+  if (target === "1W") return "1M"
   return "1D"
 }
 
@@ -293,15 +289,13 @@ async function measureAdjacentTickerSwitches(page: Page): Promise<{
   timeframe: MatrixTimeframe
   samples: UiSample[]
 }> {
-  const timeframe: MatrixTimeframe = "1h"
+  const timeframe: MatrixTimeframe = "1W"
   await page.goto(`${BASE_URL}/insights/vic`)
   await enterFullscreen(page)
   await selectTimeframe(page, "VIC", timeframe)
   const intent = await adjacentIntent(page, "VIC")
   if (!intent.target) throw new Error("Unable to resolve adjacent ticker")
 
-  // Allow the bounded idle prefetch to warm the exact adjacent target before
-  // measuring the user-visible keyboard transition.
   await page.waitForTimeout(1_000)
   await page.keyboard.press(intent.forwardKey)
   await waitTickerPath(page, intent.target)
@@ -342,26 +336,12 @@ async function measureAdjacentTickerSwitches(page: Page): Promise<{
   return { source: "VIC", target: intent.target, timeframe, samples }
 }
 
-async function measureCurrentTail(request: APIRequestContext): Promise<CurrentTailEvidence> {
-  const now = new Date()
-  if (!isVietnamSecuritiesTradingDay(now)) {
-    return { applicable: false, reason: "current date is not a Vietnam securities trading day", cases: [] }
+async function measureCurrentTail(_request: APIRequestContext): Promise<CurrentTailEvidence> {
+  return {
+    applicable: false,
+    reason: "intraday current-date tail is retired because 1D is the minimum chart timeframe",
+    cases: [],
   }
-  const open = Math.floor(Date.parse(`${vietnamDateKey(now)}T09:00:00+07:00`) / 1000)
-  const to = Math.floor(now.getTime() / 1000)
-  if (to <= open) {
-    return { applicable: false, reason: "current trading date has not reached 09:00 ICT", cases: [] }
-  }
-
-  const cases: CurrentTailEvidence["cases"] = []
-  for (const ticker of ["VIC", "VCB"] as const) {
-    const samples: ApiSample[] = []
-    for (let index = 0; index < SAMPLES; index += 1) {
-      samples.push(await sampleApi(request, ticker, "1h", { from: open, to }))
-    }
-    cases.push({ ticker, timeframe: "1h", samples, summary: summarize(samples.map((sample) => sample.wallMs)) })
-  }
-  return { applicable: true, reason: null, cases }
 }
 
 function enforceAcceptanceBudgets({
@@ -416,10 +396,6 @@ function enforceAcceptanceBudgets({
     }
   }
 
-  // The 50 ms budget is the local L0 resolution boundary, not end-to-end UI
-  // render time. Production network observation must show zero duplicate network
-  // for stable-only cases; the focused contract suite measures local cache reuse
-  // against LOCAL_STABLE_REUSE_MAX_MS without conflating React paint latency.
   expect(LOCAL_STABLE_REUSE_MAX_MS).toBe(50)
 }
 
@@ -438,7 +414,7 @@ test("QEO-172 authenticated production performance benchmark", async ({ page }) 
   }> = []
 
   for (const [ticker, timeframe] of MATRIX) {
-    await sampleApi(request, ticker, timeframe) // warm-up
+    await sampleApi(request, ticker, timeframe)
     const samples: ApiSample[] = []
     for (let index = 0; index < SAMPLES; index += 1) {
       samples.push(await sampleApi(request, ticker, timeframe))
@@ -462,8 +438,8 @@ test("QEO-172 authenticated production performance benchmark", async ({ page }) 
   for (const ticker of ["VIC", "VCB"] as const) {
     await page.goto(`${BASE_URL}/insights/${ticker.toLowerCase()}`)
     await enterFullscreen(page)
-    for (const timeframe of ["1D", "4h", "1h", "15m"] as const) {
-      await measureTimeframeInteraction(page, ticker, timeframe) // warm-up
+    for (const timeframe of ["1D", "3D", "1W", "1M"] as const) {
+      await measureTimeframeInteraction(page, ticker, timeframe)
       const samples: UiSample[] = []
       for (let index = 0; index < SAMPLES; index += 1) {
         samples.push(await measureTimeframeInteraction(page, ticker, timeframe))

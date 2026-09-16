@@ -25,6 +25,11 @@ const RETIRED_ACTIVE_SCHEDULERS = [
   ["market.sync_eod", "sync-universe-eod-1445"],
 ] as const
 
+const RETIRED_CHART_SCHEDULERS = [
+  ["qeoindex.chart_intraday_maintenance", "qeoindex-chart-intraday-maintenance-1450-ict"],
+  ["qeoindex.chart_archive_catchup", "qeoindex-chart-archive-catchup-1645-ict"],
+] as const
+
 function migrationSource() {
   const migrationsDir = new URL("../supabase/migrations/", import.meta.url)
   const matches = readdirSync(migrationsDir).filter((name) =>
@@ -35,7 +40,7 @@ function migrationSource() {
   return readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
 }
 
-test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85, QEO-150 and QEO-228 remain independent", () => {
+test("QEO-238 keeps historical EOD/chart jobs visible while removing standalone production ownership", () => {
   for (const [jobKey] of RETIRED_ACTIVE_SCHEDULERS) {
     const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
     assert.ok(job, `${jobKey} must remain visible as operational/historical catalog evidence`)
@@ -65,20 +70,20 @@ test("QEO-64 removes standalone EOD freshness scheduler ownership while QEO-85, 
   assert.equal(research.schedulePolicy?.kind, "fixed_time")
   assert.equal(research.schedulerName, "research-reports-daily-0705-ict")
 
-  const chartMaintenance = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "qeoindex.chart_intraday_maintenance")
-  assert.ok(chartMaintenance)
-  assert.equal(chartMaintenance.schedulePolicy?.kind, "fixed_time")
-  assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
-  assert.equal(chartMaintenance.scheduleUtc, "50 7 * * 1-5")
+  for (const [jobKey] of RETIRED_CHART_SCHEDULERS) {
+    const job = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === jobKey)
+    assert.ok(job)
+    assert.equal(job.scheduleKind, "manual")
+    assert.equal(job.schedulePolicy?.kind, "manual")
+    assert.equal(job.schedulerName, undefined)
+    assert.equal(job.scheduleUtc, undefined)
+    assert.equal(job.manualPolicy, "disabled")
+    assert.equal(job.manualPurpose, "maintenance")
+    assert.deepEqual(job.automatedParentKeys, [])
+  }
 
-  const chartArchiveCatchup = EFFECTIVE_ADMIN_JOB_CATALOG.find((candidate) => candidate.key === "qeoindex.chart_archive_catchup")
-  assert.ok(chartArchiveCatchup)
-  assert.equal(chartArchiveCatchup.schedulePolicy?.kind, "fixed_time")
-  assert.equal(chartArchiveCatchup.schedulerName, "qeoindex-chart-archive-catchup-1645-ict")
-  assert.equal(chartArchiveCatchup.scheduleUtc, "45 9 * * 1-5")
-
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 10)
-  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 6)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind === "manual").length, 12)
+  assert.equal(EFFECTIVE_ADMIN_JOB_CATALOG.filter((job) => job.schedulePolicy?.kind !== "manual").length, 4)
 })
 
 test("QEO-64 cron timeline exposes the seven canonical EOD v4 business phases", () => {
@@ -145,25 +150,21 @@ test("QEO-64 controlled 199/200 failure retries only the failed ticker and resto
   assert.deepEqual(recoveredAttempts.filter((attempt) => attempt.ticker === failedTicker).map((attempt) => attempt.attempt), [1, 2])
 })
 
-test("QEO-64 preserves retired pg_cron aliases for v3 telemetry but removes forward EOD child ownership", () => {
-  for (const [jobKey, schedulerName] of RETIRED_ACTIVE_SCHEDULERS) {
+test("retired pg_cron aliases stay readable historically but never advertise forward ownership", () => {
+  for (const [jobKey, schedulerName] of [...RETIRED_ACTIVE_SCHEDULERS, ...RETIRED_CHART_SCHEDULERS]) {
     assert.equal(getJobKeyForPgCron(schedulerName), jobKey, `${schedulerName} must remain readable as historical evidence`)
     assert.equal(getPgCronNameForJobKey(jobKey), undefined, `${jobKey} must not advertise an active pg_cron owner`)
   }
 
   assert.equal(getJobKeyForPgCron("kfsp-ttai-history-daily-1am-ict"), "kfsp.ttai_history")
   assert.equal(getJobKeyForPgCron("sync-universe-eod-1450"), "market.sync_eod")
-  assert.equal(getPgCronNameForJobKey("qeoindex.chart_intraday_maintenance"), "qeoindex-chart-intraday-maintenance-1450-ict")
-  assert.equal(getPgCronNameForJobKey("qeoindex.chart_archive_catchup"), "qeoindex-chart-archive-catchup-1645-ict")
   assert.equal(getPgCronNameForJobKey("research_reports.daily"), "research-reports-daily-0705-ict")
 })
 
-test("scheduler reconciliation leaves EOD to UpCloud and verifies the remaining Supabase schedules", () => {
+test("scheduler reconciliation excludes QEO-238 retired chart schedules", () => {
   assert.deepEqual(
     EXPECTED_SUPABASE_SCHEDULERS.map((mapping) => mapping.schedulerName),
     [
-      "qeoindex-chart-intraday-maintenance-1450-ict",
-      "qeoindex-chart-archive-catchup-1645-ict",
       "research-reports-daily-0705-ict",
       "sync-universe-5m",
       "sync-universe-5m-afternoon",
@@ -180,14 +181,14 @@ test("scheduler reconciliation leaves EOD to UpCloud and verifies the remaining 
     lastFinishedAt: null,
   }))
   const reconciled = reconcileSupabaseSchedulers({ availability: "available", rows })
-  assert.equal(reconciled.aggregate.expected, 6, "five Supabase schedules + one Vercel config-only schedule")
-  assert.equal(reconciled.aggregate.liveVerified, 5)
+  assert.equal(reconciled.aggregate.expected, 4, "three Supabase schedules + one Vercel config-only schedule")
+  assert.equal(reconciled.aggregate.liveVerified, 3)
   assert.equal(reconciled.aggregate.missing, 0)
   assert.equal(reconciled.aggregate.inventoryClean, true)
   assert.equal(reconciled.aggregate.expectedMappingsVerified, true)
   assert.deepEqual(
     reconciled.logical.map((mapping) => mapping.jobKey),
-    ["qeoindex.chart_intraday_maintenance", "qeoindex.chart_archive_catchup", "research_reports.daily", "market.sync_5m", "signals.daily"],
+    ["research_reports.daily", "market.sync_5m", "signals.daily"],
   )
 })
 

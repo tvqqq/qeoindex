@@ -43,12 +43,6 @@ export const VALID_DRAWING_ICONS = new Set<DrawingIconType>([
 ])
 
 export const VALID_CHART_TIMEFRAMES = new Set<ChartTimeframe>([
-  "1m",
-  "15m",
-  "30m",
-  "1h",
-  "2h",
-  "4h",
   "1D",
   "3D",
   "1W",
@@ -158,62 +152,52 @@ export function validateDrawingV2(val: unknown): ValidationResult {
     }
   }
 
-  if (val.text !== undefined) {
-    if (typeof val.text !== "string") {
-      errors.push("Drawing text must be a string.")
+  if (val.tool === "text") {
+    if (typeof val.text !== "string" || val.text.trim().length === 0) {
+      errors.push("Text drawing requires a non-empty text field.")
     } else if (val.text.length > MAX_DRAWING_TEXT_LENGTH) {
-      errors.push(`Drawing text exceeds maximum length of ${MAX_DRAWING_TEXT_LENGTH} characters.`)
+      errors.push(`Text drawing exceeds maximum length of ${MAX_DRAWING_TEXT_LENGTH}.`)
     }
+  } else if (val.text !== undefined && typeof val.text !== "string") {
+    errors.push("Drawing text must be a string when provided.")
   }
 
-  if (val.iconType !== undefined) {
+  if (val.tool === "icon") {
     if (typeof val.iconType !== "string" || !VALID_DRAWING_ICONS.has(val.iconType as DrawingIconType)) {
-      errors.push(`Invalid iconType: "${String(val.iconType)}".`)
+      errors.push(`Icon drawing requires a valid iconType, received "${String(val.iconType)}".`)
     }
+  } else if (val.iconType !== undefined && (typeof val.iconType !== "string" || !VALID_DRAWING_ICONS.has(val.iconType as DrawingIconType))) {
+    errors.push(`Invalid iconType: "${String(val.iconType)}".`)
   }
 
   if (val.locked !== undefined && typeof val.locked !== "boolean") {
-    errors.push("Drawing locked flag must be a boolean.")
+    errors.push("Drawing locked must be a boolean when provided.")
   }
-
   if (val.hidden !== undefined && typeof val.hidden !== "boolean") {
-    errors.push("Drawing hidden flag must be a boolean.")
+    errors.push("Drawing hidden must be a boolean when provided.")
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
+  return { valid: errors.length === 0, errors }
+}
+
+export function validateDrawingsCollectionV2(val: unknown): ValidationResult {
+  if (!Array.isArray(val)) {
+    return { valid: false, errors: ["Drawings must be an array."] }
   }
-}
+  if (val.length > MAX_DRAWINGS_PER_TICKER) {
+    return { valid: false, errors: [`Drawings count ${val.length} exceeds maximum limit of ${MAX_DRAWINGS_PER_TICKER}.`] }
+  }
 
-export function isPersistedDrawingV2(val: unknown): val is PersistedDrawingV2 {
-  return validateDrawingV2(val).valid
-}
-
-export function validateDrawingsCollectionV2(drawings: unknown): ValidationResult {
   const errors: string[] = []
-
-  if (!Array.isArray(drawings)) {
-    return { valid: false, errors: ["Drawings payload must be an array."] }
-  }
-
-  if (drawings.length > MAX_DRAWINGS_PER_TICKER) {
-    return {
-      valid: false,
-      errors: [`Drawings count (${drawings.length}) exceeds maximum limit of ${MAX_DRAWINGS_PER_TICKER}.`],
+  const ids = new Set<string>()
+  for (let i = 0; i < val.length; i++) {
+    const result = validateDrawingV2(val[i])
+    for (const error of result.errors) errors.push(`Drawing[${i}]: ${error}`)
+    const id = isPlainObject(val[i]) && typeof val[i].id === "string" ? val[i].id : null
+    if (id) {
+      if (ids.has(id)) errors.push(`Drawing[${i}]: duplicate drawing id "${id}".`)
+      ids.add(id)
     }
   }
-
-  for (let i = 0; i < drawings.length; i++) {
-    const res = validateDrawingV2(drawings[i])
-    if (!res.valid) {
-      const id = isPlainObject(drawings[i]) && typeof drawings[i].id === "string" ? drawings[i].id : `#${i}`
-      errors.push(`Drawing [${id}]: ${res.errors.join("; ")}`)
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  }
+  return { valid: errors.length === 0, errors }
 }

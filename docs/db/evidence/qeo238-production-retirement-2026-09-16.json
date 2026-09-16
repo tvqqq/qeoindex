@@ -1,0 +1,108 @@
+{
+  "capturedAt": "2026-09-16T07:50:22Z",
+  "projectRef": "glwhhrmejlonhyorvtzm",
+  "issue": "QEO-238",
+  "productionMigrations": [
+    {
+      "logicalName": "qeo238_stop_intraday_schedulers",
+      "repositoryVersion": "20260916141000",
+      "productionVersion": "20260916073134"
+    },
+    {
+      "logicalName": "qeo238_retire_intraday_schema",
+      "repositoryVersion": "20260916142000",
+      "productionVersion": "20260916074442"
+    }
+  ],
+  "preRetirement": {
+    "databaseBytes": 378662035,
+    "retiredCronCount": 2,
+    "storageObjectCount": 1466,
+    "storageBytes": 1834869,
+    "marketOhlcvHistory": {
+      "rows": 230013,
+      "heapBytes": 135839744,
+      "indexBytes": 22831104,
+      "totalBytes": 158744576
+    }
+  },
+  "retirement": {
+    "retiredCronCount": 0,
+    "storageObjectCount": 0,
+    "storageBytes": 0,
+    "emptyStorageBucketMetadataRetained": true,
+    "retiredRelations": [
+      "chart_ohlcv_intraday",
+      "chart_ohlcv_derived_hourly",
+      "chart_ohlcv_derived_hourly_readiness",
+      "chart_ohlcv_backfill_ranges",
+      "chart_ohlcv_cold_manifests",
+      "chart_ohlcv_provenance_batches"
+    ],
+    "retiredSequence": "chart_ohlcv_intraday_content_version_seq",
+    "representativeRetiredRoutines": [
+      "qeo_upsert_chart_intraday_bars(text,jsonb)",
+      "qeo_chart_intraday_coverage(text[],timestamp with time zone)",
+      "qeo_validate_chart_derived_hourly_manifests(uuid[])"
+    ],
+    "dailyTombstone": "qeo_prune_verified_chart_daily_partition(uuid,text,integer)",
+    "usedCascade": false
+  },
+  "vacuumFullGate": {
+    "databaseBytesBefore": 291228819,
+    "liveTuplePayloadBytes": 70476048,
+    "heapInflationFactor": 1.5,
+    "conservativeHeapBytes": 105714072,
+    "currentPrimaryKeyBytesUsedAsIndexUpperBound": 22831104,
+    "rewriteWorkspaceFactor": 1.25,
+    "estimatedRewriteBytes": 160681470,
+    "estimatedPeakBytes": 451910289,
+    "gateBytes": 470000000,
+    "estimatedHeadroomBytes": 18089711,
+    "decision": "PASS"
+  },
+  "postVacuumFull": {
+    "databaseBytes": 167931027,
+    "databaseBytesReclaimedFromPreFull": 123297792,
+    "databaseBytesReclaimedFromPreRetirement": 210731008,
+    "marketOhlcvHistory": {
+      "rows": 230013,
+      "heapBytes": 28172288,
+      "indexBytes": 7282688,
+      "totalBytes": 35463168,
+      "relationBytesReclaimed": 123281408,
+      "primaryKey": "market_ohlcv_history_pkey",
+      "redundantLookupIndex": null,
+      "deadTuples": 0,
+      "lastAnalyze": "2026-09-16T07:50:04.962837+00:00"
+    },
+    "dailyCanaries": [
+      {"ticker":"FPT","rows":1245,"firstBar":"2021-09-16T02:00:00+00:00","lastBar":"2026-09-15T02:00:00+00:00"},
+      {"ticker":"HPG","rows":1245,"firstBar":"2021-09-16T02:00:00+00:00","lastBar":"2026-09-15T02:00:00+00:00"},
+      {"ticker":"SSI","rows":1245,"firstBar":"2021-09-16T02:00:00+00:00","lastBar":"2026-09-15T02:00:00+00:00"},
+      {"ticker":"VCB","rows":1245,"firstBar":"2021-09-16T02:00:00+00:00","lastBar":"2026-09-15T02:00:00+00:00"},
+      {"ticker":"VNM","rows":1245,"firstBar":"2021-09-16T02:00:00+00:00","lastBar":"2026-09-15T02:00:00+00:00"}
+    ],
+    "vcbLatest300Plan": {
+      "nodeType": "Index Scan",
+      "scanDirection": "Backward",
+      "indexName": "market_ohlcv_history_pkey",
+      "actualRows": 300,
+      "sharedHitBlocks": 18,
+      "sharedReadBlocks": 0,
+      "executionTimeMs": 0.648
+    }
+  },
+  "preproductionGates": {
+    "sourceHead": "34b367b1d9433a42c6a3f12a0aa541fb9c3350b5",
+    "verifyRun": 35068573220,
+    "verifyConclusion": "success",
+    "dbDriftRun": 35068573168,
+    "dbDriftConclusion": "success",
+    "dbReplay": "success",
+    "generatedDatabaseTypes": "success",
+    "dbContracts": "success",
+    "typecheck": "success",
+    "retiredSchemaReadback": "success"
+  }
+}

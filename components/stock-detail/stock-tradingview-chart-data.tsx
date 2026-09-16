@@ -14,7 +14,6 @@ import {
   calculateRsiSeries,
   calculateVolumeSma,
 } from "./chart/stock-chart-indicators"
-import { CanonicalMinuteBarsContext } from "./chart/use-canonical-minute-bars"
 import { ALL_TIMEFRAMES, type ChartTimeframe } from "./chart/stock-chart-types"
 import { useChartHistory } from "./chart/use-chart-history"
 import {
@@ -47,7 +46,6 @@ interface TimeframeEventDetail {
   timeframe: ChartTimeframe
 }
 
-const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h", "4h"])
 const SUPPORTED_TIMEFRAMES = new Set<ChartTimeframe>(ALL_TIMEFRAMES.map(({ id }) => id))
 
 function formatMetric(value: number | null | undefined, digits = 2) {
@@ -99,8 +97,6 @@ function HistoryBoundChart({
     loadOlder,
     liveState,
     liveError,
-    liveProvider,
-    lastUpdatedAt,
   } = useChartHistory({ ticker, timeframe, seedDailyBars, preparedInitial })
 
   const dragStartXRef = useRef<number | null>(null)
@@ -110,18 +106,11 @@ function HistoryBoundChart({
     if (!loading && !loadingOlder && hasMore) void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder])
 
-  useEffect(() => {
-    if (timeframe !== "1m" || loading || loadingOlder || !hasMore || error) return
-    void loadOlder()
-  }, [error, hasMore, loadOlder, loading, loadingOlder, timeframe])
-
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (timeframe === "1m") return
     if (event.button === 0) dragStartXRef.current = event.clientX
   }
 
   const handleMouseMoveCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (timeframe === "1m") return
     const start = dragStartXRef.current
     if (start == null || (event.buttons & 1) === 0) return
     if (event.clientX - start >= 80) {
@@ -131,16 +120,6 @@ function HistoryBoundChart({
   }
 
   const resolvedBars = bars.length ? bars : timeframe === "1D" ? seedDailyBars : []
-  const canonicalMinuteOverride = {
-    ticker: ticker.trim().toUpperCase(),
-    bars: resolvedBars,
-  }
-  const liveTimestamp = lastUpdatedAt
-    ? new Date(lastUpdatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-    : null
-  const providerWarning = LIVE_TIMEFRAMES.has(timeframe) && liveState === "stale"
-    ? `${liveProvider ?? "Realtime"}${liveTimestamp ? ` · ${liveTimestamp}` : ""}`
-    : null
 
   const paneSeries = useMemo(() => {
     if (!isMaximized || resolvedBars.length === 0) return null
@@ -230,22 +209,20 @@ function HistoryBoundChart({
       onMouseUpCapture={() => { dragStartXRef.current = null }}
       onMouseLeave={() => { dragStartXRef.current = null }}
       onWheelCapture={(event) => {
-        if (timeframe !== "1m" && event.deltaY > 0) requestOlder()
+        if (event.deltaY > 0) requestOlder()
       }}
     >
-      <CanonicalMinuteBarsContext.Provider value={canonicalMinuteOverride}>
-        <StockTradingViewChart
-          ticker={ticker}
-          bars={resolvedBars}
-          hourlyBars={resolvedBars}
-          isLoading={loading}
-          isMaximized={isMaximized}
-          onToggleMaximize={onToggleMaximize}
-          currentPrice={currentPrice}
-          changePct={changePct}
-          navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
-        />
-      </CanonicalMinuteBarsContext.Provider>
+      <StockTradingViewChart
+        ticker={ticker}
+        bars={resolvedBars}
+        hourlyBars={resolvedBars}
+        isLoading={loading}
+        isMaximized={isMaximized}
+        onToggleMaximize={onToggleMaximize}
+        currentPrice={currentPrice}
+        changePct={changePct}
+        navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
+      />
 
       <div
         data-chart-financial-header
@@ -264,12 +241,6 @@ function HistoryBoundChart({
         <span className={liveState === "live" ? "text-emerald-300" : liveState === "stale" ? "text-amber-300" : "text-slate-500"}>
           {liveState.toUpperCase()}
         </span>
-        {providerWarning && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span className="truncate text-amber-300/90">{providerWarning}</span>
-          </>
-        )}
       </div>
 
       {preparingTimeframe && (

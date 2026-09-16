@@ -74,7 +74,7 @@ test("QEO-149 real two-session rehearsal is wired after QEO-108", () => {
   assert.match(workflow, /rehearse-qeo108-chart-storage\.sh[\s\S]*?rehearse-qeo149-concurrency\.sh/i)
 })
 
-test("QEO-147 routing and recovery require the same durable complete-generation validator", () => {
+test("QEO-147 historical derived-hourly validators remain auditable while QEO-238 removes them from active routing", () => {
   const store = readFileSync(new URL("../modules/market/chart-data/derived-hourly-store.ts", import.meta.url), "utf8")
   const readyRange = readFileSync(new URL("../modules/market/chart-data/derived-hourly-ready-range.ts", import.meta.url), "utf8")
   const recovery = readFileSync(new URL("../modules/market/chart-data/derived-hourly-recovery.ts", import.meta.url), "utf8")
@@ -88,9 +88,11 @@ test("QEO-147 routing and recovery require the same durable complete-generation 
   assert.match(readyRange, /derivedHourlyExistingManifestsReady/)
   assert.match(readyRange, /readReadyDerivedHourlyRange/)
   assert.match(readyRange, /postRead[\s\S]*?ready !== true/)
-  assert.match(timeframe, /derivedHourlyExistingManifestsReady/)
-  assert.match(timeframe, /if \(cacheReady\)/)
-  assert.match(timeframe, /if \(!cacheReady\)[\s\S]*?readIntersectingRange/)
+  assert.match(timeframe, /RETIRED_INTRADAY_RESOLUTIONS/)
+  assert.match(timeframe, /Intraday chart timeframe retired/)
+  assert.doesNotMatch(timeframe, /derivedHourlyExistingManifestsReady/)
+  assert.doesNotMatch(timeframe, /readReadyDerivedHourlyRange/)
+  assert.doesNotMatch(timeframe, /readIntersectingRange/)
 })
 
 test("QEO-147 publication schema fails closed on partial stale corrupt or mutated cache generations", () => {

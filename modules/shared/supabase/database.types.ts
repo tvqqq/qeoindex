@@ -758,225 +758,6 @@ export type Database = {
         }
         Relationships: []
       }
-      chart_ohlcv_cold_manifests: {
-        Row: {
-          archive_format: string
-          base_resolution: string
-          byte_count: number | null
-          canonical_content_digest: string | null
-          canonical_content_version: number | null
-          created_at: string
-          format_version: number
-          id: string
-          object_path: string
-          provenance: Json
-          provenance_batch_id: string | null
-          range_end: string
-          range_start: string
-          row_count: number
-          sha256: string
-          ticker: string
-          verified_at: string
-        }
-        Insert: {
-          archive_format: string
-          base_resolution: string
-          byte_count?: number | null
-          canonical_content_digest?: string | null
-          canonical_content_version?: number | null
-          created_at?: string
-          format_version?: number
-          id?: string
-          object_path: string
-          provenance?: Json
-          provenance_batch_id?: string | null
-          range_end: string
-          range_start: string
-          row_count: number
-          sha256: string
-          ticker: string
-          verified_at?: string
-        }
-        Update: {
-          archive_format?: string
-          base_resolution?: string
-          byte_count?: number | null
-          canonical_content_digest?: string | null
-          canonical_content_version?: number | null
-          created_at?: string
-          format_version?: number
-          id?: string
-          object_path?: string
-          provenance?: Json
-          provenance_batch_id?: string | null
-          range_end?: string
-          range_start?: string
-          row_count?: number
-          sha256?: string
-          ticker?: string
-          verified_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chart_ohlcv_cold_manifests_provenance_batch_id_fkey"
-            columns: ["provenance_batch_id"]
-            isOneToOne: false
-            referencedRelation: "chart_ohlcv_provenance_batches"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chart_ohlcv_derived_hourly: {
-        Row: {
-          aggregation_version: string
-          bar_time: string
-          close: number
-          generated_at: string
-          high: number
-          low: number
-          open: number
-          resolution: string
-          source_manifest_id: string
-          source_range_end: string
-          source_range_start: string
-          source_raw_row_count: number
-          source_sha256: string
-          ticker: string
-          volume: number
-        }
-        Insert: {
-          aggregation_version?: string
-          bar_time: string
-          close: number
-          generated_at?: string
-          high: number
-          low: number
-          open: number
-          resolution?: string
-          source_manifest_id: string
-          source_range_end: string
-          source_range_start: string
-          source_raw_row_count: number
-          source_sha256: string
-          ticker: string
-          volume: number
-        }
-        Update: {
-          aggregation_version?: string
-          bar_time?: string
-          close?: number
-          generated_at?: string
-          high?: number
-          low?: number
-          open?: number
-          resolution?: string
-          source_manifest_id?: string
-          source_range_end?: string
-          source_range_start?: string
-          source_raw_row_count?: number
-          source_sha256?: string
-          ticker?: string
-          volume?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chart_ohlcv_derived_hourly_source_manifest_id_fkey"
-            columns: ["source_manifest_id"]
-            isOneToOne: false
-            referencedRelation: "chart_ohlcv_cold_manifests"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chart_ohlcv_intraday: {
-        Row: {
-          bar_time: string
-          base_resolution: string
-          close: number
-          content_digest: string
-          content_version: number
-          fetched_at: string
-          high: number
-          low: number
-          open: number
-          provenance_batch_id: string | null
-          ticker: string
-          volume: number
-        }
-        Insert: {
-          bar_time: string
-          base_resolution: string
-          close: number
-          content_digest: string
-          content_version?: number
-          fetched_at?: string
-          high: number
-          low: number
-          open: number
-          provenance_batch_id?: string | null
-          ticker: string
-          volume: number
-        }
-        Update: {
-          bar_time?: string
-          base_resolution?: string
-          close?: number
-          content_digest?: string
-          content_version?: number
-          fetched_at?: string
-          high?: number
-          low?: number
-          open?: number
-          provenance_batch_id?: string | null
-          ticker?: string
-          volume?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chart_ohlcv_intraday_provenance_batch_id_fkey"
-            columns: ["provenance_batch_id"]
-            isOneToOne: false
-            referencedRelation: "chart_ohlcv_provenance_batches"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chart_ohlcv_provenance_batches: {
-        Row: {
-          base_resolution: string
-          detail: Json
-          fetched_at: string
-          id: string
-          provider: string
-          range_end: string
-          range_start: string
-          row_count: number
-          ticker: string
-        }
-        Insert: {
-          base_resolution: string
-          detail?: Json
-          fetched_at?: string
-          id?: string
-          provider: string
-          range_end: string
-          range_start: string
-          row_count: number
-          ticker: string
-        }
-        Update: {
-          base_resolution?: string
-          detail?: Json
-          fetched_at?: string
-          id?: string
-          provider?: string
-          range_end?: string
-          range_start?: string
-          row_count?: number
-          ticker?: string
-        }
-        Relationships: []
-      }
       chart_universe_bootstrap_tickers: {
         Row: {
           attempt_count: number
@@ -5014,57 +4795,6 @@ export type Database = {
         Args: { p_job_key: string; p_request_id: string; p_sync_run_id: string }
         Returns: Json
       }
-      qeo_chart_intraday_coverage: {
-        Args: { p_hot_cutoff: string; p_tickers: string[] }
-        Returns: {
-          cold_first_bar_time: string
-          cold_last_bar_time: string
-          cold_manifest_count: number
-          cold_row_count: number
-          derived_first_bar_time: string
-          derived_hourly_row_count: number
-          derived_last_bar_time: string
-          failed_attempt_count: number
-          hot_first_bar_time: string
-          hot_last_bar_time: string
-          hot_row_count: number
-          last_attempt_at: string
-          provider_gap_count: number
-          retryable_failure_count: number
-          successful_request_count: number
-          ticker: string
-        }[]
-      }
-      qeo_chart_intraday_row_content_digest: {
-        Args: {
-          p_bar_time: string
-          p_base_resolution: string
-          p_close: number
-          p_content_version: number
-          p_fetched_at: string
-          p_high: number
-          p_low: number
-          p_open: number
-          p_provenance_batch_id: string
-          p_ticker: string
-          p_volume: number
-        }
-        Returns: string
-      }
-      qeo_chart_intraday_session_coverage: {
-        Args: { p_hot_cutoff: string; p_tickers: string[] }
-        Returns: {
-          first_hot_session: string
-          hot_session_count: number
-          last_hot_session: string
-          ticker: string
-        }[]
-      }
-      qeo_chart_intraday_session_lock_key: {
-        Args: { p_trading_date: string }
-        Returns: number
-      }
-      qeo_chart_storage_capacity: { Args: never; Returns: Json }
       qeo_claim_chart_universe_bootstrap_transition: {
         Args: { p_dispatch_id: string; p_transition_id: string }
         Returns: Json
@@ -5135,10 +4865,6 @@ export type Database = {
           sync_run_id: string
           system_job_run_id: string
         }[]
-      }
-      qeo_ensure_chart_intraday_session_partition_locked: {
-        Args: { p_trading_date: string }
-        Returns: Json
       }
       qeo_finalize_kfsp_manual_lifecycle: {
         Args: {
@@ -5280,35 +5006,6 @@ export type Database = {
         }
         Returns: Json
       }
-      qeo_prune_verified_chart_intraday_partition: {
-        Args: {
-          p_expected_content_digest: string
-          p_expected_content_version: number
-          p_expected_newer_sessions: string[]
-          p_expected_row_count: number
-          p_expected_sha256: string
-          p_manifest_id: string
-        }
-        Returns: Json
-      }
-      qeo_publish_chart_derived_hourly_generation: {
-        Args: {
-          p_aggregation_version: string
-          p_bars: Json
-          p_expected_canonical_content_digest: string
-          p_expected_canonical_content_version: number
-          p_expected_format_version: number
-          p_expected_range_end: string
-          p_expected_range_start: string
-          p_expected_raw_row_count: number
-          p_expected_sha256: string
-          p_generated_at: string
-          p_generation_id: string
-          p_manifest_id: string
-          p_ticker: string
-        }
-        Returns: Json
-      }
       qeo_publish_market_universe_run: {
         Args: { p_run_id: string }
         Returns: Json
@@ -5390,10 +5087,6 @@ export type Database = {
       qeo_trigger_market_snapshot_bootstrap: { Args: never; Returns: number }
       qeo_trigger_market_universe_monthly: { Args: never; Returns: number }
       qeo_trigger_research_reports_daily: { Args: never; Returns: number }
-      qeo_upsert_chart_intraday_bars: {
-        Args: { p_rows: Json; p_ticker: string }
-        Returns: Json
-      }
       qeo_verify_eod_scheduler_secret: {
         Args: { p_secret: string }
         Returns: boolean
