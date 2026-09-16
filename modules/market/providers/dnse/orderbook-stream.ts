@@ -87,7 +87,9 @@ function timestampValueMs(value: unknown): number | null {
 }
 
 function providerTimestampMs(frame: DnseOrderbookFrame): number | null {
-  return timestampValueMs(frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime)
+  return timestampValueMs(
+    frame.multicastReceiveTime ?? frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime,
+  )
 }
 
 function latencyBetween(start: number | null, end: number | null): number | null {
@@ -213,10 +215,17 @@ export function subscribeDnseOrderbookFrames(
     nextLatencyReportAt = Math.floor(latencyFrameCount / LATENCY_REPORT_EVERY + 1) * LATENCY_REPORT_EVERY
   }
 
+  const resetLatencySamples = () => {
+    latencySamples.splice(0, latencySamples.length)
+    latencyFrameCount = 0
+    nextLatencyReportAt = LATENCY_REPORT_EVERY
+  }
+
   const resetLiveBaseline = () => {
     liveSequence = 0
     liveEpoch = ""
     liveBaselineEstablished = false
+    resetLatencySamples()
   }
 
   const clearRecoveryRetry = () => {
