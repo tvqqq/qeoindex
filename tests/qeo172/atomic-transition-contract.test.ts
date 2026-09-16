@@ -99,6 +99,18 @@ test("QEO-172 preferred navigation timeframe blocks stale remote hydration field
   assert.equal(shouldApplyRemoteChartSettingsField(preferredNavigationIntent, "timeframe"), false)
   assert.equal(shouldApplyRemoteChartSettingsField(preferredNavigationIntent, "chartStyle"), true)
   assert.equal(shouldApplyRemoteChartSettingsField(preferredNavigationIntent, "drawings"), true)
+
+  const sync = source("components/stock-detail/chart/use-user-chart-sync.ts")
+  assert.match(
+    sync,
+    /shouldApplyRemoteChartSettingsField\(generation\.localFieldIntents, field\)/,
+    "remote hydration must use the field-level intent gate",
+  )
+  assert.doesNotMatch(
+    sync,
+    /revisionMatches\s*\|\|\s*!generation\.localFieldIntents\.has\(field\)/,
+    "same-revision remote settings must not override an explicit navigation timeframe intent",
+  )
 })
 
 test("QEO-172 fresh live-tail correction replaces only same-timestamp HOT before integrity normalization", () => {
