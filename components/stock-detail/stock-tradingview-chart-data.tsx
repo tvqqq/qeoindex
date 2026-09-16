@@ -6,6 +6,7 @@ import { SlidersHorizontal } from "lucide-react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { cn } from "@/modules/shared/ui/cn"
 import {
+  deriveChartBarsFromDailySeed,
   prepareInitialChartHistory,
   type PreparedChartHistory,
 } from "./chart/chart-history"
@@ -368,7 +369,7 @@ function HistoryBoundChart({
 }
 
 export function StockTradingViewChartData(props: StockTradingViewChartDataProps) {
-  const { navigationTimeframe, onTimeframeChange, preparedInitial: externalPrepared, ticker } = props
+  const { navigationTimeframe, onTimeframeChange, preparedInitial: externalPrepared, seedDailyBars, ticker } = props
   const normalizedTicker = ticker.toUpperCase()
   const externalPreparedForTicker = externalPrepared?.ticker === normalizedTicker ? externalPrepared : null
   const requestedTimeframe = navigationTimeframe?.ticker.toUpperCase() === normalizedTicker
@@ -399,6 +400,22 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     if (nextTimeframe === committedTimeframeRef.current) return
     const generation = preparationRef.current.generation + 1
     preparationRef.current.controller?.abort()
+
+    const seededBars = deriveChartBarsFromDailySeed(seedDailyBars, nextTimeframe)
+    if (seededBars.length > 0) {
+      preparationRef.current = { generation, controller: null }
+      committedTimeframeRef.current = nextTimeframe
+      setPreparedInitial(null)
+      setCommittedTimeframe(nextTimeframe)
+      onTimeframeChange?.(nextTimeframe)
+      if (replayButton?.isConnected) {
+        replayTimeframeClickRef.current = true
+        replayButton.click()
+      }
+      setPreparingTimeframe(null)
+      return
+    }
+
     const controller = new AbortController()
     preparationRef.current = { generation, controller }
     setPreparingTimeframe(nextTimeframe)
@@ -429,7 +446,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
         setPreparingTimeframe(null)
       }
     }
-  }, [onTimeframeChange, ticker])
+  }, [onTimeframeChange, seedDailyBars, ticker])
 
   const handleTimeframeClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (replayTimeframeClickRef.current) {
