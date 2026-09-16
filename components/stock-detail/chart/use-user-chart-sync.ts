@@ -29,7 +29,7 @@ import {
 import {
   canEditChartDrawings,
   mergeRemoteChartSettingsIntoPending,
-  shouldApplyRemoteChartSettings,
+  shouldApplyRemoteChartSettingsField,
   type ChartSettingsField,
 } from "./chart-settings-hydration"
 
@@ -348,7 +348,6 @@ export function useUserChartSync({
         }
       }
 
-      const requestRevision = generation.requestRevision
       try {
         const res = await fetch(`/api/user/chart-drawings?ticker=${encodeURIComponent(ticker)}`, {
           cache: "no-store",
@@ -376,13 +375,8 @@ export function useUserChartSync({
           setDrawingSyncStatus("ready")
           viewSettingsScopeRef.current = scope
         }
-        const revisionMatches = shouldApplyRemoteChartSettings(
-          requestRevision,
-          localRevisionRef.current,
-          false,
-        )
         const canApplyField = (field: ChartSettingsField) =>
-          current && (revisionMatches || !generation.localFieldIntents.has(field))
+          current && shouldApplyRemoteChartSettingsField(generation.localFieldIntents, field)
 
         generation.unresolvedLegacyDrawings = mergeUnresolvedLegacyDrawings(
           generation.unresolvedLegacyDrawings,
