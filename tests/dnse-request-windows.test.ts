@@ -342,5 +342,8 @@ test("QEO-237 keeps provider ingress and exchange-event end-to-end latency on se
     "end-to-end latency must start from the exchange/event timestamp instead of DNSE multicast ingress time",
   )
   assert.match(orderbookStream, /providerToWorker:\s*latencyBetween\(providerIngressAt, workerReceivedAt\)/)
-  assert.match(orderbookStream, /endToEnd:\s*latencyBetween\(eventAt, browserReceivedAt\)/)
+  assert.match(
+    orderbookStream,
+    /endToEnd:\s*eventMatchesCurrentSession\s*\?\s*latencyBetween\(eventAt, browserReceivedAt\)\s*:\s*null/,
+  )
 })
