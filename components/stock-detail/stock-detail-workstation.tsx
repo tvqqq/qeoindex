@@ -21,8 +21,17 @@ import { TopNav } from "@/components/top-nav"
 import { cn } from "@/modules/shared/ui/cn"
 
 type NavigationHistoryMode = "push" | "none"
+type StockDetailRequestOptions = { force?: boolean }
 
-export function StockDetailWorkstation({ data: initialData }: { data: StockDetailData }) {
+type StockDetailWorkstationProps = {
+  data: StockDetailData
+  hydrateInitialData?: boolean
+}
+
+export function StockDetailWorkstation({
+  data: initialData,
+  hydrateInitialData = false,
+}: StockDetailWorkstationProps) {
   const [currentData, setCurrentData] = useState<StockDetailData>(initialData)
   const [activeTicker, setActiveTicker] = useState<string>(initialData.ticker)
   const [pendingTicker, setPendingTicker] = useState<string | null>(null)
@@ -43,12 +52,14 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
   const chartNavigationTimeframeRef = useRef<ChartTimeframeNavigationRequest | null>(null)
   const visibleWatchlistTickersRef = useRef<string[]>(initialData.watchlist.map((item) => item.ticker.toUpperCase()))
 
-  const getStockDetail = useCallback((ticker: string) => {
+  const getStockDetail = useCallback((ticker: string, options: StockDetailRequestOptions = {}) => {
     const sym = ticker.trim().toUpperCase()
-    const cached = cacheRef.current[sym]
-    if (cached) return Promise.resolve(cached)
     const existing = inFlightStockDetailRef.current.get(sym)
     if (existing) return existing
+    if (!options.force) {
+      const cached = cacheRef.current[sym]
+      if (cached) return Promise.resolve(cached)
+    }
 
     const request = fetch(`/api/insights/stock-detail?ticker=${encodeURIComponent(sym)}`, {
       headers: { Accept: "application/json" },
@@ -68,6 +79,38 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
     inFlightStockDetailRef.current.set(sym, request)
     return request
   }, [])
+
+  useEffect(() => {
+    if (!hydrateInitialData) return
+    let cancelled = false
+
+    const hydrate = () => {
+      void getStockDetail(initialData.ticker, { force: true })
+        .then((data) => {
+          if (cancelled || navigationGenerationRef.current !== 0) return
+          setCurrentData(data)
+          visibleWatchlistTickersRef.current = data.watchlist.map((item) => item.ticker.toUpperCase())
+          setPrefetchRevision((value) => value + 1)
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) console.warn("[StockDetailWorkstation] Deferred detail hydration failed:", error)
+        })
+    }
+
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(hydrate, { timeout: 1_000 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback(id)
+      }
+    }
+
+    const timer = window.setTimeout(hydrate, 100)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [getStockDetail, hydrateInitialData, initialData.ticker])
 
   const handleChartTimeframeChange = useCallback((timeframe: ChartTimeframe) => {
     currentChartTimeframeRef.current = timeframe
