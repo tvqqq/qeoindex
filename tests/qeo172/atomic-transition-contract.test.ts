@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import * as hydrationModule from "../../components/stock-detail/chart/chart-settings-hydration.ts"
 import type { CanonicalOhlcvBar, SourceTaggedBar } from "../../modules/market/chart-data/contract.ts"
 import * as normalizeModule from "../../modules/market/chart-data/normalize.ts"
 
@@ -78,6 +79,26 @@ test("QEO-172 adjacent keyboard intent does not retarget the rendered ticker bef
   const prepareStart = workstation.indexOf("const [targetData, targetPrepared] = await Promise.all")
   const commitState = workstation.indexOf("setChartNavigationTimeframe(navigationRequest)", prepareStart)
   assert.ok(prepareStart >= 0 && commitState > prepareStart, "navigation timeframe state must commit only after prepared target data resolves")
+})
+
+test("QEO-172 preferred navigation timeframe blocks stale remote hydration field-by-field", () => {
+  type ShouldApplyField = (localFieldIntents: ReadonlySet<string>, field: string) => boolean
+  const shouldApplyRemoteChartSettingsField = Reflect.get(
+    hydrationModule,
+    "shouldApplyRemoteChartSettingsField",
+  ) as ShouldApplyField | undefined
+
+  assert.equal(
+    typeof shouldApplyRemoteChartSettingsField,
+    "function",
+    "preferred navigation intent needs an explicit field-level remote hydration gate",
+  )
+  if (!shouldApplyRemoteChartSettingsField) return
+
+  const preferredNavigationIntent = new Set(["timeframe"])
+  assert.equal(shouldApplyRemoteChartSettingsField(preferredNavigationIntent, "timeframe"), false)
+  assert.equal(shouldApplyRemoteChartSettingsField(preferredNavigationIntent, "chartStyle"), true)
+  assert.equal(shouldApplyRemoteChartSettingsField(preferredNavigationIntent, "drawings"), true)
 })
 
 test("QEO-172 fresh live-tail correction replaces only same-timestamp HOT before integrity normalization", () => {
