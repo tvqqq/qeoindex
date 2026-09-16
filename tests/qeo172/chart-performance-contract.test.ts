@@ -55,12 +55,12 @@ test("QEO-172 recorder accumulates duration and count per stage", async () => {
 
 test("QEO-238 active Daily request stays wholly closed on a trading date", () => {
   const input: ChartRangeInput = { ticker: "VIC", timeframe: "1D", from: epoch("2026-09-01T00:00:00+07:00"), to: epoch("2026-09-10T00:00:00+07:00") }
-  assert.deepEqual(planChartHistorySlices(input, new Date("2026-09-10T16:00:00+07:00")), { stableClosed: input, currentDateTail: null })
+  assert.deepEqual(planChartHistorySlices(input), { stableClosed: input, currentDateTail: null })
 })
 
 test("QEO-238 non-trading date also keeps the bounded Daily request closed", () => {
   const input: ChartRangeInput = { ticker: "VIC", timeframe: "1D", from: epoch("2026-09-01T00:00:00+07:00"), to: epoch("2026-09-11T00:00:00+07:00") }
-  assert.deepEqual(planChartHistorySlices(input, new Date("2026-09-12T10:00:00+07:00")), { stableClosed: input, currentDateTail: null })
+  assert.deepEqual(planChartHistorySlices(input), { stableClosed: input, currentDateTail: null })
 })
 
 test("QEO-172 future-ending ranges are never stable-cacheable", () => {
@@ -70,7 +70,7 @@ test("QEO-172 future-ending ranges are never stable-cacheable", () => {
 
 test("QEO-172 completed Daily never gets an intraday current-date tail", () => {
   const input: ChartRangeInput = { ticker: "VIC", timeframe: "1D", from: 1, to: epoch("2026-09-10T00:00:00+07:00") }
-  assert.deepEqual(planChartHistorySlices(input, new Date("2026-09-10T10:30:00+07:00")), { stableClosed: input, currentDateTail: null })
+  assert.deepEqual(planChartHistorySlices(input), { stableClosed: input, currentDateTail: null })
 })
 
 test("QEO-172 server cache policy admits only safe stable complete ranges", () => {
