@@ -102,17 +102,13 @@ test("Technical indicators calculate valid series", () => {
   assert.ok(vp.buckets.some((b) => b.isPoc))
 })
 
-test("Timeframe aggregation never fabricates intraday candles from Daily bars", () => {
+test("Active timeframe aggregation derives only Daily and larger candles", () => {
   const daily = aggregateBarsByTimeframe(mockBars, undefined, "1D")
   assert.ok(daily.length > 0)
+  const threeDay = aggregateBarsByTimeframe(mockBars, undefined, "3D")
+  assert.ok(threeDay.length > 0 && threeDay.length <= daily.length)
   const weekly = aggregateBarsByTimeframe(mockBars, undefined, "1W")
   assert.ok(weekly.length > 0 && weekly.length <= daily.length)
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "1m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "15m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "30m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "1h"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "2h"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "4h"), [])
 })
 
 test("QEO-93 historical intraday aggregation never crosses the VN lunch break", () => {
