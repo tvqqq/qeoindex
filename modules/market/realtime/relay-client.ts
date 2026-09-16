@@ -11,6 +11,7 @@ export type MarketRelayMarketMessage = {
   epoch: string
   sequence: number
   publishedAt: string
+  browserReceivedAtMonotonicMs: number
   continuityGap: boolean
   frames: MarketRelayFrame[]
 }
@@ -22,6 +23,7 @@ export type MarketRelayOrderbookMessage = {
   epoch: string
   sequence: number
   publishedAt: string
+  browserReceivedAtMonotonicMs: number
   continuityGap: boolean
   frames: MarketRelayFrame[]
 }
@@ -123,7 +125,7 @@ function parseFrames(value: unknown): MarketRelayFrame[] {
   )
 }
 
-function parseDataMessage(value: unknown): MarketRelayDataMessage | null {
+function parseDataMessage(value: unknown, browserReceivedAtMonotonicMs: number): MarketRelayDataMessage | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const source = value as Record<string, unknown>
   const batchId = typeof source.batchId === "string" ? source.batchId.trim().slice(0, 160) : ""
@@ -139,6 +141,7 @@ function parseDataMessage(value: unknown): MarketRelayDataMessage | null {
       epoch,
       sequence,
       publishedAt,
+      browserReceivedAtMonotonicMs,
       continuityGap: source.continuityGap === true,
       frames: parseFrames(source.frames),
     }
@@ -154,6 +157,7 @@ function parseDataMessage(value: unknown): MarketRelayDataMessage | null {
       epoch,
       sequence,
       publishedAt,
+      browserReceivedAtMonotonicMs,
       continuityGap: source.continuityGap === true,
       frames: parseFrames(source.frames),
     }
@@ -215,6 +219,7 @@ async function connect() {
     }
     nextSocket.onmessage = (event) => {
       if (socket !== nextSocket || generation !== socketGeneration) return
+      const browserReceivedAtMonotonicMs = performance.now()
       let payload: unknown
       try {
         payload = JSON.parse(String(event.data))
@@ -236,7 +241,7 @@ async function connect() {
         return
       }
 
-      const message = parseDataMessage(payload)
+      const message = parseDataMessage(payload, browserReceivedAtMonotonicMs)
       if (!message) return
       setState({ status: "READY", error: "", lastMessageAt: new Date().toISOString() })
       dispatch(message)
