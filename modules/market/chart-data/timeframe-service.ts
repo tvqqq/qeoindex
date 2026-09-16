@@ -11,45 +11,22 @@ import type {
   ChartOhlcvResult,
 } from "./contract"
 import { ChartDataRequestError, isChartResolution } from "./contract"
-import { createSupabaseColdOhlcvStorage } from "./cold-store"
-import {
-  derivedHourlyExistingManifestsReady,
-  readReadyDerivedHourlyRange,
-} from "./derived-hourly-ready-range"
-import { verifiedHourlySourceCoverageComplete } from "./derived-hourly-source-coverage"
-import { chartHotSessionRetentionCutoff, clampChartHistoryRange } from "./history-policy"
-import { readHotIntradayRange } from "./hot-store"
-import { normalizeCanonicalBars } from "./normalize"
+import { clampChartHistoryRange } from "./history-policy"
 import type { ChartPerfStage } from "./performance"
 import { getCanonicalChartOhlcv, type ChartDataServiceDeps } from "./service"
 import {
   aggregateChartTimeframe,
-  canonicalSourceResolution,
-  hourlyCoverageIsComplete,
-  hourlyOverlapRange,
-  overlayHourlyHotOnDerived,
   sourceRangeForResolution,
   splitCanonicalSourceRange,
 } from "./timeframes"
 
 type CanonicalLoader = (request: CanonicalChartOhlcvRequest) => Promise<CanonicalChartOhlcvResult>
-type DerivedHourlyLoader = (input: { ticker: string; from: number; to: number }) => Promise<CanonicalOhlcvBar[]>
-type DerivedCoverageLoader = (input: { ticker: string; from: number; to: number }) => Promise<boolean>
-type HotLoader = (input: { ticker: string; from: number; to: number }) => Promise<CanonicalOhlcvBar[]>
 
 export interface ChartTimeframeServiceDeps extends ChartDataServiceDeps {
   canonicalLoader?: CanonicalLoader
-  derivedHourlyLoader?: DerivedHourlyLoader
-  derivedCoverageLoader?: DerivedCoverageLoader
-  sourceCoverageLoader?: DerivedCoverageLoader
-  hotLoader?: HotLoader
 }
 
-const HOURLY_RESOLUTIONS = new Set(["1h", "2h", "4h"])
-
-async function measured<T>(deps: ChartTimeframeServiceDeps, stage: ChartPerfStage, work: () => Promise<T>) {
-  return deps.performance ? deps.performance.measure(stage, work) : work()
-}
+const RETIRED_INTRADAY_RESOLUTIONS = new Set(["1m", "15m", "30m", "1h", "2h", "4h"])
 
 function measuredSync<T>(deps: ChartTimeframeServiceDeps, stage: ChartPerfStage, work: () => T) {
   return deps.performance ? deps.performance.measureSync(stage, work) : work()
@@ -60,6 +37,7 @@ function normalizePublicRequest(input: ChartOhlcvRequest): ChartOhlcvRequest {
   const resolution = String(input.resolution || "")
   if (!/^[A-Z0-9]{2,12}$/.test(ticker)) throw new ChartDataRequestError("Invalid ticker")
   if (!isChartResolution(resolution)) throw new ChartDataRequestError("Unsupported chart resolution")
+  if (RETIRED_INTRADAY_RESOLUTIONS.has(resolution)) throw new ChartDataRequestError("Intraday chart timeframe retired")
   if (!Number.isInteger(input.from) || !Number.isInteger(input.to) || input.from <= 0 || input.to <= input.from) throw new ChartDataRequestError("Invalid chart range")
   const range = clampChartHistoryRange({ resolution, from: input.from, to: input.to })
   return { ticker, resolution, from: range.from, to: range.to }
@@ -71,176 +49,56 @@ function mergeBars(results: CanonicalChartOhlcvResult[]) {
   return [...byTime.values()].sort((a, b) => a.time - b.time)
 }
 
-function mergeHourlyBars(oldBars: CanonicalOhlcvBar[], recentBars: CanonicalOhlcvBar[]) {
-  const byTime = new Map<number, CanonicalOhlcvBar>()
-  for (const bar of oldBars) byTime.set(bar.time, bar)
-  for (const bar of recentBars) byTime.set(bar.time, bar)
-  return [...byTime.values()].sort((a, b) => a.time - b.time)
-}
-
-function aggregateHourlyResolution(request: ChartOhlcvRequest, mergedHourly: CanonicalOhlcvBar[]) {
-  return request.resolution === "1h" ? mergedHourly : aggregateChartTimeframe(mergedHourly, request.resolution)
-}
-
 function uniqueErrors(results: CanonicalChartOhlcvResult[]): ChartDataError[] {
   return [...new Map(results.flatMap((result) => result.errors).map((error) => [error.code, error])).values()]
 }
-function mergeErrors(...groups: ChartDataError[][]): ChartDataError[] {
-  return [...new Map(groups.flat().map((error) => [error.code, error])).values()]
-}
+
 function uniqueGaps(results: CanonicalChartOhlcvResult[]): ChartDataGap[] {
   return [...new Map(results.flatMap((result) => result.gaps).map((gap) => [`${gap.fromTime}:${gap.toTime}`, gap])).values()]
 }
+
 function uniqueIntegrity(results: CanonicalChartOhlcvResult[]): ChartDataIntegrityIssue[] {
   return [...new Map(results.flatMap((result) => result.integrityIssues).map((issue) => [JSON.stringify(issue), issue])).values()]
 }
+
 function filterThreeDayRange(bars: CanonicalOhlcvBar[], from: number, to: number) {
   const before = bars.filter((bar) => bar.time < from).at(-1)
   const inside = bars.filter((bar) => bar.time >= from && bar.time <= to)
   return before ? [before, ...inside] : inside
 }
 
-async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartOhlcvRequest, loadCanonical: CanonicalLoader): Promise<ChartOhlcvResult> {
-  const referenceAt = deps.now ?? new Date()
-  const hotCutoff = chartHotSessionRetentionCutoff(referenceAt)
+export async function getChartOhlcv(deps: ChartTimeframeServiceDeps, input: ChartOhlcvRequest): Promise<ChartOhlcvResult> {
+  const request = normalizePublicRequest(input)
+  const loadCanonical: CanonicalLoader = deps.canonicalLoader ?? ((canonicalRequest) => getCanonicalChartOhlcv(deps, canonicalRequest))
+
+  if (request.resolution === "1D") {
+    const result = await loadCanonical({ ...request, resolution: "1D" })
+    return { ...result, resolution: request.resolution }
+  }
+
   const sourceRange = sourceRangeForResolution(request.resolution, request.from, request.to)
-  const loadDerived: DerivedHourlyLoader = deps.derivedHourlyLoader ?? ((input) => readReadyDerivedHourlyRange(deps.supabase, input.ticker, input.from, input.to))
-  const derivedCoverage: DerivedCoverageLoader = deps.derivedCoverageLoader ?? ((input) => derivedHourlyExistingManifestsReady(deps.supabase, input))
-  const sourceCoverage: DerivedCoverageLoader = deps.sourceCoverageLoader
-    ?? (deps.derivedCoverageLoader ? deps.derivedCoverageLoader : (input) => verifiedHourlySourceCoverageComplete(deps.supabase, input))
-  const loadHot: HotLoader = deps.hotLoader ?? ((input) => readHotIntradayRange(deps.supabase, input.ticker, input.from, input.to))
-
-  const oldFrom = sourceRange.from
-  const oldTo = Math.min(request.to, hotCutoff - 1)
-  const oldRequested = oldFrom <= oldTo
-  const oldErrors: ChartDataError[] = []
-  const oldIntegrityIssues: ChartDataIntegrityIssue[] = []
-  let oldHourly: CanonicalOhlcvBar[] = []
-  let oldProvider: string | null = null
-  let oldSourceCoverageComplete = !oldRequested
-
-  if (oldRequested) {
-    let oldHot: CanonicalOhlcvBar[] = []
-    try {
-      oldHot = await measured(deps, "hot-db", () => loadHot({ ticker: request.ticker, from: oldFrom, to: oldTo }))
-    } catch {
-      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-    }
-
-    // Freeze full requested-session source coverage before taking the partial
-    // derived-cache snapshot. If history is missing now, this request remains
-    // truthfully PARTIAL even if a concurrent archive fills the gap later.
-    try {
-      oldSourceCoverageComplete = await measured(deps, "derived-cache", () => sourceCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo }))
-    } catch {
-      oldSourceCoverageComplete = false
-      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-    }
-
-    let cacheReady = false
-    try {
-      cacheReady = await measured(deps, "derived-cache", () => derivedCoverage({ ticker: request.ticker, from: oldFrom, to: oldTo }))
-    } catch {
-      // Readiness evidence itself is unavailable. Verified RAW remains the
-      // authority, but the public result stays PARTIAL rather than inventing
-      // a positive cache/recovery proof.
-      oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-    }
-
-    if (cacheReady) {
-      try {
-        const derived = await measured(deps, "derived-cache", () => loadDerived({ ticker: request.ticker, from: oldFrom, to: oldTo }))
-        if (!oldHot.length) {
-          oldHourly = derived
-          if (oldHourly.length) oldProvider = "DERIVED_1H_CACHE"
-        } else {
-          // A derived 1h bar cannot be patched with a partial HOT hour. Read
-          // verified RAW only for affected buckets, then reuse ready derived
-          // cache everywhere else.
-          const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
-          const overlapRange = hourlyOverlapRange(oldHot)
-          const cold = overlapRange
-            ? await measured(deps, "cold-object", () => coldStorage.readIntersectingRange({
-                ticker: request.ticker,
-                from: Math.max(oldFrom, overlapRange.from),
-                to: Math.min(oldTo, overlapRange.to),
-              }))
-            : { bars: [], manifestsRead: 0 }
-          const overlay = overlayHourlyHotOnDerived({ derived, cold: cold.bars, hot: oldHot })
-          oldIntegrityIssues.push(...overlay.integrityIssues)
-          oldHourly = overlay.bars
-          if (overlay.unresolvedHotOverlap) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-          if (oldHourly.length) oldProvider = "DERIVED_1H_CACHE+HOT_1M_OVERLAY"
-        }
-      } catch {
-        // A cache mutation or concurrent generation can invalidate readiness
-        // after the first check. Never serve that cache: recover from verified
-        // RAW below in the same request.
-        cacheReady = false
-        oldHourly = []
-        oldProvider = null
-      }
-    }
-
-    if (!cacheReady) {
-      try {
-        const coldStorage = deps.coldStorage ?? createSupabaseColdOhlcvStorage(deps.supabase)
-        const cold = await measured(deps, "cold-object", () => coldStorage.readIntersectingRange({ ticker: request.ticker, from: oldFrom, to: oldTo }))
-        const normalized = normalizeCanonicalBars([
-          ...cold.bars.map((bar) => ({ source: "cold" as const, bar })),
-          ...oldHot.map((bar) => ({ source: "hot" as const, bar })),
-        ])
-        oldIntegrityIssues.push(...normalized.integrityIssues)
-        oldHourly = measuredSync(deps, "aggregation", () => aggregateChartTimeframe(normalized.bars, "1h"))
-        if (oldHourly.length) oldProvider = oldHot.length ? "VERIFIED_COLD_1M_RECOVERY+HOT_1M" : "VERIFIED_COLD_1M_RECOVERY"
-      } catch {
-        oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
-        // Retained HOT-only data is still useful evidence. It must remain
-        // PARTIAL because verified RAW was unavailable for this old segment.
-        if (oldHot.length) {
-          oldHourly = measuredSync(deps, "aggregation", () => aggregateChartTimeframe(oldHot, "1h"))
-          oldProvider = "HOT_1M"
-        }
-      }
-    }
-
-    if (!oldHourly.length) oldErrors.push({ code: "STORAGE_UNAVAILABLE" })
+  const chunks = splitCanonicalSourceRange("1D", sourceRange.from, sourceRange.to)
+  const results: CanonicalChartOhlcvResult[] = []
+  for (const chunk of chunks) {
+    results.push(await loadCanonical({ ticker: request.ticker, resolution: "1D", from: chunk.from, to: chunk.to }))
   }
 
-  const recentFrom = Math.max(sourceRange.from, hotCutoff)
-  const recentResults: CanonicalChartOhlcvResult[] = []
-  if (recentFrom <= request.to) {
-    for (const chunk of splitCanonicalSourceRange("1m", recentFrom, request.to)) {
-      recentResults.push(await loadCanonical({ ticker: request.ticker, resolution: "1m", from: chunk.from, to: chunk.to }))
-    }
-  }
-
-  const recentHourly = measuredSync(deps, "aggregation", () => aggregateChartTimeframe(mergeBars(recentResults), "1h"))
-  const mergedHourly = mergeHourlyBars(oldHourly, recentHourly)
-  const aggregated = request.resolution === "1h"
-    ? mergedHourly
-    : measuredSync(deps, "aggregation", () => aggregateHourlyResolution(request, mergedHourly))
-  const bars = aggregated.filter((bar) => bar.time >= sourceRange.from && bar.time <= request.to)
-
-  const gaps = uniqueGaps(recentResults)
-  const integrityIssues = uniqueIntegrity(recentResults)
-  integrityIssues.push(...oldIntegrityIssues.filter((issue) => !integrityIssues.some((existing) => JSON.stringify(existing) === JSON.stringify(issue))))
-  const errors = mergeErrors(uniqueErrors(recentResults), oldErrors)
-  const complete = hourlyCoverageIsComplete({
-    barsPresent: bars.length > 0,
-    oldRequested,
-    oldCoverageProven: oldSourceCoverageComplete,
-    recentCoverageComplete: recentResults.every((result) => result.coverage.complete),
-    hasGaps: gaps.length > 0,
-    hasIntegrityIssues: integrityIssues.length > 0,
-    hasErrors: errors.length > 0,
-  })
-
-  const sourceMetadata = [...recentResults].reverse().find((result) => result.metadata)?.metadata
-  const oldPersistedThrough = oldHourly.at(-1)?.time ?? null
-  const recentPersistedThrough = sourceMetadata?.persistedThrough ?? null
-  const persistedThrough = oldPersistedThrough == null ? recentPersistedThrough : recentPersistedThrough == null ? oldPersistedThrough : Math.max(oldPersistedThrough, recentPersistedThrough)
-  const sessionState = sourceMetadata?.sessionState ?? "CLOSED"
+  const aggregated = measuredSync(deps, "aggregation", () => aggregateChartTimeframe(mergeBars(results), request.resolution))
+  const bars = request.resolution === "3D"
+    ? filterThreeDayRange(aggregated, request.from, request.to)
+    : aggregated.filter((bar) => bar.time >= sourceRange.from && bar.time <= request.to)
+  const gaps = uniqueGaps(results)
+  const integrityIssues = uniqueIntegrity(results)
+  const errors = uniqueErrors(results)
+  const complete = bars.length > 0
+    && results.every((result) => result.coverage.complete)
+    && gaps.length === 0
+    && integrityIssues.length === 0
+    && errors.length === 0
+  const sourceMetadata = [...results].reverse().find((result) => result.metadata)?.metadata
+  const metadata = sourceMetadata
+    ? { ...sourceMetadata, sessionState: "CLOSED" as const, currentBarTime: null }
+    : undefined
 
   return {
     ...request,
@@ -249,40 +107,6 @@ async function loadHourlyFamily(deps: ChartTimeframeServiceDeps, request: ChartO
     integrityIssues,
     errors,
     coverage: { complete, state: complete ? "COMPLETE" : "PARTIAL" },
-    metadata: {
-      priceBasis: "RAW",
-      provider: sourceMetadata?.provider ?? oldProvider,
-      lastUpdatedAt: sourceMetadata?.lastUpdatedAt ?? referenceAt.toISOString(),
-      sessionState,
-      currentBarTime: sessionState === "LIVE" ? bars.at(-1)?.time ?? null : null,
-      persistedThrough,
-    },
+    metadata,
   }
-}
-
-export async function getChartOhlcv(deps: ChartTimeframeServiceDeps, input: ChartOhlcvRequest): Promise<ChartOhlcvResult> {
-  const request = normalizePublicRequest(input)
-  const sourceResolution = canonicalSourceResolution(request.resolution)
-  const loadCanonical: CanonicalLoader = deps.canonicalLoader ?? ((canonicalRequest) => getCanonicalChartOhlcv(deps, canonicalRequest))
-
-  if (request.resolution === "1m" || request.resolution === "1D") {
-    const result = await loadCanonical({ ...request, resolution: sourceResolution })
-    return { ...result, resolution: request.resolution }
-  }
-  if (HOURLY_RESOLUTIONS.has(request.resolution)) return loadHourlyFamily(deps, request, loadCanonical)
-
-  const sourceRange = sourceRangeForResolution(request.resolution, request.from, request.to)
-  const chunks = splitCanonicalSourceRange(sourceResolution, sourceRange.from, sourceRange.to)
-  const results: CanonicalChartOhlcvResult[] = []
-  for (const chunk of chunks) results.push(await loadCanonical({ ticker: request.ticker, resolution: sourceResolution, from: chunk.from, to: chunk.to }))
-
-  const aggregated = measuredSync(deps, "aggregation", () => aggregateChartTimeframe(mergeBars(results), request.resolution))
-  const bars = request.resolution === "3D" ? filterThreeDayRange(aggregated, request.from, request.to) : aggregated.filter((bar) => bar.time >= sourceRange.from && bar.time <= request.to)
-  const gaps = uniqueGaps(results)
-  const integrityIssues = uniqueIntegrity(results)
-  const errors = uniqueErrors(results)
-  const complete = bars.length > 0 && results.every((result) => result.coverage.complete) && gaps.length === 0 && integrityIssues.length === 0 && errors.length === 0
-  const sourceMetadata = [...results].reverse().find((result) => result.metadata)?.metadata
-  const metadata = sourceMetadata ? { ...sourceMetadata, currentBarTime: sourceMetadata.sessionState === "LIVE" ? bars.at(-1)?.time ?? null : null } : undefined
-  return { ...request, bars, gaps, integrityIssues, errors, coverage: { complete, state: complete ? "COMPLETE" : "PARTIAL" }, metadata }
 }
