@@ -54,8 +54,8 @@ test("QEO-172 ticker navigation has bounded prefetch and full preparation before
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
   assert.match(workstation, /adjacentPrefetchTargets/)
-  assert.match(workstation, /prefetchInitialStableChartHistory/)
   assert.match(workstation, /prepareInitialChartHistory/)
+  assert.match(workstation, /Promise\.allSettled/)
   assert.match(workstation, /inFlightStockDetailRef/)
   assert.match(workstation, /pendingTicker/)
 })
