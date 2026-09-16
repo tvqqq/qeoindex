@@ -8,6 +8,7 @@ on:
       - "components/stock-detail/**"
       - "tests/qeo172/**"
       - "tests/browser/qeo172-chart-performance-production.spec.ts"
+      - "tests/browser/qeo172-initial-load-diagnostic.spec.ts"
       - ".github/workflows/qeo-172.yml"
   workflow_dispatch:
     inputs:
@@ -60,14 +61,14 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::QEO-172 benchmark skipped: encrypted QA credentials are not provisioned"
+            echo "::notice::QEO-172 diagnostic skipped: encrypted QA credentials are not provisioned"
           fi
 
-      - name: Record skipped benchmark
+      - name: Record skipped diagnostic
         if: steps.auth.outputs.available != 'true'
         run: |
-          echo "## QEO-172 production benchmark" >> "$GITHUB_STEP_SUMMARY"
-          echo "QEO172_BENCHMARK_EXECUTED=false" >> "$GITHUB_STEP_SUMMARY"
+          echo "## QEO-172 initial-load diagnostic" >> "$GITHUB_STEP_SUMMARY"
+          echo "QEO172_DIAGNOSTIC_EXECUTED=false" >> "$GITHUB_STEP_SUMMARY"
           echo "Reason: encrypted QA credentials are not provisioned." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v4
@@ -86,16 +87,15 @@ jobs:
       - name: Install Chromium
         if: steps.auth.outputs.available == 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - name: Run authenticated production benchmark
+      - name: Run initial-load phase diagnostic
         if: steps.auth.outputs.available == 'true'
-        run: pnpm exec playwright test tests/browser/qeo172-chart-performance-production.spec.ts --project=desktop
-      - name: Upload benchmark evidence
+        run: pnpm exec playwright test tests/browser/qeo172-initial-load-diagnostic.spec.ts --project=desktop
+      - name: Upload diagnostic evidence
         if: always() && steps.auth.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: qeo172-production-performance-${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_mode || 'acceptance' }}
+          name: qeo172-initial-load-diagnostic
           path: |
-            test-results/qeo172-performance.json
             playwright-report/
             test-results/
           if-no-files-found: ignore
