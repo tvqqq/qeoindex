@@ -404,16 +404,14 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     const seededBars = deriveChartBarsFromDailySeed(seedDailyBars, nextTimeframe)
     if (seededBars.length > 0) {
       preparationRef.current = { generation, controller: null }
-      flushSync(() => {
-        committedTimeframeRef.current = nextTimeframe
-        setPreparedInitial(null)
-        setCommittedTimeframe(nextTimeframe)
-        onTimeframeChange?.(nextTimeframe)
-        if (replayButton?.isConnected) {
-          replayTimeframeClickRef.current = true
-          replayButton.click()
-        }
-      })
+      committedTimeframeRef.current = nextTimeframe
+      setPreparedInitial(null)
+      setCommittedTimeframe(nextTimeframe)
+      onTimeframeChange?.(nextTimeframe)
+      if (replayButton?.isConnected) {
+        replayTimeframeClickRef.current = true
+        replayButton.click()
+      }
       setPreparingTimeframe(null)
       return
     }
