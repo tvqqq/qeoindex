@@ -284,17 +284,23 @@ async function loadReview(): Promise<ResearchData> {
 
 async function loadTicker(ticker: string): Promise<ResearchData> {
   if (!isNotionConfigured()) return loadBoundedResearchData()
+  const normalized = ticker.trim().toUpperCase()
   try {
-    const theses = await loadTheses()
-    const thesis = theses.find((row) => row.ticker === ticker.toUpperCase())
-    if (!thesis) return buildData(theses, [], `ticker ${ticker.toUpperCase()} chưa có canonical thesis`)
+    const thesisResult = await queryDataSource(STOCK_THESIS_DATA_SOURCE_ID, {
+      filter: { property: "Ticker", title: { equals: normalized } },
+      pageSize: 1,
+      maxPages: 1,
+    })
+    const theses = thesisResult.results.map(parseThesis).filter((row) => row.ticker === normalized)
+    const thesis = theses[0]
+    if (!thesis) return buildData([], [], `ticker ${normalized} chưa có canonical thesis`)
     const logs = await queryDataSource(ANALYSIS_LOG_DATA_SOURCE_ID, {
       filter: { property: "Ticker", relation: { contains: thesis.id } },
       sorts: LOG_SORTS,
       pageSize: 100,
       maxPages: 1,
     })
-    return buildData(theses, logs.results, `ticker ${ticker.toUpperCase()} chỉ đọc log của chính mã`)
+    return buildData(theses, logs.results, `ticker ${normalized} chỉ đọc thesis + log của chính mã`)
   } catch (error) {
     console.error("[QeoIndex Research] ticker query failed", error)
     return unavailable(true, "Notion đã cấu hình nhưng truy vấn ticker hiện lỗi. QeoIndex không hiển thị dữ liệu stale/fallback.")
