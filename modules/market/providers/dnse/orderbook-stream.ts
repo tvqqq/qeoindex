@@ -86,8 +86,16 @@ function timestampValueMs(value: unknown): number | null {
   return null
 }
 
-function providerTimestampMs(frame: DnseOrderbookFrame): number | null {
-  return timestampValueMs(frame.multicastReceiveTime ?? frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime)
+function providerIngressTimestampMs(frame: DnseOrderbookFrame): number | null {
+  return timestampValueMs(
+    frame.multicastReceiveTime ?? frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime,
+  )
+}
+
+function eventTimestampMs(frame: DnseOrderbookFrame): number | null {
+  return timestampValueMs(
+    frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime ?? frame.multicastReceiveTime,
+  )
 }
 
 function latencyBetween(start: number | null, end: number | null): number | null {
@@ -168,12 +176,13 @@ export function subscribeDnseOrderbookFrames(
     for (const frame of message.frames) {
       if (frameSymbol(frame) !== upper) continue
       const workerReceivedAt = timestampValueMs(frame[WORKER_RECEIVED_AT_FIELD])
-      const providerAt = providerTimestampMs(frame)
+      const providerIngressAt = providerIngressTimestampMs(frame)
+      const eventAt = eventTimestampMs(frame)
       latencySamples.push({
-        providerToWorker: latencyBetween(providerAt, workerReceivedAt),
+        providerToWorker: latencyBetween(providerIngressAt, workerReceivedAt),
         workerQueue: latencyBetween(workerReceivedAt, publishedAt),
         delivery: latencyBetween(publishedAt, browserReceivedAt),
-        endToEnd: latencyBetween(providerAt, browserReceivedAt),
+        endToEnd: latencyBetween(eventAt, browserReceivedAt),
       })
       added += 1
     }
