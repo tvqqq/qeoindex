@@ -84,3 +84,14 @@ test("QEO-172 fresh live-tail correction replaces only same-timestamp HOT before
   assert.equal(reconciled.some((item) => item.source === "hot" && item.bar.time === staleHot.time), false)
   assert.equal(reconciled.some((item) => item.source === "hot" && item.bar.time === unrelatedHot.time), true)
 })
+
+test("QEO-172 live-tail correction handoff runs before service integrity normalization", () => {
+  const service = source("modules/market/chart-data/service.ts")
+  const partitionIndex = service.indexOf("const partition = partitionLiveMinuteBars")
+  const reconcileIndex = service.indexOf("reconcileLiveTailProviderBars(tagged, partition.responseBars)")
+  const normalizeIndex = service.indexOf("normalized = normalizeCanonicalBars(tagged)", partitionIndex)
+
+  assert.ok(partitionIndex >= 0, "service must partition live-tail provider bars")
+  assert.ok(reconcileIndex > partitionIndex, "service must reconcile fresh live-tail bars after partitioning")
+  assert.ok(normalizeIndex > reconcileIndex, "service must normalize only after live-tail correction handoff")
+})
