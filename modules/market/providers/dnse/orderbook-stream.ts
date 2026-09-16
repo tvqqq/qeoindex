@@ -87,9 +87,7 @@ function timestampValueMs(value: unknown): number | null {
 }
 
 function providerTimestampMs(frame: DnseOrderbookFrame): number | null {
-  return timestampValueMs(
-    frame.multicastReceiveTime ?? frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime,
-  )
+  return timestampValueMs(frame.multicastReceiveTime ?? frame.time ?? frame.t ?? frame.timestamp ?? frame.ts ?? frame.transactTime)
 }
 
 function latencyBetween(start: number | null, end: number | null): number | null {
