@@ -7,6 +7,7 @@ import {
   type MarketRelayOrderbookMessage,
 } from "@/modules/market/realtime/relay-client"
 import { reportRealtimeHealth } from "@/modules/market/realtime/health-reporter"
+import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getAuthenticatedSupabaseRealtimeClient } from "@/modules/shared/supabase/authenticated-realtime"
 
 export type DnseOrderbookFrame = Record<string, unknown>
@@ -150,6 +151,7 @@ export function subscribeDnseOrderbookFrames(
   let lastMessageAtMs = Date.now()
   let latencyFrameCount = 0
   let nextLatencyReportAt = LATENCY_REPORT_EVERY
+  let latencySessionPhase = getMarketSessionStatus(new Date()).phase
   const latencySamples: OrderbookLatencySample[] = []
   let currentState: DnseOrderbookStreamState = {
     status: "CONNECTING",
@@ -169,8 +171,20 @@ export function subscribeDnseOrderbookFrames(
     }
   }
 
+  const resetLatencySamples = () => {
+    latencySamples.splice(0, latencySamples.length)
+    latencyFrameCount = 0
+    nextLatencyReportAt = LATENCY_REPORT_EVERY
+  }
+
   const recordLatency = (message: MarketRelayOrderbookMessage) => {
     const browserReceivedAt = Date.now()
+    const subscriberReceivedAtMonotonicMs = performance.now()
+    const currentSession = getMarketSessionStatus(new Date(browserReceivedAt))
+    if (latencySessionPhase !== currentSession.phase) {
+      resetLatencySamples()
+      latencySessionPhase = currentSession.phase
+    }
     const publishedAt = timestampValueMs(message.publishedAt)
     let added = 0
     for (const frame of message.frames) {
@@ -178,11 +192,13 @@ export function subscribeDnseOrderbookFrames(
       const workerReceivedAt = timestampValueMs(frame[WORKER_RECEIVED_AT_FIELD])
       const providerIngressAt = providerIngressTimestampMs(frame)
       const eventAt = eventTimestampMs(frame)
+      const eventSessionPhase = eventAt == null ? null : getMarketSessionStatus(new Date(eventAt)).phase
+      const eventMatchesCurrentSession = currentSession.isLiveSession && eventSessionPhase === currentSession.phase
       latencySamples.push({
         providerToWorker: latencyBetween(providerIngressAt, workerReceivedAt),
         workerQueue: latencyBetween(workerReceivedAt, publishedAt),
-        delivery: latencyBetween(publishedAt, browserReceivedAt),
-        endToEnd: latencyBetween(eventAt, browserReceivedAt),
+        delivery: latencyBetween(message.browserReceivedAtMonotonicMs, subscriberReceivedAtMonotonicMs),
+        endToEnd: eventMatchesCurrentSession ? latencyBetween(eventAt, browserReceivedAt) : null,
       })
       added += 1
     }
@@ -220,12 +236,6 @@ export function subscribeDnseOrderbookFrames(
       endToEnd,
     })
     nextLatencyReportAt = Math.floor(latencyFrameCount / LATENCY_REPORT_EVERY + 1) * LATENCY_REPORT_EVERY
-  }
-
-  const resetLatencySamples = () => {
-    latencySamples.splice(0, latencySamples.length)
-    latencyFrameCount = 0
-    nextLatencyReportAt = LATENCY_REPORT_EVERY
   }
 
   const resetLiveBaseline = () => {
