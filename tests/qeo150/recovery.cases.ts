@@ -6,7 +6,7 @@ function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 }
 
-test("QEO-150 recovery accepts only completed Vietnam trading sessions inside the latest-five HOT window", async () => {
+test("QEO-150 historical recovery policy accepts only completed Vietnam trading sessions inside the latest-five HOT window", async () => {
   const policy = await import("../../modules/market/chart-data/maintenance-policy.ts")
   const recoverable = Reflect.get(policy, "isQeo150RecoverableCompletedSession") as
     | undefined
@@ -22,7 +22,7 @@ test("QEO-150 recovery accepts only completed Vietnam trading sessions inside th
   assert.equal(recoverable!("2026-09-12", afterClose), false)
 })
 
-test("QEO-150 recovery is a machine-only canonical subset flow, not a bootstrap or scheduled-SLA bypass", () => {
+test("QEO-238 retires the QEO-150 recovery route fail-closed while preserving historical workflow evidence", () => {
   const route = source("app/api/qeoindex/chart-maintenance-recovery/route.ts")
   const steps = source("modules/market/chart-data/maintenance-recovery-workflow-steps.ts")
   const recovery = source("workflows/chart-intraday-maintenance-recovery.ts")
@@ -30,10 +30,9 @@ test("QEO-150 recovery is a machine-only canonical subset flow, not a bootstrap 
 
   assert.match(route, /isMachineRequestAuthorized/)
   assert.match(route, /qeo_verify_eod_scheduler_secret/)
-  assert.match(route, /QEO150_RECOVERY_MAX_TICKERS/)
-  assert.match(route, /sessionDate/)
-  assert.match(route, /chartIntradayMaintenanceRecoveryWorkflow/)
-  assert.match(route, /qeo150-recovery-/)
+  assert.match(route, /INTRADAY_CHART_OPERATION_RETIRED/)
+  assert.match(route, /status:\s*410/)
+  assert.doesNotMatch(route, /QEO150_RECOVERY_MAX_TICKERS|chartIntradayMaintenanceRecoveryWorkflow|qeo150-recovery-/)
 
   assert.match(steps, /startChartIntradayMaintenanceRecoveryStep/)
   assert.match(steps, /outsideCanonical/)
@@ -43,12 +42,12 @@ test("QEO-150 recovery is a machine-only canonical subset flow, not a bootstrap 
   assert.doesNotMatch(recovery, /checkChartIntradayMaintenanceExecutionGateStep|sla_timeout/)
   assert.doesNotMatch(recovery, /chartIntradayBootstrapWorkflow|bootstrapChartIntradayChunk/)
 
-  // The normal scheduled workflow must keep its original SLA gates unchanged.
+  // Historical scheduled workflow evidence remains auditable, but no active route dispatches it.
   assert.match(scheduled, /checkChartIntradayMaintenanceExecutionGateStep/)
   assert.match(scheduled, /sla_timeout/)
 })
 
-test("QEO-150 recovery remains idempotent through the existing positive terminal-proof ticker step", () => {
+test("QEO-150 historical recovery remains idempotent through the existing positive terminal-proof ticker step", () => {
   const steps = source("modules/market/chart-data/maintenance-workflow-steps.ts")
   const maintenance = source("modules/market/chart-data/maintenance.ts")
 
