@@ -109,6 +109,7 @@ export function deriveChartBarsFromDailySeed(
   dailyBars: OhlcvBar[],
   timeframe: ChartTimeframe,
 ): OhlcvBar[] {
+  if (timeframe === "3D") return []
   return aggregateChartTimeframe(dailyBars, timeframe)
 }
 
