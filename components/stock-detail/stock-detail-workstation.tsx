@@ -11,7 +11,6 @@ import tabRailStyles from "./stock-tabs-panel.module.css"
 import { StockWatchlistSidebar } from "./stock-watchlist-sidebar"
 import {
   adjacentPrefetchTargets,
-  prefetchInitialStableChartHistory,
   prepareInitialChartHistory,
   type PreparedChartHistory,
 } from "./chart/chart-history"
@@ -158,7 +157,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
       for (const ticker of targets) {
         void Promise.allSettled([
           getStockDetail(ticker),
-          prefetchInitialStableChartHistory({ ticker, timeframe: currentChartTimeframe }),
+          prepareInitialChartHistory({ ticker, timeframe: currentChartTimeframe }),
         ])
       }
     }
