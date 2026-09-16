@@ -15,6 +15,7 @@ function migration(pattern: RegExp) {
 
 const bridgePattern = /_qeo234_daily_provenance_bridge\.sql$/
 const cutoverPattern = /_qeo234_daily_provenance_cutover\.sql$/
+const precedenceFixPattern = /_qeo234_registry_aware_daily_precedence\.sql$/
 
 test("QEO-234 bridge makes long fields nullable and registry-canonical", () => {
   const sql = migration(bridgePattern)
@@ -24,6 +25,22 @@ test("QEO-234 bridge makes long fields nullable and registry-canonical", () => {
   assert.match(sql, /registry\.provider_detail/i)
   assert.match(sql, /registry\.source_url/i)
   assert.match(sql, /history\.provider\s*=\s*registry\.provider/i)
+})
+
+test("QEO-234 precedence uses registry-backed logical provenance for compact updates", () => {
+  const sql = migration(precedenceFixPattern)
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.qeo_preserve_daily_ohlcv_provider_precedence/i)
+  assert.match(sql, /market_ohlcv_provenance/i)
+  assert.match(sql, /to_jsonb\(old\)/i)
+  assert.match(sql, /to_jsonb\(new\)/i)
+  assert.match(sql, /old_provenance_id|old_registry/i)
+  assert.match(sql, /new_provenance_id|new_registry/i)
+  assert.match(sql, /internal:\/\/stock_orderbook_snapshots/i)
+  assert.match(sql, /adjusted OHLC/i)
+  assert.doesNotMatch(sql, /\bold\.source_url\b/i)
+  assert.doesNotMatch(sql, /\bnew\.source_url\b/i)
+  assert.doesNotMatch(sql, /\bold\.provider_detail\b/i)
+  assert.doesNotMatch(sql, /\bnew\.provider_detail\b/i)
 })
 
 test("QEO-234 bridge migrates all live SQL provenance consumers", () => {

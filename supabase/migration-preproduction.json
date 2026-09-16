@@ -119,6 +119,14 @@
       "state": "REPO_AHEAD",
       "evidence": "QEO-234 reviewed fail-closed compact cutover contract; production Stage-2 promotion requires bridge canary and new maintenance authorization",
       "rationale": "After fail-closed provenance assertions, enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the obsolete QEO-233 historical backfill RPC, and preserves registry-backed logical APIs. Physical rewrite remains outside migration."
+    },
+    {
+      "logicalName": "qeo234_registry_aware_daily_precedence",
+      "repositoryVersion": "20260916073000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-234 production VCB compact-writer canary failed closed because the legacy QEO-106 precedence trigger downgraded compact internal-snapshot Fallback provenance; PR #508 RED contract run 35042206955 and GREEN focused contract run 35042415409",
+      "rationale": "Makes Daily provider precedence resolve provider_detail/source_url through provenance_id when available, while retaining JSONB fallback for pre-reference bridge rows. This preserves QEO-106 authority and Yahoo semantic-basis rules for compact writes before and after Stage-2 removes the long inline columns. The migration changes only the trigger function definition and remains repo-ahead until exact-head DB replay/Verify pass and a separately authorized production promotion plus five-ticker canary succeeds."
     }
   ]
 }
