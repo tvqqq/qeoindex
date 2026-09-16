@@ -16,6 +16,7 @@ function migration(pattern: RegExp) {
 const bridgePattern = /_qeo234_daily_provenance_bridge\.sql$/
 const cutoverPattern = /_qeo234_daily_provenance_cutover\.sql$/
 const precedenceFixPattern = /_qeo234_registry_aware_daily_precedence\.sql$/
+const lookupRemovalPattern = /_qeo234_drop_redundant_daily_lookup_idx\.sql$/
 
 test("QEO-234 bridge makes long fields nullable and registry-canonical", () => {
   const sql = migration(bridgePattern)
@@ -116,4 +117,12 @@ test("QEO-234 keeps grouped Daily tuple width/order and rollback reconstruction 
   assert.match(runbook, /ADD COLUMN provider_detail text/i)
   assert.match(runbook, /ADD COLUMN source_url text/i)
   assert.match(runbook, /market_ohlcv_provenance/i)
+})
+
+test("QEO-234 source-backed reclaim retires only the redundant Daily lookup index", () => {
+  const sql = migration(lookupRemovalPattern)
+  assert.match(sql, /drop\s+index\s+if\s+exists\s+public\.market_ohlcv_history_lookup_idx/i)
+  assert.doesNotMatch(sql, /drop\s+index[\s\S]*market_ohlcv_history_pkey/i)
+  assert.doesNotMatch(sql, /vacuum\s+full|cluster\s+public\.market_ohlcv_history|reindex/i)
+  assert.doesNotMatch(sql, /delete\s+from\s+public\.market_ohlcv_history|truncate(?:\s+table)?\s+public\.market_ohlcv_history/i)
 })
