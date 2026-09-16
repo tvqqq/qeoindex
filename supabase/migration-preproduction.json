@@ -147,18 +147,18 @@
     {
       "logicalName": "qeo238_stop_intraday_schedulers",
       "repositoryVersion": "20260916141000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-238 phased retirement source review and exact live pg_cron inventory before production promotion",
-      "rationale": "Phase 1 removes only qeoindex-chart-intraday-maintenance-1450-ict and qeoindex-chart-archive-catchup-1645-ict so retired stock-chart intraday persistence cannot regenerate before destructive cleanup."
+      "productionVersion": "20260916073134",
+      "state": "MAPPED",
+      "evidence": "QEO-238 exact-head Verify #4244 and DB Drift #1435 GREEN; production migration 20260916073134; post-apply cron readback count=0; docs/db/evidence/qeo238-production-retirement-2026-09-16.json",
+      "rationale": "Supabase assigned production version 20260916073134 while repository replay keeps reviewed version 20260916141000. Phase 1 removed only qeoindex-chart-intraday-maintenance-1450-ict and qeoindex-chart-archive-catchup-1645-ict, preventing retired stock-chart intraday persistence from regenerating before Storage and schema cleanup."
     },
     {
       "logicalName": "qeo238_retire_intraday_schema",
       "repositoryVersion": "20260916142000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-238 live routine/trigger/relation dependency inventory plus explicit no-CASCADE retirement migration review",
-      "rationale": "Phase 2 explicitly retires the isolated stock-chart intraday tables, sequence, triggers and exact-signature helper/RPC graph while preserving the QEO-236 Daily five-year retention contract and the historical Daily prune signature as a fail-closed tombstone."
+      "productionVersion": "20260916074442",
+      "state": "MAPPED",
+      "evidence": "QEO-238 Storage API empty readback 0 objects/0 bytes; production migration 20260916074442; six retired relations plus sequence and representative RPCs absent; Daily PK/tombstone preserved; targeted VACUUM FULL reduced DB to 167,931,027 bytes; docs/db/evidence/qeo238-production-retirement-2026-09-16.json",
+      "rationale": "Supabase assigned production version 20260916074442 while repository replay keeps reviewed version 20260916142000. Phase 2 explicitly retired the isolated stock-chart intraday tables, sequence, triggers and exact-signature helper/RPC graph without CASCADE while preserving QEO-236 Daily five-year retention and the historical Daily prune tombstone. After retirement created sufficient headroom under the 470,000,000-byte gate, targeted VACUUM FULL ANALYZE compacted market_ohlcv_history with all 230,013 rows and market_ohlcv_history_pkey intact."
     }
   ]
 }
