@@ -327,3 +327,20 @@ test("QEO-235 clears latency samples across relay continuity boundaries", () => 
     "a worker epoch/recovery boundary must not mix latency samples from the previous epoch",
   )
 })
+
+test("QEO-237 keeps provider ingress and exchange-event end-to-end latency on separate timestamp semantics", () => {
+  const orderbookStream = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  assert.match(
+    orderbookStream,
+    /function providerIngressTimestampMs[\s\S]*frame\.multicastReceiveTime/,
+    "provider-to-worker diagnostics must continue to use DNSE multicast receive time",
+  )
+  assert.match(
+    orderbookStream,
+    /function eventTimestampMs[\s\S]*frame\.time \?\? frame\.t/,
+    "end-to-end latency must start from the exchange/event timestamp instead of DNSE multicast ingress time",
+  )
+  assert.match(orderbookStream, /providerToWorker:\s*latencyBetween\(providerIngressAt, workerReceivedAt\)/)
+  assert.match(orderbookStream, /endToEnd:\s*latencyBetween\(eventAt, browserReceivedAt\)/)
+})
