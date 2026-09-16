@@ -6,12 +6,12 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("QEO-228 archive catch-up fans out by ticker instead of relying on one global 48-partition EOD run", () => {
+test("QEO-228 historical archive catch-up fans out by ticker instead of relying on one global 48-partition EOD run", () => {
   const workflowPath = new URL("../workflows/chart-intraday-archive-catchup.ts", import.meta.url)
   const stepsPath = new URL("../modules/market/chart-data/archive-catchup-workflow-steps.ts", import.meta.url)
 
-  assert.equal(existsSync(workflowPath), true, "dedicated catch-up workflow must exist")
-  assert.equal(existsSync(stepsPath), true, "catch-up workflow steps must exist")
+  assert.equal(existsSync(workflowPath), true, "historical catch-up workflow must remain auditable")
+  assert.equal(existsSync(stepsPath), true, "historical catch-up workflow steps must remain auditable")
 
   const workflow = source("workflows/chart-intraday-archive-catchup.ts")
   const steps = source("modules/market/chart-data/archive-catchup-workflow-steps.ts")
@@ -26,7 +26,7 @@ test("QEO-228 archive catch-up fans out by ticker instead of relying on one glob
   assert.doesNotMatch(workflow, /runChartIntradayArchiveLifecycle/)
 })
 
-test("QEO-228 catch-up remains fail-closed and reports per-ticker archive failures", () => {
+test("QEO-228 historical catch-up remains fail-closed and reports per-ticker archive failures", () => {
   const steps = source("modules/market/chart-data/archive-catchup-workflow-steps.ts")
   const workflow = source("workflows/chart-intraday-archive-catchup.ts")
 
@@ -38,9 +38,9 @@ test("QEO-228 catch-up remains fail-closed and reports per-ticker archive failur
   assert.match(workflow, /status === "partial"/)
 })
 
-test("QEO-228 exposes a machine-authenticated workflow dispatch and a post-EOD weekday schedule", () => {
+test("QEO-238 retires QEO-228 machine dispatch and active scheduler while preserving historical evidence", () => {
   const routePath = new URL("../app/api/qeoindex/chart-archive-catchup/route.ts", import.meta.url)
-  assert.equal(existsSync(routePath), true, "dedicated machine route must exist")
+  assert.equal(existsSync(routePath), true, "retired machine route must remain as a fail-closed tombstone")
 
   const route = source("app/api/qeoindex/chart-archive-catchup/route.ts")
   const migration = source("supabase/migrations/20260915073500_qeo228_chart_archive_catchup.sql")
@@ -49,13 +49,15 @@ test("QEO-228 exposes a machine-authenticated workflow dispatch and a post-EOD w
 
   assert.match(route, /isMachineRequestAuthorized/)
   assert.match(route, /qeo_verify_eod_scheduler_secret/)
-  assert.match(route, /chartIntradayArchiveCatchupWorkflow/)
-  assert.match(route, /qeo228-/)
+  assert.match(route, /INTRADAY_CHART_OPERATION_RETIRED/)
+  assert.match(route, /status:\s*410/)
+  assert.doesNotMatch(route, /chartIntradayArchiveCatchupWorkflow|qeo228-/)
+
   assert.match(migration, /qeoindex-chart-archive-catchup-1645-ict/)
   assert.match(migration, /45 9 \* \* 1-5/)
   assert.match(migration, /\/api\/qeoindex\/chart-archive-catchup/)
   assert.match(jobSchedule, /"qeoindex-chart-archive-catchup-1645-ict":\s*"qeoindex\.chart_archive_catchup"/)
-  assert.match(jobSchedule, /"qeoindex\.chart_archive_catchup":\s*"qeoindex-chart-archive-catchup-1645-ict"/)
+  assert.doesNotMatch(jobSchedule, /"qeoindex\.chart_archive_catchup":\s*"qeoindex-chart-archive-catchup-1645-ict"/)
   assert.match(effectiveCatalog, /key:\s*"qeoindex\.chart_archive_catchup"/)
-  assert.match(effectiveCatalog, /scheduleIct:\s*"16:45 T2-T6"/)
+  assert.match(effectiveCatalog, /asRetiredChartJob\(QEO228_CHART_ARCHIVE_CATCHUP_JOB\)/)
 })
