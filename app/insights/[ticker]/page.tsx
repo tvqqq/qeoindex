@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { LandingLogin } from "@/components/auth/landing-login"
 import { StockDetailWorkstation } from "@/components/stock-detail/stock-detail-workstation"
 import { getServerAuthContext } from "@/modules/auth/server"
-import { fetchStockDetailData } from "@/modules/research/insights/stock-detail-data"
+import { fetchStockDetailCriticalData } from "@/modules/research/insights/stock-detail-critical-data"
 
 export const dynamic = "force-dynamic"
 
@@ -37,7 +37,7 @@ export default async function InsightsTickerPage({
     decoded = "HPG"
   }
 
-  const stockDetailData = await fetchStockDetailData(decoded, auth.supabase)
+  const stockDetailData = await fetchStockDetailCriticalData(decoded, auth.supabase)
 
-  return <StockDetailWorkstation data={stockDetailData} />
+  return <StockDetailWorkstation data={stockDetailData} hydrateInitialData />
 }
