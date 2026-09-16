@@ -40,7 +40,7 @@ const QEO150_CHART_MAINTENANCE_JOB: AdminJobDefinition = {
   key: "qeoindex.chart_intraday_maintenance",
   provider: "supabase_pg_cron_workflow",
   label: "Chart Intraday Freshness Maintenance",
-  description: "QEO-150 bounded canonical-200 completed-session reconciliation through the shared QEO-148 closed-range ingestion contract.",
+  description: "Historical QEO-150 chart maintenance evidence. Retired by QEO-238 after the product cut over to Daily-and-larger chart history.",
   group: "market",
   scheduleUtc: "50 7 * * 1-5",
   scheduleIct: "14:50 T2-T6",
@@ -57,7 +57,7 @@ const QEO228_CHART_ARCHIVE_CATCHUP_JOB: AdminJobDefinition = {
   key: "qeoindex.chart_archive_catchup",
   provider: "supabase_pg_cron_workflow",
   label: "Chart 1m Archive Catch-up",
-  description: "QEO-228 post-EOD canonical-universe fan-out that archives verified old 1m HOT sessions to private Storage and prunes only after checksum/readback/content-retention proof.",
+  description: "Historical QEO-228 1m archive evidence. Retired by QEO-238; the active product no longer retains an intraday chart archive.",
   group: "market",
   scheduleUtc: "45 9 * * 1-5",
   scheduleIct: "16:45 T2-T6",
@@ -156,6 +156,25 @@ function asRetiredEodJob(
   })
 }
 
+function asRetiredChartJob(job: AdminJobDefinition): AdminJobDefinition {
+  return withSchedulePolicy({
+    ...job,
+    provider: "machine",
+    label: `${job.label} (Retired)`,
+    scheduleUtc: undefined,
+    scheduleIct: undefined,
+    scheduleKind: "manual",
+    schedulerName: undefined,
+    scheduleDays: undefined,
+    windowStartIct: undefined,
+    windowEndIct: undefined,
+    intervalMinutes: undefined,
+    manualPolicy: "disabled",
+    manualPurpose: "maintenance",
+    automatedParentKeys: [],
+  })
+}
+
 function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition {
   if (job.key === "signals.daily") {
     return withSchedulePolicy({
@@ -220,18 +239,11 @@ function applyOperationalOverrides(job: AdminJobDefinition): AdminJobDefinition 
   return withSchedulePolicy(job)
 }
 
-/**
- * Canonical operational catalog after QEO-228 chart archive throughput hardening.
- *
- * EOD v4 remains the sole EOD orchestration owner. QEO-150 is a separate,
- * narrowly scoped chart-data maintenance workflow at 14:50 ICT; QEO-228 is a
- * post-EOD verified HOT/COLD archive catch-up at 16:45 ICT. Neither runs
- * market-close collection, EOD publishing, Wyckoff, or AI phases.
- */
+/** Canonical operational catalog after QEO-238 intraday chart retirement. */
 export const EFFECTIVE_ADMIN_JOB_CATALOG: AdminJobDefinition[] = [
   withSchedulePolicy(QEOINDEX_EOD_PIPELINE_JOB),
-  withSchedulePolicy(QEO150_CHART_MAINTENANCE_JOB),
-  withSchedulePolicy(QEO228_CHART_ARCHIVE_CATCHUP_JOB),
+  asRetiredChartJob(QEO150_CHART_MAINTENANCE_JOB),
+  asRetiredChartJob(QEO228_CHART_ARCHIVE_CATCHUP_JOB),
   withSchedulePolicy(RESEARCH_REPORTS_DAILY_JOB),
   withSchedulePolicy(RESEARCH_REPORTS_BACKFILL_JOB),
   ...ADMIN_JOB_CATALOG
