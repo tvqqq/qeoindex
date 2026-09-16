@@ -93,7 +93,7 @@
       "repositoryVersion": "20260915083000",
       "productionVersion": "20260915090954",
       "state": "MAPPED",
-      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: focused QEO-232/QEO-233 contracts, Verify 34950444143, DB Drift 34950444002, merge SHA 5c6ea378eeab3bda9cd15abd804ccbfea4f67682, production migration 20260915090954, and live schema/FK/nullability readback",
+      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: focused QEO-232/QEO-233 contracts, Verify 34950444143, DB Drift 34950444002, merge SHA 5c6ea378eeab3da9cd15abd804ccbfea4f67682, production migration 20260915090954, and live schema/FK/nullability readback",
       "rationale": "Supabase assigned production version 20260915090954 while repository replay keeps reviewed version 20260915083000. Production readback confirms the additive immutable Daily provenance registry exists, market_ohlcv_history.provenance_id remains nullable, the reference is ON DELETE RESTRICT, and no historical backfill or legacy-column removal was performed during rollout."
     },
     {
@@ -101,7 +101,7 @@
       "repositoryVersion": "20260915083500",
       "productionVersion": "20260915091036",
       "state": "MAPPED",
-      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: Verify 34950444143, DB Drift 34950444002, production migration 20260915091036, width-10 grouped RPC readback with mismatch_rows=0, and Vercel READY deployment dpl_DhvT8RZMZ7JaHs9awVdYAvYdRVs6 on merge SHA 5c6ea378eeab3bda9cd15abd804ccbfea4f67682",
+      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: Verify 34950444143, DB Drift 34950444002, production migration 20260915091036, width-10 grouped RPC readback with mismatch_rows=0, and Vercel READY deployment dpl_DhvT8RZMZ7JaHs9awVdYAvYdRVs6 on merge SHA 5c6ea378eeab3da9cd15abd804ccbfea4f67682",
       "rationale": "Supabase assigned production version 20260915091036 while repository replay keeps reviewed version 20260915083500. Production readback confirms the compatibility view and bounded capacity-gated backfill RPC are present, grouped Daily output preserves the width-10 ABI, mismatch_rows is zero, and the historical provenance backfill remains separately gated rather than being invoked by migration."
     },
     {
@@ -131,10 +131,10 @@
     {
       "logicalName": "qeo234_drop_redundant_daily_lookup_idx",
       "repositoryVersion": "20260916080000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-234 production transactional benchmark: VCB/FPT/HPG/SSI/VNM all used market_ohlcv_history_pkey backward scan without the lookup index, avoided sequential scans, remained under 20 ms and within 2x their same-transaction baseline; rollback restored the index and preserved the logical digest",
-      "rationale": "Source-backed physical-reclaim preparation removes only market_ohlcv_history_lookup_idx after the separately approved benchmark proved the primary key serves representative latest-Daily reads within the runbook gates. Permanent production promotion remains separately authorized; VACUUM FULL remains outside this migration and requires its own capacity-gated approval."
+      "productionVersion": "20260916022351",
+      "state": "MAPPED",
+      "evidence": "QEO-234 PR #509 exact-head gates GREEN; squash merge 2405e6564b54407827db5f841a23aff1ae2e41ae; production migration 20260916022351; 348,691 rows preserved; market_ohlcv_history_lookup_idx absent; market_ohlcv_history_pkey intact; five-ticker post-drop probe used backward Index Only Scan; database/relation physical bytes fell by exactly 20,357,120 bytes, the removed index size",
+      "rationale": "Supabase assigned production version 20260916022351 while repository replay keeps reviewed version 20260916080000. The migration removed only the redundant Daily lookup index after the approved transactional benchmark. Post-drop capacity remeasurement confirmed ~19.41 MiB immediate reclaim with the heap unchanged. Ordinary VACUUM (ANALYZE) left only 6 estimated dead tuples; the conservative rewrite peak was 575,571,271 bytes, above the 470,000,000-byte VACUUM FULL gate, so no physical heap rewrite was attempted."
     }
   ]
 }
