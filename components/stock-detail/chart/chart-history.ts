@@ -4,24 +4,13 @@ import {
   chartHistoryFloor,
   maxChartHistorySeconds,
 } from "../../../modules/market/chart-data/history-policy.ts"
-import {
-  isVietnamSecuritiesTradingDay,
-  vietnamDateKey,
-} from "../../../modules/market/calendar.ts"
 import type { ChartTimeframe } from "./stock-chart-types"
 
-const DAY_SECONDS = 86400
 const CLOSED_RANGE_CACHE_TTL_MS = 10 * 60 * 1000
 const CLOSED_RANGE_CACHE_TO_TOLERANCE_SECONDS = 10 * 60
 const CLOSED_RANGE_CACHE_MAX_ENTRIES = 24
 
 const INITIAL_HISTORY_WINDOW_SECONDS: Record<ChartTimeframe, number> = {
-  "1m": 5 * DAY_SECONDS,
-  "15m": 21 * DAY_SECONDS,
-  "30m": 31 * DAY_SECONDS,
-  "1h": 90 * DAY_SECONDS,
-  "2h": 150 * DAY_SECONDS,
-  "4h": 186 * DAY_SECONDS,
   "1D": 0,
   "3D": 0,
   "1W": 0,
@@ -115,36 +104,20 @@ export function mergeChartBars(existing: OhlcvBar[], incoming: OhlcvBar[]) {
   return [...byTime.values()].sort((a, b) => a.time - b.time)
 }
 
-function vietnamTradingOpenEpoch(now: Date) {
-  return Math.floor(Date.parse(`${vietnamDateKey(now)}T09:00:00+07:00`) / 1000)
-}
-
-export function planChartHistorySlices(input: ChartRangeInput, now: Date = new Date()): ChartHistorySlices {
-  const normalized = { ...input, ticker: input.ticker.toUpperCase() }
-  if (chartHistoryClass(normalized.timeframe) === "LONG" || !isVietnamSecuritiesTradingDay(now)) {
-    return { stableClosed: normalized, currentDateTail: null }
-  }
-
-  const open = vietnamTradingOpenEpoch(now)
-  const stableTo = Math.min(normalized.to, open - 1)
-  const tailFrom = Math.max(normalized.from, open)
+/**
+ * QEO-238: every active chart timeframe is derived from completed Daily bars,
+ * so the whole bounded request is stable and there is no mutable intraday tail.
+ */
+export function planChartHistorySlices(input: ChartRangeInput): ChartHistorySlices {
   return {
-    stableClosed: normalized.from <= stableTo
-      ? { ...normalized, to: stableTo }
-      : null,
-    currentDateTail: tailFrom <= normalized.to
-      ? { ...normalized, from: tailFrom }
-      : null,
+    stableClosed: { ...input, ticker: input.ticker.toUpperCase() },
+    currentDateTail: null,
   }
 }
 
 export function isStableClosedChartRange(input: ChartRangeInput, now: Date = new Date()) {
   if (!Number.isFinite(input.from) || !Number.isFinite(input.to) || input.from > input.to) return false
-  const nowEpoch = Math.floor(now.getTime() / 1000)
-  if (input.to > nowEpoch) return false
-  if (chartHistoryClass(input.timeframe) === "LONG") return true
-  if (!isVietnamSecuritiesTradingDay(now)) return true
-  return input.to < vietnamTradingOpenEpoch(now)
+  return input.to <= Math.floor(now.getTime() / 1000)
 }
 
 function requestKey(input: ChartRangeInput) {
@@ -258,27 +231,20 @@ export function requestChartRange(
     from: String(normalized.from),
     to: String(normalized.to),
   })
-
-  const promise = (async () => {
-    const response = await fetchImpl(`/api/market/ohlcv?${params.toString()}`, {
-      cache: transportMode === "stable" ? "default" : "no-store",
-      headers: { Accept: "application/json" },
-      signal,
-    })
-    const body = await response.json() as Partial<ChartHistoryResponse> & { ok?: boolean; error?: string }
-    if (!response.ok || body.ok !== true || !Array.isArray(body.bars)) {
-      throw new Error(body.error || `Chart history request failed (${response.status})`)
-    }
-    const result = {
-      ...(body as ChartHistoryResponse),
-      bars: mergeChartBars([], body.bars),
-    }
-    rememberClosedRange(normalized, result, now)
-    return result
-  })().finally(() => {
-    inFlight.delete(flightKey)
+  const promise = fetchImpl(`/api/market/ohlcv?${params}`, {
+    signal,
+    cache: options.bypassCache || !stable ? "no-store" : "default",
   })
-
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Chart history request failed: ${response.status}`)
+      const payload = await response.json() as ChartHistoryResponse
+      if (!payload.ok) throw new Error("Chart history response is invalid")
+      if (!options.bypassCache && stable) rememberClosedRange(normalized, payload, now)
+      return payload
+    })
+    .finally(() => {
+      if (inFlight.get(flightKey) === promise) inFlight.delete(flightKey)
+    })
   inFlight.set(flightKey, promise)
   return promise
 }
@@ -288,135 +254,35 @@ export function requestFreshChartRange(
   signal?: AbortSignal,
   fetchImpl: FetchLike = fetch,
 ) {
-  return requestChartRange(input, signal, fetchImpl, { bypassCache: true, now: new Date() })
+  return requestChartRange(input, signal, fetchImpl, { bypassCache: true })
 }
 
-export async function prefetchStableChartRange(
-  input: ChartRangeInput,
-  signal?: AbortSignal,
-  now: Date = new Date(),
-  fetchImpl: FetchLike = fetch,
-) {
-  if (!isStableClosedChartRange(input, now)) return null
-  return requestChartRange(input, signal, fetchImpl, { now })
-}
-
-function combineHistoryResults(
-  input: ChartRangeInput,
-  stableResult: ChartHistoryResponse | null,
-  tailResult: ChartHistoryResponse | null,
-): ChartHistoryResponse {
-  const results = [stableResult, tailResult].filter((result): result is ChartHistoryResponse => result != null)
-  const complete = results.length > 0 && results.every((result) => result.coverage.complete && result.coverage.state === "COMPLETE")
-  let bars: OhlcvBar[] = []
-  for (const result of results) bars = mergeChartBars(bars, result.bars)
-  const metadata = tailResult?.metadata ?? stableResult?.metadata ?? null
-  return {
-    ok: true,
-    ticker: input.ticker.toUpperCase(),
-    resolution: input.timeframe,
-    from: input.from,
-    to: input.to,
-    bars,
-    gaps: results.flatMap((result) => result.gaps),
-    integrityIssues: results.flatMap((result) => result.integrityIssues),
-    coverage: { complete, state: complete ? "COMPLETE" : "PARTIAL" },
-    errors: results.flatMap((result) => result.errors),
-    metadata,
-    generatedAt: tailResult?.generatedAt ?? stableResult?.generatedAt,
-  }
-}
-
-export async function loadInitialChartHistory({
-  ticker,
-  timeframe,
-  now = new Date(),
-  signal,
-  fetchImpl = fetch,
-}: {
-  ticker: string
-  timeframe: ChartTimeframe
-  now?: Date
-  signal?: AbortSignal
-  fetchImpl?: FetchLike
-}) {
-  const to = Math.floor(now.getTime() / 1000)
-  const range = initialChartHistoryRange(timeframe, to)
-  const input: ChartRangeInput = { ticker: ticker.toUpperCase(), timeframe, ...range }
-  const slices = planChartHistorySlices(input, now)
-  const [stableResult, tailResult] = await Promise.all([
-    slices.stableClosed
-      ? requestChartRange(slices.stableClosed, signal, fetchImpl, { now })
-      : Promise.resolve(null),
-    slices.currentDateTail
-      ? requestFreshChartRange(slices.currentDateTail, signal, fetchImpl)
-      : Promise.resolve(null),
-  ])
-  return { range, result: combineHistoryResults(input, stableResult, tailResult) }
-}
-
-function assertPreparedResult(result: ChartHistoryResponse) {
-  if (
-    !result.coverage.complete
-    || result.coverage.state !== "COMPLETE"
-    || result.gaps.length > 0
-    || result.integrityIssues.length > 0
-    || result.errors.length > 0
-  ) {
-    throw new Error("Target chart history is incomplete; keeping the previously committed chart.")
-  }
-}
-
-export async function prepareInitialChartHistory({
-  ticker,
-  timeframe,
-  now = new Date(),
-  signal,
-  fetchImpl = fetch,
-}: {
+export async function prepareInitialChartHistory(input: {
   ticker: string
   timeframe: ChartTimeframe
   now?: Date
   signal?: AbortSignal
   fetchImpl?: FetchLike
 }): Promise<PreparedChartHistory> {
-  const loaded = await loadInitialChartHistory({ ticker, timeframe, now, signal, fetchImpl })
-  assertPreparedResult(loaded.result)
+  const now = input.now ?? new Date()
+  const to = Math.floor(now.getTime() / 1000)
+  const range = initialChartHistoryRange(input.timeframe, to)
+  const slices = planChartHistorySlices({ ticker: input.ticker, timeframe: input.timeframe, ...range })
+  if (!slices.stableClosed) throw new Error("Daily chart history requires a stable closed range")
+  const result = await requestChartRange(slices.stableClosed, input.signal, input.fetchImpl, { now })
   return {
-    ticker: ticker.toUpperCase(),
-    timeframe,
-    range: loaded.range,
-    result: loaded.result,
+    ticker: input.ticker.trim().toUpperCase(),
+    timeframe: input.timeframe,
+    range,
+    result,
   }
 }
 
-export async function prefetchInitialStableChartHistory({
-  ticker,
-  timeframe,
-  now = new Date(),
-  signal,
-  fetchImpl = fetch,
-}: {
-  ticker: string
-  timeframe: ChartTimeframe
-  now?: Date
-  signal?: AbortSignal
-  fetchImpl?: FetchLike
-}) {
-  const to = Math.floor(now.getTime() / 1000)
-  const range = initialChartHistoryRange(timeframe, to)
-  const slices = planChartHistorySlices({ ticker: ticker.toUpperCase(), timeframe, ...range }, now)
-  if (!slices.stableClosed) return null
-  return prefetchStableChartRange(slices.stableClosed, signal, now, fetchImpl)
-}
+export const loadInitialChartHistory = prepareInitialChartHistory
 
-export function adjacentPrefetchTargets(order: string[], active: string) {
-  const normalized = order.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean)
-  const activeTicker = active.trim().toUpperCase()
-  const index = normalized.indexOf(activeTicker)
+export function adjacentPrefetchTargets(tickers: string[], ticker: string) {
+  const normalized = ticker.trim().toUpperCase()
+  const index = tickers.findIndex((candidate) => candidate.trim().toUpperCase() === normalized)
   if (index < 0) return []
-  const result: string[] = []
-  if (index > 0) result.push(normalized[index - 1])
-  if (index + 1 < normalized.length) result.push(normalized[index + 1])
-  return [...new Set(result)].slice(0, 2)
+  return [tickers[index - 1], tickers[index + 1]].filter((candidate): candidate is string => Boolean(candidate))
 }
