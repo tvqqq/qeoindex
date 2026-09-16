@@ -17,20 +17,18 @@ type RetentionCleanupResult = {
   durationMs?: number
   tables?: Array<{ table?: string; cutoff?: string; deletedRows?: number; oldestRetainedAt?: string | null; policy?: string }>
 }
-type SafeRetentionCleanupResult = RetentionCleanupResult & {
-  monitoring?: Record<string, unknown>
-  rawHistoryRetention?: { status?: string; table?: string; detail?: string }
-}
 type DailyHistoryRetentionResult = {
   status?: string
   table?: string
-  referenceAt?: string
   cutoff?: string
   deletedRows?: number
   oldestRetainedAt?: string | null
   policy?: string
-  durationMs?: number
   detail?: string
+}
+type SafeRetentionCleanupResult = RetentionCleanupResult & {
+  monitoring?: Record<string, unknown>
+  rawHistoryRetention?: DailyHistoryRetentionResult
 }
 export type EodRetentionCleanupCheckpoint = EodArchiveCheckpoint & {
   safeCleanup?: SafeRetentionCleanupResult
@@ -54,31 +52,27 @@ export async function runEodRetentionCleanup(
 ): Promise<EodRetentionCleanupCheckpoint> {
   const referenceAt = new Date(`${input.tradingDate}T23:59:59.999+07:00`).toISOString()
 
-  const dailyRetention = await supabase.rpc("qeo_prune_daily_ohlcv_history", { p_reference_at: referenceAt })
-  if (dailyRetention.error) return {
-    status: "error",
-    detail: `Daily OHLCV rolling 5 calendar years retention failed: ${dailyRetention.error.message}`,
-  }
-  const rawHistoryRetention = dailyRetention.data as DailyHistoryRetentionResult | null
-  if (!rawHistoryRetention || rawHistoryRetention.status !== "succeeded") return {
-    status: "error",
-    detail: `Daily OHLCV rolling 5 calendar years retention returned invalid status=${rawHistoryRetention?.status || "missing"}.`,
-    rawHistoryRetention: rawHistoryRetention || undefined,
-  }
-  const rawHistoryDetail = `Canonical Daily OHLCV is retained for rolling 5 calendar years; cutoff=${rawHistoryRetention.cutoff || "unknown"}, deleted=${rawHistoryRetention.deletedRows ?? 0}.`
-
   const cleanup = await supabase.rpc("qeo_run_safe_retention_cleanup", { p_reference_at: referenceAt })
   if (cleanup.error) return {
     status: "error",
-    detail: `Safe telemetry/staging retention failed: ${cleanup.error.message}. ${rawHistoryDetail}`,
-    rawHistoryRetention,
+    detail: `Safe telemetry/staging + Daily OHLCV retention failed: ${cleanup.error.message}`,
   }
 
   const safeCleanup = cleanup.data as SafeRetentionCleanupResult | null
   if (!safeCleanup || safeCleanup.status !== "succeeded") return {
-    status: "error", detail: `Safe telemetry/staging retention returned invalid status=${safeCleanup?.status || "missing"}. ${rawHistoryDetail}`,
-    safeCleanup: safeCleanup || undefined, rawHistoryRetention,
+    status: "error",
+    detail: `Safe telemetry/staging + Daily OHLCV retention returned invalid status=${safeCleanup?.status || "missing"}.`,
+    safeCleanup: safeCleanup || undefined,
   }
+
+  const rawHistoryRetention = safeCleanup.rawHistoryRetention
+  if (!rawHistoryRetention || rawHistoryRetention.status !== "succeeded") return {
+    status: "error",
+    detail: `Daily OHLCV rolling 5 calendar years retention returned invalid status=${rawHistoryRetention?.status || "missing"}.`,
+    safeCleanup,
+    rawHistoryRetention,
+  }
+  const rawHistoryDetail = `Canonical Daily OHLCV is retained for rolling 5 calendar years; cutoff=${rawHistoryRetention.cutoff || "unknown"}, deleted=${rawHistoryRetention.deletedRows ?? 0}.`
 
   const jobTelemetry = await supabase.rpc("qeo_run_job_telemetry_cleanup", { p_reference_at: referenceAt })
   if (jobTelemetry.error) return { status: "error", detail: `Job telemetry retention failed: ${jobTelemetry.error.message}. ${rawHistoryDetail}`, safeCleanup, rawHistoryRetention }
