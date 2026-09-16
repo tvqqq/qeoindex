@@ -16,11 +16,11 @@ test("QEO-173 keeps ticker transitions usable and visually non-disruptive", () =
   assert.match(workstation, /currentData\.exchange/)
 })
 
-test("QEO-173 exposes a compact financial header and only surfaces provider noise on stale state", () => {
+test("QEO-173 exposes a compact financial header without retired provider noise", () => {
   const chartData = source("components/stock-detail/stock-tradingview-chart-data.tsx")
 
   assert.match(chartData, /exchange\?: string/)
-  assert.match(chartData, /providerWarning/)
+  assert.doesNotMatch(chartData, /providerWarning/)
   assert.doesNotMatch(chartData, />\s*LIVE\{liveProvider/)
   assert.match(chartData, /data-chart-financial-header/)
   assert.match(chartData, /tabular-nums/)
