@@ -30,7 +30,11 @@ import {
   upsertHotIntradayBars,
 } from "./hot-store"
 import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
-import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
+import {
+  detectTradingSessionGaps,
+  normalizeCanonicalBars,
+  reconcileLiveTailProviderBars,
+} from "./normalize"
 import type { ChartPerformanceRecorder, ChartPerfStage } from "./performance"
 import {
   createPrimaryChartOhlcvProvider,
@@ -462,7 +466,11 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
       const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, true)
       if (!partition.responseBars.length) throw new ProviderRangeFetchError("Provider returned no usable live-tail 1m bars")
       latestProvider = providerResult.provider
-      tagged.push(...partition.responseBars.map((bar) => ({ source: "provider" as const, bar })))
+      tagged.splice(
+        0,
+        tagged.length,
+        ...reconcileLiveTailProviderBars(tagged, partition.responseBars),
+      )
       normalized = normalizeCanonicalBars(tagged)
 
       if (partition.completedBars.length) {

@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import type { CanonicalOhlcvBar, SourceTaggedBar } from "../../modules/market/chart-data/contract.ts"
+import * as normalizeModule from "../../modules/market/chart-data/normalize.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 }
@@ -55,4 +58,40 @@ test("QEO-172 ticker navigation has bounded prefetch and full preparation before
   assert.match(workstation, /prepareInitialChartHistory/)
   assert.match(workstation, /inFlightStockDetailRef/)
   assert.match(workstation, /pendingTicker/)
+})
+
+test("QEO-172 fresh live-tail correction replaces only same-timestamp HOT before integrity normalization", () => {
+  type ReconcileLiveTail = (existing: SourceTaggedBar[], freshProviderBars: CanonicalOhlcvBar[]) => SourceTaggedBar[]
+  const reconcileLiveTailProviderBars = Reflect.get(normalizeModule, "reconcileLiveTailProviderBars") as ReconcileLiveTail | undefined
+
+  assert.equal(typeof reconcileLiveTailProviderBars, "function", "live-tail correction handoff must be explicit")
+  if (!reconcileLiveTailProviderBars) return
+
+  const staleHot: CanonicalOhlcvBar = { time: 100, open: 10, high: 11, low: 9, close: 10, volume: 100 }
+  const unrelatedHot: CanonicalOhlcvBar = { time: 160, open: 12, high: 13, low: 11, close: 12, volume: 90 }
+  const unrelatedCold: CanonicalOhlcvBar = { time: 40, open: 8, high: 9, low: 7, close: 8, volume: 80 }
+  const freshProvider: CanonicalOhlcvBar = { time: 100, open: 10, high: 12, low: 9, close: 11, volume: 120 }
+
+  const reconciled = reconcileLiveTailProviderBars([
+    { source: "cold", bar: unrelatedCold },
+    { source: "hot", bar: staleHot },
+    { source: "hot", bar: unrelatedHot },
+  ], [freshProvider])
+  const normalized = normalizeModule.normalizeCanonicalBars(reconciled)
+
+  assert.deepEqual(normalized.integrityIssues, [])
+  assert.deepEqual(normalized.bars, [unrelatedCold, freshProvider, unrelatedHot])
+  assert.equal(reconciled.some((item) => item.source === "hot" && item.bar.time === staleHot.time), false)
+  assert.equal(reconciled.some((item) => item.source === "hot" && item.bar.time === unrelatedHot.time), true)
+})
+
+test("QEO-172 live-tail correction handoff runs before service integrity normalization", () => {
+  const service = source("modules/market/chart-data/service.ts")
+  const partitionIndex = service.indexOf("const partition = partitionLiveMinuteBars")
+  const reconcileIndex = service.indexOf("reconcileLiveTailProviderBars(tagged, partition.responseBars)")
+  const normalizeIndex = service.indexOf("normalized = normalizeCanonicalBars(tagged)", partitionIndex)
+
+  assert.ok(partitionIndex >= 0, "service must partition live-tail provider bars")
+  assert.ok(reconcileIndex > partitionIndex, "service must reconcile fresh live-tail bars after partitioning")
+  assert.ok(normalizeIndex > reconcileIndex, "service must normalize only after live-tail correction handoff")
 })
