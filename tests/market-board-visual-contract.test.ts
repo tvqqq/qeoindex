@@ -181,6 +181,22 @@ test("sparklines keep the pre-regression 5m history and live fallback pipeline",
   assert.match(boardSource, /out\[ticker\] = pts\.map\(\(p\) => p\.close\)/)
 })
 
+test("line-only market-board sparklines split green above and red below reference", () => {
+  assert.match(stockSource, /<Sparkline[^>]*fill=\{false\}/)
+  assert.match(sparklineSource, /const REFERENCE_UP_COLOR = "#22c98a"/)
+  assert.match(sparklineSource, /const REFERENCE_DOWN_COLOR = "#ff4757"/)
+  assert.match(sparklineSource, /const splitAtReference = !fill && ref != null && refY != null/)
+  assert.match(sparklineSource, /clipPath id=\{`spark-above-\$\{uid\}`\}/)
+  assert.match(sparklineSource, /clipPath id=\{`spark-below-\$\{uid\}`\}/)
+  assert.match(sparklineSource, /stroke=\{REFERENCE_UP_COLOR\}/)
+  assert.match(sparklineSource, /stroke=\{REFERENCE_DOWN_COLOR\}/)
+})
+
+test("market-board sparkline capacity preserves 48 five-minute points plus one live endpoint", () => {
+  assert.match(stockSource, /const MAX_BOARD_SPARK_POINTS = 48/)
+  assert.match(sparklineSource, /const MAX_SPARKLINE_POINTS = 49/)
+})
+
 test("intraday API prefers today's cached snapshot before expensive provider fan-out", () => {
   assert.match(intradayRouteSource, /getCachedIntraday5mSnapshot/)
   assert.match(intradayRouteSource, /cacheLayer = snapshot \? "cache" : "provider"/)
