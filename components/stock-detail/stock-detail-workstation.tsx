@@ -206,7 +206,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
         timeframe: currentChartTimeframeRef.current,
       }
       chartNavigationTimeframeRef.current = navigationRequest
-      setChartNavigationTimeframe(navigationRequest)
       void handleSelectTicker(nextTicker)
     }
 
