@@ -397,7 +397,6 @@ test("QEO-106 integrity repair scopes the expensive audit to the requested ticke
   assert.match(integrity, /\{ p_tickers: tickers \}/)
   assert.equal((integrity.match(/loadIntegrityReport\(supabase, tickers\)/g) ?? []).length, 2)
 })
-
 test("QEO-108 Daily deep-cold backfill endpoint is retired but remains authenticated", () => {
   const history = source("modules/market/history/daily-cold-history.ts")
   const route = source("app/api/admin/market/daily-history/backfill/route.ts")
@@ -416,13 +415,12 @@ test("QEO-100 incomplete stored coverage backfills the missing head instead of t
   assert.deepEqual(missingProviderRanges({ from: 100, to: 1_000 }, [{ from: 700, to: 1_000 }, { from: 100, to: 750 }]), [])
 })
 
-test("QEO-100 1m loadOlder progressively hydrates the bounded horizon independent of gestures", () => {
+test("QEO-238 Daily+ loadOlder progressively hydrates history without intraday gesture branches", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const hook = source("components/stock-detail/chart/use-chart-history.ts")
-  assert.match(wrapper, /timeframe !== "1m" \|\| loading \|\| loadingOlder \|\| !hasMore/)
-  assert.match(wrapper, /void loadOlder\(\)/)
-  assert.match(wrapper, /if \(timeframe === "1m"\) return/)
-  assert.match(wrapper, /timeframe !== "1m" && event\.deltaY > 0/)
+  assert.match(wrapper, /if \(!loading && !loadingOlder && hasMore\) void loadOlder\(\)/)
+  assert.match(wrapper, /if \(event\.deltaY > 0\) requestOlder\(\)/)
+  assert.doesNotMatch(wrapper, /timeframe === "1m"|timeframe !== "1m"/)
   assert.match(hook, /historyCursorRef/)
   assert.match(hook, /historyCursorRef\.current = range\.from/)
   assert.match(hook, /olderChartHistoryRange\(timeframe, cursor, horizonTo\)/)
