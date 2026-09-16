@@ -75,13 +75,19 @@ Use it for initial state:
 const [loading, setLoading] = useState(() => !exactPrepared && !hasUsableDailySeed)
 ```
 
-Inside the existing `useLayoutEffect`, after resetting state and before creating/loading the network range, return early when `hasUsableDailySeed` is true:
+Inside the existing `useLayoutEffect`, after resetting state and after the higher-priority prepared-dataset branch, return early when `hasUsableDailySeed` is true. Preserve the earliest/latest seed cursors so pan-left can still request older history when available:
 
 ```ts
 if (hasUsableDailySeed) {
-  horizonToRef.current = seedDailyBars.at(-1)?.time ?? null
-  historyCursorRef.current = seedDailyBars.at(0)?.time ?? null
-  setHasMore(false)
+  const horizonTo = seedDailyBars.at(-1)?.time ?? null
+  const historyCursor = seedDailyBars.at(0)?.time ?? null
+  horizonToRef.current = horizonTo
+  historyCursorRef.current = historyCursor
+  setHasMore(Boolean(
+    horizonTo
+    && historyCursor
+    && historyCursor > chartHistoryFloor(timeframe, horizonTo) + 1,
+  ))
   setLoading(false)
   return () => controller.abort()
 }
