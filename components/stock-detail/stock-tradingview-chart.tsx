@@ -50,7 +50,6 @@ import {
   type VolumeProfileData,
 } from "./chart/stock-chart-types"
 import { useUserChartSync } from "./chart/use-user-chart-sync"
-import { useCanonicalMinuteBars } from "./chart/use-canonical-minute-bars"
 
 interface StockTradingViewChartProps {
   ticker: string
@@ -507,14 +506,9 @@ export function StockTradingViewChart({
         showQeoBase129: false,
       }, [indicators, isMaximized])
 
-  const minuteBars = useCanonicalMinuteBars({ ticker, enabled: timeframe === "1m" })
   const displayBars = useMemo(
-    () => normalizeBars(
-      timeframe === "1m"
-        ? minuteBars.bars
-        : aggregateBarsByTimeframe(bars, hourlyBars, timeframe),
-    ),
-    [bars, hourlyBars, minuteBars.bars, timeframe],
+    () => normalizeBars(aggregateBarsByTimeframe(bars, hourlyBars, timeframe)),
+    [bars, hourlyBars, timeframe],
   )
   const futureCount = Math.max(
     MIN_MAX_RIGHT_OFFSET_BARS,
@@ -1216,8 +1210,8 @@ export function StockTradingViewChart({
     }
     return [...groups.entries()]
   }, [])
-  const unsupportedEmpty = displayBars.length === 0 && !isLoading && !(timeframe === "1m" && minuteBars.status === "loading")
-  const loadingState = isLoading || (timeframe === "1m" && minuteBars.status === "loading")
+  const unsupportedEmpty = displayBars.length === 0 && !isLoading
+  const loadingState = isLoading
 
   return (
     <div className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[#080b10]", isMaximized ? "h-full" : "min-h-[340px]")}>
