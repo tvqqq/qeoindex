@@ -60,6 +60,26 @@ test("QEO-172 ticker navigation has bounded prefetch and full preparation before
   assert.match(workstation, /pendingTicker/)
 })
 
+test("QEO-172 adjacent keyboard intent does not retarget the rendered ticker before prepared commit", () => {
+  const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
+  const shortcutStart = workstation.indexOf("const handleChartShortcut")
+  const navigateStart = workstation.indexOf("const navigationRequest = {", shortcutStart)
+  const navigateEnd = workstation.indexOf("void handleSelectTicker(nextTicker)", navigateStart)
+  const shortcutNavigation = workstation.slice(navigateStart, navigateEnd)
+
+  assert.ok(shortcutStart >= 0 && navigateStart > shortcutStart && navigateEnd > navigateStart)
+  assert.match(shortcutNavigation, /chartNavigationTimeframeRef\.current = navigationRequest/)
+  assert.doesNotMatch(
+    shortcutNavigation,
+    /setChartNavigationTimeframe\(navigationRequest\)/,
+    "keyboard intent must not drop the current ticker preferred timeframe before target preparation commits",
+  )
+
+  const prepareStart = workstation.indexOf("const [targetData, targetPrepared] = await Promise.all")
+  const commitState = workstation.indexOf("setChartNavigationTimeframe(navigationRequest)", prepareStart)
+  assert.ok(prepareStart >= 0 && commitState > prepareStart, "navigation timeframe state must commit only after prepared target data resolves")
+})
+
 test("QEO-172 fresh live-tail correction replaces only same-timestamp HOT before integrity normalization", () => {
   type ReconcileLiveTail = (existing: SourceTaggedBar[], freshProviderBars: CanonicalOhlcvBar[]) => SourceTaggedBar[]
   const reconcileLiveTailProviderBars = Reflect.get(normalizeModule, "reconcileLiveTailProviderBars") as ReconcileLiveTail | undefined
