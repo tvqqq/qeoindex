@@ -7,8 +7,9 @@ const source = readFileSync(
   "utf8",
 )
 
-test("QEO-172 usable 1D SSR seed renders ready without duplicate initial history fetch", () => {
-  assert.match(source, /const hasUsableDailySeed = timeframe === "1D" && seedDailyBars\.length > 0/)
+test("QEO-172 usable SSR Daily seed renders ready without duplicate initial history fetch", () => {
+  assert.match(source, /deriveChartBarsFromDailySeed\(seedDailyBars,\s*timeframe\)/)
+  assert.match(source, /const hasUsableDailySeed = seedBars\.length > 0/)
   assert.match(source, /useState\(\(\) => !exactPrepared && !hasUsableDailySeed\)/)
   assert.match(
     source,
