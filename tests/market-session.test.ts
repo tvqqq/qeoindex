@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
 import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart } from "../modules/market/realtime/session-ui.ts"
@@ -143,4 +144,32 @@ test("new session reference history starts at 09:15 ICT", () => {
   assert.deepEqual(newSessionReferencePoint(58.5, new Date("2026-08-18T02:00:00Z")), [
     { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 58.5 },
   ])
+})
+
+test("QEO-237 resets orderbook latency samples at VN session boundaries and excludes stale-phase end-to-end frames", () => {
+  const orderbook = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  assert.match(orderbook, /getMarketSessionStatus/)
+  assert.match(orderbook, /let latencySessionPhase/)
+  assert.match(
+    orderbook,
+    /if \(latencySessionPhase !== currentSession\.phase\)[\s\S]*resetLatencySamples\(\)[\s\S]*latencySessionPhase = currentSession\.phase/,
+  )
+  assert.match(orderbook, /eventSessionPhase[\s\S]*=== currentSession\.phase/)
+  assert.match(orderbook, /endToEnd:\s*eventMatchesCurrentSession\s*\?\s*latencyBetween\(eventAt, browserReceivedAt\)\s*:\s*null/)
+})
+
+test("QEO-237 measures browser delivery with one monotonic clock instead of worker/browser wall clocks", () => {
+  const relay = readFileSync("modules/market/realtime/relay-client.ts", "utf8")
+  const orderbook = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  assert.match(relay, /browserReceivedAtMonotonicMs:\s*number/)
+  assert.match(relay, /const browserReceivedAtMonotonicMs = performance\.now\(\)/)
+  assert.match(relay, /parseDataMessage\(payload, browserReceivedAtMonotonicMs\)/)
+  assert.match(orderbook, /const subscriberReceivedAtMonotonicMs = performance\.now\(\)/)
+  assert.match(
+    orderbook,
+    /delivery:\s*latencyBetween\(message\.browserReceivedAtMonotonicMs, subscriberReceivedAtMonotonicMs\)/,
+  )
+  assert.doesNotMatch(orderbook, /delivery:\s*latencyBetween\(publishedAt, browserReceivedAt\)/)
 })
