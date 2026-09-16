@@ -11,7 +11,7 @@ export interface HistoricalBarsResult {
   fetchedAt: string
 }
 
-export const DAILY_BACKFILL_DAYS = 8 * 366
+export const DAILY_BACKFILL_DAYS = 5 * 366
 export const HOURLY_BACKFILL_DAYS = 180
 export const DAILY_DELTA_DAYS = 14
 export const HOURLY_DELTA_DAYS = 7
