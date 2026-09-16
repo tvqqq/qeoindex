@@ -107,26 +107,34 @@
     {
       "logicalName": "qeo234_daily_provenance_bridge",
       "repositoryVersion": "20260915193000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-234 approved two-stage compact Daily provenance design and focused RED/GREEN contracts; production bridge promotion remains separately authorized",
-      "rationale": "Makes legacy provider_detail/source_url nullable, permits compact writes only when exact registry identity/provider remains valid, moves live provenance consumers to registry-backed logical reads, and performs no destructive column drop or physical reclaim."
+      "productionVersion": "20260915223907",
+      "state": "MAPPED",
+      "evidence": "QEO-234 Stage-1 production bridge readback: 348,691 rows, pending/mismatch/compat all zero, legacy long fields nullable, grouped width-10 preserved, and old-compatible application remained healthy",
+      "rationale": "Supabase assigned production version 20260915223907 while repository replay keeps reviewed version 20260915193000. The bridge made only the two long provenance fields nullable and moved live provenance consumers to registry-backed logical reads without destructive column removal or physical reclaim."
     },
     {
       "logicalName": "qeo234_daily_provenance_cutover",
       "repositoryVersion": "20260915194500",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-234 reviewed fail-closed compact cutover contract; production Stage-2 promotion requires bridge canary and new maintenance authorization",
-      "rationale": "After fail-closed provenance assertions, enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the obsolete QEO-233 historical backfill RPC, and preserves registry-backed logical APIs. Physical rewrite remains outside migration."
+      "productionVersion": "20260916013520",
+      "state": "MAPPED",
+      "evidence": "QEO-234 Stage-2 production cutover preserved 348,691 rows and deterministic logical SHA-256 f4c24ccf7f5db0fd4dd2b2d97ec2eed850fe878a1d713d20364f1aafcbbee124 with zero pending/orphan/provider/compat inconsistencies; final five-ticker route canary passed",
+      "rationale": "Supabase assigned production version 20260916013520 while repository replay keeps reviewed version 20260915194500. The cutover enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the QEO-233 backfill RPC, and preserves registry-backed logical APIs. It performs no physical rewrite or index removal."
     },
     {
       "logicalName": "qeo234_registry_aware_daily_precedence",
       "repositoryVersion": "20260916073000",
+      "productionVersion": "20260916012108",
+      "state": "MAPPED",
+      "evidence": "QEO-234 PR #508 RED/GREEN contract evidence plus production promotion 20260916012108 and five-ticker compact-writer canary PASS before Stage-2",
+      "rationale": "Supabase assigned production version 20260916012108 while repository replay keeps reviewed version 20260916073000. Daily provider precedence now resolves logical long provenance through provenance_id when available, preserving QEO-106 authority semantics for compact writes before and after final column removal."
+    },
+    {
+      "logicalName": "qeo234_drop_redundant_daily_lookup_idx",
+      "repositoryVersion": "20260916080000",
       "productionVersion": null,
       "state": "REPO_AHEAD",
-      "evidence": "QEO-234 production VCB compact-writer canary failed closed because the legacy QEO-106 precedence trigger downgraded compact internal-snapshot Fallback provenance; PR #508 RED contract run 35042206955 and GREEN focused contract run 35042415409",
-      "rationale": "Makes Daily provider precedence resolve provider_detail/source_url through provenance_id when available, while retaining JSONB fallback for pre-reference bridge rows. This preserves QEO-106 authority and Yahoo semantic-basis rules for compact writes before and after Stage-2 removes the long inline columns. The migration changes only the trigger function definition and remains repo-ahead until exact-head DB replay/Verify pass and a separately authorized production promotion plus five-ticker canary succeeds."
+      "evidence": "QEO-234 production transactional benchmark: VCB/FPT/HPG/SSI/VNM all used market_ohlcv_history_pkey backward scan without the lookup index, avoided sequential scans, remained under 20 ms and within 2x their same-transaction baseline; rollback restored the index and preserved the logical digest",
+      "rationale": "Source-backed physical-reclaim preparation removes only market_ohlcv_history_lookup_idx after the separately approved benchmark proved the primary key serves representative latest-Daily reads within the runbook gates. Permanent production promotion remains separately authorized; VACUUM FULL remains outside this migration and requires its own capacity-gated approval."
     }
   ]
 }
