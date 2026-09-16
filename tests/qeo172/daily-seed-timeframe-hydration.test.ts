@@ -21,7 +21,7 @@ const dailyBars: OhlcvBar[] = [
   { time: 1788904800, open: 109, high: 111, low: 108, close: 110, volume: 1_700 },
 ]
 
-test("QEO-172 every active timeframe can render deterministically from the SSR Daily seed", () => {
+test("QEO-172 alignment-safe timeframes render deterministically from the bounded SSR Daily seed", () => {
   const derive = (chartHistory as typeof chartHistory & {
     deriveChartBarsFromDailySeed?: (bars: OhlcvBar[], timeframe: ChartTimeframe) => OhlcvBar[]
   }).deriveChartBarsFromDailySeed
@@ -29,7 +29,7 @@ test("QEO-172 every active timeframe can render deterministically from the SSR D
   assert.equal(typeof derive, "function", "chart-history must expose a canonical Daily-seed derivation helper")
   if (!derive) return
 
-  for (const timeframe of ["1D", "3D", "1W", "1M", "1Q", "1Y"] as ChartTimeframe[]) {
+  for (const timeframe of ["1D", "1W", "1M", "1Q", "1Y"] as ChartTimeframe[]) {
     const bars = derive(dailyBars, timeframe)
     assert.ok(bars.length > 0, `${timeframe} must be renderable from Daily seed bars`)
     assert.equal(bars.at(-1)?.close, dailyBars.at(-1)?.close, `${timeframe} must preserve the latest completed close`)
@@ -37,6 +37,20 @@ test("QEO-172 every active timeframe can render deterministically from the SSR D
 
   assert.equal(derive(dailyBars, "1D").length, dailyBars.length)
   assert.ok(derive(dailyBars, "1W").length < dailyBars.length, "weekly seed must be aggregated rather than relabeled Daily bars")
+})
+
+test("QEO-172 bounded Daily seed never fabricates canonical 3D bucket alignment", () => {
+  const derive = (chartHistory as typeof chartHistory & {
+    deriveChartBarsFromDailySeed?: (bars: OhlcvBar[], timeframe: ChartTimeframe) => OhlcvBar[]
+  }).deriveChartBarsFromDailySeed
+
+  assert.equal(typeof derive, "function")
+  if (!derive) return
+  assert.deepEqual(
+    derive(dailyBars, "3D"),
+    [],
+    "3D must fall back to canonical anchored history because a bounded seed cannot prove session modulo alignment",
+  )
 })
 
 test("QEO-172 persisted timeframe hydration commits from Daily seed before any remote history preparation", () => {
