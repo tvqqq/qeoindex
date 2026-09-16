@@ -46,8 +46,9 @@ export function useChartHistory({
   preparedInitial = null,
 }: UseChartHistoryOptions) {
   const exactPrepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
+  const hasUsableDailySeed = timeframe === "1D" && seedDailyBars.length > 0
   const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : []))
-  const [loading, setLoading] = useState(() => !exactPrepared)
+  const [loading, setLoading] = useState(() => !exactPrepared && !hasUsableDailySeed)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [coverage, setCoverage] = useState<ChartHistoryResponse["coverage"] | null>(() => exactPrepared?.result.coverage ?? null)
@@ -75,7 +76,7 @@ export function useChartHistory({
     barsRef.current = initialBars
     historyCursorRef.current = prepared?.range.from ?? null
     setBars(initialBars)
-    setLoading(!prepared)
+    setLoading(!prepared && !hasUsableDailySeed)
     setLoadingOlder(false)
     olderRequestRef.current = false
     setError(null)
@@ -86,6 +87,20 @@ export function useChartHistory({
       const horizonTo = prepared.range.to
       horizonToRef.current = horizonTo
       setHasMore(prepared.range.from > chartHistoryFloor(timeframe, horizonTo) + 1)
+      return () => controller.abort()
+    }
+
+    if (hasUsableDailySeed) {
+      const horizonTo = seedDailyBars.at(-1)?.time ?? null
+      const historyCursor = seedDailyBars.at(0)?.time ?? null
+      horizonToRef.current = horizonTo
+      historyCursorRef.current = historyCursor
+      setHasMore(Boolean(
+        horizonTo
+        && historyCursor
+        && historyCursor > chartHistoryFloor(timeframe, horizonTo) + 1,
+      ))
+      setLoading(false)
       return () => controller.abort()
     }
 
@@ -117,7 +132,7 @@ export function useChartHistory({
       })
 
     return () => controller.abort()
-  }, [preparedInitial, seedDailyBars, ticker, timeframe])
+  }, [hasUsableDailySeed, preparedInitial, seedDailyBars, ticker, timeframe])
 
   const loadOlder = useCallback(async () => {
     if (olderRequestRef.current || !hasMore) return
