@@ -139,10 +139,10 @@
     {
       "logicalName": "qeo236_daily_5y_retention",
       "repositoryVersion": "20260916102000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-236 approved permanent rolling-5Y Daily retention; TDD RED EOD v4 run 35051077767 failed only because the migration was absent; GREEN EOD v4 run 35051256805 passed after the service-role prune RPC, 5Y bootstrap bound, and EOD wiring were added",
-      "rationale": "QEO-236 replaces the bounded ~8Y canonical Daily OHLCV contract with rolling 5 calendar years and no cold/archive copy. The service-role-only idempotent RPC derives the cutoff from the Vietnam-local EOD reference date and deletes only 1D rows strictly older than that cutoff. The migration remains repo-ahead until exact-head Verify/DB replay/types gates pass and production purge/readback is completed."
+      "productionVersion": "20260916033201",
+      "state": "MAPPED",
+      "evidence": "QEO-236 PR #512 exact-head EOD v4 35051787291, Verify 35051787344 and DB Drift 35051787317 GREEN; squash merge e2f94482cae761d7df7f0bb85137cf0c52585153; production migration 20260916033201; rolling-5Y purge deleted 118,678 Daily rows and retained 230,013 with zero rows before the cutoff; ordinary VACUUM ANALYZE left n_dead_tup=0; five-ticker latest-300 read probe used backward market_ohlcv_history_pkey Index Scan with no seq scan",
+      "rationale": "Supabase assigned production version 20260916033201 while repository replay keeps reviewed version 20260916102000. Production readback confirms the service-role-only safe-retention RPC now owns rolling 5-calendar-year Daily pruning from a Vietnam-local cutoff, retaining the full cutoff date and requiring no cold/archive copy. Post-purge compact live tuple bytes were 70,476,048 and the conservative estimated VACUUM FULL peak was 517,586,912 bytes, above the 470,000,000-byte gate, so no physical heap rewrite was attempted."
     }
   ]
 }
