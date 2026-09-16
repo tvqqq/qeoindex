@@ -57,29 +57,29 @@ export const VN_TOP_COMPANY_NAMES: Record<string, string> = {
   HCM: "Công ty Cổ phần Chứng khoán TP.HCM (HSC)",
   DGC: "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang",
   DCM: "Công ty Cổ phần Phân bón Dầu khí Cà Mau",
-  DPM: "Tổng Công ty Phân bón và Hóa chất Dầu khí (Phú Mỹ)",
+  DPM: "Tổng Công ty Phân bón và Hóa chất Dầu khí Phú Mỹ",
   KDH: "Công ty Cổ phần Đầu tư và Kinh doanh Nhà Khang Điền",
   NLG: "Công ty Cổ phần Đầu tư Nam Long",
-  DIG: "Tổng Công ty Cổ phần Đầu tư Phát triển Xây dựng (DIC Corp)",
+  DIG: "Tổng Công ty Cổ phần Đầu tư Phát triển Xây dựng DIC Corp",
   DXG: "Công ty Cổ phần Tập đoàn Đất Xanh",
   PDR: "Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
   KBC: "Tổng Công ty Phát triển Đô thị Kinh Bắc",
   VSC: "Công ty Cổ phần Tập đoàn Container Việt Nam",
   GMD: "Công ty Cổ phần Gemadept",
   HAH: "Công ty Cổ phần Vận tải và Xếp dỡ Hải An",
-  REE: "Công ty Cổ phần Cơ Điện Lạnh (REE)",
+  REE: "Công ty Cổ phần Cơ Điện Lạnh REE",
   PNJ: "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận",
-  FRT: "Công ty Cổ phần Bán lẻ Kỹ thuật số FPT (FPT Retail)",
-  DGW: "Công ty Cổ phần Thế Giới Số (Digiworld)",
-  BCM: "Tổng Công ty Đầu tư và Phát triển Công nghiệp (Becamex IDC)",
-  NVL: "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va (Novaland)",
+  FRT: "Công ty Cổ phần Bán lẻ Kỹ thuật số FPT FPT Retail",
+  DGW: "Công ty Cổ phần Thế Giới Số Digiworld",
+  BCM: "Tổng Công ty Đầu tư và Phát triển Công nghiệp Becamex IDC",
+  NVL: "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va Novaland",
   GEX: "Công ty Cổ phần Tập đoàn GELEX",
   HSG: "Công ty Cổ phần Tập đoàn Hoa Sen",
   NKG: "Công ty Cổ phần Thép Nam Kim",
   VGC: "Tổng Công ty Viglacera",
   PC1: "Công ty Cổ phần Tập đoàn PC1",
-  CTR: "Tổng Công ty Cổ phần Công trình Viettel (Viettel Construction)",
-  VTP: "Tổng Công ty Cổ phần Bưu chính Viettel (Viettel Post)",
+  CTR: "Tổng Công ty Cổ phần Công trình Viettel Viettel Construction",
+  VTP: "Tổng Công ty Cổ phần Bưu chính Viettel Viettel Post",
 }
 
 type StockCouncilRunRow = {
@@ -108,6 +108,22 @@ type StockCouncilOutcomeRow = {
   mfe_20d_pct: number | null
   mae_20d_pct: number | null
   direction_correct_5d: boolean | null
+}
+
+type StockDetailBootstrapStage = "research" | "scanner" | "daily" | "councilRuntime" | "aiHistory" | "rating"
+type StockDetailBootstrapTimings = Partial<Record<StockDetailBootstrapStage | "total", number>>
+
+async function measureStockDetailBootstrapStage<T>(
+  timings: StockDetailBootstrapTimings,
+  stage: StockDetailBootstrapStage,
+  load: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now()
+  try {
+    return await load()
+  } finally {
+    timings[stage] = Number((performance.now() - startedAt).toFixed(1))
+  }
 }
 
 function nullableNumber(value: unknown) {
@@ -244,27 +260,27 @@ export async function fetchStockDetailData(
     decoded = "HPG"
   }
 
-  const councilRuntimePromise = supabase
+  const bootstrapStartedAt = performance.now()
+  const bootstrapTimings: StockDetailBootstrapTimings = {}
+  const councilRuntimePromise = measureStockDetailBootstrapStage(bootstrapTimings, "councilRuntime", () => supabase
     ? getStockDetailCouncilRuntime(supabase).catch(() => null)
-    : Promise.resolve(null)
-  const aiHistoryPromise = supabase
+    : Promise.resolve(null))
+  const aiHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "aiHistory", () => supabase
     ? getTickerAiCouncilHistory(supabase, decoded).catch(() => [] as AiCouncilHistoryEntry[])
-    : Promise.resolve([] as AiCouncilHistoryEntry[])
-  const ratingRowPromise = supabase
+    : Promise.resolve([] as AiCouncilHistoryEntry[]))
+  const ratingRowPromise = measureStockDetailBootstrapStage(bootstrapTimings, "rating", () => supabase
     ? getInsightsRatingForTicker(supabase, decoded).catch(() => null)
-    : Promise.resolve(null)
-  const dailyHistoryPromise = supabase
+    : Promise.resolve(null))
+  const dailyHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "daily", () => supabase
     ? getCanonicalDailySeed(supabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
-    : getCachedDailyHistory(decoded)
-  // Stock-detail navigation must not block on external intraday providers. The chart
-  // owns 1H/4H loading through the canonical /api/market/ohlcv path after render.
+    : getCachedDailyHistory(decoded))
   const hourlyHistoryPromise = supabase
-    ? Promise.resolve({ bars: [], provider: "CANONICAL_CHART_API", detail: "1H/4H loaded lazily by /api/market/ohlcv" })
+    ? Promise.resolve({ bars: [], provider: "CANONICAL_CHART_API", detail: "Daily-only chart history is loaded canonically" })
     : getCachedHourlyHistory(decoded)
 
   const [researchData, scannerData, dailyHistory, hourlyHistory, councilRuntime, aiHistory, loadedRatingRow] = await Promise.all([
-    getCachedResearchData(),
-    getCachedScannerData(),
+    measureStockDetailBootstrapStage(bootstrapTimings, "research", () => getCachedResearchData()),
+    measureStockDetailBootstrapStage(bootstrapTimings, "scanner", () => getCachedScannerData()),
     dailyHistoryPromise,
     hourlyHistoryPromise,
     councilRuntimePromise,
@@ -357,7 +373,7 @@ export async function fetchStockDetailData(
     })
   }
 
-  return {
+  const result: StockDetailData = {
     ticker: decoded,
     companyName: resolvedCompanyName,
     exchange: universeItem?.rank ? "HOSE" : "HNX",
@@ -390,6 +406,10 @@ export async function fetchStockDetailData(
     watchlist,
     ratingRow,
   }
+
+  bootstrapTimings.total = Number((performance.now() - bootstrapStartedAt).toFixed(1))
+  console.info("[qeo172-stock-detail-bootstrap]", JSON.stringify({ ticker: decoded, stageMs: bootstrapTimings }))
+  return result
 }
 
 export function buildFallbackRatingRow(data: {
