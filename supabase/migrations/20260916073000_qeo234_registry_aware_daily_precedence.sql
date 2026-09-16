@@ -2,10 +2,10 @@
 --
 -- Stage-1 compact writes intentionally omit provider_detail/source_url from the
 -- fact row after resolving provenance_id. The legacy QEO-106 precedence trigger
--- ranked an incoming Fallback row from NEW.source_url, so a compact verified
--- final-close repair lost its 250 rank and was treated as generic Fallback=200.
--- That caused the trigger to return OLD and preserve the long inline fields,
--- blocking the production compact-writer canary.
+-- ranked an incoming Fallback row from inline long provenance, so a compact
+-- verified final-close repair lost its 250 rank and was treated as generic
+-- Fallback=200. That caused the trigger to return OLD and preserve the long
+-- inline fields, blocking the production compact-writer canary.
 --
 -- Resolve the logical long provenance through market_ohlcv_provenance whenever
 -- provenance_id is available. JSONB field access is deliberate: it keeps this
