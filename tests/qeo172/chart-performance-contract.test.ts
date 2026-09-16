@@ -37,6 +37,10 @@ function browserBenchmarkSource() {
   )
 }
 
+function source(path: string) {
+  return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
+}
+
 function completeResponse(input: ChartRangeInput, times: number[]): ChartHistoryResponse {
   return {
     ok: true,
@@ -238,4 +242,17 @@ test("QEO-172 production benchmark persists matrix evidence before adjacent navi
   assert.ok(completeWrite >= 0, "benchmark must persist a completed artifact after adjacent navigation")
   assert.ok(partialWrite < adjacentMeasure, "matrix artifact must exist before adjacent navigation can fail")
   assert.ok(adjacentMeasure < completeWrite, "completed marker must only be written after adjacent navigation succeeds")
+})
+
+test("QEO-238 active chart contract is Daily-only and stale intraday API requests fail closed", () => {
+  const types = source("components/stock-detail/chart/stock-chart-types.ts")
+  const route = source("app/api/market/ohlcv/route.ts")
+  const browser = browserBenchmarkSource()
+  const matrix = browser.match(/const MATRIX = \[[\s\S]*?\] as const/)?.[0] ?? ""
+
+  assert.match(types, /export type ChartTimeframe = \"1D\" \| \"3D\" \| \"1W\" \| \"1M\" \| \"1Q\" \| \"1Y\"/)
+  assert.doesNotMatch(types, /\| \"(?:1m|15m|30m|1h|2h|4h)\"/)
+  assert.ok(matrix, "QEO-172 benchmark matrix must remain explicit")
+  assert.doesNotMatch(matrix, /\"(?:1m|15m|30m|1h|2h|4h)\"/)
+  assert.match(route, /INTRADAY_TIMEFRAME_RETIRED/)
 })
