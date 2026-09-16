@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react"
+import { memo, useId, useMemo } from "react"
 
 interface SparklineProps {
   data: number[]
@@ -13,8 +13,12 @@ interface SparklineProps {
   className?: string
 }
 
-const MAX_SPARKLINE_POINTS = 48
+// Market Board supplies up to 48 stable 5-minute closes and may append one
+// transient live-price endpoint. Keep all 49 before generic downsampling kicks in.
+const MAX_SPARKLINE_POINTS = 49
 const SPARK_EPSILON = 1e-6
+const REFERENCE_UP_COLOR = "#22c98a"
+const REFERENCE_DOWN_COLOR = "#ff4757"
 
 function sparklinePropsEqual(previous: SparklineProps, next: SparklineProps) {
   if (previous.refValue !== next.refValue) return false
@@ -43,6 +47,11 @@ function sparklinePropsEqual(previous: SparklineProps, next: SparklineProps) {
  * Lightweight SVG sparkline for dense market boards.
  * Keeps the visible shape but caps path complexity so hundreds of live rows
  * do not continuously rebuild large SVG paths on slower machines.
+ *
+ * Line-only sparklines are the Market Board variant. When a reference price is
+ * available, that variant is clipped into green-above-reference and
+ * red-below-reference strokes while filled/orderbook sparklines keep their
+ * caller-provided market-tone color.
  */
 export const Sparkline = memo(function Sparkline({
   data,
@@ -56,6 +65,8 @@ export const Sparkline = memo(function Sparkline({
   fill = true,
   className = "",
 }: SparklineProps) {
+  const reactId = useId()
+  const uid = reactId.replace(/:/g, "")
   const hasRef = typeof refValue === "number" && Number.isFinite(refValue) && refValue > 0
   const ref = hasRef ? refValue : undefined
 
@@ -102,6 +113,7 @@ export const Sparkline = memo(function Sparkline({
     const last = coords[coords.length - 1]
     const lastX = last[0]
     const lastY = last[1]
+    const lastValue = points[points.length - 1]
 
     let refY: number | null = null
     if (ref != null) {
@@ -109,15 +121,30 @@ export const Sparkline = memo(function Sparkline({
       refY = Math.max(padY + 1, Math.min(height - padY - 1, calculatedRefY))
     }
 
-    const uid = Math.abs(Math.round(coords[0][0] * 100)) + "-" + color.replace(/[^a-z0-9]/gi, "")
-    return { path, lastX, lastY, refY, padX, uid }
-  }, [data, ref, width, height, strokeWidth, color])
+    return { path, lastX, lastY, lastValue, refY, padX }
+  }, [data, ref, width, height, strokeWidth])
 
   if (!computed) {
     return <svg width={width} height={height} aria-hidden="true" className={className} />
   }
 
-  const { path, lastX, lastY, refY, padX, uid } = computed
+  const { path, lastX, lastY, lastValue, refY, padX } = computed
+  const splitAtReference = !fill && ref != null && refY != null
+  const pointColor = splitAtReference
+    ? lastValue > ref + SPARK_EPSILON
+      ? REFERENCE_UP_COLOR
+      : lastValue < ref - SPARK_EPSILON
+        ? REFERENCE_DOWN_COLOR
+        : color
+    : color
+
+  const strokeProps = {
+    d: path,
+    fill: "none",
+    strokeWidth,
+    strokeLinejoin: "round" as const,
+    strokeLinecap: "round" as const,
+  }
 
   return (
     <svg
@@ -136,7 +163,34 @@ export const Sparkline = memo(function Sparkline({
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         )}
+        {splitAtReference && (
+          <>
+            <clipPath id={`spark-above-${uid}`}>
+              <rect x={0} y={0} width={width} height={refY} />
+            </clipPath>
+            <clipPath id={`spark-below-${uid}`}>
+              <rect x={0} y={refY} width={width} height={Math.max(0, height - refY)} />
+            </clipPath>
+          </>
+        )}
       </defs>
+
+      {fill && (
+        <path
+          d={`${path} L ${lastX.toFixed(2)},${height} L ${padX.toFixed(2)},${height} Z`}
+          fill={`url(#spark-grad-${uid})`}
+          stroke="none"
+        />
+      )}
+
+      {splitAtReference ? (
+        <>
+          <path {...strokeProps} stroke={REFERENCE_UP_COLOR} clipPath={`url(#spark-above-${uid})`} />
+          <path {...strokeProps} stroke={REFERENCE_DOWN_COLOR} clipPath={`url(#spark-below-${uid})`} />
+        </>
+      ) : (
+        <path {...strokeProps} stroke={color} />
+      )}
 
       {hasRef && refY != null && (
         <line
@@ -151,27 +205,10 @@ export const Sparkline = memo(function Sparkline({
         />
       )}
 
-      {fill && (
-        <path
-          d={`${path} L ${lastX.toFixed(2)},${height} L ${padX.toFixed(2)},${height} Z`}
-          fill={`url(#spark-grad-${uid})`}
-          stroke="none"
-        />
-      )}
-
-      <path
-        d={path}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-
       {showDot && (
         <>
-          <circle cx={lastX} cy={lastY} r={strokeWidth + 1.2} fill={color} fillOpacity={0.25} />
-          <circle cx={lastX} cy={lastY} r={strokeWidth + 0.3} fill={color} />
+          <circle cx={lastX} cy={lastY} r={strokeWidth + 1.2} fill={pointColor} fillOpacity={0.25} />
+          <circle cx={lastX} cy={lastY} r={strokeWidth + 0.3} fill={pointColor} />
         </>
       )}
     </svg>
