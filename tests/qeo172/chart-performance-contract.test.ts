@@ -133,6 +133,15 @@ test("QEO-172 production benchmark persists matrix evidence before adjacent navi
   assert.ok(adjacentMeasure < completeWrite)
 })
 
+test("QEO-172 stock-detail bootstrap emits privacy-safe per-stage timings before optimization", () => {
+  const stockDetail = source("modules/research/insights/stock-detail-data.ts")
+  assert.match(stockDetail, /qeo172-stock-detail-bootstrap/)
+  for (const stage of ["research", "scanner", "daily", "councilRuntime", "aiHistory", "rating", "total"]) {
+    assert.match(stockDetail, new RegExp(`\\b${stage}\\b`), `missing ${stage} bootstrap timing`)
+  }
+  assert.doesNotMatch(stockDetail, /console\.(?:info|log)\([^\n]*email|password|token/i)
+})
+
 test("QEO-238 active chart contract is Daily-only and stale intraday API requests fail closed", () => {
   const types = source("components/stock-detail/chart/stock-chart-types.ts")
   const route = source("app/api/market/ohlcv/route.ts")
