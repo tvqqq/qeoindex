@@ -17,10 +17,6 @@ function canonicalBar(iso: string): CanonicalOhlcvBar {
   }
 }
 
-function source(path: string) {
-  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
-}
-
 test("QEO-172 ignores the HOSE ATC auction boundary when detecting 1m session gaps", () => {
   const gaps = detectTradingSessionGaps([
     canonicalBar("2026-09-10T07:29:00Z"), // 14:29 Asia/Ho_Chi_Minh
@@ -43,19 +39,15 @@ test("QEO-172 still reports missing bars inside the continuous PM session", () =
   }])
 })
 
-test("QEO-172 targeted archive recovery can scope expired HOT partitions to one ticker", () => {
+test("QEO-238 targeted stock-chart intraday archive route is retired fail-closed", () => {
   const routeUrl = new URL("../app/api/qeoindex/chart-archive-targeted/route.ts", import.meta.url)
-  assert.equal(existsSync(routeUrl), true, "targeted authenticated archive route must exist")
+  assert.equal(existsSync(routeUrl), true, "retired authenticated archive route must remain as an explicit tombstone")
 
-  const lifecycle = source("modules/market/chart-data/archive-lifecycle.ts")
-  const targeted = source("modules/market/chart-data/targeted-archive-partitions.ts")
   const route = readFileSync(routeUrl, "utf8")
-
-  assert.match(lifecycle, /ticker\?: string/)
-  assert.match(lifecycle, /listExpiredHotPartitionsForTicker/)
-  assert.match(targeted, /\.eq\("ticker", ticker\)/)
-  assert.match(route, /runChartIntradayArchiveLifecycle/)
-  assert.match(route, /searchParams\.get\("ticker"\)/)
+  assert.match(route, /INTRADAY_CHART_OPERATION_RETIRED/)
+  assert.match(route, /status:\s*410/)
+  assert.doesNotMatch(route, /runChartIntradayArchiveLifecycle/)
+  assert.doesNotMatch(route, /searchParams\.get\("ticker"\)/)
 })
 
 test("five-minute buckets keep minute bars in the same candle", () => {
