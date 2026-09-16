@@ -1,26 +1,8 @@
-export type ChartTimeframe =
-  | "1m"
-  | "15m"
-  | "30m"
-  | "1h"
-  | "2h"
-  | "4h"
-  | "1D"
-  | "3D"
-  | "1W"
-  | "1M"
-  | "1Q"
-  | "1Y"
+export type ChartTimeframe = "1D" | "3D" | "1W" | "1M" | "1Q" | "1Y"
 
-export const QUICK_TIMEFRAMES: ChartTimeframe[] = ["15m", "1h", "1D", "1W"]
+export const QUICK_TIMEFRAMES: ChartTimeframe[] = ["1D", "1W", "1M"]
 
 export const ALL_TIMEFRAMES: { id: ChartTimeframe; label: string; group: string }[] = [
-  { id: "1m", label: "1 phút", group: "Phút" },
-  { id: "15m", label: "15 phút", group: "Phút" },
-  { id: "30m", label: "30 phút", group: "Phút" },
-  { id: "1h", label: "1 giờ", group: "Giờ" },
-  { id: "2h", label: "2 giờ", group: "Giờ" },
-  { id: "4h", label: "4 giờ", group: "Giờ" },
   { id: "1D", label: "1 ngày", group: "Ngày / Tuần" },
   { id: "3D", label: "3 ngày", group: "Ngày / Tuần" },
   { id: "1W", label: "1 tuần", group: "Ngày / Tuần" },
@@ -28,6 +10,14 @@ export const ALL_TIMEFRAMES: { id: ChartTimeframe; label: string; group: string 
   { id: "1Q", label: "1 quý", group: "Tháng / Quý / Năm" },
   { id: "1Y", label: "1 năm", group: "Tháng / Quý / Năm" },
 ]
+
+const ACTIVE_CHART_TIMEFRAMES = new Set<string>(ALL_TIMEFRAMES.map(({ id }) => id))
+
+export function normalizePersistedChartTimeframe(value: unknown): ChartTimeframe {
+  return typeof value === "string" && ACTIVE_CHART_TIMEFRAMES.has(value)
+    ? value as ChartTimeframe
+    : "1D"
+}
 
 export type ChartStyle = "candles" | "line" | "area" | "hollow" | "bars"
 
