@@ -306,7 +306,7 @@ test("QEO-235 uses DNSE multicast receive time for provider-to-worker latency", 
   const orderbookStream = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
   assert.match(
     orderbookStream,
-    /timestampValueMs\(frame\.multicastReceiveTime \?\? frame\.time/,
+    /function providerIngressTimestampMs[\s\S]*frame\.multicastReceiveTime \?\? frame\.time/,
     "provider latency must prefer DNSE multicastReceiveTime before exchange/event time",
   )
 })
