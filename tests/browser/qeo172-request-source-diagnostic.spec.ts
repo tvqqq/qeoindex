@@ -78,7 +78,40 @@ function parseOhlcv(url: string) {
 }
 
 test("QEO-172 production request-source diagnostic", async ({ page }) => {
-  test.setTimeout(4 * 60_000)
+  test.setTimeout(2 * 60_000)
+
+  page.on("console", (message) => {
+    const text = message.text()
+    if (text.startsWith("[qeo172-browser-")) console.log(text)
+  })
+
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+      if (url.includes("/api/market/ohlcv")) {
+        console.log(`[qeo172-browser-fetch] ${JSON.stringify({
+          at: Date.now(),
+          url,
+          stack: new Error("qeo172 fetch origin").stack ?? null,
+        })}`)
+      }
+      return originalFetch(input, init)
+    }) as typeof window.fetch
+
+    window.addEventListener("qeo:chart-timeframe", (event) => {
+      const detail = (event as CustomEvent).detail
+      console.log(`[qeo172-browser-timeframe-event] ${JSON.stringify({
+        at: Date.now(),
+        detail,
+      })}`)
+    })
+  })
+
   await login(page)
 
   const networkEvents: NetworkEvent[] = []
@@ -93,61 +126,41 @@ test("QEO-172 production request-source diagnostic", async ({ page }) => {
     networkEvents.push({ kind: "response", at: Date.now(), url: response.url(), ...parsed })
   })
 
-  for (let index = 0; index < 3; index += 1) {
-    const startedAt = Date.now()
-    await page.goto(`${BASE_URL}/insights/vic?qeo172_request_diag=${index}`, { waitUntil: "domcontentloaded" })
-    const renderedKey = await waitAnyRendered(page, "VIC")
-    const navigation = await page.evaluate(() => {
-      const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined
-      return entry ? {
-        responseEnd: entry.responseEnd,
-        domContentLoadedEventEnd: entry.domContentLoadedEventEnd,
-        loadEventEnd: entry.loadEventEnd,
-      } : null
-    })
-    const storedTimeframe = await page.evaluate(() => {
-      try {
-        const raw = localStorage.getItem("qeo_chart_settings_VIC")
-        if (!raw) return null
-        const parsed = JSON.parse(raw) as { timeframe?: unknown }
-        return typeof parsed.timeframe === "string" ? parsed.timeframe : null
-      } catch {
-        return null
-      }
-    })
-    console.log(`[qeo172-initial-request-diagnostic] ${JSON.stringify({
-      index,
-      wallMs: Date.now() - startedAt,
-      renderedKey,
-      storedTimeframe,
-      navigation,
-    })}`)
-  }
+  const startedAt = Date.now()
+  await page.goto(`${BASE_URL}/insights/vic?qeo172_request_diag=stack`, { waitUntil: "domcontentloaded" })
+  const initialRenderedKey = await waitAnyRendered(page, "VIC")
+  const navigation = await page.evaluate(() => {
+    const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined
+    return entry ? {
+      responseEnd: entry.responseEnd,
+      domContentLoadedEventEnd: entry.domContentLoadedEventEnd,
+      loadEventEnd: entry.loadEventEnd,
+    } : null
+  })
+  console.log(`[qeo172-initial-request-diagnostic] ${JSON.stringify({
+    wallMs: Date.now() - startedAt,
+    renderedKey: initialRenderedKey,
+    navigation,
+  })}`)
 
-  await page.goto(`${BASE_URL}/insights/vic?qeo172_request_diag=sequence`, { waitUntil: "domcontentloaded" })
-  await waitAnyRendered(page, "VIC")
   await enterFullscreen(page)
   await selectTimeframe(page, "1D")
+  await selectTimeframe(page, "3D")
 
-  for (const seedTarget of ["1M", "1W"] as const) {
-    networkEvents.length = 0
-    await selectTimeframe(page, "3D")
-    const seedStartedAt = Date.now()
-    const eventStart = networkEvents.length
-    await clickTimeframe(page, seedTarget)
-    const renderedKey = await waitRendered(page, "VIC", seedTarget)
-    const renderedAt = Date.now()
-    await page.waitForTimeout(1_800)
-    const events = networkEvents.slice(eventStart).map((event) => ({
+  networkEvents.length = 0
+  const seedStartedAt = Date.now()
+  await clickTimeframe(page, "1M")
+  const renderedKey = await waitRendered(page, "VIC", "1M")
+  const renderedAt = Date.now()
+  await page.waitForTimeout(1_800)
+
+  console.log(`[qeo172-seed-window-diagnostic] ${JSON.stringify({
+    seedTarget: "1M",
+    renderMs: renderedAt - seedStartedAt,
+    renderedKey,
+    events: networkEvents.map((event) => ({
       ...event,
       deltaFromSeedClickMs: event.at - seedStartedAt,
-    }))
-    console.log(`[qeo172-seed-window-diagnostic] ${JSON.stringify({
-      seedTarget,
-      renderMs: renderedAt - seedStartedAt,
-      renderedKey,
-      events,
-    })}`)
-    await selectTimeframe(page, "1D")
-  }
+    })),
+  })}`)
 })
