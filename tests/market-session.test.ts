@@ -175,16 +175,16 @@ test("QEO-242 full-day mini chart fits the existing 48-point capacity after lunc
   assert.ok(display.length <= 48)
 })
 
-test("QEO-242 fresh and cached intraday snapshots apply the same mini-chart session policy", () => {
+test("QEO-242 SSR and browser hydration apply mini-chart policy without mutating shared cache semantics", () => {
+  const boardPage = readFileSync("app/board/page.tsx", "utf8")
+  const intradayRoute = readFileSync("app/api/market/intraday/route.ts", "utf8")
   const service = readFileSync("modules/market/realtime/intraday-5m-service.ts", "utf8")
 
-  assert.match(service, /miniChartPointsForDisplay/)
-  assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(\{ rows: enhancedRows/)
-  assert.match(service, /function sanitizeUsableCachedIntradaySnapshot/)
-  assert.match(service, /const sanitized = sanitizeIntradayMiniChartSnapshot\(value, now\)/)
-  assert.match(service, /return isIntradaySnapshot\(sanitized, symbols\) \? sanitized : null/)
-  assert.match(service, /sanitizeUsableCachedIntradaySnapshot\(await cache\.get\(bucketKey\), symbols, now\)/)
-  assert.match(service, /sanitizeUsableCachedIntradaySnapshot\(await redisClient\.get<IntradaySnapshot>\(latestKey\), symbols, now\)/)
+  assert.match(boardPage, /miniChartPointsForDisplay\(cachedRow\.points, now\)/)
+  assert.match(boardPage, /miniChartPointsForDisplay\(snap\.intraday_1m as unknown as IntradayPoint\[\], now\)/)
+  assert.match(intradayRoute, /miniChartPointsForDisplay\(row\.points, now\)/)
+  assert.match(intradayRoute, /lastBarAt: points\.at\(-1\)\?\.time \?\? null/)
+  assert.doesNotMatch(service, /miniChartPointsForDisplay/)
 })
 
 test("new session reference history starts at 09:15 ICT", () => {
