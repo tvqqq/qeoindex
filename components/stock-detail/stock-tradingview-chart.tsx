@@ -600,7 +600,6 @@ export function StockTradingViewChart({
   const renderedRef = useRef<RenderedData | null>(null)
   const renderedTimeframeRef = useRef<ChartTimeframe | null>(null)
   const timeframeRef = useRef(timeframe)
-  timeframeRef.current = timeframe
   const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)
   const overlayFrameRef = useRef<number | null>(null)
   const [chartReady, setChartReady] = useState(false)
@@ -624,6 +623,10 @@ export function StockTradingViewChart({
   const [editingTextDrawingId, setEditingTextDrawingId] = useState<string | null>(null)
   const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
   const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
+
+  useEffect(() => {
+    timeframeRef.current = timeframe
+  }, [timeframe])
 
   useEffect(() => {
     if (drawingSyncStatus !== "ready") return
