@@ -1,0 +1,42 @@
+name: QEO-172 Request Source Diagnostic
+
+on:
+  pull_request:
+    paths:
+      - "tests/browser/qeo172-request-source-diagnostic.spec.ts"
+      - ".github/workflows/qeo-172-request-source-diagnostic.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qeo172-request-source-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnostic:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      QEO172_BASE_URL: https://qeoindex.qeoqeo.com
+      QEO171_TEST_EMAIL: ${{ secrets.QEO171_TEST_EMAIL }}
+      QEO171_TEST_PASSWORD: ${{ secrets.QEO171_TEST_PASSWORD }}
+    steps:
+      - name: Check encrypted QA credentials
+        shell: bash
+        run: |
+          test -n "$QEO171_TEST_EMAIL"
+          test -n "$QEO171_TEST_PASSWORD"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Run authenticated request-source diagnostic
+        run: pnpm exec playwright test tests/browser/qeo172-request-source-diagnostic.spec.ts --project=desktop
