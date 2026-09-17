@@ -49,22 +49,13 @@ export function projectNextFutureTime(time: number, timeframe: ChartTimeframe) {
   if (timeframe === "1D") {
     return localEpochForDateKey(advanceTradingDays(currentDateKey, 1), parts.hour, parts.minute)
   }
-  if (timeframe === "3D") {
-    return localEpochForDateKey(advanceTradingDays(currentDateKey, 3), parts.hour, parts.minute)
-  }
   if (timeframe === "1W") {
     const nextWeekCandidate = addCalendarDaysKey(currentDateKey, 7)
     return localEpochForDateKey(firstTradingDateOnOrAfter(nextWeekCandidate), parts.hour, parts.minute)
   }
 
-  if (timeframe === "1M" || timeframe === "1Q") {
-    const monthsToAdd = timeframe === "1M" ? 1 : 3
-    const target = new Date(Date.UTC(parts.year, parts.month - 1 + monthsToAdd, 1, 0, 0, 0))
-    const targetKey = dateKey(target.getUTCFullYear(), target.getUTCMonth() + 1, 1)
-    return localEpochForDateKey(firstTradingDateOnOrAfter(targetKey), parts.hour, parts.minute)
-  }
-
-  const targetKey = dateKey(parts.year + 1, 1, 1)
+  const target = new Date(Date.UTC(parts.year, parts.month, 1, 0, 0, 0))
+  const targetKey = dateKey(target.getUTCFullYear(), target.getUTCMonth() + 1, 1)
   return localEpochForDateKey(firstTradingDateOnOrAfter(targetKey), parts.hour, parts.minute)
 }
 
@@ -80,7 +71,7 @@ export function projectFutureTimes(lastTime: number, timeframe: ChartTimeframe, 
 
 export function formatFutureTimelineLabel(time: number, timeframe: ChartTimeframe) {
   const date = new Date(time * 1000)
-  if (timeframe === "1D" || timeframe === "3D" || timeframe === "1W") {
+  if (timeframe === "1D" || timeframe === "1W") {
     return new Intl.DateTimeFormat("vi-VN", {
       timeZone: "Asia/Ho_Chi_Minh",
       day: "2-digit",
