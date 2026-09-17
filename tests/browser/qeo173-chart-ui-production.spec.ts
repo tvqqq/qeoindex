@@ -7,6 +7,8 @@ const TEST_EMAIL = process.env.QEO171_TEST_EMAIL
 const TEST_PASSWORD = process.env.QEO171_TEST_PASSWORD
 const TICKERS = ["VIC", "VCB"] as const
 const TIMEFRAME_PATTERN = ALL_TIMEFRAMES.map(({ id }) => id).join("|")
+const ACTIVE_TIMEFRAMES = ["1D", "1W", "1M"] as const
+const RETIRED_TIMEFRAMES = ["3D", "1Q", "1Y"] as const
 
 type EvidenceRow = {
   ticker: string
@@ -44,6 +46,34 @@ async function waitRendered(page: Page, ticker: string) {
     { timeout: 30_000 },
   )
   return terminal
+}
+
+async function assertFixedTimeframeControls(page: Page) {
+  const group = page.getByRole("group", { name: "Khung thời gian" })
+  await expect(group).toBeVisible()
+  await expect(group.getByRole("button")).toHaveCount(ACTIVE_TIMEFRAMES.length)
+  for (const timeframe of ACTIVE_TIMEFRAMES) {
+    await expect(group.getByRole("button", { name: timeframe, exact: true })).toBeVisible()
+  }
+  await expect(page.getByRole("button", { name: /chọn khung thời gian/i })).toHaveCount(0)
+}
+
+async function assertRetiredTimeframesFailClosed(page: Page) {
+  const results = await page.evaluate(async (resolutions) => {
+    const to = Math.floor(Date.now() / 1000)
+    const from = to - 30 * 24 * 60 * 60
+    return Promise.all(resolutions.map(async (resolution) => {
+      const response = await fetch(`/api/market/ohlcv?ticker=VIC&resolution=${resolution}&from=${from}&to=${to}`, {
+        cache: "no-store",
+      })
+      return { resolution, status: response.status, body: await response.json() }
+    }))
+  }, [...RETIRED_TIMEFRAMES])
+
+  for (const result of results) {
+    expect(result.status, `${result.resolution} must be retired`).toBe(410)
+    expect(result.body?.error?.code).toBe("CHART_TIMEFRAME_RETIRED")
+  }
 }
 
 async function collectEvidence(page: Page, ticker: string, mode: "compact" | "fullscreen"): Promise<EvidenceRow> {
@@ -87,16 +117,19 @@ test("QEO-173 authenticated VIC + VCB compact/fullscreen visual acceptance", asy
   test.setTimeout(4 * 60_000)
   mkdirSync("test-results", { recursive: true })
   await login(page)
+  await assertRetiredTimeframesFailClosed(page)
 
   const evidence: EvidenceRow[] = []
   for (const ticker of TICKERS) {
     await page.goto(`${BASE_URL}/insights/${ticker.toLowerCase()}`)
     const terminal = await waitRendered(page, ticker)
     await expect(terminal).toHaveAttribute("data-chart-maximized", "false")
+    await assertFixedTimeframeControls(page)
     evidence.push(await collectEvidence(page, ticker, "compact"))
 
     await page.keyboard.press("Backquote")
     await expect(terminal).toHaveAttribute("data-chart-maximized", "true", { timeout: 15_000 })
+    await assertFixedTimeframeControls(page)
     evidence.push(await collectEvidence(page, ticker, "fullscreen"))
 
     // Canonical crosshair timestamp stays owned by the chart legend and is
