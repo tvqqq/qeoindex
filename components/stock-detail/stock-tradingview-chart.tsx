@@ -598,6 +598,8 @@ export function StockTradingViewChart({
   const chartGenerationRef = useRef(0)
   const pocPriceLineRef = useRef<LightweightPriceLineApi | null>(null)
   const renderedRef = useRef<RenderedData | null>(null)
+  const renderedTimeframeRef = useRef<ChartTimeframe | null>(null)
+  const timeframeRef = useRef(timeframe)
   const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)
   const overlayFrameRef = useRef<number | null>(null)
   const [chartReady, setChartReady] = useState(false)
@@ -621,6 +623,10 @@ export function StockTradingViewChart({
   const [editingTextDrawingId, setEditingTextDrawingId] = useState<string | null>(null)
   const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
   const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
+
+  useEffect(() => {
+    timeframeRef.current = timeframe
+  }, [timeframe])
 
   useEffect(() => {
     if (drawingSyncStatus !== "ready") return
@@ -801,7 +807,8 @@ export function StockTradingViewChart({
     window.setTimeout(() => setExportStatus(null), 1800)
   }, [ticker, timeframe])
 
-  // A ticker/timeframe generation owns one LWC instance. Cleanup invalidates
+  // A ticker generation owns one LWC instance. Timeframe-only changes reuse
+  // the instance and update formatting/data in place. Cleanup still invalidates
   // the generation before a slow CDN promise can resolve.
   useEffect(() => {
     const host = chartHostRef.current
@@ -816,6 +823,7 @@ export function StockTradingViewChart({
     setChartReady(false)
     setRuntimeError(null)
     renderedRef.current = null
+    renderedTimeframeRef.current = null
     visibleRangeRef.current = null
     seriesRef.current = null
 
@@ -823,6 +831,7 @@ export function StockTradingViewChart({
       .then((runtime) => {
         if (disposed || chartGenerationRef.current !== generation || !host.isConnected) return
 
+        const initialTimeframe = timeframeRef.current
         chart = runtime.createChart(host, {
           width: Math.max(1, host.clientWidth),
           height: Math.max(1, host.clientHeight),
@@ -849,16 +858,16 @@ export function StockTradingViewChart({
           },
           timeScale: {
             borderColor: "rgba(255,255,255,0.08)",
-            timeVisible: timeframe.includes("m") || timeframe.includes("h"),
+            timeVisible: initialTimeframe.includes("m") || initialTimeframe.includes("h"),
             secondsVisible: false,
             rightOffset: DEFAULT_RIGHT_OFFSET_BARS,
             barSpacing: 7,
             minBarSpacing: 2,
-            tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),
+            tickMarkFormatter: (time: unknown) => formatAxisTime(time, initialTimeframe),
           },
           localization: {
             locale: "vi-VN",
-            timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),
+            timeFormatter: (time: unknown) => formatCrosshairTime(time, initialTimeframe),
           },
           crosshair: {
             vertLine: { color: "rgba(148,163,184,0.42)", labelBackgroundColor: "#334155" },
@@ -1035,10 +1044,27 @@ export function StockTradingViewChart({
       chartRef.current = null
       seriesRef.current = null
       renderedRef.current = null
+      renderedTimeframeRef.current = null
       visibleRangeRef.current = null
       setChartReady(false)
     }
-  }, [scheduleOverlayPaint, ticker, timeframe])
+  }, [scheduleOverlayPaint, ticker])
+
+  // Keep timeframe-specific axis formatting in sync while reusing the ticker-owned chart instance.
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !chartReady) return
+    chart.applyOptions({
+      timeScale: {
+        timeVisible: timeframe.includes("m") || timeframe.includes("h"),
+        tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),
+      },
+      localization: {
+        locale: "vi-VN",
+        timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),
+      },
+    })
+  }, [chartReady, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1066,6 +1092,14 @@ export function StockTradingViewChart({
     applyIndicatorStyle(series.macdSignal, { ...styles.macd, color: "#f97316" }, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdHistogram, styles.macd, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdZero, { ...styles.macd, color: "#64748b", width: 1, opacity: 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showMacd)
+
+    const previousTimeframe = renderedTimeframeRef.current
+    const timeframeChanged = previousTimeframe !== timeframe
+    if (timeframeChanged) {
+      renderedRef.current = null
+      visibleRangeRef.current = null
+      renderedTimeframeRef.current = timeframe
+    }
 
     const previous = renderedRef.current
     const latest = displayBars.at(-1)
@@ -1144,6 +1178,7 @@ export function StockTradingViewChart({
     renderPayload,
     scheduleOverlayPaint,
     setLatestVisibleRange,
+    timeframe,
     viewSettings,
   ])
 
