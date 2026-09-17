@@ -66,3 +66,28 @@ test("QEO-172 ticker navigation uses fetched Daily seed before remote chart prep
   assert.match(navigation, /seededBars\.length > 0\s*\?\s*null/)
   assert.match(navigation, /targetPreparedPromise \?\? prepareInitialChartHistory/)
 })
+
+test("QEO-172 SSR Daily seed reads canonical market storage through the trusted server client", () => {
+  const stockDetailData = source("modules/research/insights/stock-detail-data.ts")
+
+  assert.match(
+    stockDetailData,
+    /import \{ getSupabaseServerClient \} from "@\/modules\/shared\/supabase\/server"/,
+    "Stock Detail must have an explicit trusted server-side market-data client",
+  )
+  assert.match(
+    stockDetailData,
+    /const canonicalDailySupabase = getSupabaseServerClient\(\)/,
+    "canonical Daily seed must resolve the trusted server client explicitly",
+  )
+  assert.match(
+    stockDetailData,
+    /canonicalDailySupabase\s*\?\s*getCanonicalDailySeed\(canonicalDailySupabase, decoded\)/,
+    "canonical Daily seed must read with the trusted client rather than the user-scoped auth client",
+  )
+  assert.doesNotMatch(
+    stockDetailData,
+    /getCanonicalDailySeed\(supabase, decoded\)/,
+    "user-scoped Supabase must not be used to read service-only canonical market storage",
+  )
+})

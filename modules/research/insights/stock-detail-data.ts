@@ -13,6 +13,7 @@ import {
   getCachedResearchTickerData,
   getCachedScannerTickerData,
 } from "@/modules/shared/cache/request-cache"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
 import type { ScannerData } from "@/modules/signals/scanner/data"
 import { getInsightsRatingForTicker, type InsightsRatingRow } from "@/modules/research/insights/data"
@@ -334,6 +335,7 @@ export async function fetchStockDetailData(
 
   const bootstrapStartedAt = performance.now()
   const bootstrapTimings: StockDetailBootstrapTimings = {}
+  const canonicalDailySupabase = getSupabaseServerClient()
   const councilRuntimePromise = measureStockDetailBootstrapStage(bootstrapTimings, "councilRuntime", () => supabase
     ? getStockDetailCouncilRuntime(supabase, decoded).catch(() => null)
     : Promise.resolve(null))
@@ -344,7 +346,9 @@ export async function fetchStockDetailData(
     ? getInsightsRatingForTicker(supabase, decoded).catch(() => null)
     : Promise.resolve(null))
   const dailyHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "daily", () => supabase
-    ? getCanonicalDailySeed(supabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
+    ? canonicalDailySupabase
+      ? getCanonicalDailySeed(canonicalDailySupabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
+      : Promise.resolve({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily service client unavailable" })
     : getCachedDailyHistory(decoded))
   const researchDataPromise = measureStockDetailBootstrapStage(bootstrapTimings, "research", () => getCachedResearchTickerData(decoded))
   const scannerDataPromise = measureStockDetailBootstrapStage(bootstrapTimings, "scanner", () => getCachedScannerTickerData(decoded))
