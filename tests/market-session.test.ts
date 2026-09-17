@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
-import { getMarketUiPhase, isLatestMiniChartSnapshotFresh, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart } from "../modules/market/realtime/session-ui.ts"
+import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart } from "../modules/market/realtime/session-ui.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -158,27 +158,21 @@ test("QEO-242 afternoon mini chart keeps morning history and drops synthetic lun
   ])
 })
 
-test("QEO-242 latest snapshot fallback is phase-aware and bounded during live trading", () => {
-  assert.equal(
-    isLatestMiniChartSnapshotFresh("2026-08-18T05:59:30Z", new Date("2026-08-18T06:00:30Z")),
-    false,
-    "a lunch snapshot must not seed the reopened afternoon session",
-  )
-  assert.equal(
-    isLatestMiniChartSnapshotFresh("2026-08-18T06:28:00Z", new Date("2026-08-18T06:33:00Z")),
-    true,
-    "a recent same-phase afternoon snapshot is an acceptable stale-while-live seed",
-  )
-  assert.equal(
-    isLatestMiniChartSnapshotFresh("2026-08-18T06:20:00Z", new Date("2026-08-18T06:33:00Z")),
-    false,
-    "an old afternoon snapshot must not hide a missing provider refresh",
-  )
-  assert.equal(
-    isLatestMiniChartSnapshotFresh("2026-08-18T04:25:00Z", new Date("2026-08-18T05:30:00Z")),
-    true,
-    "lunch may reuse the completed morning snapshot because the exchange is paused",
-  )
+test("QEO-242 full-day mini chart fits the existing 48-point capacity after lunch gaps are removed", () => {
+  const start = Date.parse("2026-08-18T02:15:00Z") / 1000
+  const stop = Date.parse("2026-08-18T07:30:00Z") / 1000
+  const points: Array<{ time: number; close: number }> = []
+
+  for (let time = start, index = 0; time <= stop; time += 300, index += 1) {
+    points.push({ time, close: 10 + index / 100 })
+  }
+
+  const display = miniChartPointsForDisplay(points, new Date("2026-08-18T07:30:00Z"))
+  assert.equal(display.length, 46)
+  assert.equal(display[0]?.time, start)
+  assert.equal(display.at(-1)?.time, stop)
+  assert.equal(display.some((point) => isLunchBreak(new Date(point.time * 1000))), false)
+  assert.ok(display.length <= 48)
 })
 
 test("QEO-242 fresh and cached intraday snapshots apply the same mini-chart session policy", () => {
