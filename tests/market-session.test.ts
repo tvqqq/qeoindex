@@ -112,7 +112,7 @@ test("getMarketSessionStatus returns accurate session phase, live flag, and cach
   assert.equal(weekendStatus.phase, "EOD_CLOSED")
   assert.equal(weekendStatus.isLiveSession, false)
   assert.equal(weekendStatus.cacheBucketKey, "eod_closed")
-  assert.ok(eodStatus.ttlSeconds > 3600)
+  assert.ok(weekendStatus.ttlSeconds > 86400)
 })
 
 test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", () => {
@@ -129,11 +129,12 @@ test("mini chart is hidden in ATO, live only from 09:15 to 14:30, then adds one 
     { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 10.1 },
     { time: Date.parse("2026-08-18T07:30:00Z") / 1000, close: 10.4 },
     { time: Date.parse("2026-08-18T07:45:00Z") / 1000, close: 10.5 },
+    { time: Date.parse("2026-08-18T07:50:00Z") / 1000, close: 10.5 },
   ]
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T02:05:00Z")), [])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T03:00:00Z")), [points[1]])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:35:00Z")), [points[1], points[2]])
-  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:50:00Z")), [points[1], points[2], points[3]])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:55:00Z")), [points[1], points[2], points[3]])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-22T03:00:00Z")), points)
   assert.equal(shouldAcceptRealtimeMiniChart(points[1].time), true)
   assert.equal(shouldAcceptRealtimeMiniChart(points[0].time), false)
@@ -155,6 +156,15 @@ test("QEO-242 afternoon mini chart keeps morning history and drops synthetic lun
     points[4],
     points[5],
   ])
+})
+
+test("QEO-242 fresh and cached intraday snapshots apply the same mini-chart session policy", () => {
+  const service = readFileSync("modules/market/realtime/intraday-5m-service.ts", "utf8")
+
+  assert.match(service, /miniChartPointsForDisplay/)
+  assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(\{ rows: enhancedRows/)
+  assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(cached, now\)/)
+  assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(cachedLatest, now\)/)
 })
 
 test("new session reference history starts at 09:15 ICT", () => {
