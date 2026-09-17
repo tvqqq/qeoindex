@@ -106,6 +106,16 @@ function sanitizeIntradayMiniChartSnapshot(snapshot: IntradaySnapshot, now: Date
   }
 }
 
+function sanitizeUsableCachedIntradaySnapshot(
+  value: unknown,
+  symbols: string[] | readonly string[],
+  now: Date,
+): IntradaySnapshot | null {
+  if (!isUsableCachedIntradaySnapshot(value, symbols, now)) return null
+  const sanitized = sanitizeIntradayMiniChartSnapshot(value, now)
+  return isIntradaySnapshot(sanitized, symbols) ? sanitized : null
+}
+
 export async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: number, worker: (item: T) => Promise<R>) {
   const results = new Array<R | undefined>(items.length)
   let cursor = 0
@@ -247,26 +257,26 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
   const cache = getCache({ namespace: "market-board-v11" })
 
   try {
-    const cached = await cache.get(bucketKey)
-    if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cached, now)
+    const cached = sanitizeUsableCachedIntradaySnapshot(await cache.get(bucketKey), symbols, now)
+    if (cached) return cached
   } catch { /* Runtime Cache fail open */ }
 
   const redisClient = getRedis()
   if (redisClient) {
     try {
-      const cached = await redisClient.get<IntradaySnapshot>(bucketKey)
-      if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cached, now)
+      const cached = sanitizeUsableCachedIntradaySnapshot(await redisClient.get<IntradaySnapshot>(bucketKey), symbols, now)
+      if (cached) return cached
     } catch { /* Redis fail open */ }
 
     try {
-      const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
-      if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cachedLatest, now)
+      const cachedLatest = sanitizeUsableCachedIntradaySnapshot(await redisClient.get<IntradaySnapshot>(latestKey), symbols, now)
+      if (cachedLatest) return cachedLatest
     } catch { /* Redis fail open */ }
   }
 
   try {
-    const cachedLatest = await cache.get(latestKey)
-    if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cachedLatest, now)
+    const cachedLatest = sanitizeUsableCachedIntradaySnapshot(await cache.get(latestKey), symbols, now)
+    if (cachedLatest) return cachedLatest
   } catch { /* Runtime Cache fail open */ }
 
   return null
