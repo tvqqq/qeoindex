@@ -1,4 +1,4 @@
-import { getVnTimeSeconds } from "./session-countdown.ts"
+import { getVnTimeSeconds, isLunchBreak } from "./session-countdown.ts"
 import type { IntradayPoint } from "./intraday-5m.ts"
 
 export const MARKET_SESSION_RESET_EVENT = "qeoindex:market-session-reset"
@@ -10,6 +10,7 @@ const MINI_CHART_START_SECONDS = 9 * 3600 + 15 * 60
 const MINI_CHART_STOP_SECONDS = 14 * 3600 + 30 * 60
 const EOD_START_SECONDS = 14 * 3600 + 46 * 60
 const EOD_FINAL_BAR_SECONDS = 14 * 3600 + 45 * 60
+const FIVE_MINUTE_SECONDS = 5 * 60
 
 export function getMarketUiPhase(date = new Date()): MarketUiPhase {
   const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
@@ -51,11 +52,18 @@ export function miniChartPointsForDisplay(points: IntradayPoint[], date = new Da
   const start = sessionTimestampSeconds(date, MINI_CHART_START_SECONDS)
   const stop = sessionTimestampSeconds(date, MINI_CHART_STOP_SECONDS)
   const visibleThrough = Math.min(stop, Math.floor(date.getTime() / 1000))
-  const base = points.filter((point) => point.time >= start && point.time <= visibleThrough)
+  const base = points.filter((point) => (
+    point.time >= start
+    && point.time <= visibleThrough
+    && !isLunchBreak(new Date(point.time * 1000))
+  ))
   if (phase !== "EOD") return base
 
   const finalBarStart = sessionTimestampSeconds(date, EOD_FINAL_BAR_SECONDS)
-  const finalPoint = points.filter((point) => point.time >= finalBarStart).sort((a, b) => a.time - b.time).at(-1)
+  const finalPoint = points
+    .filter((point) => point.time >= finalBarStart && point.time < finalBarStart + FIVE_MINUTE_SECONDS)
+    .sort((a, b) => a.time - b.time)
+    .at(-1)
   if (!finalPoint || base.some((point) => point.time === finalPoint.time)) return base
   return [...base, finalPoint]
 }
