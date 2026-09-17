@@ -33,7 +33,7 @@ test("validateDrawingV2 accepts valid text and icon drawings", () => {
     id: "draw-text-1",
     tool: "text",
     anchors: [{ time: 1700000000, price: 100 }],
-    sourceTimeframe: "3D",
+    sourceTimeframe: "1W",
     visibility: "source-timeframe",
     style: { color: "#ffffff", lineWidth: 1, fontSize: 14 },
     text: "Key resistance level",
@@ -55,19 +55,21 @@ test("validateDrawingV2 accepts valid text and icon drawings", () => {
   assert.equal(validateDrawingV2(iconDrawing).valid, true)
 })
 
-test("validateDrawingV2 rejects retired intraday source timeframes", () => {
-  const retired = {
-    schemaVersion: 2,
-    id: "legacy-intraday",
-    tool: "trendline",
-    anchors: [{ time: 1700000000, price: 50 }],
-    sourceTimeframe: "15m",
-    visibility: "source-timeframe",
-    style: { color: "#00f0ff", lineWidth: 2 },
+test("QEO-241 validateDrawingV2 rejects retired source timeframes", () => {
+  for (const sourceTimeframe of ["15m", "3D", "1Q", "1Y"]) {
+    const retired = {
+      schemaVersion: 2,
+      id: `legacy-${sourceTimeframe}`,
+      tool: "trendline",
+      anchors: [{ time: 1700000000, price: 50 }],
+      sourceTimeframe,
+      visibility: "source-timeframe",
+      style: { color: "#00f0ff", lineWidth: 2 },
+    }
+    const result = validateDrawingV2(retired)
+    assert.equal(result.valid, false, `${sourceTimeframe} must be rejected by the active schema`)
+    assert.ok(result.errors.some((error) => error.includes("Invalid sourceTimeframe")))
   }
-  const result = validateDrawingV2(retired)
-  assert.equal(result.valid, false)
-  assert.ok(result.errors.some((error) => error.includes("Invalid sourceTimeframe")))
 })
 
 test("validateDrawingV2 rejects non-finite coordinates (NaN, Infinity)", () => {
