@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic"
 
 const NO_STORE = { "Cache-Control": "no-store" }
 const RETIRED_INTRADAY_RESOLUTIONS = new Set(["1m", "15m", "30m", "1h", "2h", "4h"])
+const RETIRED_DAILY_DERIVED_RESOLUTIONS = new Set(["3D", "1Q", "1Y"])
 
 function parseEpoch(value: string | null) {
   if (!value || !/^\d+$/.test(value)) return NaN
@@ -69,6 +70,15 @@ export async function GET(request: Request) {
       error: {
         code: "INTRADAY_TIMEFRAME_RETIRED",
         message: "Intraday chart timeframes are retired; minimum timeframe is 1D.",
+      },
+    }, { status: 410, headers: NO_STORE })
+  }
+  if (RETIRED_DAILY_DERIVED_RESOLUTIONS.has(rawResolution)) {
+    return NextResponse.json({
+      ok: false,
+      error: {
+        code: "CHART_TIMEFRAME_RETIRED",
+        message: "Chart timeframe retired; supported timeframes are 1D, 1W, and 1M.",
       },
     }, { status: 410, headers: NO_STORE })
   }
