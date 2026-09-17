@@ -1,4 +1,4 @@
-import { getMarketSessionStatus, getVnTimeSeconds, isLunchBreak } from "./session-countdown.ts"
+import { getVnTimeSeconds, isLunchBreak } from "./session-countdown.ts"
 import type { IntradayPoint } from "./intraday-5m.ts"
 
 export const MARKET_SESSION_RESET_EVENT = "qeoindex:market-session-reset"
@@ -7,12 +7,10 @@ export type MarketUiPhase = "PRE_MARKET" | "ATO" | "CONTINUOUS" | "CLOSING_AUCTI
 
 const ATO_START_SECONDS = 9 * 3600
 const MINI_CHART_START_SECONDS = 9 * 3600 + 15 * 60
-const LUNCH_START_SECONDS = 11 * 3600 + 30 * 60
 const MINI_CHART_STOP_SECONDS = 14 * 3600 + 30 * 60
 const EOD_START_SECONDS = 14 * 3600 + 46 * 60
 const EOD_FINAL_BAR_SECONDS = 14 * 3600 + 45 * 60
 const FIVE_MINUTE_SECONDS = 5 * 60
-const LATEST_LIVE_SNAPSHOT_MAX_AGE_MS = 6 * 60 * 1000
 
 export function getMarketUiPhase(date = new Date()): MarketUiPhase {
   const { dayOfWeek, totalSeconds } = getVnTimeSeconds(date)
@@ -37,38 +35,6 @@ export function sessionTimestampSeconds(date: Date, totalSeconds: number) {
   }).formatToParts(date)
   const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0)
   return Date.UTC(value("year"), value("month") - 1, value("day"), 0, 0, totalSeconds) / 1000 - 7 * 3600
-}
-
-export function isLatestMiniChartSnapshotFresh(generatedAt: string, now = new Date()) {
-  const generated = new Date(generatedAt)
-  const generatedMs = generated.getTime()
-  const nowMs = now.getTime()
-  if (!Number.isFinite(generatedMs) || generatedMs > nowMs) return false
-
-  const currentPhase = getMarketSessionStatus(now).phase
-  const generatedPhase = getMarketSessionStatus(generated).phase
-
-  if (currentPhase === "EOD_CLOSED") {
-    return true
-  }
-
-  if (currentPhase === "PRE_MARKET") {
-    return generatedPhase === "PRE_MARKET"
-  }
-
-  if (currentPhase === "LUNCH_BREAK") {
-    if (generatedPhase === "LUNCH_BREAK") return true
-    if (generatedPhase !== "MORNING") return false
-
-    const lunchStartMs = sessionTimestampSeconds(now, LUNCH_START_SECONDS) * 1000
-    return generatedMs >= lunchStartMs - LATEST_LIVE_SNAPSHOT_MAX_AGE_MS && generatedMs <= lunchStartMs
-  }
-
-  if (currentPhase === "MORNING" || currentPhase === "AFTERNOON") {
-    return generatedPhase === currentPhase && nowMs - generatedMs <= LATEST_LIVE_SNAPSHOT_MAX_AGE_MS
-  }
-
-  return false
 }
 
 export function newSessionReferencePoint(reference: number, date = new Date()): IntradayPoint[] {
