@@ -14,6 +14,7 @@ import { isTradingSessionOpen, getMarketSessionStatus } from "@/modules/market/r
 import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
 import { getIntraday5mSnapshot } from "@/modules/market/realtime/intraday-5m-service"
+import { miniChartPointsForDisplay } from "@/modules/market/realtime/session-ui"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { getEodForeignRoom } from "@/modules/eod/shares"
@@ -86,9 +87,9 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
 
     let intraday: IntradayPoint[] = []
     if (cachedRow?.points && cachedRow.points.length > 0) {
-      intraday = cachedRow.points.slice(-INITIAL_HISTORY_POINTS)
+      intraday = miniChartPointsForDisplay(cachedRow.points, now).slice(-INITIAL_HISTORY_POINTS)
     } else if (Array.isArray(snap?.intraday_1m) && snap?.session_date === currentDay && snap.intraday_1m.length > 0) {
-      intraday = (snap.intraday_1m as unknown as IntradayPoint[]).slice(-INITIAL_HISTORY_POINTS)
+      intraday = miniChartPointsForDisplay(snap.intraday_1m as unknown as IntradayPoint[], now).slice(-INITIAL_HISTORY_POINTS)
     }
 
     const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
