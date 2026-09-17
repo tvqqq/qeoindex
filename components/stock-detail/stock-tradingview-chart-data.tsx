@@ -180,22 +180,16 @@ function HistoryBoundChart({
     terminal?.removeAttribute("data-chart-rendered-key")
     if (loading || resolvedBars.length === 0) return
 
-    let secondFrame = 0
-    const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => {
-        const latestTime = resolvedBars.at(-1)?.time ?? 0
-        terminalRef.current?.setAttribute(
-          "data-chart-rendered-key",
-          `${ticker.trim().toUpperCase()}:${timeframe}:${resolvedBars.length}:${latestTime}`,
-        )
-        onRendered?.(ticker, timeframe)
-      })
-    })
-
-    return () => {
-      window.cancelAnimationFrame(firstFrame)
-      if (secondFrame) window.cancelAnimationFrame(secondFrame)
-    }
+    // StockTradingViewChart is the child of this wrapper, so its passive
+    // effect applies the Lightweight Charts series before this parent effect
+    // runs. Publish readiness immediately after that data-apply work instead
+    // of padding the measurement with two synthetic animation frames.
+    const latestTime = resolvedBars.at(-1)?.time ?? 0
+    terminalRef.current?.setAttribute(
+      "data-chart-rendered-key",
+      `${ticker.trim().toUpperCase()}:${timeframe}:${resolvedBars.length}:${latestTime}`,
+    )
+    onRendered?.(ticker, timeframe)
   }, [loading, onRendered, resolvedBars, ticker, timeframe])
 
   return (

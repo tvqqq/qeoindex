@@ -91,3 +91,21 @@ test("QEO-172 SSR Daily seed reads canonical market storage through the trusted 
     "user-scoped Supabase must not be used to read service-only canonical market storage",
   )
 })
+
+test("QEO-172 render-ready publishes immediately after the child chart data-apply effect, without frame-delay padding", () => {
+  const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+  const readinessStart = wrapper.indexOf('terminal?.removeAttribute("data-chart-rendered-key")')
+  const readinessEnd = wrapper.indexOf("  return (", readinessStart)
+  const readinessBlock = wrapper.slice(readinessStart, readinessEnd)
+
+  assert.ok(readinessStart >= 0 && readinessEnd > readinessStart, "render-ready effect must remain discoverable")
+  assert.match(readinessBlock, /if \(loading \|\| resolvedBars\.length === 0\) return/)
+  assert.match(readinessBlock, /const latestTime = resolvedBars\.at\(-1\)\?\.time \?\? 0/)
+  assert.match(readinessBlock, /terminalRef\.current\?\.setAttribute\(/)
+  assert.match(readinessBlock, /onRendered\?\.\(ticker, timeframe\)/)
+  assert.doesNotMatch(
+    readinessBlock,
+    /requestAnimationFrame|cancelAnimationFrame/,
+    "render-ready must not add synthetic animation-frame latency after the child chart has applied its dataset",
+  )
+})
