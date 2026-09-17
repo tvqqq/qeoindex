@@ -129,15 +129,62 @@ test("mini chart is hidden in ATO, live only from 09:15 to 14:30, then adds one 
     { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 10.1 },
     { time: Date.parse("2026-08-18T07:30:00Z") / 1000, close: 10.4 },
     { time: Date.parse("2026-08-18T07:45:00Z") / 1000, close: 10.5 },
+    { time: Date.parse("2026-08-18T07:50:00Z") / 1000, close: 10.5 },
   ]
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T02:05:00Z")), [])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T03:00:00Z")), [points[1]])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:35:00Z")), [points[1], points[2]])
-  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:50:00Z")), [points[1], points[2], points[3]])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:55:00Z")), [points[1], points[2], points[3]])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-22T03:00:00Z")), points)
   assert.equal(shouldAcceptRealtimeMiniChart(points[1].time), true)
   assert.equal(shouldAcceptRealtimeMiniChart(points[0].time), false)
   assert.equal(shouldAcceptRealtimeMiniChart(points[2].time), false)
+})
+
+test("QEO-242 afternoon mini chart keeps morning history and drops synthetic lunch buckets", () => {
+  const points = [
+    { time: Date.parse("2026-08-18T04:25:00Z") / 1000, close: 10.1 }, // 11:25 ICT
+    { time: Date.parse("2026-08-18T04:30:00Z") / 1000, close: 10.1 }, // 11:30 synthetic
+    { time: Date.parse("2026-08-18T05:00:00Z") / 1000, close: 10.1 }, // 12:00 synthetic
+    { time: Date.parse("2026-08-18T05:55:00Z") / 1000, close: 10.1 }, // 12:55 synthetic
+    { time: Date.parse("2026-08-18T06:00:00Z") / 1000, close: 10.2 }, // 13:00 ICT
+    { time: Date.parse("2026-08-18T06:05:00Z") / 1000, close: 10.3 }, // 13:05 ICT
+  ]
+
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T06:10:00Z")), [
+    points[0],
+    points[4],
+    points[5],
+  ])
+})
+
+test("QEO-242 full-day mini chart fits the existing 48-point capacity after lunch gaps are removed", () => {
+  const start = Date.parse("2026-08-18T02:15:00Z") / 1000
+  const stop = Date.parse("2026-08-18T07:30:00Z") / 1000
+  const points: Array<{ time: number; close: number }> = []
+
+  for (let time = start, index = 0; time <= stop; time += 300, index += 1) {
+    points.push({ time, close: 10 + index / 100 })
+  }
+
+  const display = miniChartPointsForDisplay(points, new Date("2026-08-18T07:30:00Z"))
+  assert.equal(display.length, 46)
+  assert.equal(display[0]?.time, start)
+  assert.equal(display.at(-1)?.time, stop)
+  assert.equal(display.some((point) => isLunchBreak(new Date(point.time * 1000))), false)
+  assert.ok(display.length <= 48)
+})
+
+test("QEO-242 SSR and browser hydration apply mini-chart policy without mutating shared cache semantics", () => {
+  const boardPage = readFileSync("app/board/page.tsx", "utf8")
+  const intradayRoute = readFileSync("app/api/market/intraday/route.ts", "utf8")
+  const service = readFileSync("modules/market/realtime/intraday-5m-service.ts", "utf8")
+
+  assert.match(boardPage, /miniChartPointsForDisplay\(cachedRow\.points, now\)/)
+  assert.match(boardPage, /miniChartPointsForDisplay\(snap\.intraday_1m as unknown as IntradayPoint\[\], now\)/)
+  assert.match(intradayRoute, /miniChartPointsForDisplay\(row\.points, now\)/)
+  assert.match(intradayRoute, /lastBarAt: points\.at\(-1\)\?\.time \?\? null/)
+  assert.doesNotMatch(service, /miniChartPointsForDisplay/)
 })
 
 test("new session reference history starts at 09:15 ICT", () => {
