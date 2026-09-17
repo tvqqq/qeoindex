@@ -180,8 +180,11 @@ test("QEO-242 fresh and cached intraday snapshots apply the same mini-chart sess
 
   assert.match(service, /miniChartPointsForDisplay/)
   assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(\{ rows: enhancedRows/)
-  assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(cached, now\)/)
-  assert.match(service, /return sanitizeIntradayMiniChartSnapshot\(cachedLatest, now\)/)
+  assert.match(service, /function sanitizeUsableCachedIntradaySnapshot/)
+  assert.match(service, /const sanitized = sanitizeIntradayMiniChartSnapshot\(value, now\)/)
+  assert.match(service, /return isIntradaySnapshot\(sanitized, symbols\) \? sanitized : null/)
+  assert.match(service, /sanitizeUsableCachedIntradaySnapshot\(await cache\.get\(bucketKey\), symbols, now\)/)
+  assert.match(service, /sanitizeUsableCachedIntradaySnapshot\(await redisClient\.get<IntradaySnapshot>\(latestKey\), symbols, now\)/)
 })
 
 test("new session reference history starts at 09:15 ICT", () => {
