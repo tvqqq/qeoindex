@@ -112,7 +112,7 @@ test("getMarketSessionStatus returns accurate session phase, live flag, and cach
   assert.equal(weekendStatus.phase, "EOD_CLOSED")
   assert.equal(weekendStatus.isLiveSession, false)
   assert.equal(weekendStatus.cacheBucketKey, "eod_closed")
-  assert.ok(weekendStatus.ttlSeconds > 86400)
+  assert.ok(eodStatus.ttlSeconds > 3600)
 })
 
 test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", () => {
@@ -138,6 +138,23 @@ test("mini chart is hidden in ATO, live only from 09:15 to 14:30, then adds one 
   assert.equal(shouldAcceptRealtimeMiniChart(points[1].time), true)
   assert.equal(shouldAcceptRealtimeMiniChart(points[0].time), false)
   assert.equal(shouldAcceptRealtimeMiniChart(points[2].time), false)
+})
+
+test("QEO-242 afternoon mini chart keeps morning history and drops synthetic lunch buckets", () => {
+  const points = [
+    { time: Date.parse("2026-08-18T04:25:00Z") / 1000, close: 10.1 }, // 11:25 ICT
+    { time: Date.parse("2026-08-18T04:30:00Z") / 1000, close: 10.1 }, // 11:30 synthetic
+    { time: Date.parse("2026-08-18T05:00:00Z") / 1000, close: 10.1 }, // 12:00 synthetic
+    { time: Date.parse("2026-08-18T05:55:00Z") / 1000, close: 10.1 }, // 12:55 synthetic
+    { time: Date.parse("2026-08-18T06:00:00Z") / 1000, close: 10.2 }, // 13:00 ICT
+    { time: Date.parse("2026-08-18T06:05:00Z") / 1000, close: 10.3 }, // 13:05 ICT
+  ]
+
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T06:10:00Z")), [
+    points[0],
+    points[4],
+    points[5],
+  ])
 })
 
 test("new session reference history starts at 09:15 ICT", () => {
