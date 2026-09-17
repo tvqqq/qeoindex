@@ -13,11 +13,8 @@ const CLOSED_RANGE_CACHE_MAX_ENTRIES = 24
 
 const INITIAL_HISTORY_WINDOW_SECONDS: Record<ChartTimeframe, number> = {
   "1D": 0,
-  "3D": 0,
   "1W": 0,
   "1M": 0,
-  "1Q": 0,
-  "1Y": 0,
 }
 
 export interface ChartHistoryMetadata {
@@ -109,12 +106,11 @@ export function deriveChartBarsFromDailySeed(
   dailyBars: OhlcvBar[],
   timeframe: ChartTimeframe,
 ): OhlcvBar[] {
-  if (timeframe === "3D") return []
   return aggregateChartTimeframe(dailyBars, timeframe)
 }
 
 /**
- * QEO-238: every active chart timeframe is derived from completed Daily bars,
+ * QEO-238/QEO-241: every active chart timeframe is derived from completed Daily bars,
  * so the whole bounded request is stable and there is no mutable intraday tail.
  */
 export function planChartHistorySlices(input: ChartRangeInput): ChartHistorySlices {

@@ -52,19 +52,19 @@ test("QEO-172 adjacent prefetch waits for the active chart to render and skips O
   )
 })
 
-test("QEO-172 ticker navigation uses fetched Daily seed before remote chart preparation while preserving 3D fallback", () => {
+test("QEO-241 ticker navigation uses fetched Daily seed for every active timeframe before remote fallback", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
   const navigationStart = workstation.indexOf("const handleSelectTicker")
   const navigationEnd = workstation.indexOf("useEffect(() => {", navigationStart)
   const navigation = workstation.slice(navigationStart, navigationEnd)
 
   assert.ok(navigationStart >= 0 && navigationEnd > navigationStart, "ticker navigation block must remain discoverable")
-  assert.match(navigation, /const targetDataPromise = getStockDetail\(sym\)/)
-  assert.match(navigation, /const targetPreparedPromise = targetTimeframe === "3D"/)
-  assert.match(navigation, /const targetData = await targetDataPromise/)
+  assert.match(navigation, /const targetData = await getStockDetail\(sym\)/)
   assert.match(navigation, /deriveChartBarsFromDailySeed\(targetData\.bars, targetTimeframe\)/)
   assert.match(navigation, /seededBars\.length > 0\s*\?\s*null/)
-  assert.match(navigation, /targetPreparedPromise \?\? prepareInitialChartHistory/)
+  assert.match(navigation, /: await prepareInitialChartHistory/)
+  assert.doesNotMatch(navigation, /targetTimeframe === "3D"/)
+  assert.doesNotMatch(navigation, /targetPreparedPromise/)
 })
 
 test("QEO-172 SSR Daily seed reads canonical market storage through the trusted server client", () => {
