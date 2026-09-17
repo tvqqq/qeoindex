@@ -5,8 +5,6 @@ import { toPng } from "html-to-image"
 import {
   CalendarDays,
   Camera,
-  Check,
-  ChevronDown,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -40,7 +38,6 @@ import {
 import { projectFutureTimes } from "./chart/future-timeline"
 import { aggregateBarsByTimeframe } from "./chart/stock-chart-timeframes"
 import {
-  ALL_TIMEFRAMES,
   DEFAULT_INDICATOR_CONFIG,
   QUICK_TIMEFRAMES,
   type ChartTimeframe,
@@ -609,7 +606,6 @@ export function StockTradingViewChart({
   const [overlayRevision, setOverlayRevision] = useState(0)
   const [priceAxisGutter, setPriceAxisGutter] = useState(80)
   const [crosshairTime, setCrosshairTime] = useState<number | null>(null)
-  const [showTfDropdown, setShowTfDropdown] = useState(false)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [activeTool, setActiveTool] = useState<DrawingTool>("cursor")
@@ -1236,15 +1232,6 @@ export function StockTradingViewChart({
     ? drawings.find((drawing) => drawing.id === editingTextDrawingId) ?? null
     : null
   const editingPosition = editingTextDrawing?.points[0] ?? { x: 24, y: 24 }
-  const timeframeGroups = useMemo(() => {
-    const groups = new Map<string, typeof ALL_TIMEFRAMES>()
-    for (const item of ALL_TIMEFRAMES) {
-      const group = groups.get(item.group) ?? []
-      group.push(item)
-      groups.set(item.group, group)
-    }
-    return [...groups.entries()]
-  }, [])
   const unsupportedEmpty = displayBars.length === 0 && !isLoading
   const loadingState = isLoading
 
@@ -1252,61 +1239,16 @@ export function StockTradingViewChart({
     <div className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[#080b10]", isMaximized ? "h-full" : "min-h-[340px]")}>
       <div className="relative z-30 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0d1118] px-2 py-1.5">
         <div className="flex min-w-0 items-center gap-1">
-          {isMaximized && <>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowTfDropdown((open) => !open)}
-              className="flex items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1 font-mono text-[11px] font-bold text-slate-200 transition-colors hover:bg-white/[0.08]"
-              aria-label="Chọn khung thời gian"
-            >
-              {timeframe}
-              <ChevronDown className="size-3 text-slate-500" />
-            </button>
-            {showTfDropdown && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Đóng chọn khung thời gian"
-                  className="fixed inset-0 z-40 cursor-default"
-                  onClick={() => setShowTfDropdown(false)}
-                />
-                <div className="absolute left-0 top-8 z-50 w-[min(520px,calc(100vw-24px))] rounded-lg border border-white/[0.12] bg-[#0b0f15] p-2 shadow-[0_18px_52px_rgba(0,0,0,0.82)]">
-                  <div className="grid grid-cols-4 divide-x divide-white/[0.08]">
-                    {timeframeGroups.map(([group, items]) => (
-                      <div key={group} className="min-w-0 px-2 first:pl-0 last:pr-0">
-                        <div className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">{group}</div>
-                        {items.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => {
-                              setTimeframe(item.id)
-                              setShowTfDropdown(false)
-                            }}
-                            className="flex w-full items-center gap-2 rounded px-1 py-1 text-left text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
-                          >
-                            <span className="w-8 shrink-0 text-left font-mono text-[11px] font-bold">{item.id}</span>
-                            <span className="truncate text-[10px]">{item.label}</span>
-                            {item.id === timeframe && <Check className="ml-auto size-3.5 shrink-0 text-cyan-400" />}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="hidden items-center gap-0.5 sm:flex">
+          <div className="flex items-center gap-0.5" role="group" aria-label="Khung thời gian">
             {QUICK_TIMEFRAMES.map((item) => (
               <button
                 key={item}
                 type="button"
                 onClick={() => setTimeframe(item)}
+                disabled={isLoading}
+                aria-pressed={timeframe === item}
                 className={cn(
-                  "rounded px-1.5 py-1 font-mono text-[10px] transition-colors",
+                  "rounded px-1.5 py-1 font-mono text-[10px] transition-colors disabled:cursor-wait disabled:opacity-50",
                   timeframe === item ? "bg-cyan-300/10 text-cyan-200" : "text-slate-500 hover:bg-white/[0.05] hover:text-slate-200",
                 )}
               >
@@ -1315,27 +1257,28 @@ export function StockTradingViewChart({
             ))}
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              title="Chỉ báo kỹ thuật"
-              onClick={() => setShowIndicatorModal((open) => !open)}
-              className="flex items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
-            >
-              <SlidersHorizontal className="size-3.5" />
-              <span className="hidden md:inline">Indicators</span>
-            </button>
-            {showIndicatorModal && (
-              <StockChartIndicatorModal
-                config={indicators}
-                onChange={handleIndicatorConfigChange}
-                viewSettings={viewSettings}
-                onViewSettingsChange={setViewSettings}
-                onClose={() => setShowIndicatorModal(false)}
-              />
-            )}
-          </div>
-          <span className="hidden rounded border border-white/[0.08] px-1.5 py-1 font-mono text-[9px] text-slate-600 lg:inline">Nến Nhật</span>
+          {isMaximized && <>
+            <div className="relative">
+              <button
+                type="button"
+                title="Chỉ báo kỹ thuật"
+                onClick={() => setShowIndicatorModal((open) => !open)}
+                className="flex items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+              >
+                <SlidersHorizontal className="size-3.5" />
+                <span className="hidden md:inline">Indicators</span>
+              </button>
+              {showIndicatorModal && (
+                <StockChartIndicatorModal
+                  config={indicators}
+                  onChange={handleIndicatorConfigChange}
+                  viewSettings={viewSettings}
+                  onViewSettingsChange={setViewSettings}
+                  onClose={() => setShowIndicatorModal(false)}
+                />
+              )}
+            </div>
+            <span className="hidden rounded border border-white/[0.08] px-1.5 py-1 font-mono text-[9px] text-slate-600 lg:inline">Nến Nhật</span>
           </>}
           {!isMaximized && <span className="rounded border border-white/[0.08] px-2 py-1 font-mono text-[10px] text-slate-400">Nến Nhật · Volume · MA20</span>}
         </div>
