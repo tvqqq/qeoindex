@@ -92,34 +92,20 @@ test("QEO-172 SSR Daily seed reads canonical market storage through the trusted 
   )
 })
 
-test("QEO-172 render-ready is published when Lightweight Charts data is applied, without frame-delay padding", () => {
+test("QEO-172 render-ready publishes immediately after the child chart data-apply effect, without frame-delay padding", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
-  const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const readinessStart = wrapper.indexOf('terminal?.removeAttribute("data-chart-rendered-key")')
+  const readinessEnd = wrapper.indexOf("  return (", readinessStart)
+  const readinessBlock = wrapper.slice(readinessStart, readinessEnd)
 
-  assert.match(
-    chart,
-    /onDataApplied\?: \(barCount: number, latestTime: number\) => void/,
-    "the chart engine must expose an explicit data-applied readiness signal",
-  )
-
-  const applyStart = chart.indexOf("series.futureAxis.setData")
-  const applyEnd = chart.indexOf("scheduleOverlayPaint()", applyStart)
-  const applyBlock = chart.slice(applyStart, applyEnd)
-  assert.ok(applyStart >= 0 && applyEnd > applyStart, "chart series apply block must remain discoverable")
-  assert.match(
-    applyBlock,
-    /onDataApplied\?\.\(displayBars\.length, latest\.time\)/,
-    "readiness must fire from the same effect after all series data has been applied",
-  )
-  assert.ok(
-    applyBlock.indexOf("series.macdZero.setData") < applyBlock.indexOf("onDataApplied?.(displayBars.length, latest.time)"),
-    "readiness must be emitted after the last series setData call",
-  )
-
-  assert.match(wrapper, /onDataApplied=\{handleDataApplied\}/)
+  assert.ok(readinessStart >= 0 && readinessEnd > readinessStart, "render-ready effect must remain discoverable")
+  assert.match(readinessBlock, /if \(loading \|\| resolvedBars\.length === 0\) return/)
+  assert.match(readinessBlock, /const latestTime = resolvedBars\.at\(-1\)\?\.time \?\? 0/)
+  assert.match(readinessBlock, /terminalRef\.current\?\.setAttribute\(/)
+  assert.match(readinessBlock, /onRendered\?\.\(ticker, timeframe\)/)
   assert.doesNotMatch(
-    wrapper,
-    /requestAnimationFrame/,
-    "wrapper readiness must not add synthetic animation-frame latency after chart data is already applied",
+    readinessBlock,
+    /requestAnimationFrame|cancelAnimationFrame/,
+    "render-ready must not add synthetic animation-frame latency after the child chart has applied its dataset",
   )
 })
