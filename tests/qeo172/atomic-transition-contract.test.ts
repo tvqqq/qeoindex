@@ -76,7 +76,7 @@ test("QEO-172 adjacent keyboard intent does not retarget the rendered ticker bef
     "keyboard intent must not drop the current ticker preferred timeframe before target preparation commits",
   )
 
-  const targetDataResolved = workstation.indexOf("const targetData = await targetDataPromise")
+  const targetDataResolved = workstation.indexOf("const targetData = await getStockDetail(sym)")
   const seedProof = workstation.indexOf("deriveChartBarsFromDailySeed(targetData.bars, targetTimeframe)", targetDataResolved)
   const targetPreparedResolved = workstation.indexOf("const targetPrepared = seededBars.length > 0", seedProof)
   const commitState = workstation.indexOf("setChartNavigationTimeframe(navigationRequest)", targetPreparedResolved)
