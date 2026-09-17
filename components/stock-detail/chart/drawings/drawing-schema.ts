@@ -44,11 +44,8 @@ export const VALID_DRAWING_ICONS = new Set<DrawingIconType>([
 
 export const VALID_CHART_TIMEFRAMES = new Set<ChartTimeframe>([
   "1D",
-  "3D",
   "1W",
   "1M",
-  "1Q",
-  "1Y",
 ])
 
 function isPlainObject(val: unknown): val is Record<string, unknown> {
