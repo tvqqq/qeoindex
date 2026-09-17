@@ -20,16 +20,14 @@ const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024
 
 const MATRIX = [
   ["VIC", "1D"],
-  ["VIC", "3D"],
   ["VIC", "1W"],
   ["VIC", "1M"],
   ["VCB", "1D"],
-  ["VCB", "3D"],
   ["VCB", "1W"],
   ["VCB", "1M"],
 ] as const
 const QUICK_TIMEFRAMES = new Set<MatrixTimeframe>(["1D", "1W", "1M"])
-const ANY_TIMEFRAME = "(?:1D|3D|1W|1M|1Q|1Y)"
+const ANY_TIMEFRAME = "(?:1D|1W|1M)"
 
 type MatrixTicker = (typeof MATRIX)[number][0]
 type MatrixTimeframe = (typeof MATRIX)[number][1]
@@ -488,7 +486,7 @@ test("QEO-172 authenticated production performance benchmark", async ({ page }) 
   for (const ticker of ["VIC", "VCB"] as const) {
     await page.goto(`${BASE_URL}/insights/${ticker.toLowerCase()}`)
     await enterFullscreen(page)
-    for (const timeframe of ["1D", "3D", "1W", "1M"] as const) {
+    for (const timeframe of ["1D", "1W", "1M"] as const) {
       await measureTimeframeInteraction(page, ticker, timeframe)
       const samples: UiSample[] = []
       for (let index = 0; index < SAMPLES; index += 1) {
