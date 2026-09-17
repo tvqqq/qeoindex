@@ -55,9 +55,9 @@ function bar(iso: string, open: number, high = open + 1, low = open - 1, close =
   return { time: epoch(iso), open, high, low, close, volume }
 }
 
-test("QEO-238 timeframe definitions expose exactly Daily and larger intervals", () => {
+test("QEO-241 timeframe definitions expose exactly 1D, 1W and 1M", () => {
   assert.deepEqual(QUICK_TIMEFRAMES, ["1D", "1W", "1M"])
-  assert.deepEqual(ALL_TIMEFRAMES.map((timeframe) => timeframe.id), ["1D", "3D", "1W", "1M", "1Q", "1Y"])
+  assert.deepEqual(ALL_TIMEFRAMES.map((timeframe) => timeframe.id), ["1D", "1W", "1M"])
 })
 
 test("Technical indicators calculate valid series", () => {
@@ -102,13 +102,13 @@ test("Technical indicators calculate valid series", () => {
   assert.ok(vp.buckets.some((b) => b.isPoc))
 })
 
-test("Active timeframe aggregation derives only Daily and larger candles", () => {
+test("QEO-241 active timeframe aggregation derives only Daily, Weekly and Monthly candles", () => {
   const daily = aggregateBarsByTimeframe(mockBars, undefined, "1D")
   assert.ok(daily.length > 0)
-  const threeDay = aggregateBarsByTimeframe(mockBars, undefined, "3D")
-  assert.ok(threeDay.length > 0 && threeDay.length <= daily.length)
   const weekly = aggregateBarsByTimeframe(mockBars, undefined, "1W")
   assert.ok(weekly.length > 0 && weekly.length <= daily.length)
+  const monthly = aggregateBarsByTimeframe(mockBars, undefined, "1M")
+  assert.ok(monthly.length > 0 && monthly.length <= daily.length)
 })
 
 test("QEO-93 historical intraday aggregation never crosses the VN lunch break", () => {
