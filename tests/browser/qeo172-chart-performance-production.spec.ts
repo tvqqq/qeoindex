@@ -143,6 +143,44 @@ async function waitRendered(page: Page, ticker: string, timeframe: string, timeo
   )
 }
 
+const RENDERED_AT_ATTRIBUTE = "data-qeo172-rendered-at"
+
+async function armRenderedTimestamp(page: Page, ticker: string, timeframe: string) {
+  const terminal = page.locator('[data-chart-terminal="true"]')
+  await terminal.evaluate((node, target) => {
+    const element = node as HTMLElement & { __qeo172RenderedObserver?: MutationObserver }
+    element.__qeo172RenderedObserver?.disconnect()
+    element.removeAttribute(target.attribute)
+    const expectedPrefix = `${target.ticker.toUpperCase()}:${target.timeframe}:`
+    const recordIfReady = () => {
+      const renderedKey = element.getAttribute("data-chart-rendered-key")
+      if (!renderedKey?.startsWith(expectedPrefix)) return false
+      element.setAttribute(target.attribute, String(Date.now()))
+      element.__qeo172RenderedObserver?.disconnect()
+      element.__qeo172RenderedObserver = undefined
+      return true
+    }
+    if (recordIfReady()) return
+    const observer = new MutationObserver(() => {
+      if (recordIfReady()) observer.disconnect()
+    })
+    element.__qeo172RenderedObserver = observer
+    observer.observe(element, {
+      attributes: true,
+      attributeFilter: ["data-chart-rendered-key"],
+    })
+  }, { ticker, timeframe, attribute: RENDERED_AT_ATTRIBUTE })
+}
+
+async function readRenderedTimestamp(page: Page) {
+  const raw = await page.locator('[data-chart-terminal="true"]').getAttribute(RENDERED_AT_ATTRIBUTE)
+  const renderedAt = Number(raw)
+  if (!Number.isFinite(renderedAt) || renderedAt <= 0) {
+    throw new Error("QEO-172 rendered timestamp was not captured")
+  }
+  return renderedAt
+}
+
 async function waitAnyRendered(page: Page, ticker: string, timeout = 30_000) {
   const terminal = page.locator('[data-chart-terminal="true"]')
   await expect(terminal).toHaveAttribute(
@@ -230,22 +268,34 @@ async function measureTimeframeInteraction(
 
   let networkRequests = 0
   let lastNetworkFinishedAt = 0
+  const responseFinishes: Promise<void>[] = []
   const onResponse = (response: PlaywrightResponse) => {
-    if (!response.url().includes("/api/market/ohlcv")) return
+    const responseUrl = new URL(response.url())
+    if (
+      responseUrl.pathname !== "/api/market/ohlcv"
+      || responseUrl.searchParams.get("ticker")?.toUpperCase() !== ticker
+      || responseUrl.searchParams.get("resolution") !== target
+    ) return
     networkRequests += 1
-    void response.finished().then(() => { lastNetworkFinishedAt = Date.now() })
+    responseFinishes.push(response.finished().then(() => {
+      lastNetworkFinishedAt = Date.now()
+    }))
   }
   page.on("response", onResponse)
 
+  await armRenderedTimestamp(page, ticker, target)
   const startedAt = Date.now()
   await clickTimeframe(page, target)
   await waitRendered(page, ticker, target)
-  const endedAt = Date.now()
+  await Promise.allSettled(responseFinishes)
+  const renderedAt = await readRenderedTimestamp(page)
   page.off("response", onResponse)
 
   return {
-    interactionMs: endedAt - startedAt,
-    renderAfterNetworkMs: lastNetworkFinishedAt >= startedAt ? Math.max(0, endedAt - lastNetworkFinishedAt) : null,
+    interactionMs: Math.max(0, renderedAt - startedAt),
+    renderAfterNetworkMs: lastNetworkFinishedAt >= startedAt
+      ? Math.max(0, renderedAt - lastNetworkFinishedAt)
+      : null,
     networkRequests,
   }
 }
