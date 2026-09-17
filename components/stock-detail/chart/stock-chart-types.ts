@@ -1,14 +1,11 @@
-export type ChartTimeframe = "1D" | "3D" | "1W" | "1M" | "1Q" | "1Y"
+export type ChartTimeframe = "1D" | "1W" | "1M"
 
 export const QUICK_TIMEFRAMES: ChartTimeframe[] = ["1D", "1W", "1M"]
 
 export const ALL_TIMEFRAMES: { id: ChartTimeframe; label: string; group: string }[] = [
   { id: "1D", label: "1 ngày", group: "Ngày / Tuần" },
-  { id: "3D", label: "3 ngày", group: "Ngày / Tuần" },
   { id: "1W", label: "1 tuần", group: "Ngày / Tuần" },
-  { id: "1M", label: "1 tháng", group: "Tháng / Quý / Năm" },
-  { id: "1Q", label: "1 quý", group: "Tháng / Quý / Năm" },
-  { id: "1Y", label: "1 năm", group: "Tháng / Quý / Năm" },
+  { id: "1M", label: "1 tháng", group: "Tháng" },
 ]
 
 const ACTIVE_CHART_TIMEFRAMES = new Set<string>(ALL_TIMEFRAMES.map(({ id }) => id))
