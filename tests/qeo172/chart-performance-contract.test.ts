@@ -142,14 +142,16 @@ test("QEO-172 stock-detail bootstrap emits privacy-safe per-stage timings before
   assert.doesNotMatch(stockDetail, /console\.(?:info|log)\([^\n]*email|password|token/i)
 })
 
-test("QEO-238 active chart contract is Daily-only and stale intraday API requests fail closed", () => {
+test("QEO-241 active chart contract is 1D/1W/1M only and all retired timeframe API requests fail closed", () => {
   const types = source("components/stock-detail/chart/stock-chart-types.ts")
   const route = source("app/api/market/ohlcv/route.ts")
   const matrix = browserBenchmarkSource().match(/const MATRIX = \[[\s\S]*?\] as const/)?.[0] ?? ""
-  assert.match(types, /export type ChartTimeframe = \"1D\" \| \"3D\" \| \"1W\" \| \"1M\" \| \"1Q\" \| \"1Y\"/)
-  assert.doesNotMatch(types, /\| \"(?:1m|15m|30m|1h|2h|4h)\"/)
+
+  assert.match(types, /export type ChartTimeframe = \"1D\" \| \"1W\" \| \"1M\"/)
+  assert.doesNotMatch(types, /\| \"(?:3D|1Q|1Y|1m|15m|30m|1h|2h|4h)\"/)
   assert.ok(matrix)
-  assert.doesNotMatch(matrix, /\"(?:1m|15m|30m|1h|2h|4h)\"/)
+  assert.doesNotMatch(matrix, /\"(?:3D|1Q|1Y|1m|15m|30m|1h|2h|4h)\"/)
+  assert.match(route, /CHART_TIMEFRAME_RETIRED/)
   assert.match(route, /INTRADAY_TIMEFRAME_RETIRED/)
 })
 
