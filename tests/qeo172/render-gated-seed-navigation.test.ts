@@ -91,3 +91,35 @@ test("QEO-172 SSR Daily seed reads canonical market storage through the trusted 
     "user-scoped Supabase must not be used to read service-only canonical market storage",
   )
 })
+
+test("QEO-172 render-ready is published when Lightweight Charts data is applied, without frame-delay padding", () => {
+  const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+  const chart = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(
+    chart,
+    /onDataApplied\?: \(barCount: number, latestTime: number\) => void/,
+    "the chart engine must expose an explicit data-applied readiness signal",
+  )
+
+  const applyStart = chart.indexOf("series.futureAxis.setData")
+  const applyEnd = chart.indexOf("scheduleOverlayPaint()", applyStart)
+  const applyBlock = chart.slice(applyStart, applyEnd)
+  assert.ok(applyStart >= 0 && applyEnd > applyStart, "chart series apply block must remain discoverable")
+  assert.match(
+    applyBlock,
+    /onDataApplied\?\.\(displayBars\.length, latest\.time\)/,
+    "readiness must fire from the same effect after all series data has been applied",
+  )
+  assert.ok(
+    applyBlock.indexOf("series.macdZero.setData") < applyBlock.indexOf("onDataApplied?.(displayBars.length, latest.time)"),
+    "readiness must be emitted after the last series setData call",
+  )
+
+  assert.match(wrapper, /onDataApplied=\{handleDataApplied\}/)
+  assert.doesNotMatch(
+    wrapper,
+    /requestAnimationFrame/,
+    "wrapper readiness must not add synthetic animation-frame latency after chart data is already applied",
+  )
+})
