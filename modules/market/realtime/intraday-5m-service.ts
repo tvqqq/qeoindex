@@ -5,7 +5,7 @@ import { intradaySnapshot, type IntradayPoint } from "@/modules/market/realtime/
 import { fetchYahooFiveMinuteSnapshot } from "@/modules/market/providers/yahoo/history"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 import { getMarketSessionStatus, getVnTimeSeconds } from "@/modules/market/realtime/session-countdown"
-import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
+import { miniChartPointsForDisplay, sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
 import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
 
 export const FETCH_CONCURRENCY = 12
@@ -90,6 +90,20 @@ export function isUsableCachedIntradaySnapshot(value: unknown, symbols: string[]
   const finalBarAt = sessionTimestampSeconds(now, 14 * 3600 + 45 * 60)
   const finalRows = value.rows.filter((row) => isIntradayRow(row) && (row.lastBarAt ?? row.points.at(-1)?.time ?? 0) >= finalBarAt)
   return finalRows.length >= Math.min(symbols.length * 0.5, 40)
+}
+
+function sanitizeIntradayMiniChartSnapshot(snapshot: IntradaySnapshot, now: Date): IntradaySnapshot {
+  return {
+    ...snapshot,
+    rows: snapshot.rows.map((row) => {
+      const points = miniChartPointsForDisplay(row.points, now)
+      return {
+        ...row,
+        points,
+        lastBarAt: points.at(-1)?.time ?? null,
+      }
+    }),
+  }
 }
 
 export async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: number, worker: (item: T) => Promise<R>) {
@@ -224,7 +238,7 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
     }
   })
 
-  return { rows: enhancedRows, generatedAt: new Date().toISOString() }
+  return sanitizeIntradayMiniChartSnapshot({ rows: enhancedRows, generatedAt: new Date().toISOString() }, now)
 }
 
 export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot | null> {
@@ -234,25 +248,25 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
 
   try {
     const cached = await cache.get(bucketKey)
-    if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
+    if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cached, now)
   } catch { /* Runtime Cache fail open */ }
 
   const redisClient = getRedis()
   if (redisClient) {
     try {
       const cached = await redisClient.get<IntradaySnapshot>(bucketKey)
-      if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
+      if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cached, now)
     } catch { /* Redis fail open */ }
 
     try {
       const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
-      if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
+      if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cachedLatest, now)
     } catch { /* Redis fail open */ }
   }
 
   try {
     const cachedLatest = await cache.get(latestKey)
-    if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
+    if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return sanitizeIntradayMiniChartSnapshot(cachedLatest, now)
   } catch { /* Runtime Cache fail open */ }
 
   return null
