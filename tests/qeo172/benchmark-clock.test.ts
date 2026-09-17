@@ -35,3 +35,16 @@ test("QEO-172 timed timeframe samples use the rendered-key mutation timestamp in
     "timed samples must not use the post-assertion wall clock as the render completion timestamp",
   )
 })
+
+test("QEO-172 timeframe timing ignores unrelated adjacent OHLCV prefetch responses", () => {
+  const benchmark = source("tests/browser/qeo172-chart-performance-production.spec.ts")
+  const measureStart = benchmark.indexOf("async function measureTimeframeInteraction")
+  const measureEnd = benchmark.indexOf("async function adjacentIntent", measureStart)
+  const measureBlock = benchmark.slice(measureStart, measureEnd)
+
+  assert.ok(measureStart >= 0 && measureEnd > measureStart, "timeframe measurement block must remain discoverable")
+  assert.match(measureBlock, /const responseUrl = new URL\(response\.url\(\)\)/)
+  assert.match(measureBlock, /responseUrl\.pathname !== "\/api\/market\/ohlcv"/)
+  assert.match(measureBlock, /responseUrl\.searchParams\.get\("ticker"\)\?\.toUpperCase\(\) !== ticker/)
+  assert.match(measureBlock, /responseUrl\.searchParams\.get\("resolution"\) !== target/)
+})
