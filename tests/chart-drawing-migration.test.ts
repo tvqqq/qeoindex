@@ -59,36 +59,38 @@ test("Legacy drawing with missing time or price is NEVER guessed and marked unre
   assert.ok(result.warnings.some((w) => w.drawingId === "legacy-pixels-only"))
 })
 
-test("migrateDrawings normalizes a retired V2 source timeframe to 1D", () => {
-  const existingV2 = {
-    schemaVersion: 2,
-    id: "existing-v2",
-    tool: "arrow",
-    anchors: [
-      { time: 1700000000, price: 30 },
-      { time: 1700100000, price: 35 },
-    ],
-    sourceTimeframe: "1h",
-    visibility: "source-timeframe",
-    style: { color: "#f43f5e", lineWidth: 2 },
-  }
-  const expected: PersistedDrawingV2 = {
-    schemaVersion: 2,
-    id: "existing-v2",
-    tool: "arrow",
-    anchors: [
-      { time: 1700000000, price: 30 },
-      { time: 1700100000, price: 35 },
-    ],
-    sourceTimeframe: "1D",
-    visibility: "source-timeframe",
-    style: { color: "#f43f5e", lineWidth: 2 },
-  }
+test("QEO-241 migrateDrawings normalizes retired V2 source timeframes to 1D", () => {
+  for (const sourceTimeframe of ["1h", "3D", "1Q", "1Y"]) {
+    const existingV2 = {
+      schemaVersion: 2,
+      id: `existing-v2-${sourceTimeframe}`,
+      tool: "arrow",
+      anchors: [
+        { time: 1700000000, price: 30 },
+        { time: 1700100000, price: 35 },
+      ],
+      sourceTimeframe,
+      visibility: "source-timeframe",
+      style: { color: "#f43f5e", lineWidth: 2 },
+    }
+    const expected: PersistedDrawingV2 = {
+      schemaVersion: 2,
+      id: `existing-v2-${sourceTimeframe}`,
+      tool: "arrow",
+      anchors: [
+        { time: 1700000000, price: 30 },
+        { time: 1700100000, price: 35 },
+      ],
+      sourceTimeframe: "1D",
+      visibility: "source-timeframe",
+      style: { color: "#f43f5e", lineWidth: 2 },
+    }
 
-  const result = migrateDrawings([existingV2])
-  assert.equal(result.migrated.length, 1)
-  assert.deepEqual(result.migrated[0], expected)
-  assert.equal(result.unresolved.length, 0)
+    const result = migrateDrawings([existingV2])
+    assert.equal(result.migrated.length, 1, `${sourceTimeframe} must migrate instead of being discarded`)
+    assert.deepEqual(result.migrated[0], expected)
+    assert.equal(result.unresolved.length, 0)
+  }
 })
 
 test("migrateDrawings filters out interactive non-drawing tools (cursor, eraser)", () => {
