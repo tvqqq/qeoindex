@@ -115,25 +115,17 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
       const targetTimeframe = navigationRequest.timeframe
 
       try {
-        const targetDataPromise = getStockDetail(sym)
-        const targetPreparedPromise = targetTimeframe === "3D"
-          ? prepareInitialChartHistory({
-              ticker: sym,
-              timeframe: targetTimeframe,
-              signal: controller.signal,
-            })
-          : null
-        const targetData = await targetDataPromise
+        const targetData = await getStockDetail(sym)
         if (controller.signal.aborted || navigationGenerationRef.current !== generation) return
 
         const seededBars = deriveChartBarsFromDailySeed(targetData.bars, targetTimeframe)
         const targetPrepared = seededBars.length > 0
           ? null
-          : await (targetPreparedPromise ?? prepareInitialChartHistory({
+          : await prepareInitialChartHistory({
               ticker: sym,
               timeframe: targetTimeframe,
               signal: controller.signal,
-            }))
+            })
         if (controller.signal.aborted || navigationGenerationRef.current !== generation) return
 
         setPreparedChartInitial(targetPrepared)
