@@ -1,0 +1,96 @@
+name: QEO-172 Reuse Chart Autopatch
+
+on:
+  push:
+    branches:
+      - perf/qeo172-reuse-chart-instance
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[qeo172-autopatch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/qeo172-reuse-chart-instance
+          fetch-depth: 0
+      - name: Apply focused chart lifecycle patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('components/stock-detail/stock-tradingview-chart.tsx')
+          source = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global source
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, got {count}: {old[:100]!r}')
+              source = source.replace(old, new, 1)
+
+          replace_once(
+              '  const renderedRef = useRef<RenderedData | null>(null)\n  const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)',
+              '  const renderedRef = useRef<RenderedData | null>(null)\n  const renderedTimeframeRef = useRef<ChartTimeframe | null>(null)\n  const timeframeRef = useRef(timeframe)\n  timeframeRef.current = timeframe\n  const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)',
+          )
+          replace_once(
+              '  // A ticker/timeframe generation owns one LWC instance. Cleanup invalidates\n  // the generation before a slow CDN promise can resolve.',
+              '  // A ticker generation owns one LWC instance. Timeframe-only changes reuse\n  // the instance and update formatting/data in place. Cleanup still invalidates\n  // the generation before a slow CDN promise can resolve.',
+          )
+          replace_once(
+              '        chart = runtime.createChart(host, {',
+              '        const initialTimeframe = timeframeRef.current\n        chart = runtime.createChart(host, {',
+          )
+          replace_once(
+              '            timeVisible: timeframe.includes("m") || timeframe.includes("h"),',
+              '            timeVisible: initialTimeframe.includes("m") || initialTimeframe.includes("h"),',
+          )
+          replace_once(
+              '            tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),',
+              '            tickMarkFormatter: (time: unknown) => formatAxisTime(time, initialTimeframe),',
+          )
+          replace_once(
+              '            timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),',
+              '            timeFormatter: (time: unknown) => formatCrosshairTime(time, initialTimeframe),',
+          )
+          replace_once(
+              '    renderedRef.current = null\n    visibleRangeRef.current = null\n    seriesRef.current = null',
+              '    renderedRef.current = null\n    renderedTimeframeRef.current = null\n    visibleRangeRef.current = null\n    seriesRef.current = null',
+          )
+          replace_once(
+              '      seriesRef.current = null\n      renderedRef.current = null\n      visibleRangeRef.current = null\n      setChartReady(false)',
+              '      seriesRef.current = null\n      renderedRef.current = null\n      renderedTimeframeRef.current = null\n      visibleRangeRef.current = null\n      setChartReady(false)',
+          )
+          replace_once(
+              '  }, [scheduleOverlayPaint, ticker, timeframe])\n\n  useEffect(() => {\n    const chart = chartRef.current\n    const series = seriesRef.current',
+              '''  }, [scheduleOverlayPaint, ticker])\n\n  // Keep timeframe-specific axis formatting in sync while reusing the ticker-owned chart instance.\n  useEffect(() => {\n    const chart = chartRef.current\n    if (!chart || !chartReady) return\n    chart.applyOptions({\n      timeScale: {\n        timeVisible: timeframe.includes("m") || timeframe.includes("h"),\n        tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),\n      },\n      localization: {\n        locale: "vi-VN",\n        timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),\n      },\n    })\n  }, [chartReady, timeframe])\n\n  useEffect(() => {\n    const chart = chartRef.current\n    const series = seriesRef.current''',
+          )
+          replace_once(
+              '    const previous = renderedRef.current\n    const latest = displayBars.at(-1)',
+              '''    const previousTimeframe = renderedTimeframeRef.current\n    const timeframeChanged = previousTimeframe !== timeframe\n    if (timeframeChanged) {\n      renderedRef.current = null\n      visibleRangeRef.current = null\n      renderedTimeframeRef.current = timeframe\n    }\n\n    const previous = renderedRef.current\n    const latest = displayBars.at(-1)''',
+          )
+          replace_once(
+              '    setLatestVisibleRange,\n    viewSettings,\n  ])',
+              '    setLatestVisibleRange,\n    timeframe,\n    viewSettings,\n  ])',
+          )
+
+          path.write_text(source)
+          PY
+          git diff --check
+          git diff -- components/stock-detail/stock-tradingview-chart.tsx
+      - name: Commit focused runtime fix
+        shell: bash
+        run: |
+          if git diff --quiet -- components/stock-detail/stock-tradingview-chart.tsx; then
+            echo 'No runtime diff generated'
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add components/stock-detail/stock-tradingview-chart.tsx
+          git commit -m 'perf(QEO-172): reuse chart instance [qeo172-autopatch]'
+          git push origin HEAD:perf/qeo172-reuse-chart-instance
