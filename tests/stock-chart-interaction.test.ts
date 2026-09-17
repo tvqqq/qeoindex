@@ -194,3 +194,25 @@ test("drawing tools retain object management, text editing, and persistence", ()
   assert.match(toolsCode, /disabled=\{!drawingReady\}/)
   assert.match(canvasCode, /pointerEvents: !drawingReady/)
 })
+
+test("QEO-241 chart product exposes only fixed 1D, 1W and 1M controls", () => {
+  const typesCode = source("components/stock-detail/chart/stock-chart-types.ts")
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(typesCode, /export type ChartTimeframe = "1D" \| "1W" \| "1M"/)
+  assert.match(typesCode, /QUICK_TIMEFRAMES[^\n]*\["1D", "1W", "1M"\]/)
+  assert.doesNotMatch(typesCode, /"3D"|"1Q"|"1Y"/)
+  assert.match(chartCode, /QUICK_TIMEFRAMES\.map/)
+  assert.doesNotMatch(chartCode, /showTfDropdown|setShowTfDropdown|Chọn khung thời gian|ALL_TIMEFRAMES\.map/)
+})
+
+test("QEO-241 ticker navigation no longer has a 3D remote preparation special case", () => {
+  const workstationCode = source("components/stock-detail/stock-detail-workstation.tsx")
+  assert.doesNotMatch(workstationCode, /targetTimeframe\s*===\s*["']3D["']/)
+})
+
+test("QEO-241 OHLCV route fails closed for retired 3D, 1Q and 1Y resolutions", () => {
+  const routeCode = source("app/api/market/ohlcv/route.ts")
+  assert.match(routeCode, /new Set\(\["3D",\s*"1Q",\s*"1Y"\]\)/)
+  assert.match(routeCode, /TIMEFRAME_RETIRED/)
+})
