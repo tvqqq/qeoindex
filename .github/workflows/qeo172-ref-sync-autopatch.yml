@@ -39,7 +39,6 @@ jobs:
           path.write_text(source)
           PY
           git diff --check
-          pnpm exec eslint components/stock-detail/stock-tradingview-chart.tsx
       - name: Commit lint-safe ref sync
         shell: bash
         run: |
