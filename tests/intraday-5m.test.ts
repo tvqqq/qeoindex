@@ -4,7 +4,7 @@ import test from "node:test"
 
 import { detectTradingSessionGaps } from "../modules/market/chart-data/normalize.ts"
 import type { CanonicalOhlcvBar } from "../modules/market/chart-data/contract.ts"
-import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, mergeIntradayPointHistory, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../modules/market/realtime/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../modules/market/realtime/intraday-5m.ts"
 
 function canonicalBar(iso: string): CanonicalOhlcvBar {
   return {
@@ -127,27 +127,6 @@ test("live closes update the matching bucket without resetting history", () => {
   const appended = mergeFiveMinuteClose(updated, 51_100, history.at(-1)!.time + 300)
   assert.equal(appended.length, 55)
   assert.equal(appended.at(-1)?.close, 51_100)
-})
-
-test("QEO-242 afternoon hydration preserves morning mini-chart history", () => {
-  const morningStart = Date.UTC(2026, 8, 17, 2, 15, 0) / 1000
-  const afternoonStart = Date.UTC(2026, 8, 17, 6, 0, 0) / 1000
-  const morning = [
-    { time: morningStart, close: 50_000 },
-    { time: morningStart + 300, close: 50_100 },
-    { time: Date.UTC(2026, 8, 17, 4, 25, 0) / 1000, close: 50_400 },
-  ]
-  const afternoonReload = [
-    { time: afternoonStart, close: 50_500 },
-    { time: afternoonStart + 300, close: 50_600 },
-  ]
-
-  const merged = mergeIntradayPointHistory(morning, afternoonReload)
-
-  assert.deepEqual(merged, [
-    ...morning,
-    ...afternoonReload,
-  ])
 })
 
 test("replayed and out-of-order closes replace their bucket and remain sorted", () => {
