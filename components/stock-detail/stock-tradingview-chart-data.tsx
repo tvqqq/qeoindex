@@ -35,6 +35,7 @@ interface StockTradingViewChartDataProps {
   navigationTimeframe?: ChartTimeframeNavigationRequest | null
   preparedInitial?: PreparedChartHistory | null
   onTimeframeChange?: (timeframe: ChartTimeframe) => void
+  onRendered?: (ticker: string, timeframe: ChartTimeframe) => void
 }
 
 export interface ChartTimeframeNavigationRequest {
@@ -81,6 +82,7 @@ function HistoryBoundChart({
   changePct,
   navigationTimeframe,
   preparedInitial,
+  onRendered,
   onTimeframeClickCapture,
   preparingTimeframe,
 }: StockTradingViewChartDataProps & {
@@ -186,6 +188,7 @@ function HistoryBoundChart({
           "data-chart-rendered-key",
           `${ticker.trim().toUpperCase()}:${timeframe}:${resolvedBars.length}:${latestTime}`,
         )
+        onRendered?.(ticker, timeframe)
       })
     })
 
@@ -193,7 +196,7 @@ function HistoryBoundChart({
       window.cancelAnimationFrame(firstFrame)
       if (secondFrame) window.cancelAnimationFrame(secondFrame)
     }
-  }, [loading, resolvedBars, ticker, timeframe])
+  }, [loading, onRendered, resolvedBars, ticker, timeframe])
 
   return (
     <div

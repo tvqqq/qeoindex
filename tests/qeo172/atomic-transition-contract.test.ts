@@ -76,9 +76,14 @@ test("QEO-172 adjacent keyboard intent does not retarget the rendered ticker bef
     "keyboard intent must not drop the current ticker preferred timeframe before target preparation commits",
   )
 
-  const prepareStart = workstation.indexOf("const [targetData, targetPrepared] = await Promise.all")
-  const commitState = workstation.indexOf("setChartNavigationTimeframe(navigationRequest)", prepareStart)
-  assert.ok(prepareStart >= 0 && commitState > prepareStart, "navigation timeframe state must commit only after prepared target data resolves")
+  const targetDataResolved = workstation.indexOf("const targetData = await targetDataPromise")
+  const seedProof = workstation.indexOf("deriveChartBarsFromDailySeed(targetData.bars, targetTimeframe)", targetDataResolved)
+  const targetPreparedResolved = workstation.indexOf("const targetPrepared = seededBars.length > 0", seedProof)
+  const commitState = workstation.indexOf("setChartNavigationTimeframe(navigationRequest)", targetPreparedResolved)
+  assert.ok(
+    targetDataResolved >= 0 && seedProof > targetDataResolved && targetPreparedResolved > seedProof && commitState > targetPreparedResolved,
+    "navigation timeframe state must commit only after target Daily seed proof or remote preparation resolves",
+  )
 })
 
 test("QEO-172 preferred navigation timeframe blocks stale remote hydration field-by-field", () => {
