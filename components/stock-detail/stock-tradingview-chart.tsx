@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { toPng } from "html-to-image"
 import {
   CalendarDays,
@@ -24,7 +24,13 @@ import { StockChartIndicatorModal } from "./chart/stock-chart-indicator-modal"
 import { StockChartObjectManager } from "./chart/stock-chart-object-manager"
 import { StockChartTextEditor } from "./chart/stock-chart-text-editor"
 import { boundChartTimeToTimeline, bridgeCoordinateToTime, bridgeTimeToCoordinate } from "./chart/chart-coordinate-bridge"
+import {
+  canonicalPaneGeometry,
+  type MeasuredPaneGeometry,
+  type PaneGeometry,
+} from "./chart/chart-pane-geometry"
 import { canIncrementallyUpdateLatest, fingerprintOhlcvPrefix } from "./chart/chart-render-diff"
+import { chartTimeRangeForBars, shiftVisibleLogicalRange } from "./chart/chart-viewport"
 import {
   calculateBollingerBands,
   calculateIchimokuBaseSeries,
@@ -58,13 +64,11 @@ interface StockTradingViewChartProps {
   currentPrice?: number
   changePct?: number
   navigationTimeframe?: ChartTimeframe | null
+  onPaneGeometryChange?: (geometry: MeasuredPaneGeometry) => void
 }
 
 const DEFAULT_RIGHT_OFFSET_BARS = 8
 const MIN_MAX_RIGHT_OFFSET_BARS = 32
-const EXPANDED_SUBPANE_HEIGHT = 92
-const COLLAPSED_SUBPANE_HEIGHT = 24
-const VOLUME_PANE_HEIGHT = 64
 const INITIAL_MAX_VISIBLE_BARS = 180
 
 type ChartDimensions = { width: number; height: number }
@@ -464,6 +468,7 @@ export function StockTradingViewChart({
   currentPrice,
   changePct,
   navigationTimeframe,
+  onPaneGeometryChange,
 }: StockTradingViewChartProps) {
   const {
     timeframe,
@@ -604,6 +609,7 @@ export function StockTradingViewChart({
   const [dimensions, setDimensions] = useState<ChartDimensions>({ width: 0, height: 0 })
   const [visibleRangeState, setVisibleRangeState] = useState<{ from: number; to: number } | null>(null)
   const [overlayRevision, setOverlayRevision] = useState(0)
+  const [latestCandleX, setLatestCandleX] = useState<number | null>(null)
   const [priceAxisGutter, setPriceAxisGutter] = useState(80)
   const [crosshairTime, setCrosshairTime] = useState<number | null>(null)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
@@ -619,6 +625,10 @@ export function StockTradingViewChart({
   const [editingTextDrawingId, setEditingTextDrawingId] = useState<string | null>(null)
   const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
   const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
+  const [measuredPaneGeometry, setMeasuredPaneGeometry] = useState<{
+    key: string
+    geometry: PaneGeometry
+  } | null>(null)
 
   useEffect(() => {
     timeframeRef.current = timeframe
@@ -659,24 +669,18 @@ export function StockTradingViewChart({
   }
   const overlayWidth = dimensions.width || 1000
   const overlayHeight = dimensions.height || (isMaximized ? 640 : 340)
-  const paneHeights = useMemo(() => {
-    if (!isMaximized) return {
-      main: overlayHeight,
-      volume: VOLUME_PANE_HEIGHT,
-      rsi: 0,
-      macd: 0,
-    }
-    const volume = Math.max(72, Math.round(overlayHeight * 0.15))
-    const rsi = isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : Math.max(72, Math.round(overlayHeight * 0.15))
-    const macd = isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : Math.max(72, Math.round(overlayHeight * 0.15))
-    return {
-      main: Math.max(220, overlayHeight - volume - rsi - macd),
-      volume,
-      rsi,
-      macd,
-    }
-  }, [isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
-  const mainPaneHeight = paneHeights.main
+  const paneHeights = useMemo(() => canonicalPaneGeometry({
+    hostHeight: overlayHeight,
+    isMaximized: Boolean(isMaximized),
+    rsiCollapsed: isRsiCollapsed,
+    macdCollapsed: isMacdCollapsed,
+  }), [isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
+  const paneGeometryKey = `${overlayHeight}:${isMaximized}:${isRsiCollapsed}:${isMacdCollapsed}`
+  const effectivePaneHeights = measuredPaneGeometry?.key === paneGeometryKey
+    ? measuredPaneGeometry.geometry
+    : paneHeights
+  const mainPaneHeight = effectivePaneHeights.main
+  const drawingWidth = Math.max(0, overlayWidth - priceAxisGutter)
   useEffect(() => {
     if (!chartReady) return
     const measured = chartRef.current?.panes()[0]?.getRightPriceScale?.().width?.()
@@ -711,6 +715,13 @@ export function StockTradingViewChart({
       (candidate) => chartRef.current?.timeScale().timeToCoordinate(candidate) ?? null,
     )
   }, [allTimes])
+  useEffect(() => {
+    const latestTime = displayBars.at(-1)?.time
+    const frame = window.requestAnimationFrame(() => {
+      setLatestCandleX(latestTime == null || !chartReady ? null : timeToX(latestTime))
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [chartReady, displayBars, overlayRevision, timeToX])
 
   const volumeProfile = useMemo(() => {
     if (!effectiveIndicators.showVolumeProfile || displayBars.length === 0) return null
@@ -753,29 +764,19 @@ export function StockTradingViewChart({
     // forcing half of the first view to be empty.
     const rightOffset = DEFAULT_RIGHT_OFFSET_BARS
     chart.applyOptions({ timeScale: { rightOffset } })
-    const range = {
-      from: Math.max(-0.5, displayBars.length - visibleBars),
-      to: displayBars.length - 1 + rightOffset,
-    }
-    chart.timeScale().setVisibleLogicalRange(range)
-    visibleRangeRef.current = range
-    setVisibleRangeState(range)
-  }, [displayBars.length])
+    const range = chartTimeRangeForBars(displayBars, futureTimes, visibleBars, rightOffset)
+    if (range) chart.timeScale().setVisibleRange(range)
+  }, [displayBars, futureTimes])
 
   const setVisibleBars = useCallback((count: number) => {
     const chart = chartRef.current
     if (!chart || displayBars.length === 0) return
     const visible = Math.min(displayBars.length, Math.max(15, count))
     const rightOffset = DEFAULT_RIGHT_OFFSET_BARS
-    const range = {
-      from: Math.max(-0.5, displayBars.length - visible),
-      to: displayBars.length - 1 + rightOffset,
-    }
     chart.applyOptions({ timeScale: { rightOffset } })
-    chart.timeScale().setVisibleLogicalRange(range)
-    visibleRangeRef.current = range
-    setVisibleRangeState(range)
-  }, [displayBars.length])
+    const range = chartTimeRangeForBars(displayBars, futureTimes, visible, rightOffset)
+    if (range) chart.timeScale().setVisibleRange(range)
+  }, [displayBars, futureTimes])
 
   const handleResetView = useCallback(() => {
     setLatestVisibleRange()
@@ -1102,7 +1103,6 @@ export function StockTradingViewChart({
     const canUpdateLatest = canIncrementallyUpdateLatest(previous, displayBars)
       && previous?.futureLength === futureTimes.length
 
-    series.futureAxis.setData(renderPayload.futureAxis)
     if (displayBars.length === 0) {
       series.candles.setData([])
       series.volume.setData([])
@@ -1137,6 +1137,9 @@ export function StockTradingViewChart({
     series.macdSignal.setData(renderPayload.macdSignal)
     series.macdHistogram.setData(renderPayload.macdHistogram)
     series.macdZero.setData(renderPayload.macdZero)
+    // Apply future whitespace last. On a reused chart instance this keeps the
+    // real dataset authoritative before the projection horizon is extended.
+    series.futureAxis.setData(renderPayload.futureAxis)
 
     if (displayBars.length > 0 && !previous) {
       setLatestVisibleRange()
@@ -1144,10 +1147,7 @@ export function StockTradingViewChart({
       // Prepending older history shifts logical indexes. Preserve the user's
       // current viewport instead of fitting the chart on every refresh.
       const shift = displayBars.length - previous.actualLength
-      const range = {
-        from: visibleRangeRef.current.from + shift,
-        to: visibleRangeRef.current.to + shift,
-      }
+      const range = shiftVisibleLogicalRange(visibleRangeRef.current, shift)
       chart.timeScale().setVisibleLogicalRange(range)
       visibleRangeRef.current = range
       setVisibleRangeState(range)
@@ -1178,14 +1178,16 @@ export function StockTradingViewChart({
     viewSettings,
   ])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const chart = chartRef.current
     if (!chart || !chartReady) return
     const panes = chart.panes()
-    panes[0]?.setHeight(paneHeights.main)
     panes[1]?.setHeight(paneHeights.volume)
     panes[2]?.setHeight(paneHeights.rsi)
     panes[3]?.setHeight(paneHeights.macd)
+    // Main is applied last so native pane redistribution cannot steal height
+    // from the already-budgeted indicator panes.
+    panes[0]?.setHeight(paneHeights.main)
     panes[1]?.getRightPriceScale?.().applyOptions({
       visible: true,
       ticksVisible: true,
@@ -1203,8 +1205,48 @@ export function StockTradingViewChart({
       borderVisible: isMaximized,
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
+
+    const measureNativePanes = () => {
+      const heights = panes.slice(0, 4).map((pane) => pane?.getHeight?.())
+      if (
+        heights.length !== 4
+        || heights.some((height) => typeof height !== "number" || !Number.isFinite(height) || height < 0)
+      ) return
+      const [main, volume, rsi, macd] = heights as [number, number, number, number]
+      const geometry = {
+        main,
+        volume,
+        rsi,
+        macd,
+        drawableHeight: main + volume + rsi + macd,
+      }
+      setMeasuredPaneGeometry((current) => (
+        current?.key === paneGeometryKey
+        && current.geometry.main === main
+        && current.geometry.volume === volume
+        && current.geometry.rsi === rsi
+        && current.geometry.macd === macd
+          ? current
+          : { key: paneGeometryKey, geometry }
+      ))
+      onPaneGeometryChange?.({
+        ...geometry,
+        plotTop: plotContainerRef.current?.offsetTop ?? 0,
+      })
+    }
+
+    measureNativePanes()
+    const measurementFrame = window.requestAnimationFrame(measureNativePanes)
     scheduleOverlayPaint()
-  }, [chartReady, isMaximized, paneHeights, scheduleOverlayPaint])
+    return () => window.cancelAnimationFrame(measurementFrame)
+  }, [
+    chartReady,
+    isMaximized,
+    onPaneGeometryChange,
+    paneGeometryKey,
+    paneHeights,
+    scheduleOverlayPaint,
+  ])
 
   const updateDrawingFlag = useCallback((id: string, key: "hidden" | "locked") => {
     const drawing = drawings.find((item) => item.id === id)
@@ -1333,6 +1375,13 @@ export function StockTradingViewChart({
         ref={plotContainerRef}
         className={cn("relative min-h-0 flex-1 overflow-hidden bg-[#080b10]", isMaximized ? "min-h-0" : "min-h-[300px]")}
         data-chart-plot="lightweight"
+        data-chart-price-pane-height={effectivePaneHeights.main}
+        data-chart-volume-pane-height={effectivePaneHeights.volume}
+        data-chart-rsi-pane-height={effectivePaneHeights.rsi}
+        data-chart-macd-pane-height={effectivePaneHeights.macd}
+        data-chart-pane-geometry={measuredPaneGeometry?.key === paneGeometryKey ? "native" : "planned"}
+        data-chart-latest-candle-x={latestCandleX ?? ""}
+        data-chart-drawable-width={drawingWidth}
       >
         <div
           ref={chartHostRef}
@@ -1352,7 +1401,7 @@ export function StockTradingViewChart({
           volumeProfile={volumeProfile}
           timeToX={timeToX}
           priceToY={priceToY}
-          rsiPaneTop={paneHeights.main + paneHeights.volume}
+          rsiPaneTop={effectivePaneHeights.main + effectivePaneHeights.volume}
           rsiPriceToY={rsiPriceToY}
           showRsiBand={isMaximized && effectiveIndicators.showRsi}
           priceAxisGutter={priceAxisGutter}
@@ -1471,8 +1520,8 @@ export function StockTradingViewChart({
         )}
 
         {isMaximized && <StockChartDrawingCanvas
-          width={overlayWidth}
-          height={overlayHeight}
+          width={drawingWidth}
+          height={mainPaneHeight}
           drawings={drawings}
           selectedId={selectedDrawingId}
           onSelectDrawing={setSelectedDrawingId}
@@ -1491,6 +1540,7 @@ export function StockTradingViewChart({
           timeToX={timeToX}
           xToTime={xToTime}
           drawingReady={drawingSyncStatus === "ready"}
+          onDrawingComplete={() => setActiveTool("cursor")}
         />}
 
         {isMaximized && (
@@ -1502,9 +1552,9 @@ export function StockTradingViewChart({
                 const next = !isRsiCollapsed
                 setIsRsiCollapsed(next)
                 setViewSettings((previous: ChartViewSettings) => ({ ...previous, rsiCollapsed: next }))
-                chartRef.current?.panes()[2]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
               }}
-              className="absolute right-2 top-[62%] z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
+              style={{ top: `${effectivePaneHeights.main + effectivePaneHeights.volume + 2}px` }}
+              className="absolute right-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
             >
               {isRsiCollapsed ? "+" : "−"}
             </button>
@@ -1515,9 +1565,9 @@ export function StockTradingViewChart({
                 const next = !isMacdCollapsed
                 setIsMacdCollapsed(next)
                 setViewSettings((previous: ChartViewSettings) => ({ ...previous, macdCollapsed: next }))
-                chartRef.current?.panes()[3]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
               }}
-              className="absolute right-2 bottom-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
+              style={{ top: `${effectivePaneHeights.main + effectivePaneHeights.volume + effectivePaneHeights.rsi + 3}px` }}
+              className="absolute right-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
             >
               {isMacdCollapsed ? "+" : "−"}
             </button>

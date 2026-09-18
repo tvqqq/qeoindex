@@ -245,6 +245,7 @@ test("StockTradingViewChart keeps one native chart instance across compact and m
   assert.match(code, /runtime\.CandlestickSeries/)
   assert.match(code, /chart\.panes\(\)/)
   assert.match(code, /panes\[0\]\?\.setHeight\(paneHeights\.main\)/)
+  assert.match(code, /canonicalPaneGeometry/)
   assert.match(code, /effectiveIndicators\.showRsi/)
   assert.match(code, /effectiveIndicators\.showMacd/)
   assert.match(code, /effectiveIndicators\.showIchimoku/)

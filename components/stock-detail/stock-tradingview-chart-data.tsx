@@ -15,6 +15,7 @@ import {
   calculateRsiSeries,
   calculateVolumeSma,
 } from "./chart/stock-chart-indicators"
+import type { MeasuredPaneGeometry } from "./chart/chart-pane-geometry"
 import { ALL_TIMEFRAMES, type ChartTimeframe } from "./chart/stock-chart-types"
 import { useChartHistory } from "./chart/use-chart-history"
 import {
@@ -105,6 +106,18 @@ function HistoryBoundChart({
   const dragStartXRef = useRef<number | null>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const [paneTime, setPaneTime] = useState<number | null>(null)
+  const [paneGeometry, setPaneGeometry] = useState<MeasuredPaneGeometry | null>(null)
+  const handlePaneGeometryChange = useCallback((geometry: MeasuredPaneGeometry) => {
+    setPaneGeometry((current) => (
+      current?.plotTop === geometry.plotTop
+      && current.main === geometry.main
+      && current.volume === geometry.volume
+      && current.rsi === geometry.rsi
+      && current.macd === geometry.macd
+        ? current
+        : geometry
+    ))
+  }, [])
   const requestOlder = useCallback(() => {
     if (!loading && !loadingOlder && hasMore) void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder])
@@ -206,9 +219,6 @@ function HistoryBoundChart({
       onMouseMoveCapture={handleMouseMoveCapture}
       onMouseUpCapture={() => { dragStartXRef.current = null }}
       onMouseLeave={() => { dragStartXRef.current = null }}
-      onWheelCapture={(event) => {
-        if (event.deltaY > 0) requestOlder()
-      }}
     >
       <StockTradingViewChart
         ticker={ticker}
@@ -220,6 +230,7 @@ function HistoryBoundChart({
         currentPrice={currentPrice}
         changePct={changePct}
         navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
+        onPaneGeometryChange={handlePaneGeometryChange}
       />
 
       <div
@@ -266,7 +277,8 @@ function HistoryBoundChart({
           <div
             data-chart-pane-header="volume"
             data-chart-pane-time={paneTime ?? ""}
-            className="pointer-events-none absolute left-11 top-[55.5%] z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+            style={{ top: paneGeometry ? `${paneGeometry.plotTop + paneGeometry.main + 2}px` : "55.5%" }}
+            className="pointer-events-none absolute left-11 z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
           >
             <span className="font-semibold text-slate-300">Volume</span>
             <span className="text-slate-400">{formatCompactVolume(paneBar?.volume)}</span>
@@ -284,7 +296,8 @@ function HistoryBoundChart({
           <div
             data-chart-pane-header="rsi"
             data-chart-pane-time={paneTime ?? ""}
-            className="pointer-events-none absolute left-11 top-[70.5%] z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+            style={{ top: paneGeometry ? `${paneGeometry.plotTop + paneGeometry.main + paneGeometry.volume + 3}px` : "70.5%" }}
+            className="pointer-events-none absolute left-11 z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
           >
             <span className="font-semibold text-violet-300">RSI 14</span>
             <span className="text-violet-200/85">{formatMetric(paneRsi)}</span>
@@ -309,7 +322,8 @@ function HistoryBoundChart({
           <div
             data-chart-pane-header="macd"
             data-chart-pane-time={paneTime ?? ""}
-            className="pointer-events-none absolute left-11 top-[85.5%] z-30 flex h-5 max-w-[75%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+            style={{ top: paneGeometry ? `${paneGeometry.plotTop + paneGeometry.main + paneGeometry.volume + paneGeometry.rsi + 4}px` : "85.5%" }}
+            className="pointer-events-none absolute left-11 z-30 flex h-5 max-w-[75%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
           >
             <span className="font-semibold text-sky-300">MACD</span>
             <span className="text-sky-200/85">{formatMetric(paneMacd, 4)}</span>
