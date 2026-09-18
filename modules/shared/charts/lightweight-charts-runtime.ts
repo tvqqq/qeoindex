@@ -30,6 +30,7 @@ export interface LightweightLogicalRange {
 
 export interface LightweightTimeScaleApi {
   fitContent(): void
+  setVisibleRange(range: { from: number; to: number }): void
   setVisibleLogicalRange(range: LightweightLogicalRange): void
   timeToCoordinate(time: number): number | null
   coordinateToTime?(coordinate: number): unknown
@@ -39,6 +40,7 @@ export interface LightweightTimeScaleApi {
 
 export interface LightweightPaneApi {
   setHeight(height: number): void
+  getHeight?(): number
   getRightPriceScale?(): LightweightPriceScaleApi
 }
 

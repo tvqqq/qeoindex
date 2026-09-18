@@ -405,11 +405,12 @@ test("QEO-100 incomplete stored coverage backfills the missing head instead of t
   assert.deepEqual(missingProviderRanges({ from: 100, to: 1_000 }, [{ from: 700, to: 1_000 }, { from: 100, to: 750 }]), [])
 })
 
-test("QEO-238 Daily+ loadOlder progressively hydrates history without intraday gesture branches", () => {
+test("QEO-238 Daily+ loadOlder uses drag-edge hydration without competing wheel ownership", () => {
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const hook = source("components/stock-detail/chart/use-chart-history.ts")
   assert.match(wrapper, /if \(!loading && !loadingOlder && hasMore\) void loadOlder\(\)/)
-  assert.match(wrapper, /if \(event\.deltaY > 0\) requestOlder\(\)/)
+  assert.match(wrapper, /event\.clientX - start >= 80/)
+  assert.doesNotMatch(wrapper, /onWheelCapture/)
   assert.doesNotMatch(wrapper, /timeframe === "1m"|timeframe !== "1m"/)
   assert.match(hook, /historyCursorRef/)
   assert.match(hook, /historyCursorRef\.current = range\.from/)

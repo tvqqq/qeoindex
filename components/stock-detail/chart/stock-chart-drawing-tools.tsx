@@ -130,6 +130,7 @@ export function StockChartDrawingTools({
             type="button"
             disabled={!drawingReady}
             title={item.label}
+            aria-pressed={isActive}
             onClick={() => {
               onSelectTool(item.id)
               setShowPalette(false)
@@ -153,6 +154,7 @@ export function StockChartDrawingTools({
           type="button"
           disabled={!drawingReady}
           title="Chèn biểu tượng / Sticker"
+          aria-pressed={activeTool === "icon"}
           onClick={() => {
             onSelectTool("icon")
             setShowIconPicker((prev) => !prev)

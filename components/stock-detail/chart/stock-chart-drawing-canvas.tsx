@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useId, useRef, useState } from "react"
 import {
   AlertTriangle,
   Flag,
@@ -13,6 +13,11 @@ import {
   Unlock,
 } from "lucide-react"
 import { cn } from "@/modules/shared/ui/cn"
+import {
+  clampDrawingPoint,
+  hasCanonicalDrawingAnchor,
+  isInsideDrawingBounds,
+} from "./drawing-bounds"
 import type { DrawingIconType, DrawingObject, DrawingPoint, DrawingTool } from "./stock-chart-types"
 
 export type DrawingGestureState = "idle" | "creating" | "selected" | "body-drag" | "anchor-drag"
@@ -38,6 +43,7 @@ interface DrawingCanvasProps {
   timeToX?: (time: number) => number | null | undefined
   xToTime?: (x: number) => number | null | undefined
   drawingReady?: boolean
+  onDrawingComplete: (id: string) => void
 }
 
 const PALETTE_COLORS = ["#00f0ff", "#a855f7", "#10b981", "#f59e0b", "#f43f5e", "#ffffff"]
@@ -71,8 +77,12 @@ export function StockChartDrawingCanvas({
   timeToX,
   xToTime,
   drawingReady = true,
+  onDrawingComplete,
 }: DrawingCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const instanceId = useId().replaceAll(":", "")
+  const clipPathId = `chart-drawing-clip-${instanceId}`
+  const arrowMarkerId = `chart-drawing-arrow-${instanceId}`
 
   // Active drawing state for new shapes
   const [currentStart, setCurrentStart] = useState<DrawingPoint | null>(null)
@@ -143,14 +153,23 @@ export function StockChartDrawingCanvas({
   }
 
   // Coordinate transforms
-  const getSvgCoordinates = (e: { clientX: number; clientY: number }): DrawingPoint => {
+  const getSvgCoordinates = (
+    e: { clientX: number; clientY: number },
+    fallback?: DrawingPoint,
+  ): { point: DrawingPoint; inside: boolean } | null => {
     const svg = svgRef.current
-    if (!svg) return { x: 0, y: 0 }
+    if (!svg) return null
     const rect = svg.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 }
-    const x = ((e.clientX - rect.left) / rect.width) * width
-    const y = ((e.clientY - rect.top) / rect.height) * height
-    return createRuntimePoint(x, y)
+    if (rect.width <= 0 || rect.height <= 0) return null
+    const rawPoint = {
+      x: ((e.clientX - rect.left) / rect.width) * width,
+      y: ((e.clientY - rect.top) / rect.height) * height,
+    }
+    const boundedPoint = clampDrawingPoint(rawPoint, { width, height })
+    return {
+      point: createRuntimePoint(boundedPoint.x, boundedPoint.y, fallback),
+      inside: isInsideDrawingBounds(rawPoint, { width, height }),
+    }
   }
 
   // Convert point time/price to current screen coordinates if available.
@@ -200,7 +219,7 @@ export function StockChartDrawingCanvas({
 
   const commitTwoPointDrawing = (first: DrawingPoint, second: DrawingPoint) => {
     const dist = Math.hypot(second.x - first.x, second.y - first.y)
-    if (dist <= 3) return
+    if (dist <= 3 || !hasCanonicalDrawingAnchor(first) || !hasCanonicalDrawingAnchor(second)) return false
     const newId = createDrawingId()
     onAddDrawing({
       id: newId,
@@ -211,6 +230,8 @@ export function StockChartDrawingCanvas({
     })
     onSelectDrawing(newId)
     setGestureState("selected")
+    onDrawingComplete(newId)
+    return true
   }
 
   // Two-point tools use click-click creation. This keeps the first canonical
@@ -224,7 +245,9 @@ export function StockChartDrawingCanvas({
       return
     }
 
-    const point = getSvgCoordinates(e)
+    const coordinates = getSvgCoordinates(e)
+    if (!coordinates?.inside || !hasCanonicalDrawingAnchor(coordinates.point)) return
+    const point = coordinates.point
 
     if (twoPointTool) {
       if (currentStart) {
@@ -241,28 +264,34 @@ export function StockChartDrawingCanvas({
     }
 
     if (activeTool === "horizontal") {
+      const newId = createDrawingId()
       onAddDrawing({
-        id: createDrawingId(),
+        id: newId,
         tool: "horizontal",
         // A horizontal line only needs one canonical market anchor.
         points: [point],
         color: activeColor,
         lineWidth,
       })
+      onSelectDrawing(newId)
       setGestureState("selected")
+      onDrawingComplete(newId)
       return
     }
 
     if (activeTool === "icon") {
+      const newId = createDrawingId()
       onAddDrawing({
-        id: createDrawingId(),
+        id: newId,
         tool: "icon",
         points: [point],
         color: activeColor,
         lineWidth,
         iconType: selectedIconType,
       })
+      onSelectDrawing(newId)
       setGestureState("selected")
+      onDrawingComplete(newId)
       return
     }
 
@@ -280,6 +309,7 @@ export function StockChartDrawingCanvas({
       onSelectDrawing(newId)
       onEditText(newId)
       setGestureState("selected")
+      onDrawingComplete(newId)
       return
     }
 
@@ -291,7 +321,9 @@ export function StockChartDrawingCanvas({
   // Mouse Move handler
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!drawingReady) return
-    const coords = getSvgCoordinates(e)
+    const coordinates = getSvgCoordinates(e)
+    if (!coordinates) return
+    const coords = coordinates.point
 
     // Handle dragging existing shape or handle
     if (dragState) {
@@ -374,6 +406,7 @@ export function StockChartDrawingCanvas({
       })
       onSelectDrawing(newId)
       setGestureState("selected")
+      onDrawingComplete(newId)
     }
 
     setCurrentStart(null)
@@ -402,8 +435,11 @@ export function StockChartDrawingCanvas({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className="absolute inset-0 z-20 size-full select-none"
+        className="absolute left-0 top-0 z-20 select-none"
         style={{
+          width: `${width}px`,
+          height: `${height}px`,
+          overflow: "hidden",
           // Leave the chart's native pan/zoom/crosshair handlers in charge when
           // the cursor tool is selected. Drawing gestures opt into the overlay.
           pointerEvents: !drawingReady || activeTool === "cursor" ? "none" : "auto",
@@ -425,10 +461,15 @@ export function StockChartDrawingCanvas({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         data-drawing-gesture={gestureState}
+        data-drawing-width={width}
+        data-drawing-height={height}
       >
         <defs>
+          <clipPath id={clipPathId}>
+            <rect x="0" y="0" width={width} height={height} />
+          </clipPath>
           <marker
-            id="arrow-marker"
+            id={arrowMarkerId}
             viewBox="0 0 10 10"
             refX="5"
             refY="5"
@@ -440,8 +481,9 @@ export function StockChartDrawingCanvas({
           </marker>
         </defs>
 
-        {/* Existing Drawings */}
-        {drawings.map((draw) => {
+        <g clipPath={`url(#${clipPathId})`}>
+          {/* Existing Drawings */}
+          {drawings.map((draw) => {
           if (draw.hidden) return null
 
           const rawP1 = draw.points[0]
@@ -485,7 +527,9 @@ export function StockChartDrawingCanvas({
             e.stopPropagation()
             svgRef.current?.setPointerCapture(e.pointerId)
             onSelectDrawing(draw.id)
-            const coords = getSvgCoordinates(e)
+            const coordinates = getSvgCoordinates(e)
+            if (!coordinates) return
+            const coords = coordinates.point
             setDragState({
               drawingId: draw.id,
               handleIndex: null,
@@ -580,7 +624,7 @@ export function StockChartDrawingCanvas({
                     y2={p2.y}
                     stroke={draw.color}
                     strokeWidth={draw.lineWidth}
-                    markerEnd="url(#arrow-marker)"
+                    markerEnd={`url(#${arrowMarkerId})`}
                     strokeLinecap="round"
                   />
                 </>
@@ -674,7 +718,9 @@ export function StockChartDrawingCanvas({
                     onPointerDown={(e) => {
                       e.stopPropagation()
                       svgRef.current?.setPointerCapture(e.pointerId)
-                      const coords = getSvgCoordinates(e)
+                      const coordinates = getSvgCoordinates(e)
+                      if (!coordinates) return
+                      const coords = coordinates.point
                       setDragState({
                         drawingId: draw.id,
                         handleIndex: 0,
@@ -697,7 +743,9 @@ export function StockChartDrawingCanvas({
                       onPointerDown={(e) => {
                         e.stopPropagation()
                         svgRef.current?.setPointerCapture(e.pointerId)
-                        const coords = getSvgCoordinates(e)
+                        const coordinates = getSvgCoordinates(e)
+                        if (!coordinates) return
+                        const coords = coordinates.point
                         setDragState({
                           drawingId: draw.id,
                           handleIndex: 1,
@@ -712,11 +760,11 @@ export function StockChartDrawingCanvas({
               )}
             </g>
           )
-        })}
+          })}
 
-        {/* Temporary Shape currently being drawn */}
-        {currentStart && currentEnd && (
-          <>
+          {/* Temporary Shape currently being drawn */}
+          {currentStart && currentEnd && (
+            <>
             {activeTool === "trendline" && (
               <line
                 x1={currentStart.x}
@@ -750,7 +798,7 @@ export function StockChartDrawingCanvas({
                 y2={currentEnd.y}
                 stroke={activeColor}
                 strokeWidth={lineWidth}
-                markerEnd="url(#arrow-marker)"
+                markerEnd={`url(#${arrowMarkerId})`}
               />
             )}
             {activeTool === "rectangle" && (
@@ -779,8 +827,9 @@ export function StockChartDrawingCanvas({
                 strokeDasharray="4 4"
               />
             )}
-          </>
-        )}
+            </>
+          )}
+        </g>
       </svg>
 
       {/* Floating Action Bar for Selected Drawing Object */}
@@ -788,7 +837,7 @@ export function StockChartDrawingCanvas({
         (() => {
           const pt = resolvePoint(selectedDrawing.points[0] || { x: width / 2, y: 50 })
           const barLeft = Math.min(Math.max(20, pt.x - 60), width - 220)
-          const barTop = Math.max(10, pt.y - 42)
+          const barTop = Math.min(Math.max(10, pt.y - 42), Math.max(10, height - 38))
 
           return (
             <div
