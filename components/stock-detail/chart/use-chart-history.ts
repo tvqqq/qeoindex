@@ -13,6 +13,7 @@ import {
   type ChartHistoryResponse,
   type PreparedChartHistory,
 } from "./chart-history"
+import { chartHistoryIdentity, renderBarsForChartIdentity } from "./chart-history-identity"
 
 interface UseChartHistoryOptions {
   ticker: string
@@ -46,6 +47,7 @@ export function useChartHistory({
   seedDailyBars = [],
   preparedInitial = null,
 }: UseChartHistoryOptions) {
+  const requestedKey = chartHistoryIdentity(ticker, timeframe)
   const exactPrepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
   const seedBars = useMemo(
     () => deriveChartBarsFromDailySeed(seedDailyBars, timeframe),
@@ -53,6 +55,7 @@ export function useChartHistory({
   )
   const hasUsableDailySeed = seedBars.length > 0
   const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? seedBars)
+  const [stateKey, setStateKey] = useState(requestedKey)
   const [loading, setLoading] = useState(() => !exactPrepared && !hasUsableDailySeed)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +67,7 @@ export function useChartHistory({
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(() => exactPrepared?.result.metadata?.lastUpdatedAt ?? exactPrepared?.result.generatedAt ?? null)
 
   const barsRef = useRef(bars)
+  const stateKeyRef = useRef(requestedKey)
   const generationRef = useRef(0)
   const olderRequestRef = useRef(false)
   const horizonToRef = useRef<number | null>(null)
@@ -78,6 +82,8 @@ export function useChartHistory({
     const controller = new AbortController()
     const prepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
     const initialBars = prepared?.result.bars ?? seedBars
+    stateKeyRef.current = requestedKey
+    setStateKey(requestedKey)
     barsRef.current = initialBars
     historyCursorRef.current = prepared?.range.from ?? null
     setBars(initialBars)
@@ -137,10 +143,10 @@ export function useChartHistory({
       })
 
     return () => controller.abort()
-  }, [hasUsableDailySeed, preparedInitial, seedBars, seedDailyBars, ticker, timeframe])
+  }, [hasUsableDailySeed, preparedInitial, requestedKey, seedBars, seedDailyBars, ticker, timeframe])
 
   const loadOlder = useCallback(async () => {
-    if (olderRequestRef.current || !hasMore) return
+    if (stateKeyRef.current !== requestedKey || olderRequestRef.current || !hasMore) return
     const cursor = historyCursorRef.current ?? barsRef.current[0]?.time
     const horizonTo = horizonToRef.current
     if (!cursor || !horizonTo) {
@@ -176,19 +182,39 @@ export function useChartHistory({
       if (generationRef.current === generation) setLoadingOlder(false)
       olderRequestRef.current = false
     }
-  }, [hasMore, ticker, timeframe])
+  }, [hasMore, requestedKey, ticker, timeframe])
+
+  const targetBars = exactPrepared?.result.bars ?? seedBars
+  const targetLoading = !exactPrepared && !hasUsableDailySeed
+  const targetCoverage = exactPrepared?.result.coverage ?? null
+  const targetLastUpdatedAt = exactPrepared?.result.metadata?.lastUpdatedAt ?? exactPrepared?.result.generatedAt ?? null
+  const targetHasMore = exactPrepared
+    ? exactPrepared.range.from > chartHistoryFloor(timeframe, exactPrepared.range.to) + 1
+    : hasUsableDailySeed
+      ? (() => {
+          const horizonTo = seedDailyBars.at(-1)?.time ?? seedBars.at(-1)?.time ?? null
+          const historyCursor = seedDailyBars.at(0)?.time ?? seedBars.at(0)?.time ?? null
+          return Boolean(
+            horizonTo
+            && historyCursor
+            && historyCursor > chartHistoryFloor(timeframe, horizonTo) + 1,
+          )
+        })()
+      : true
+  const renderKeyMatches = stateKey === requestedKey
+  const renderBars = renderBarsForChartIdentity(stateKey, requestedKey, bars, targetBars)
 
   return {
-    bars,
-    loading,
-    loadingOlder,
-    error,
-    coverage,
-    hasMore,
+    bars: renderBars,
+    loading: renderKeyMatches ? loading : targetLoading,
+    loadingOlder: renderKeyMatches ? loadingOlder : false,
+    error: renderKeyMatches ? error : null,
+    coverage: renderKeyMatches ? coverage : targetCoverage,
+    hasMore: renderKeyMatches ? hasMore : targetHasMore,
     loadOlder,
     liveState,
     liveError,
     liveProvider,
-    lastUpdatedAt,
+    lastUpdatedAt: renderKeyMatches ? lastUpdatedAt : targetLastUpdatedAt,
   }
 }

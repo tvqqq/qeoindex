@@ -11,6 +11,10 @@ import {
   fingerprintOhlcvPrefix,
 } from "../components/stock-detail/chart/chart-render-diff.ts"
 import {
+  chartHistoryIdentity,
+  renderBarsForChartIdentity,
+} from "../components/stock-detail/chart/chart-history-identity.ts"
+import {
   canonicalPaneGeometry,
   drawablePaneBudget,
 } from "../components/stock-detail/chart/chart-pane-geometry.ts"
@@ -94,6 +98,29 @@ test("corrected prior candle forces a full render instead of latest-only update"
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
   assert.match(chartCode, /canIncrementallyUpdateLatest\(previous, displayBars\)/)
   assert.match(chartCode, /barFingerprint/)
+})
+
+test("chart history identity never exposes the previous timeframe family during reset", () => {
+  const daily = [{ timeframe: "1D", time: 1 }]
+  const weekly = [{ timeframe: "1W", time: 7 }]
+  const monthly = [{ timeframe: "1M", time: 30 }]
+
+  let committedKey = chartHistoryIdentity("VIC", "1D")
+  let committedBars = daily
+  for (const [timeframe, targetBars] of [["1W", weekly], ["1M", monthly], ["1D", daily]] as const) {
+    const requestedKey = chartHistoryIdentity("VIC", timeframe)
+    const rendered = renderBarsForChartIdentity(committedKey, requestedKey, committedBars, targetBars)
+    assert.deepEqual(rendered, targetBars, `${timeframe} must render its own family before layout reset commits`)
+    assert.notEqual(rendered, committedBars)
+    committedKey = requestedKey
+    committedBars = targetBars
+  }
+
+  assert.deepEqual(
+    renderBarsForChartIdentity(committedKey, chartHistoryIdentity("VIC", "1W"), committedBars, []),
+    [],
+    "an unprepared target must render an empty/loading state, never stale bars",
+  )
 })
 
 test("coordinate bridge interpolates missing anchors and keeps pointer work logarithmic", () => {
