@@ -159,6 +159,16 @@ test("restore staging helper downloads only into quarantine and never promotes",
   assert.doesNotMatch(restoreStage, /systemctl (?:start|enable)|rsync .*\/opt|qeo-restore-host/)
 })
 
+test("restore runbook validates SQLite through disposable copies without mutating quarantine", () => {
+  const runbook = source("docs/operations/upcloud-restic-restore.md")
+  assert.match(runbook, /without opening the manifest-controlled quarantine files directly/i)
+  assert.match(runbook, /mktemp -d \/var\/tmp\/qeo-sqlite-check\.XXXXXX/)
+  assert.match(runbook, /cp -p -- "\$db" "\$check_dir\/\$base"/)
+  assert.match(runbook, /for suffix in -wal -shm -journal/)
+  assert.match(runbook, /sqlite3 "\$check_dir\/\$base" 'PRAGMA integrity_check;'/)
+  assert.match(runbook, /sha256sum --check qeo-backup-manifest\.sha256/)
+})
+
 test("restore helper is quarantine-only, allowlisted, and fail-closed", () => {
   const restore = source("ops/upcloud/restic/restore-host.sh")
   assert.match(restore, /--from/)

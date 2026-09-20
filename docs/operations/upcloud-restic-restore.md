@@ -235,7 +235,48 @@ Required checks:
 - representative source/restore hashes match backup-drill expectations when recorded;
 - restored permissions are compatible with the expected live ownership/modes.
 
-If a restored Hermes SQLite database is present, run an integrity check against the staged copy before it is promoted. Do not start Hermes against an unchecked restored SQLite file.
+If restored Hermes SQLite databases are present, validate them **without opening the manifest-controlled quarantine files directly**. Opening a SQLite database can create, checkpoint, truncate, or remove adjacent `-wal` / `-shm` files even when the intended operation is only `PRAGMA integrity_check`, which invalidates the backup manifest.
+
+Use disposable verification copies instead:
+
+```bash
+SQLITE_CHECK_ROOT="$(mktemp -d /var/tmp/qeo-sqlite-check.XXXXXX)"
+trap 'rm -rf -- "$SQLITE_CHECK_ROOT"' EXIT
+
+index=0
+while IFS= read -r db; do
+  index=$((index + 1))
+  check_dir="$SQLITE_CHECK_ROOT/$index"
+  install -d -m 0700 "$check_dir"
+  base="$(basename "$db")"
+
+  cp -p -- "$db" "$check_dir/$base"
+  for suffix in -wal -shm -journal; do
+    [[ -f "${db}${suffix}" ]] && cp -p -- "${db}${suffix}" "$check_dir/${base}${suffix}"
+  done
+
+  result="$(sqlite3 "$check_dir/$base" 'PRAGMA integrity_check;')"
+  [[ "$result" == "ok" ]] || {
+    echo "SQLite integrity check failed for staged database copy: $db" >&2
+    exit 66
+  }
+done < <(
+  find "$RESTORE_ROOT/opt/hermes/data" -type f \
+    \( -name '*.sqlite' -o -name '*.sqlite3' -o -name '*.db' \) \
+    | sort
+)
+
+rm -rf -- "$SQLITE_CHECK_ROOT"
+trap - EXIT
+
+# Prove the quarantine tree remained byte-for-byte unchanged.
+(
+  cd "$RESTORE_ROOT"
+  sha256sum --check qeo-backup-manifest.sha256 >/dev/null
+)
+```
+
+Do not start Hermes against an unchecked restored SQLite file, and do not promote if the manifest fails after validation.
 
 The metadata contract version must be `1`. Stop on an unsupported version.
 
