@@ -158,7 +158,7 @@ sudo chown root:root /etc/restic/qeoindex/repository-password /etc/restic/qeoind
 sudo chmod 0600 /etc/restic/qeoindex/repository-password /etc/restic/qeoindex/runtime.env
 ```
 
-`runtime.env` must expose only the variables required by Restic's S3-compatible backend and QEO-202 heartbeat integration. Do not `cat`, `env`, `set -x`, `printenv` or otherwise dump it.
+`runtime.env` must expose only the variables required by Restic's S3-compatible backend and QEO-202 heartbeat integration. A replacement host may also set non-secret snapshot identity variables `QEO_RESTIC_BACKUP_HOST` and `QEO_RESTIC_BACKUP_TAG`; if omitted, both retain the historical `qeo-upcloud-operational` default for backward compatibility. Do not `cat`, `env`, `set -x`, `printenv` or otherwise dump it.
 
 Load the credential file only in the root recovery shell and set the Restic repository/password-file variables using the deployed QEO-202 configuration. Never embed credential values in command arguments.
 
@@ -390,6 +390,8 @@ Recommended order:
 4. QeoIndex EOD worker manual smoke path;
 5. monitoring/backup support services.
 
+The backup helper supports exactly one Hermes gateway in either system-service or per-user systemd topology. If zero or multiple Hermes gateway units are discoverable across those scopes, backup must fail closed rather than guessing which runtime to quiesce.
+
 For every service:
 
 - start manually;
@@ -431,12 +433,13 @@ After the replacement host is operational:
 
 1. revoke the temporary R2 restore credential;
 2. provision the normal least-privilege backup credential for the new host;
-3. run one fresh backup using the deployed QEO-202 backup service;
-4. verify a new snapshot appears with host/tag `qeo-upcloud-operational`;
-5. verify the external backup success heartbeat;
-6. record backup runtime and size;
-7. remove `/var/tmp/qeo-restore/<snapshot-id>` after recovery evidence is captured and no further inspection is needed;
-8. verify no temporary plaintext recovery/staging copy remains.
+3. set a semantic replacement-host snapshot identity when the recovered host is not UpCloud, for example `QEO_RESTIC_BACKUP_HOST=qeo-onidel-operational` and `QEO_RESTIC_BACKUP_TAG=qeo-onidel-operational`;
+4. run one fresh backup using the deployed QEO-202 backup service;
+5. verify a new snapshot appears with the configured host/tag;
+6. verify the external backup success heartbeat;
+7. record backup runtime and size;
+8. remove `/var/tmp/qeo-restore/<snapshot-id>` after recovery evidence is captured and no further inspection is needed;
+9. verify no temporary plaintext recovery/staging copy remains.
 
 Do not delete the original Restic repository history as part of normal host replacement.
 
