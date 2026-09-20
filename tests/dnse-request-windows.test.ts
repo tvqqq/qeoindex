@@ -274,6 +274,35 @@ test("QEO-225 exposes the worker relay on loopback only and keeps existing marke
   assert.match(stopTimer, /Persistent=true/)
 })
 
+test("QEO-254 keeps the Onidel public edge canonical, hardened, and loopback-upstream only", () => {
+  const caddyPath = "services/market-realtime-worker/deploy/onidel/Caddyfile.qeo-realtime.onidel"
+  const composePath = "services/market-realtime-worker/deploy/onidel/docker-compose.realtime-edge.onidel.yml"
+
+  for (const path of [caddyPath, composePath]) {
+    assert.equal(existsSync(path), true, `missing Onidel realtime edge artifact: ${path}`)
+  }
+
+  const caddy = readFileSync(caddyPath, "utf8")
+  const compose = readFileSync(composePath, "utf8")
+
+  assert.match(caddy, /^realtime\.qeoqeo\.com\s*\{/m)
+  assert.match(caddy, /bind\s+216\.176\.238\.116/)
+  assert.match(caddy, /reverse_proxy\s+127\.0\.0\.1:8790/)
+  assert.doesNotMatch(caddy, /reverse_proxy\s+(?!127\.0\.0\.1)/)
+
+  assert.match(compose, /image:\s*caddy:2\.11\.4-alpine/)
+  assert.match(compose, /restart:\s*unless-stopped/)
+  assert.match(compose, /network_mode:\s*host/)
+  assert.match(compose, /read_only:\s*true/)
+  assert.match(compose, /no-new-privileges:true/)
+  assert.match(compose, /cap_drop:[\s\S]*- ALL/)
+  assert.match(compose, /cap_add:[\s\S]*- NET_BIND_SERVICE/)
+  assert.match(compose, /\/opt\/qeoindex\/deploy\/Caddyfile\.qeo-realtime\.onidel:\/etc\/caddy\/Caddyfile:ro/)
+  assert.match(compose, /qeo-realtime-caddy-data:\/data/)
+  assert.match(compose, /qeo-realtime-caddy-config:\/config/)
+  assert.doesNotMatch(compose, /env_file:|environment:/)
+})
+
 test("QEO-225 removes browser-direct provider orderbook transport and Supabase Broadcast hot path", () => {
   const transportPath = "modules/market/providers/dnse/orderbook-stream.ts"
   assert.equal(existsSync(transportPath), true, "centralized orderbook transport must exist")
