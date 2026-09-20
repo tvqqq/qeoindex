@@ -193,6 +193,15 @@ test("restore helper is quarantine-only, allowlisted, and fail-closed", () => {
     /local rel_dir="\$1"[^\n]*live_dir="\/\$rel_dir"/,
     "set -u requires live_dir to be initialized after rel_dir",
   )
+  assert.match(restore, /require_identity hermes hermes/)
+  assert.match(restore, /require_identity qeo qeo/)
+  assert.match(restore, /semantic_reown_nonroot/)
+  assert.match(restore, /find "\$live" -xdev -mindepth 1 ! -uid 0 -exec chown -h "\$user:\$group"/)
+  assert.match(restore, /find "\$live" -xdev -mindepth 1 -uid 0 ! -gid 0 -print -quit/)
+  assert.match(restore, /promote_dir opt\/hermes\/data hermes hermes/)
+  assert.match(restore, /promote_dir opt\/hermes\/deploy hermes hermes/)
+  assert.match(restore, /promote_dir opt\/qeoindex\/deploy qeo qeo/)
+  assert.doesNotMatch(restore, /chown -R/)
   assert.doesNotMatch(restore, /systemctl (?:start|enable)/)
   assert.doesNotMatch(restore, /\/opt\/qeoindex\/env\//)
 })
