@@ -207,16 +207,28 @@ test("QEO-196 keeps the bounded Go worker runtime foundation", () => {
 test("QEO-225 exposes the worker relay on loopback only and keeps existing market timers", () => {
   const dockerfilePath = "services/market-realtime-worker/Dockerfile"
   const composePath = "services/market-realtime-worker/deploy/upcloud/docker-compose.upcloud.yml"
+  const opsComposePath = "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml"
+  const envExamplePath = "services/market-realtime-worker/.env.example"
   const servicePath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime.service"
   const startTimerPath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime-start.timer"
   const stopTimerPath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime-stop.timer"
 
-  for (const path of [dockerfilePath, composePath, servicePath, startTimerPath, stopTimerPath]) {
+  for (const path of [
+    dockerfilePath,
+    composePath,
+    opsComposePath,
+    envExamplePath,
+    servicePath,
+    startTimerPath,
+    stopTimerPath,
+  ]) {
     assert.equal(existsSync(path), true, `missing UpCloud artifact: ${path}`)
   }
 
   const dockerfile = readFileSync(dockerfilePath, "utf8")
   const compose = readFileSync(composePath, "utf8")
+  const opsCompose = readFileSync(opsComposePath, "utf8")
+  const envExample = readFileSync(envExamplePath, "utf8")
   const service = readFileSync(servicePath, "utf8")
   const startTimer = readFileSync(startTimerPath, "utf8")
   const stopTimer = readFileSync(stopTimerPath, "utf8")
@@ -226,8 +238,34 @@ test("QEO-225 exposes the worker relay on loopback only and keeps existing marke
   assert.match(compose, /mem_limit:\s*384m/i)
   assert.match(compose, /cpus:\s*["']?0\.[0-9]+/i)
   assert.match(compose, /\/opt\/qeoindex\/env\/market-realtime-worker\.env/)
-  assert.match(compose, /127\.0\.0\.1:8787:8787/)
-  assert.doesNotMatch(compose, /["']0\.0\.0\.0:8787:8787["']/)
+  const portsBlock = compose.match(/^    ports:[ \t]*\n((?:^      -[^\n]*(?:\n|$))+)/m)?.[1]
+  assert.ok(portsBlock, "worker relay must declare a Compose ports block")
+  const workerPublishedPorts = [...portsBlock.matchAll(/^[ \t]*-[ \t]*(?:"([^"]+)"|'([^']+)'|([^ \t#]+))/gm)]
+    .map(([, doubleQuoted, singleQuoted, bare]) => doubleQuoted ?? singleQuoted ?? bare)
+  assert.deepEqual(
+    workerPublishedPorts,
+    ["127.0.0.1:8790:8787"],
+    "worker relay must publish exactly one loopback mapping; unqualified, wildcard, IPv6, and extra ports are forbidden",
+  )
+  const workerPort = workerPublishedPorts[0]?.match(/^127\.0\.0\.1:(\d+):(\d+)$/)
+  const opsPort = opsCompose.match(/["']127\.0\.0\.1:(\d+):(\d+)["']/)
+  assert.ok(workerPort, "worker relay must publish one loopback port")
+  assert.ok(opsPort, "ops-dashboard must publish one loopback port")
+  assert.equal(workerPort[1], "8790", "worker relay host port must not collide with ops-dashboard")
+  assert.equal(workerPort[2], "8787", "worker relay container port must remain 8787")
+  assert.equal(opsPort[1], "8787", "ops-dashboard owns host loopback port 8787")
+  assert.equal(opsPort[2], "8787", "ops-dashboard container port must remain 8787")
+  assert.notEqual(workerPort[1], opsPort[1], "worker and ops-dashboard host ports must differ")
+  assert.doesNotMatch(compose, /0\.0\.0\.0:/, "worker relay must not bind a public host interface")
+  assert.match(envExample, /^# QEO-225 authenticated browser relay\. Never commit the real signing secret\.$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_SIGNING_SECRET=$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_ALLOWED_ORIGINS=https:\/\/example\.com$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_LISTEN_ADDR=:8787$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_AUTH_TIMEOUT_MS=5000$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_PING_MS=15000$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_SEND_QUEUE=64$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_MARKET_FLUSH_MS=100$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS=50$/m)
   assert.match(service, /WorkingDirectory=\/opt\/qeoindex\/repo\/services\/market-realtime-worker/)
   assert.match(service, /--no-build/)
   assert.match(startTimer, /01:55:00\s+UTC/)
