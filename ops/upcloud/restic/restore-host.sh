@@ -41,7 +41,8 @@ promote_dir() {
   rsync -a "$RESTORE_ROOT/$rel/" "$live/"
 }
 promote_file_glob() {
-  local rel_dir="$1" pattern="$2" mode="$3" live_dir="/$rel_dir"
+  local rel_dir="$1" pattern="$2" mode="$3"
+  local live_dir="/$rel_dir"
   [[ -d "$RESTORE_ROOT/$rel_dir" ]] || return 0
   install -d -m 0755 "$live_dir"
   local src
