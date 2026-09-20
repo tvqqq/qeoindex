@@ -26,7 +26,7 @@ heartbeat_start "${QEO_RESTIC_MAINTENANCE_HEARTBEAT_URL:-}" || true
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then heartbeat_fail "${QEO_RESTIC_MAINTENANCE_HEARTBEAT_URL:-}" || true; fi; exit $rc' EXIT
 
 restic check
-RETENTION=(--keep-daily 14 --keep-weekly 8 --keep-monthly 6 --group-by paths,tags --tag qeo-upcloud-operational)
+RETENTION=(--keep-daily 14 --keep-weekly 8 --keep-monthly 6 --group-by paths,tags --tag "$QEO_RESTIC_BACKUP_TAG")
 if [[ "$MODE" == dry-run ]]; then
   restic forget "${RETENTION[@]}" --dry-run
 else
