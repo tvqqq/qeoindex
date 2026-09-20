@@ -107,7 +107,10 @@ Confirm:
 - SSH access is stable;
 - unexpected public ports are absent;
 - enough disk space exists for repository restore staging;
+- the dedicated `hermes:hermes` and `qeo:qeo` service identities already exist on the replacement host;
 - no QeoIndex/Hermes production timers are active yet.
+
+Do not reuse source-host numeric UID/GID values as identity authority. Replacement hosts can legitimately assign the same numeric IDs to different account names. The promotion helper therefore requires semantic service accounts before copying live state.
 
 If any of those assumptions are false, stop and resolve them before recovery.
 
@@ -312,8 +315,9 @@ The helper consumes the already-restored quarantine tree. It does not choose/dow
 Expected helper responsibilities:
 
 - verify restore-root safety and manifest/version;
-- restore Hermes deploy/state;
-- restore QeoIndex host-only deploy state when present;
+- restore Hermes deploy/state, then normalize every non-root entry under those service paths to `hermes:hermes`;
+- restore QeoIndex host-only deploy state when present, then normalize every non-root entry there to `qeo:qeo`;
+- preserve root-owned entries only when their group is also root; stop for manual review if a root-owned entry carries an ambiguous non-root numeric group;
 - install approved QeoIndex systemd units and root-owned wrappers;
 - run `systemctl daemon-reload`;
 - leave SSH/UFW/sudoers/Docker daemon copies as reference-only material for manual review;
