@@ -174,6 +174,15 @@ test("restore helper is quarantine-only, allowlisted, and fail-closed", () => {
   assert.match(restore, /WAIT.*Hermes embedded credentials/i)
   assert.match(restore, /promote_file_glob usr\/local\/bin .*0750/)
   assert.match(restore, /promote_file_glob usr\/local\/sbin .*0750/)
+  assert.match(
+    restore,
+    /local rel_dir="\$1" pattern="\$2" mode="\$3"\n\s+local live_dir="\/\$rel_dir"/,
+  )
+  assert.doesNotMatch(
+    restore,
+    /local rel_dir="\$1"[^\n]*live_dir="\/\$rel_dir"/,
+    "set -u requires live_dir to be initialized after rel_dir",
+  )
   assert.doesNotMatch(restore, /systemctl (?:start|enable)/)
   assert.doesNotMatch(restore, /\/opt\/qeoindex\/env\//)
 })
