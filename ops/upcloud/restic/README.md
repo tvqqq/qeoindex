@@ -9,3 +9,10 @@ This package implements the approved encrypted operational-state backup contract
 - `install.sh` installs root-owned artifacts but leaves both timers disabled.
 
 Runtime credentials live only under `/etc/restic/qeoindex/` and are never committed. See `docs/operations/upcloud-restic-restore.md` for replacement-VPS recovery.
+
+
+## Replacement-host identity
+
+Fresh replacement hosts may set `QEO_RESTIC_BACKUP_HOST` and `QEO_RESTIC_BACKUP_TAG` in the root-only runtime env. Both default to `qeo-upcloud-operational` for backward compatibility. Use a semantic identity such as `qeo-onidel-operational` after a provider migration.
+
+Backup discovery supports exactly one Hermes gateway across system or per-user systemd. Zero or multiple discovered gateways are a hard failure; the helper never guesses which runtime to quiesce.

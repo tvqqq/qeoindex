@@ -52,8 +52,8 @@ build_stage "$STAGE_ROOT"
   cd "$STAGE_ROOT"
   printf 'contract_version=1\ncreated_utc=%s\nsource_host=%s\n' "$(date -u +%FT%TZ)" "$(hostname)" > qeo-backup-metadata.txt
   find . -type f ! -name qeo-backup-manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > qeo-backup-manifest.sha256
-  restic backup . --host qeo-upcloud-operational --tag qeo-upcloud-operational
+  restic backup . --host "$QEO_RESTIC_BACKUP_HOST" --tag "$QEO_RESTIC_BACKUP_TAG"
 )
-restic snapshots --latest 1 --host qeo-upcloud-operational --tag qeo-upcloud-operational >/dev/null
+restic snapshots --latest 1 --host "$QEO_RESTIC_BACKUP_HOST" --tag "$QEO_RESTIC_BACKUP_TAG" >/dev/null
 BACKUP_OK=1
 heartbeat_success "${QEO_RESTIC_BACKUP_HEARTBEAT_URL:-}" || true
