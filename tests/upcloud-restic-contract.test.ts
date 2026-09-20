@@ -39,6 +39,8 @@ test("QEO-202 committed secret example contains names only", () => {
     "AWS_SECRET_ACCESS_KEY",
     "QEO_RESTIC_BACKUP_HEARTBEAT_URL",
     "QEO_RESTIC_MAINTENANCE_HEARTBEAT_URL",
+    "QEO_RESTIC_BACKUP_HOST",
+    "QEO_RESTIC_BACKUP_TAG",
   ]) assert.match(example, new RegExp(`^${name}=$`, "m"))
 })
 
@@ -52,6 +54,15 @@ test("common runtime preflight is root-only and never dumps secrets", () => {
   assert.match(common, /RESTIC_PASSWORD_FILE/)
   assert.match(common, /AWS_ACCESS_KEY_ID/)
   assert.match(common, /AWS_SECRET_ACCESS_KEY/)
+  assert.match(common, /QEO_RESTIC_BACKUP_HOST:-qeo-upcloud-operational/)
+  assert.match(common, /QEO_RESTIC_BACKUP_TAG:-qeo-upcloud-operational/)
+  assert.match(common, /systemctl list-unit-files 'hermes-gateway-\*\.service'/)
+  assert.match(common, /systemctl --user list-unit-files 'hermes-gateway-\*\.service'/)
+  assert.match(common, /sed 's\/\^\/system\|\/'/)
+  assert.match(common, /sed 's\/\^\/user\|\/'/)
+  assert.match(common, /hermes_gateway_systemctl/)
+  assert.match(common, /system\) systemctl "\$action" "\$unit"/)
+  assert.match(common, /user\) hermes_user_systemctl "\$action" "\$unit"/)
   assert.doesNotMatch(common, /set -x|printenv/)
 })
 
@@ -93,7 +104,8 @@ test("daily backup quiesces Hermes only for staging and backs up a relative tree
   assert.match(backup, /hermes_gateway_start/)
   assert.doesNotMatch(backup, /docker compose/)
   assert.match(backup, /hermes_gateway_stop "\$HERMES_UNIT"[\s\S]*HERMES_STOPPED=1[\s\S]*stage_hermes_data "\$STAGE_ROOT"[\s\S]*restart_hermes_if_needed[\s\S]*build_stage "\$STAGE_ROOT"[\s\S]*restic backup \./)
-  assert.match(backup, /restic backup \. --host qeo-upcloud-operational --tag qeo-upcloud-operational/)
+  assert.match(backup, /restic backup \. --host "\$QEO_RESTIC_BACKUP_HOST" --tag "\$QEO_RESTIC_BACKUP_TAG"/)
+  assert.match(backup, /restic snapshots --latest 1 --host "\$QEO_RESTIC_BACKUP_HOST" --tag "\$QEO_RESTIC_BACKUP_TAG"/)
   assert.match(backup, /qeo-backup-manifest\.sha256/)
   assert.match(backup, /qeo-backup-metadata\.txt/)
   assert.match(backup, /trap .*EXIT/)
@@ -109,7 +121,7 @@ test("maintenance supports one-time init and keeps scheduled retention check-fir
   assert.match(maintenance, /--keep-weekly 8/)
   assert.match(maintenance, /--keep-monthly 6/)
   assert.match(maintenance, /--group-by paths,tags/)
-  assert.match(maintenance, /--tag qeo-upcloud-operational/)
+  assert.match(maintenance, /--tag "\$QEO_RESTIC_BACKUP_TAG"/)
   assert.match(maintenance, /dry-run/)
   assert.match(maintenance, /--dry-run/)
   assert.match(maintenance, /apply/)
