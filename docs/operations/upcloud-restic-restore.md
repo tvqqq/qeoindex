@@ -78,6 +78,7 @@ Use these recovery-only locations:
 /var/tmp/qeo-restore/             temporary restored snapshots
 /opt/qeoindex/repo/               fresh GitHub checkout
 /opt/qeoindex/env/                independently provisioned runtime secrets
+/opt/qeoindex/state/beszel/       restored Beszel monitoring history/config when present
 /opt/hermes/data/                 restored Hermes persistent state
 /opt/hermes/deploy/               restored Hermes deployment state
 ```
@@ -317,6 +318,7 @@ Expected helper responsibilities:
 - verify restore-root safety and manifest/version;
 - restore Hermes deploy/state, then normalize every non-root entry under those service paths to `hermes:hermes`;
 - restore QeoIndex host-only deploy state when present, then normalize every non-root entry there to `qeo:qeo`;
+- restore Beszel persistent state under `/opt/qeoindex/state/beszel` as `root:root` when present; the Agent `KEY/TOKEN` env is never restored and must be provisioned independently;
 - preserve root-owned entries only when their group is also root; stop for manual review if a root-owned entry carries an ambiguous non-root numeric group;
 - install approved QeoIndex systemd units and root-owned wrappers;
 - run `systemctl daemon-reload`;
@@ -337,6 +339,8 @@ Recreate QeoIndex runtime secrets independently under:
 Use the existing project contract: real production env files are host-side secret files, not Git or Restic state.
 
 Verify only filenames, owners and modes. Do not print values.
+
+Beszel Agent credentials are part of this independent secret provisioning contract. If Beszel state was restored, recreate `/opt/qeoindex/env/beszel-agent.env` from a fresh/approved Hub system credential before starting `qeo-beszel.service`.
 
 Typical permission check:
 

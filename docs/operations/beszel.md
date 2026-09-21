@@ -72,7 +72,7 @@ Agent secrets live only in:
 
 The real `KEY` and `TOKEN`, Telegram bot token/chat identifier, SSH material, Supabase credentials, and unrelated QeoIndex secrets must not be committed or exposed to browsers.
 
-QEO-202 should review Beszel persistent state for backup coverage. It should not back up the runtime Unix socket.
+QEO-202 backs up `/opt/qeoindex/state/beszel` as host-only operational state. The backup helper quiesces `qeo-beszel.service` only for the staging copy so PocketBase SQLite/WAL files are consistent, then restarts monitoring before upload. The runtime Unix socket and `/opt/qeoindex/env/beszel-agent.env` remain excluded.
 
 ## Authentication and downstream contract
 

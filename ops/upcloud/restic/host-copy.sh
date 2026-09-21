@@ -26,6 +26,14 @@ stage_hermes_data() {
   copy_dir "$stage" /opt/hermes/data
 }
 
+stage_beszel_data() {
+  local stage="$1"
+  [[ "$stage" == /var/lib/qeo-backup/stage/* ]] || { echo "Unsafe stage root" >&2; return 64; }
+  [[ -d /opt/qeoindex/state/beszel ]] || return 0
+  install -d -m 0700 "$stage"
+  copy_dir "$stage" /opt/qeoindex/state/beszel
+}
+
 build_stage() {
   local stage="$1"
   [[ "$stage" == /var/lib/qeo-backup/stage/* ]] || { echo "Unsafe stage root" >&2; return 64; }
@@ -49,6 +57,7 @@ build_stage() {
   copy_file "$stage" /etc/sudoers.d/hermes-qeo
   copy_file "$stage" /etc/docker/daemon.json
 
-  # Explicit non-sources: /opt/qeoindex/env, /etc/ssh/ssh_host_*, /var/lib/docker,
-  # repository source, logs, caches, database dumps, and arbitrary home state.
+  # Explicit non-sources: /opt/qeoindex/env (including Beszel Agent KEY/TOKEN),
+  # /etc/ssh/ssh_host_*, /var/lib/docker, repository source, logs, caches,
+  # canonical database dumps, and arbitrary home state.
 }
