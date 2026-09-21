@@ -75,6 +75,7 @@ require_identity qeo qeo
 promote_dir opt/hermes/data hermes hermes
 promote_dir opt/hermes/deploy hermes hermes
 promote_dir opt/qeoindex/deploy qeo qeo
+promote_dir opt/qeoindex/state/beszel root root
 promote_file_glob etc/systemd/system 'qeo-*.service' 0644
 promote_file_glob etc/systemd/system 'qeo-*.timer' 0644
 promote_file_glob usr/local/bin 'qeo-*' 0750
