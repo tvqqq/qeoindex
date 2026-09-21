@@ -1,6 +1,12 @@
 import { sleep } from "workflow"
 
-import { runScannerUniverse } from "@/modules/signals/scanner/runner"
+import {
+  finalizeScannerRun,
+  prepareScannerRun,
+  runScannerBatch,
+  type ScannerBatchSummary,
+  type ScannerRunPlan,
+} from "@/modules/signals/scanner/runner"
 import { runSignalMonitor } from "@/modules/signals/monitor"
 import {
   failSignalsDailyRunStep,
@@ -9,9 +15,57 @@ import {
   updateSignalsDailyStageStep,
 } from "@/modules/signals/daily-telemetry"
 
-async function refreshDailyScannerStep() {
+const DAILY_SCANNER_BATCH_SIZE = 25
+const DAILY_SCANNER_MAX_ATTEMPTS = 4
+const DAILY_SCANNER_RETRY_DELAYS = ["5s", "10s", "20s"] as const
+
+type ScannerPlanAttempt =
+  | { ok: true; plan: ScannerRunPlan }
+  | { ok: false; error: string }
+
+type ScannerBatchAttempt =
+  | { ok: true; batch: ScannerBatchSummary }
+  | { ok: false; error: string }
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function retryDelay(attempt: number) {
+  return DAILY_SCANNER_RETRY_DELAYS[Math.min(attempt - 1, DAILY_SCANNER_RETRY_DELAYS.length - 1)]
+}
+
+async function prepareDailyScannerAttemptStep(): Promise<ScannerPlanAttempt> {
   "use step"
-  return runScannerUniverse()
+  try {
+    return { ok: true, plan: await prepareScannerRun() }
+  } catch (error) {
+    return { ok: false, error: errorMessage(error).slice(0, 1000) }
+  }
+}
+
+prepareDailyScannerAttemptStep.maxRetries = 0
+
+async function refreshDailyScannerBatchAttemptStep(
+  plan: ScannerRunPlan,
+  offset: number,
+): Promise<ScannerBatchAttempt> {
+  "use step"
+  try {
+    return {
+      ok: true,
+      batch: await runScannerBatch(plan, { offset, limit: DAILY_SCANNER_BATCH_SIZE }),
+    }
+  } catch (error) {
+    return { ok: false, error: errorMessage(error).slice(0, 1000) }
+  }
+}
+
+refreshDailyScannerBatchAttemptStep.maxRetries = 0
+
+async function finalizeDailyScannerStep(plan: ScannerRunPlan, batches: ScannerBatchSummary[]) {
+  "use step"
+  return finalizeScannerRun(plan, batches)
 }
 
 async function monitorSignalStep() {
@@ -32,6 +86,88 @@ function vietnamDateKey(iso: string) {
 
 function atVietnamTime(dateKey: string, hour: number, minute: number, second = 0) {
   return new Date(`${dateKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}+07:00`)
+}
+
+async function prepareDailyScanner(runId: string) {
+  let lastError = "unknown scanner preparation error"
+
+  for (let attempt = 1; attempt <= DAILY_SCANNER_MAX_ATTEMPTS; attempt += 1) {
+    const result = await prepareDailyScannerAttemptStep()
+    if (result.ok) return result.plan
+
+    lastError = result.error
+    await updateSignalsDailyStageStep(runId, "SCANNER", {
+      scanner: {
+        phase: "prepare",
+        attempt,
+        maxAttempts: DAILY_SCANNER_MAX_ATTEMPTS,
+        error: lastError,
+      },
+    })
+    if (attempt < DAILY_SCANNER_MAX_ATTEMPTS) await sleep(retryDelay(attempt))
+  }
+
+  throw new Error(`Daily scanner prepare failed after ${DAILY_SCANNER_MAX_ATTEMPTS} attempts: ${lastError}`)
+}
+
+async function runDailyScannerBatches(runId: string, plan: ScannerRunPlan) {
+  const batches: ScannerBatchSummary[] = []
+  const totalBatches = Math.ceil(plan.targets.length / DAILY_SCANNER_BATCH_SIZE)
+
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+    const offset = batchIndex * DAILY_SCANNER_BATCH_SIZE
+    let lastError = "unknown scanner batch error"
+    let batch: ScannerBatchSummary | null = null
+
+    for (let attempt = 1; attempt <= DAILY_SCANNER_MAX_ATTEMPTS; attempt += 1) {
+      const result = await refreshDailyScannerBatchAttemptStep(plan, offset)
+      if (result.ok) {
+        batch = result.batch
+        break
+      }
+
+      lastError = result.error
+      await updateSignalsDailyStageStep(runId, "SCANNER", {
+        scanner: {
+          phase: "batch_retry",
+          batch: batchIndex + 1,
+          totalBatches,
+          offset,
+          attempt,
+          maxAttempts: DAILY_SCANNER_MAX_ATTEMPTS,
+          error: lastError,
+        },
+      })
+      if (attempt < DAILY_SCANNER_MAX_ATTEMPTS) await sleep(retryDelay(attempt))
+    }
+
+    if (!batch) {
+      throw new Error(
+        `Daily scanner batch ${batchIndex + 1}/${totalBatches} failed after ${DAILY_SCANNER_MAX_ATTEMPTS} attempts: ${lastError}`,
+      )
+    }
+
+    batches.push(batch)
+    const completed = batches.reduce((sum, item) => sum + item.completed.length, 0)
+    const skipped = batches.reduce((sum, item) => sum + item.skipped.length, 0)
+    const errors = batches.reduce((sum, item) => sum + item.errors.length, 0)
+    const processed = batches.reduce((sum, item) => sum + item.requested, 0)
+
+    await updateSignalsDailyStageStep(runId, "SCANNER", {
+      scanner: {
+        phase: "batch_complete",
+        batch: batchIndex + 1,
+        totalBatches,
+        processed,
+        total: plan.targets.length,
+        completed,
+        skipped,
+        errors,
+      },
+    })
+  }
+
+  return batches
 }
 
 export function nextSignalMonitorIntervalMinutes(openCount: number, bullishCandidates: number) {
@@ -59,7 +195,9 @@ export async function dailySignalWorkflow(startedAtIso: string) {
 
   try {
     const dateKey = vietnamDateKey(startedAtIso)
-    const scanner = await refreshDailyScannerStep()
+    const scannerPlan = await prepareDailyScanner(runId)
+    const scannerBatches = await runDailyScannerBatches(runId, scannerPlan)
+    const scanner = await finalizeDailyScannerStep(scannerPlan, scannerBatches)
     const scannerSummary = {
       requested: scanner.requested,
       completed: scanner.completed.length,
@@ -139,7 +277,7 @@ export async function dailySignalWorkflow(startedAtIso: string) {
 
     return result
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     await failSignalsDailyRunStep(runId, startedAtIso, message)
     throw error
   }

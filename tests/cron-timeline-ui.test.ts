@@ -186,12 +186,24 @@ test("manual recovery lane is backed by the dispatch allowlist, not manualPolicy
   assert.equal(timeline.totalManual, 0)
 })
 
-test("daily signals scans the full canonical universe instead of a positional Top50 subset", () => {
+test("daily signals scans the full canonical universe through bounded durable batches", () => {
   const workflow = source("workflows/daily-signal-workflow.ts")
   const scannerRunner = source("modules/signals/scanner/runner.ts")
 
-  assert.match(workflow, /return runScannerUniverse\(\)/)
-  assert.doesNotMatch(workflow, /runScannerUniverse\(\{\s*limit:\s*50/)
+  assert.match(workflow, /DAILY_SCANNER_BATCH_SIZE\s*=\s*25/)
+  assert.match(workflow, /DAILY_SCANNER_MAX_ATTEMPTS\s*=\s*4/)
+  assert.match(workflow, /prepareDailyScannerAttemptStep\.maxRetries\s*=\s*0/)
+  assert.match(workflow, /refreshDailyScannerBatchAttemptStep\.maxRetries\s*=\s*0/)
+  assert.match(workflow, /Math\.ceil\(plan\.targets\.length\s*\/\s*DAILY_SCANNER_BATCH_SIZE\)/)
+  assert.match(workflow, /runScannerBatch\(plan,\s*\{\s*offset,\s*limit:\s*DAILY_SCANNER_BATCH_SIZE\s*\}\)/)
+  assert.match(workflow, /Daily scanner batch .* failed after/)
+  assert.match(workflow, /updateSignalsDailyStageStep\(runId,\s*"SCANNER"/)
+  assert.doesNotMatch(workflow, /return runScannerUniverse\(\)/)
+
+  assert.match(scannerRunner, /Freeze membership \+ previous-scan evidence once per logical run/)
+  assert.match(scannerRunner, /previousResult:\s*rowToPreviousResult\(previousRow\)/)
+  assert.match(scannerRunner, /requested !== plan\.targets\.length/)
+  assert.match(scannerRunner, /await invalidateScannerDataCache\(\)/)
   assert.doesNotMatch(scannerRunner, /100 cache invalidations/)
 })
 
