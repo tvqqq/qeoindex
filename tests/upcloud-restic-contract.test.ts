@@ -74,6 +74,7 @@ test("host-copy stages only approved host state", () => {
     "/opt/hermes/data",
     "/opt/hermes/deploy",
     "/opt/qeoindex/deploy",
+    "/opt/qeoindex/state/beszel",
     "/etc/systemd/system/qeo-",
     "/usr/local/bin/qeo-",
     "/usr/local/sbin/qeo-",
@@ -85,10 +86,12 @@ test("host-copy stages only approved host state", () => {
   assert.match(copy, /\.env/)
   assert.match(copy, /ssh_host_/)
   assert.match(copy, /\/opt\/qeoindex\/env/)
+  assert.match(copy, /Beszel Agent KEY\/TOKEN/)
+  assert.doesNotMatch(copy, /copy_(?:dir|file)[^\n]*\/opt\/qeoindex\/env/)
   assert.doesNotMatch(copy, /copy_(?:dir|file)[^\n]*\/var\/lib\/docker/)
 })
 
-test("daily backup quiesces Hermes only for staging and backs up a relative tree", () => {
+test("daily backup quiesces mutable local state only for staging and backs up a relative tree", () => {
   const backup = source("ops/upcloud/restic/backup.sh")
   assert.match(backup, /set -Eeuo pipefail/)
   assert.match(backup, /umask 077/)
@@ -103,7 +106,9 @@ test("daily backup quiesces Hermes only for staging and backs up a relative tree
   assert.match(backup, /stage_hermes_data/)
   assert.match(backup, /hermes_gateway_start/)
   assert.doesNotMatch(backup, /docker compose/)
-  assert.match(backup, /hermes_gateway_stop "\$HERMES_UNIT"[\s\S]*HERMES_STOPPED=1[\s\S]*stage_hermes_data "\$STAGE_ROOT"[\s\S]*restart_hermes_if_needed[\s\S]*build_stage "\$STAGE_ROOT"[\s\S]*restic backup \./)
+  assert.match(backup, /hermes_gateway_stop "\$HERMES_UNIT"[\s\S]*HERMES_STOPPED=1[\s\S]*stage_hermes_data "\$STAGE_ROOT"[\s\S]*restart_hermes_if_needed/)
+  assert.match(backup, /systemctl is-active --quiet qeo-beszel\.service[\s\S]*systemctl stop qeo-beszel\.service[\s\S]*BESZEL_STOPPED=1[\s\S]*stage_beszel_data "\$STAGE_ROOT"[\s\S]*restart_beszel_if_needed/)
+  assert.match(backup, /restart_beszel_if_needed[\s\S]*build_stage "\$STAGE_ROOT"[\s\S]*restic backup \./)
   assert.match(backup, /restic backup \. --host "\$QEO_RESTIC_BACKUP_HOST" --tag "\$QEO_RESTIC_BACKUP_TAG"/)
   assert.match(backup, /restic snapshots --latest 1 --host "\$QEO_RESTIC_BACKUP_HOST" --tag "\$QEO_RESTIC_BACKUP_TAG"/)
   assert.match(backup, /qeo-backup-manifest\.sha256/)
@@ -213,6 +218,7 @@ test("restore helper is quarantine-only, allowlisted, and fail-closed", () => {
   assert.match(restore, /promote_dir opt\/hermes\/data hermes hermes/)
   assert.match(restore, /promote_dir opt\/hermes\/deploy hermes hermes/)
   assert.match(restore, /promote_dir opt\/qeoindex\/deploy qeo qeo/)
+  assert.match(restore, /promote_dir opt\/qeoindex\/state\/beszel root root/)
   assert.doesNotMatch(restore, /chown -R/)
   assert.doesNotMatch(restore, /systemctl (?:start|enable)/)
   assert.doesNotMatch(restore, /\/opt\/qeoindex\/env\//)
