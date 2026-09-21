@@ -93,6 +93,31 @@ test("QEO-201 stack is bounded and systemd-owned", () => {
   )
 })
 
+test("QEO-255 Onidel Beszel deployment keeps the accepted private topology", () => {
+  const composePath = "services/beszel/deploy/onidel/docker-compose.onidel.yml"
+  const servicePath = "services/beszel/deploy/onidel/qeo-beszel.service"
+
+  assert.equal(existsSync(new URL(`../${composePath}`, import.meta.url)), true)
+  assert.equal(existsSync(new URL(`../${servicePath}`, import.meta.url)), true)
+
+  const compose = source(composePath)
+  const service = source(servicePath)
+
+  assert.match(compose, /henrygd\/beszel:0\.19\.0/)
+  assert.match(compose, /henrygd\/beszel-agent:0\.19\.0/)
+  assert.match(compose, /ghcr\.io\/linuxserver\/socket-proxy:3\.4\.3-r0-ls93/)
+  assert.match(compose, /APP_URL:\s*https:\/\/qeo-onidel\.tail426fe8\.ts\.net\/beszel/)
+  assert.match(compose, /127\.0\.0\.1:8090:8090/)
+  assert.match(compose, /127\.0\.0\.1:2375:2375/)
+  assert.doesNotMatch(compose, /0\.0\.0\.0:/)
+  assert.doesNotMatch(compose, /45876/)
+  assert.match(compose, /LISTEN:\s*\/beszel_socket\/beszel\.sock/)
+  assert.match(compose, /DOCKER_HOST:\s*tcp:\/\/127\.0\.0\.1:2375/)
+  assert.match(compose, /POST:\s*["']?0["']?/)
+  assert.match(service, /deploy\/onidel\/docker-compose\.onidel\.yml up -d --remove-orphans/)
+  assert.match(service, /deploy\/onidel\/docker-compose\.onidel\.yml down --timeout 20/)
+})
+
 test("QEO-201 runbook preserves Tailscale-only ingress", () => {
   const readme = source(readmePath)
   const ops = source(opsDocPath)
