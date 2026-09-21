@@ -25,6 +25,29 @@ The Hub and Agent images run as UID 0 while the Compose hardening drops all Linu
 
 Create `/opt/qeoindex/env/beszel-agent.env` from `deploy/upcloud/beszel-agent.env.example` only after the Hub provides the Agent credentials. Keep the real file mode `0600`.
 
+## Onidel deployment
+
+The Onidel replacement host uses the canonical artifacts under:
+
+```text
+deploy/onidel/docker-compose.onidel.yml
+deploy/onidel/qeo-beszel.service
+```
+
+Its private browser URL is:
+
+```text
+https://qeo-onidel.tail426fe8.ts.net/beszel
+```
+
+The security topology is unchanged from QEO-201: Hub on `127.0.0.1:8090`, Docker read proxy on `127.0.0.1:2375`, Agent on the shared Unix socket, and no public Beszel ingress. Configure Tailscale Serve on the Onidel node with:
+
+```bash
+sudo tailscale serve --bg --https=443 --set-path=/beszel http://127.0.0.1:8090
+```
+
+Create the Hub admin account and Onidel system entry through that private URL, then write the generated Agent `KEY` and `TOKEN` to `/opt/qeoindex/env/beszel-agent.env` with mode `0600`. Do not reuse the retired UpCloud system identity.
+
 ## Validate Compose
 
 ```bash
