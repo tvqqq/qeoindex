@@ -18,6 +18,7 @@ import {
 } from "@/components/live-market-board"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
+import { MARKET_SESSION_RESET_EVENT } from "@/modules/market/realtime/session-ui"
 import {
   defaultStockFilterCriteria,
   filterBoardTickers,
@@ -143,6 +144,7 @@ export function MarketBoardFilterShell({
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const ignoreModeCaptureRef = useRef(false)
+  const filterSessionDayRef = useRef(vietnamSessionDay())
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
   const [boardKey, setBoardKey] = useState(0)
   const [quoteSeed, setQuoteSeed] = useState<BoardSeedQuotes>(() => ({ ...initialQuotes }))
@@ -324,6 +326,37 @@ export function MarketBoardFilterShell({
       setIsRefreshing(false)
     }
   }, [clickChildMode, fetchCurrentQuotes, openFilterEditor, readDailyCache, universe, writeDailyCache])
+
+  useEffect(() => {
+    const handleSessionReset = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionDate?: string }>).detail
+      const sessionDate = detail?.sessionDate || vietnamSessionDay()
+      if (filterSessionDayRef.current === sessionDate) return
+      filterSessionDayRef.current = sessionDate
+      if (!filterActive || !savedCriteria) return
+
+      void (async () => {
+        setIsRefreshing(true)
+        try {
+          const { merged, stocks } = await fetchCurrentQuotes()
+          const tickers = filterBoardTickers(universe, stocks, savedCriteria)
+          setQuoteSeed(merged)
+          setHistorySeed({})
+          setFilteredTickers(tickers)
+          writeDailyCache(savedCriteria, tickers)
+          setPersistenceError("")
+          setBoardKey((key) => key + 1)
+        } catch {
+          setPersistenceError("Không thể làm mới Filter CP cho phiên mới. Danh sách hiện tại được giữ nguyên.")
+        } finally {
+          setIsRefreshing(false)
+        }
+      })()
+    }
+
+    window.addEventListener(MARKET_SESSION_RESET_EVENT, handleSessionReset)
+    return () => window.removeEventListener(MARKET_SESSION_RESET_EVENT, handleSessionReset)
+  }, [fetchCurrentQuotes, filterActive, savedCriteria, universe, writeDailyCache])
 
   const handleFilterButton = useCallback(() => {
     if (filterActive) {
