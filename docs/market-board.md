@@ -39,7 +39,7 @@ The resolved ticker list is cached in browser local storage under a per-user nam
 - deterministic hash of normalized criteria;
 - every cached ticker still belongs to the current canonical universe.
 
-Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe.
+Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe. If an already-filtered tab remains open across a Vietnam trading-day rollover, the market-session reset event invalidates that in-memory daily membership and re-resolves Filter CP once from a fresh quote snapshot before remounting the filtered board.
 
 The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoard`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. Market-index channels remain present independently.
 
