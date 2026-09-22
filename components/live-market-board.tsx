@@ -113,6 +113,26 @@ type IntradayHistoryResponse = {
   histories?: Record<string, { symbol: string; provider: "Yahoo" | null; points: IntradayPoint[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
 }
 type IndexHistoryResponse = { ok: boolean; quotes?: Record<string, IndexQuote> }
+type QuoteReconcileResponse = {
+  ok: boolean
+  quotes?: Record<string, {
+    symbol: string
+    price: number | null
+    reference: number | null
+    ceiling: number | null
+    floor: number | null
+    change: number | null
+    changePercent: number | null
+    volume: number | null
+    foreignBuyVolume?: number | null
+    foreignSellVolume?: number | null
+    foreignBuyValue?: number | null
+    foreignSellValue?: number | null
+    foreignNetValue?: number | null
+    foreignRoom?: number | null
+  }>
+  updatedAt?: string
+}
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
 const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
@@ -605,6 +625,7 @@ export function LiveMarketBoard({
   const [lastMessageAt, setLastMessageAt] = useState("")
   const [reconnectKey, setReconnectKey] = useState(0)
   const [historyReloadKey, setHistoryReloadKey] = useState(0)
+  const [quoteReloadKey, setQuoteReloadKey] = useState(0)
   const [marketUiPhase, setMarketUiPhase] = useState<MarketUiPhase>(() => getMarketUiPhase())
   const [showSessionOpenAlert, setShowSessionOpenAlert] = useState(false)
   const [query, setQuery] = useState("")
@@ -816,6 +837,7 @@ export function LiveMarketBoard({
       detail: { sessionDate: vietnamSessionDay(now) },
     }))
     setReconnectKey((key) => key + 1)
+    setQuoteReloadKey((key) => key + 1)
     for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
     eodReloadTimers.current = []
     if (notify) {
@@ -896,6 +918,101 @@ export function LiveMarketBoard({
     }
     return covered / symbolList.length >= SSR_HISTORY_COVERAGE_MIN
   }, [initialHistories, symbolList])
+
+  useEffect(() => {
+    if (quoteReloadKey === 0 || symbolList.length === 0) return
+
+    const controller = new AbortController()
+    const requestedAt = Date.now()
+    const requestedSessionDay = activeSessionDayRef.current
+    let disposed = false
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/market/quotes", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ symbols: symbolList }),
+          signal: controller.signal,
+        })
+        const payload = await response.json() as QuoteReconcileResponse
+        if (
+          disposed ||
+          !response.ok ||
+          !payload.ok ||
+          !payload.quotes ||
+          activeSessionDayRef.current !== requestedSessionDay
+        ) return
+
+        const currentQuotes = quotesRef.current
+        const nextQuotes = { ...currentQuotes }
+        const receivedAt = payload.updatedAt || new Date().toISOString()
+
+        for (const symbol of symbolList) {
+          const quote = payload.quotes[symbol]
+          if (!quote) continue
+
+          const existing = currentQuotes[symbol] as LiveStockQuote | undefined
+          const reference = quote.reference && quote.reference > 0
+            ? quote.reference
+            : existing?.reference || dailyReferences.current[symbol] || 0
+          if (reference > 0) dailyReferences.current[symbol] = reference
+
+          const existingUpdatedAt = existing?.updatedAt ? Date.parse(existing.updatedAt) : 0
+          const hasNewerLiveQuote = Number.isFinite(existingUpdatedAt) && existingUpdatedAt > requestedAt
+          const price = hasNewerLiveQuote
+            ? existing?.price
+            : quote.price && quote.price > 0 ? quote.price : existing?.price || reference
+          if (!price || price <= 0) continue
+
+          const change = reference > 0 ? price - reference : (quote.change ?? existing?.change ?? 0)
+          const changePercent = reference > 0
+            ? (change / reference) * 100
+            : (quote.changePercent ?? existing?.changePercent ?? 0)
+
+          nextQuotes[symbol] = {
+            ...(existing ?? {}),
+            symbol,
+            price,
+            reference: reference || undefined,
+            ceiling: quote.ceiling ?? existing?.ceiling,
+            floor: quote.floor ?? existing?.floor,
+            change,
+            changePercent,
+            volume: hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume),
+            foreignBuyVolume: hasNewerLiveQuote ? existing?.foreignBuyVolume : (quote.foreignBuyVolume ?? existing?.foreignBuyVolume),
+            foreignSellVolume: hasNewerLiveQuote ? existing?.foreignSellVolume : (quote.foreignSellVolume ?? existing?.foreignSellVolume),
+            foreignBuyValue: hasNewerLiveQuote ? existing?.foreignBuyValue : (quote.foreignBuyValue ?? existing?.foreignBuyValue),
+            foreignSellValue: hasNewerLiveQuote ? existing?.foreignSellValue : (quote.foreignSellValue ?? existing?.foreignSellValue),
+            foreignNetValue: hasNewerLiveQuote ? existing?.foreignNetValue : (quote.foreignNetValue ?? existing?.foreignNetValue),
+            foreignRoom: quote.foreignRoom ?? existing?.foreignRoom,
+            updatedAt: hasNewerLiveQuote && existing?.updatedAt ? existing.updatedAt : receivedAt,
+          }
+        }
+
+        quotesRef.current = nextQuotes
+        latestCommittedQuotesRef.current = nextQuotes
+        quotesDirtyRef.current = false
+        lastOrderingRefreshAt.current = Date.now()
+        if (marketOrderingTimer.current !== null) {
+          window.clearTimeout(marketOrderingTimer.current)
+          marketOrderingTimer.current = null
+        }
+        setQuotes(nextQuotes)
+        setOrderingQuotes(nextQuotes)
+      } catch (error) {
+        if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("Market board session quote reconcile unavailable", error)
+        }
+      }
+    })()
+
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [quoteReloadKey, symbolList])
 
   useEffect(() => {
     if (!symbolList.length) return
