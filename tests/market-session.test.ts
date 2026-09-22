@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
-import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart } from "../modules/market/realtime/session-ui.ts"
+import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart, shouldResetForNewTradingDay } from "../modules/market/realtime/session-ui.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -121,6 +121,29 @@ test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", ()
   assert.equal(getMarketUiPhase(new Date("2026-08-18T02:15:00Z")), "CONTINUOUS")
   assert.equal(getMarketUiPhase(new Date("2026-08-18T07:30:00Z")), "CLOSING_AUCTION")
   assert.equal(getMarketUiPhase(new Date("2026-08-18T07:46:00Z")), "EOD")
+})
+
+test("QEO-262 trading-date rollover resets stale tabs even when ATO was skipped", () => {
+  const priorTradingDay = "2026-08-17"
+
+  // Same phase before/after sleep: a tab frozen Monday during CONTINUOUS can
+  // resume Tuesday at 10:00 ICT directly into CONTINUOUS and must still reset.
+  assert.equal(shouldResetForNewTradingDay(priorTradingDay, new Date("2026-08-18T03:00:00Z")), true)
+
+  // Do not reset before the next session actually opens.
+  assert.equal(shouldResetForNewTradingDay(priorTradingDay, new Date("2026-08-18T01:59:59Z")), false)
+
+  // Once the active session day has been recorded, subsequent checks are no-ops.
+  assert.equal(shouldResetForNewTradingDay("2026-08-18", new Date("2026-08-18T03:00:00Z")), false)
+
+  // Weekend rollover is not a trading-session reset.
+  assert.equal(shouldResetForNewTradingDay("2026-08-21", new Date("2026-08-22T03:00:00Z")), false)
+
+  // A stale Friday tab must reset when Monday trading is active, including after ATO.
+  assert.equal(shouldResetForNewTradingDay("2026-08-21", new Date("2026-08-24T03:00:00Z")), true)
+
+  // If the machine wakes only after market close, refresh the stale trading day too.
+  assert.equal(shouldResetForNewTradingDay(priorTradingDay, new Date("2026-08-18T08:00:00Z")), true)
 })
 
 test("mini chart is hidden in ATO, live only from 09:15 to 14:30, then adds one final EOD point", () => {

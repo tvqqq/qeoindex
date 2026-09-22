@@ -50,6 +50,21 @@ test("saved criteria and daily cache are scoped by user, Vietnam day, universe r
   assert.match(shellSource, /isValidDailyFilterCache/)
 })
 
+test("active Filter CP re-resolves once when the trading day rolls over", () => {
+  assert.match(shellSource, /MARKET_SESSION_RESET_EVENT/)
+  assert.match(shellSource, /const filterSessionDayRef = useRef\(vietnamSessionDay\(\)\)/)
+  assert.match(shellSource, /filterSessionDayRef\.current === sessionDate/)
+  assert.match(shellSource, /filterBoardTickers\(universe, stocks, savedCriteria\)/)
+  assert.match(shellSource, /writeDailyCache\(savedCriteria, tickers\)/)
+  assert.match(shellSource, /setBoardKey\(\(key\) => key \+ 1\)/)
+})
+
+test("session-safe filter quote merge clears stale prior-session limit prices", () => {
+  assert.match(shellSource, /ceiling: quote\.ceiling === null \? undefined : \(quote\.ceiling \?\? previous\?\.ceiling\)/)
+  assert.match(shellSource, /floor: quote\.floor === null \? undefined : \(quote\.floor \?\? previous\?\.floor\)/)
+})
+
+
 test("Filter CP limits the child board universe while centralized Supabase realtime stays canonical", () => {
   assert.match(shellSource, /universe=\{activeUniverse\}/)
   assert.match(boardSource, /const symbolList = useMemo\(\(\) => universe\.map\(\(stock\) => stock\.ticker\)/)

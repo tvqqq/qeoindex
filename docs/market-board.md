@@ -39,7 +39,7 @@ The resolved ticker list is cached in browser local storage under a per-user nam
 - deterministic hash of normalized criteria;
 - every cached ticker still belongs to the current canonical universe.
 
-Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe.
+Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe. If an already-filtered tab remains open across a Vietnam trading-day rollover, the market-session reset event invalidates that in-memory daily membership and re-resolves Filter CP once from a fresh quote snapshot before remounting the filtered board.
 
 The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoard`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. Market-index channels remain present independently.
 
@@ -97,7 +97,9 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 ## Trading-day UI lifecycle
 
 - The browser evaluates session boundaries in `Asia/Ho_Chi_Minh`, including while the tab was opened before the session or temporarily hidden.
-- At 09:00 on weekdays, the board atomically restores stocks and indexes to their reference values, clears session volume/foreign flow and chart state, reconnects DNSE, and broadcasts a reset event to every open orderbook.
+- At 09:00 on weekdays, the board atomically restores stocks and indexes to their reference values, clears session volume/foreign flow and chart state, reconnects realtime transport, and broadcasts a reset event to every open orderbook.
+- Trading-date rollover is detected independently from UI phase transitions. If a suspended/throttled tab skips ATO and resumes later in the session, the board still resets exactly once for the new Vietnam trading day, reloads current-day intraday history, and reconciles fresh stock quotes/references through `/api/market/quotes`.
+- The quote reconcile is session-guarded and preserves a newer realtime quote if one arrives while the request is in flight; its current-session reference may still update the baseline. The reconcile endpoint accepts a same-session snapshot as-is, but a snapshot from exactly the previous trading session is downgraded to a neutral previous-close fallback with zero session volume; older snapshots fail closed instead of carrying stale volume/reference/limit prices into the new day.
 - Open orderbooks clear cached depth, matched trades, foreign flow, put-through rows, and chart history at the same boundary. In-flight Supabase/REST snapshots are ignored during ATO so yesterday's data cannot race back into the UI.
 - Mini charts are deliberately blank from 09:00 through 09:14:59. DNSE 1-minute OHLC frames are accepted only from 09:15 through 14:29:59 and collapsed into one close per 5-minute bucket.
 - From 14:30 the live mini chart is frozen. At EOD availability (14:46 onward), the intraday snapshot is reloaded and may add the final 14:45 point once.
