@@ -39,6 +39,7 @@ import {
   MARKET_SESSION_RESET_EVENT,
   newSessionReferencePoint,
   shouldAcceptRealtimeMiniChart,
+  shouldResetForNewTradingDay,
   type MarketUiPhase,
 } from "@/modules/market/realtime/session-ui"
 import { setSoundEnabled, playWhaleSound } from "@/modules/shared/ui/sound-engine"
@@ -675,6 +676,7 @@ export function LiveMarketBoard({
   const sessionOpenAlertTimer = useRef<number | null>(null)
   const eodReloadTimers = useRef<number[]>([])
   const didResetCurrentAto = useRef(false)
+  const activeSessionDayRef = useRef(vietnamSessionDay())
 
   const scheduleMarketOrderingRefresh = useCallback((snapshot: Record<string, LiveStockQuote | IndexQuote>) => {
     latestCommittedQuotesRef.current = snapshot
@@ -749,10 +751,14 @@ export function LiveMarketBoard({
 
   const resetForNewTradingSession = useCallback((now = new Date(), notify = true) => {
     didResetCurrentAto.current = true
+    activeSessionDayRef.current = vietnamSessionDay(now)
     const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
     for (const [symbol, current] of Object.entries(quotesRef.current)) {
       if ("value" in current) {
-        const reference = indexReferences.current[symbol] || current.value - (current.change ?? 0)
+        const reference = current.value > 0
+          ? current.value
+          : indexReferences.current[symbol] || current.value - (current.change ?? 0)
+        if (reference > 0) indexReferences.current[symbol] = reference
         resetQuotes[symbol] = {
           ...current,
           value: reference > 0 ? reference : current.value,
@@ -768,7 +774,9 @@ export function LiveMarketBoard({
         continue
       }
       const fallback = universe.find((stock) => stock.ticker === symbol)?.lastClose
-      const reference = dailyReferences.current[symbol] || current.reference || fallback || current.price
+      const reference = current.price > 0
+        ? current.price
+        : fallback || current.reference || dailyReferences.current[symbol] || 0
       if (reference > 0) dailyReferences.current[symbol] = reference
       resetQuotes[symbol] = {
         ...current,
@@ -1023,21 +1031,29 @@ export function LiveMarketBoard({
       setIsLunch((prev) => (prev !== lunch ? lunch : prev))
 
       const nextPhase = getMarketUiPhase(now)
+      const needsTradingDayReset = shouldResetForNewTradingDay(activeSessionDayRef.current, now)
+      const needsHistoryReloadAfterReset = needsTradingDayReset && nextPhase !== "ATO"
+
+      if (needsTradingDayReset) {
+        resetForNewTradingSession(now, nextPhase === "ATO")
+        if (needsHistoryReloadAfterReset) setHistoryReloadKey((key) => key + 1)
+      }
+
       if (marketUiPhaseRef.current !== nextPhase) {
         const previousPhase = marketUiPhaseRef.current
         marketUiPhaseRef.current = nextPhase
         setMarketUiPhase(nextPhase)
         if (nextPhase === "ATO") {
-          resetForNewTradingSession(now)
+          if (!needsTradingDayReset) resetForNewTradingSession(now)
         } else if (nextPhase === "CONTINUOUS" || nextPhase === "EOD") {
-          setHistoryReloadKey((key) => key + 1)
+          if (!needsHistoryReloadAfterReset) setHistoryReloadKey((key) => key + 1)
           if (nextPhase === "EOD") {
             for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
             eodReloadTimers.current = [4 * 60_000, 14 * 60_000].map((delay) => window.setTimeout(() => {
               setHistoryReloadKey((key) => key + 1)
             }, delay))
           }
-          if (previousPhase === "PRE_MARKET") setReconnectKey((key) => key + 1)
+          if (previousPhase === "PRE_MARKET" && !needsTradingDayReset) setReconnectKey((key) => key + 1)
         } else if (nextPhase === "PRE_MARKET") {
           didResetCurrentAto.current = false
         }
