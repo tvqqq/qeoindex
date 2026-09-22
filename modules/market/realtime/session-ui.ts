@@ -1,3 +1,4 @@
+import { isVietnamSecuritiesTradingDay, vietnamDateKey } from "../calendar.ts"
 import { getVnTimeSeconds, isLunchBreak } from "./session-countdown.ts"
 import type { IntradayPoint } from "./intraday-5m.ts"
 
@@ -20,6 +21,13 @@ export function getMarketUiPhase(date = new Date()): MarketUiPhase {
   if (totalSeconds < MINI_CHART_STOP_SECONDS) return "CONTINUOUS"
   if (totalSeconds < EOD_START_SECONDS) return "CLOSING_AUCTION"
   return "EOD"
+}
+
+export function shouldResetForNewTradingDay(activeSessionDay: string, date = new Date()) {
+  const currentSessionDay = vietnamDateKey(date)
+  if (!activeSessionDay || activeSessionDay === currentSessionDay) return false
+  if (!isVietnamSecuritiesTradingDay(date)) return false
+  return getMarketUiPhase(date) !== "PRE_MARKET"
 }
 
 export function shouldAcceptRealtimeMiniChart(timestampSeconds: number) {
