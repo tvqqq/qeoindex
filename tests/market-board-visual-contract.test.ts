@@ -206,6 +206,11 @@ test("intraday API prefers today's cached snapshot before expensive provider fan
 
 test("09:00 session reset clears board and every open orderbook atomically", () => {
   assert.match(boardSource, /const resetForNewTradingSession = useCallback/)
+  assert.match(boardSource, /const activeSessionDayRef = useRef\(vietnamSessionDay\(\)\)/)
+  assert.match(boardSource, /shouldResetForNewTradingDay\(activeSessionDayRef\.current, now\)/)
+  assert.match(boardSource, /if \(needsTradingDayReset\)[\s\S]*resetForNewTradingSession\(now, nextPhase === "ATO"\)/)
+  assert.match(boardSource, /activeSessionDayRef\.current = vietnamSessionDay\(now\)/)
+  assert.match(boardSource, /const reference = current\.price > 0[\s\S]*dailyReferences\.current\[symbol\]/)
   assert.match(boardSource, /window\.dispatchEvent\(new CustomEvent\(MARKET_SESSION_RESET_EVENT/)
   assert.match(boardSource, /priceHistoryRef\.current = resetHistory/)
   assert.match(orderbookSource, /window\.addEventListener\(MARKET_SESSION_RESET_EVENT, resetSession\)/)
