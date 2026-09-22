@@ -805,6 +805,8 @@ export function LiveMarketBoard({
         ...current,
         price: reference,
         reference,
+        ceiling: isTradingDayRollover ? undefined : current.ceiling,
+        floor: isTradingDayRollover ? undefined : current.floor,
         change: 0,
         changePercent: 0,
         volume: 0,
