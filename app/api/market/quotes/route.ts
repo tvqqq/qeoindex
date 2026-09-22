@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { requireApiUser } from "@/modules/auth/server"
 import { fetchLiveBatchQuotes, type LiveBatchQuote } from "@/modules/market/realtime/broker-live-quotes"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/modules/market/calendar"
+import { getVnTimeSeconds } from "@/modules/market/realtime/session-countdown"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 import { getCanonicalBoardOverviewSnapshots } from "@/modules/shared/supabase/board-overview"
@@ -59,15 +60,20 @@ export async function POST(request: Request) {
       getCanonicalBoardOverviewSnapshots(symbols),
     ])
     const quotes: Record<string, LiveBatchQuote> = { ...brokerQuotes }
-    const currentSessionDate = vietnamDateKey()
-    const previousSessionDate = previousTradingDateKey(currentSessionDate)
+    const now = new Date()
+    const calendarDate = vietnamDateKey(now)
+    const { totalSeconds } = getVnTimeSeconds(now)
+    const activeSessionDate = isVietnamSecuritiesTradingDateKey(calendarDate) && totalSeconds >= 9 * 3600
+      ? calendarDate
+      : previousTradingDateKey(calendarDate)
+    const previousSessionDate = previousTradingDateKey(activeSessionDate)
 
     for (const symbol of symbols) {
       if (quotes[symbol]?.price && quotes[symbol].price! > 0) continue
       const snapshot = snapshots[symbol]
       if (!snapshot) continue
 
-      if (snapshot.session_date === currentSessionDate) {
+      if (snapshot.session_date === activeSessionDate) {
         const price = snapshot.latest_price || snapshot.reference_price
         if (!price || price <= 0) continue
         const reference = snapshot.reference_price || price
