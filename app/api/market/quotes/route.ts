@@ -102,6 +102,12 @@ export async function POST(request: Request) {
           change: 0,
           changePercent: 0,
           volume: 0,
+          foreignBuyVolume: 0,
+          foreignSellVolume: 0,
+          foreignBuyValue: 0,
+          foreignSellValue: 0,
+          foreignNetVolume: 0,
+          foreignNetValue: 0,
         }
       }
     }
