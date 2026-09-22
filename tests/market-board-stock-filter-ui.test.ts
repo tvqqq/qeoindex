@@ -59,6 +59,11 @@ test("active Filter CP re-resolves once when the trading day rolls over", () => 
   assert.match(shellSource, /setBoardKey\(\(key\) => key \+ 1\)/)
 })
 
+test("session-safe filter quote merge clears stale prior-session limit prices", () => {
+  assert.match(shellSource, /ceiling: quote\.ceiling === null \? undefined : \(quote\.ceiling \?\? previous\?\.ceiling\)/)
+  assert.match(shellSource, /floor: quote\.floor === null \? undefined : \(quote\.floor \?\? previous\?\.floor\)/)
+})
+
 
 test("Filter CP limits the child board universe while centralized Supabase realtime stays canonical", () => {
   assert.match(shellSource, /universe=\{activeUniverse\}/)
