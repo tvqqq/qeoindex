@@ -37,6 +37,7 @@ test("market quote reconcile route is authenticated, canonical-bounded, and uses
   assert.match(quoteRoute, /snapshot\.session_date === activeSessionDate/)
   assert.match(quoteRoute, /snapshot\.session_date === previousSessionDate/)
   assert.match(quoteRoute, /price: previousClose,[\s\S]*reference: previousClose,[\s\S]*volume: 0/)
+  assert.match(quoteRoute, /foreignBuyVolume: 0,[\s\S]*foreignSellVolume: 0,[\s\S]*foreignBuyValue: 0,[\s\S]*foreignSellValue: 0,[\s\S]*foreignNetValue: 0/)
   assert.match(quoteRoute, /missingSymbols/)
   assert.match(quoteRoute, /Unable to reconcile all requested market quotes/)
   assert.match(quoteRoute, /"Cache-Control": "no-store, max-age=0"/)
