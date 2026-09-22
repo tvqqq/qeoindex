@@ -751,11 +751,13 @@ export function LiveMarketBoard({
 
   const resetForNewTradingSession = useCallback((now = new Date(), notify = true) => {
     didResetCurrentAto.current = true
-    activeSessionDayRef.current = vietnamSessionDay(now)
+    const nextSessionDay = vietnamSessionDay(now)
+    const isTradingDayRollover = activeSessionDayRef.current !== nextSessionDay
+    activeSessionDayRef.current = nextSessionDay
     const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
     for (const [symbol, current] of Object.entries(quotesRef.current)) {
       if ("value" in current) {
-        const reference = current.value > 0
+        const reference = isTradingDayRollover && current.value > 0
           ? current.value
           : indexReferences.current[symbol] || current.value - (current.change ?? 0)
         if (reference > 0) indexReferences.current[symbol] = reference
@@ -774,9 +776,9 @@ export function LiveMarketBoard({
         continue
       }
       const fallback = universe.find((stock) => stock.ticker === symbol)?.lastClose
-      const reference = current.price > 0
+      const reference = isTradingDayRollover && current.price > 0
         ? current.price
-        : fallback || current.reference || dailyReferences.current[symbol] || 0
+        : current.reference || dailyReferences.current[symbol] || fallback || current.price || 0
       if (reference > 0) dailyReferences.current[symbol] = reference
       resetQuotes[symbol] = {
         ...current,
