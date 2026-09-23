@@ -30,9 +30,9 @@ export async function GET(request: Request) {
 
   const now = new Date()
 
-  // Prefer the exact bucket, then today's latest known good snapshot. The board
-  // already receives a live DNSE stream, so serving the latest cached 5m shape
-  // is materially better than blocking a browser request on 100 provider calls.
+  // Prefer the exact bucket, then a recent latest snapshot. During a live session
+  // the service accepts only the current or immediately previous 5-minute bucket,
+  // so a fresh page cannot inherit an hours-old morning chart before realtime starts.
   let snapshot = await getCachedIntraday5mSnapshot(symbols, now)
   const cacheLayer = snapshot ? "cache" : "provider"
 

@@ -4,7 +4,7 @@ import test from "node:test"
 
 import { detectTradingSessionGaps } from "../modules/market/chart-data/normalize.ts"
 import type { CanonicalOhlcvBar } from "../modules/market/chart-data/contract.ts"
-import { fiveMinuteBucket, intradaySnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../modules/market/realtime/intraday-5m.ts"
+import { fiveMinuteBucket, intradaySnapshot, isRecentFiveMinuteSnapshot, mergeFiveMinuteClose, normalizeEpochSeconds, normalizeFiveMinuteBars, normalizeMarketPrice, previousSessionClose, selectLatestSession } from "../modules/market/realtime/intraday-5m.ts"
 
 function canonicalBar(iso: string): CanonicalOhlcvBar {
   return {
@@ -54,6 +54,26 @@ test("five-minute buckets keep minute bars in the same candle", () => {
   const start = Date.UTC(2026, 7, 17, 2, 0, 0) / 1000
   assert.equal(fiveMinuteBucket(start), fiveMinuteBucket(start + 299))
   assert.notEqual(fiveMinuteBucket(start), fiveMinuteBucket(start + 300))
+})
+
+test("QEO-270 live latest snapshot accepts only the current or immediately previous 5-minute bucket", () => {
+  const now = new Date("2026-09-23T11:23:00+07:00")
+  assert.equal(isRecentFiveMinuteSnapshot("2026-09-23T11:20:01+07:00", now), true)
+  assert.equal(isRecentFiveMinuteSnapshot("2026-09-23T11:15:00+07:00", now), true)
+  assert.equal(isRecentFiveMinuteSnapshot("2026-09-23T11:14:59+07:00", now), false)
+  assert.equal(isRecentFiveMinuteSnapshot("2026-09-23T09:15:00+07:00", now), false)
+  assert.equal(isRecentFiveMinuteSnapshot("invalid", now), false)
+})
+
+test("QEO-270 latest cache fallback is freshness-gated only while the market is live", () => {
+  const serviceSource = readFileSync(new URL("../modules/market/realtime/intraday-5m-service.ts", import.meta.url), "utf8")
+  assert.match(serviceSource, /isUsableLatestCachedIntradaySnapshot/)
+  assert.match(serviceSource, /if \(!status\.isLiveSession\) return true/)
+  assert.match(serviceSource, /isRecentFiveMinuteSnapshot\(value\.generatedAt, now\)/)
+  assert.equal(
+    serviceSource.match(/isUsableLatestCachedIntradaySnapshot\(cachedLatest, symbols, now\)/g)?.length,
+    2,
+  )
 })
 
 test("epoch timestamps accept seconds, milliseconds, and a fallback", () => {
