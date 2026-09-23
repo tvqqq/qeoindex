@@ -29,7 +29,7 @@ test("research summary image prompt is grounded in persisted report analysis and
     ],
   })
 
-  assert.equal(fields.location, "Vietnam Equity Research Report")
+  assert.equal(fields.location, "Cao su & Săm lốp")
   assert.match(fields.headline, /Cao su/)
   assert.match(fields.services, /GVR/)
   assert.match(fields.services, /DRC/)
