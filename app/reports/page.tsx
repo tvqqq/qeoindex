@@ -338,7 +338,7 @@ export default async function ResearchReportsCatalogPage({
                               {dateLabel(item.publishDate)}
                             </span>
                             <span className="inline-flex items-center rounded-full border border-amber-300/20 bg-amber-300/[0.06] px-2.5 py-1.5 text-[11px] font-bold text-amber-100">
-                              {recommendation.primary}{recommendation.target ? ` • ${recommendation.target}` : ""}
+                              Khuyến nghị: {recommendation.primary}{recommendation.target ? ` • ${recommendation.target}` : ""}
                             </span>
                           </div>
                           {item.tickers.length > 0 ? (
