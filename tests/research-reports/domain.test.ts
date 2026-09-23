@@ -274,7 +274,7 @@ test("QEO-274 summary image schema and generator preserve a private, report-grou
   assert.match(generator, /DEFAULT_IMAGE_CREATOR_NONCE = "05f3482112"/)
   assert.match(generator, /wpaiic_nonce/)
   assert.match(generator, /1536x1024/)
-  assert.match(generator, /MÃ CỔ PHIẾU LIÊN QUAN/)
+  assert.match(generator, /MÃ CỔ PHIẾU KHUYẾN NGHỊ \/ LIÊN QUAN/)
   assert.match(generator, /Không thêm câu chuyện, slogan hay dữ liệu thị trường không có trong báo cáo/)
   assert.doesNotMatch(generator, /QeoIndex/)
   assert.match(catalog, /summaryImageStatus === "ready"/)
