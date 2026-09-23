@@ -159,6 +159,14 @@
       "state": "MAPPED",
       "evidence": "QEO-238 Storage API empty readback 0 objects/0 bytes; production migration 20260916074442; six retired relations plus sequence and representative RPCs absent; Daily PK/tombstone preserved; targeted VACUUM FULL reduced DB to 167,931,027 bytes; docs/db/evidence/qeo238-production-retirement-2026-09-16.json",
       "rationale": "Supabase assigned production version 20260916074442 while repository replay keeps reviewed version 20260916142000. Phase 2 explicitly retired the isolated stock-chart intraday tables, sequence, triggers and exact-signature helper/RPC graph without CASCADE while preserving QEO-236 Daily five-year retention and the historical Daily prune tombstone. After retirement created sufficient headroom under the 470,000,000-byte gate, targeted VACUUM FULL ANALYZE compacted market_ohlcv_history with all 230,013 rows and market_ohlcv_history_pkey intact."
+    },
+    {
+      "logicalName": "qeo272_research_report_summary_images",
+      "repositoryVersion": "20260923165000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-272 PR #558 source-level implementation pending exact-head Verify and DB Drift acceptance",
+      "rationale": "QEO-272 adds only best-effort Research Report summary-image lifecycle metadata. Canonical report analysis remains authoritative and image-generation failure is isolated. The migration stays repo-ahead until exact-head Verify/DB replay are green and a separately authorized production rollout is performed."
     }
   ]
 }
