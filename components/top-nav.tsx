@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { BrainCircuit, Briefcase, CandlestickChart, ChevronDown, Compass, FileText, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
 
 import { BRAND } from "@/modules/shared/brand"
@@ -97,12 +98,59 @@ function getInsightsActiveStyle(pathname: string) {
   return null
 }
 
+function TopNavNavigationLoading() {
+  return createPortal(
+    <div
+      className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-[#070a0e] text-white"
+    >
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10" aria-hidden="true">
+            <CandlestickChart className="size-5 text-emerald-300" />
+          </span>
+          <span className="font-ticker text-lg font-extrabold italic tracking-tight">{BRAND.name}</span>
+        </div>
+        <div className="flex items-center gap-2.5 text-sm text-slate-300" role="status">
+          <span
+            aria-hidden="true"
+            className="size-5 animate-spin rounded-full border-2 border-emerald-400/25 border-t-emerald-300 motion-reduce:animate-none"
+          />
+          <span>Đang tải trang...</span>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export function TopNav() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [isRootUser, setIsRootUser] = useState(false)
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigationSourcePathRef = useRef<string | null>(null)
+
+  const clearPendingNavigation = useCallback(() => {
+    if (navigationTimeoutRef.current !== null) clearTimeout(navigationTimeoutRef.current)
+    navigationTimeoutRef.current = null
+    navigationSourcePathRef.current = null
+    setPendingHref(null)
+  }, [])
+
+  const startTopNavNavigation = useCallback((href: string) => {
+    if (pathname === href) {
+      clearPendingNavigation()
+      return
+    }
+
+    if (navigationTimeoutRef.current !== null) clearTimeout(navigationTimeoutRef.current)
+    navigationSourcePathRef.current = pathname
+    setPendingHref(href)
+    navigationTimeoutRef.current = setTimeout(clearPendingNavigation, 15_000)
+  }, [clearPendingNavigation, pathname])
 
   const isBoardActive = pathname.startsWith("/board")
   const isPortfolioActive = pathname.startsWith("/portfolio")
@@ -128,6 +176,28 @@ export function TopNav() {
   }, [])
 
   useEffect(() => {
+    if (
+      pendingHref &&
+      navigationSourcePathRef.current !== null &&
+      pathname !== navigationSourcePathRef.current
+    ) {
+      clearPendingNavigation()
+    }
+  }, [clearPendingNavigation, pathname, pendingHref])
+
+  useEffect(() => {
+    window.addEventListener("pageshow", clearPendingNavigation)
+    window.addEventListener("popstate", clearPendingNavigation)
+
+    return () => {
+      window.removeEventListener("pageshow", clearPendingNavigation)
+      window.removeEventListener("popstate", clearPendingNavigation)
+      if (navigationTimeoutRef.current !== null) clearTimeout(navigationTimeoutRef.current)
+      navigationTimeoutRef.current = null
+    }
+  }, [clearPendingNavigation])
+
+  useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsOpen(false)
     }
@@ -146,9 +216,16 @@ export function TopNav() {
   }, [])
 
   return (
+    <>
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.08] bg-[#070a0e]/96 px-4 shadow-[0_4px_30px_-4px_rgba(0,0,0,0.7)]">
       <div className="flex min-w-0 items-center gap-4 xl:gap-7">
-        <Link href="/" prefetch={false} className="group flex shrink-0 items-center gap-2.5" aria-label={BRAND.name}>
+        <Link
+          href="/"
+          prefetch={false}
+          onNavigate={() => startTopNavNavigation("/")}
+          className="group flex shrink-0 items-center gap-2.5"
+          aria-label={BRAND.name}
+        >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-purple-500/15 to-emerald-500/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_0_14px_rgba(34,201,138,0.22)] transition-colors duration-200 group-hover:border-purple-500/50">
             <img src="/brand/stockos-mark.svg" alt="" className="h-6 w-6 shrink-0" />
           </div>
@@ -164,6 +241,7 @@ export function TopNav() {
           <Link
             href="/board"
             prefetch={false}
+            onNavigate={() => startTopNavNavigation("/board")}
             className={[
               "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",
               isBoardActive
@@ -178,6 +256,7 @@ export function TopNav() {
           <Link
             href="/portfolio"
             prefetch={false}
+            onNavigate={() => startTopNavNavigation("/portfolio")}
             className={[
               "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors duration-200",
               isPortfolioActive
@@ -208,6 +287,7 @@ export function TopNav() {
               <Link
                 href="/insights"
                 prefetch={false}
+                onNavigate={() => startTopNavNavigation("/insights")}
                 onClick={() => setIsOpen(false)}
                 className="flex items-center gap-1.5 whitespace-nowrap py-1.5 pl-3.5 pr-1 text-xs font-medium"
               >
@@ -248,6 +328,7 @@ export function TopNav() {
                           key={item.href}
                           href={item.href}
                           prefetch={false}
+                          onNavigate={() => startTopNavNavigation(item.href)}
                           role="menuitem"
                           onClick={() => setIsOpen(false)}
                           className={[
@@ -281,6 +362,7 @@ export function TopNav() {
             <Link
               href="/admin"
               prefetch={false}
+              onNavigate={() => startTopNavNavigation("/admin")}
               className={[
                 "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200",
                 isAdminActive
@@ -305,5 +387,7 @@ export function TopNav() {
         </div>
       ) : null}
     </header>
+    {pendingHref ? <TopNavNavigationLoading /> : null}
+    </>
   )
 }
