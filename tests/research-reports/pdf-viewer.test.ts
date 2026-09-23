@@ -184,5 +184,5 @@ test("generated research summary image has an accessible click-to-zoom lightbox"
   assert.match(image, /role="dialog"/)
   assert.match(image, /aria-modal="true"/)
   assert.match(image, /event\.key === "Escape"/)
-  assert.match(image, /aspect-\[297\/210\]/)
+  assert.match(image, /aspect-\[3\/2\]/)
 })
