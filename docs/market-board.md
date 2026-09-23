@@ -53,12 +53,12 @@ A failed persistence write never disables the locally active filter. A failed fu
 
 1. Vercel Runtime Cache exact session bucket.
 2. Upstash Redis exact session bucket when configured.
-3. Today's latest known-good snapshot from Redis/Runtime Cache.
+3. Today's latest known-good snapshot from Redis/Runtime Cache; during a live session it is accepted only when generated in the current or immediately previous 5-minute bucket.
 4. Provider fan-out only when no acceptable cached snapshot exists.
 
 The provider path tries the DNSE 5-minute chart endpoint first and falls back to Yahoo when required. Fetch concurrency remains bounded at 12 symbols.
 
-`/api/market/intraday` follows the same stale-while-live strategy and accepts today's latest known-good snapshot before starting provider fan-out. This matters because the browser immediately transitions to the DNSE realtime stream; blocking a hydration request for a perfect new 5-minute snapshot is worse than serving a slightly older valid chart shape and letting live ticks take over.
+`/api/market/intraday` follows the same stale-while-live strategy, but live-session reuse is freshness-bounded. An exact current bucket remains preferred; a `latest` fallback is accepted only from the current or immediately previous 5-minute bucket. Older same-day snapshots fall through to provider refresh so a user opening the board mid-session receives the elapsed 09:15-to-now chart history before realtime continues. Lunch and closed-session reuse keep their existing semantics.
 
 Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/market/index-candles` and `/api/market/intraday`. The cache-first and SSR-history-reuse changes directly target the intraday portion of that failure mode.
 
@@ -134,6 +134,6 @@ If production is still hot after this change, profile before adding more throttl
 - `tests/market-board-stock-filter-api.test.ts` covers authenticated persistence, settings merge, canonical symbol bounds, batch reconcile, and bounded snapshot fallback.
 - `tests/market-board-stock-filter-ui.test.ts` covers portal placement, modal controls, daily cache identity, filtered WS scoping, fresh-quote gating, and full-board reconcile/remount behavior.
 - `tests/market-board-filter-avg50-regression.test.ts` locks KLTB 50-session liquidity semantics, six-column KFSP grouping, bank/securities mandatory selection, and minimum-one-per-column behavior.
-- `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, and latest-session fallback.
+- `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, latest-session fallback, and live-session freshness gating for cached mini-chart snapshots.
 - `pnpm test:supabase` covers final snapshot RLS and Auth/API security contracts.
 - GitHub `Verify` also runs the production Next.js build before a PR can be considered release-ready.

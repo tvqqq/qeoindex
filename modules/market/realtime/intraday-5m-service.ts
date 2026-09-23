@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis"
 import { getCache } from "@vercel/functions"
 
-import { intradaySnapshot, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
+import { intradaySnapshot, isRecentFiveMinuteSnapshot, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/modules/market/providers/yahoo/history"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 import { getMarketSessionStatus, getVnTimeSeconds } from "@/modules/market/realtime/session-countdown"
@@ -90,6 +90,13 @@ export function isUsableCachedIntradaySnapshot(value: unknown, symbols: string[]
   const finalBarAt = sessionTimestampSeconds(now, 14 * 3600 + 45 * 60)
   const finalRows = value.rows.filter((row) => isIntradayRow(row) && (row.lastBarAt ?? row.points.at(-1)?.time ?? 0) >= finalBarAt)
   return finalRows.length >= Math.min(symbols.length * 0.5, 40)
+}
+
+export function isUsableLatestCachedIntradaySnapshot(value: unknown, symbols: string[] | readonly string[], now: Date): value is IntradaySnapshot {
+  if (!isUsableCachedIntradaySnapshot(value, symbols, now)) return false
+  const status = getMarketSessionStatus(now)
+  if (!status.isLiveSession) return true
+  return isRecentFiveMinuteSnapshot(value.generatedAt, now)
 }
 
 export async function mapWithConcurrency<T, R>(items: T[] | readonly T[], concurrency: number, worker: (item: T) => Promise<R>) {
@@ -246,13 +253,13 @@ export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly s
 
     try {
       const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
-      if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
+      if (isUsableLatestCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
     } catch { /* Redis fail open */ }
   }
 
   try {
     const cachedLatest = await cache.get(latestKey)
-    if (isUsableCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
+    if (isUsableLatestCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
   } catch { /* Runtime Cache fail open */ }
 
   return null

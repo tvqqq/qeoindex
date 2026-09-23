@@ -40,6 +40,14 @@ export function fiveMinuteBucket(timestampSeconds: number) {
   return Math.floor(timestampSeconds / FIVE_MINUTE_SECONDS)
 }
 
+export function isRecentFiveMinuteSnapshot(generatedAt: string, now: Date, maxBucketsBehind = 1) {
+  const generatedAtMs = Date.parse(generatedAt)
+  if (!Number.isFinite(generatedAtMs) || !Number.isInteger(maxBucketsBehind) || maxBucketsBehind < 0) return false
+  const generatedBucket = fiveMinuteBucket(Math.floor(generatedAtMs / 1000))
+  const currentBucket = fiveMinuteBucket(Math.floor(now.getTime() / 1000))
+  return generatedBucket >= currentBucket - maxBucketsBehind && generatedBucket <= currentBucket
+}
+
 export function normalizeEpochSeconds(value: unknown, fallbackSeconds: number) {
   const parsed = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0) return fallbackSeconds
