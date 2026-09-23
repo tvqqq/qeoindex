@@ -158,6 +158,12 @@ test("timeframe reset uses canonical timestamps while history prepend preserves 
   assert.match(chartCode, /setVisibleRange/)
   assert.match(chartCode, /setVisibleLogicalRange/)
   assert.match(chartCode, /Prepending older history shifts logical indexes/)
+  const snapshot = chartCode.indexOf("const rangeBeforeData = previous")
+  const firstDataReplacement = chartCode.indexOf("series.candles.setData(renderPayload.candle)")
+  const restored = chartCode.indexOf("shiftVisibleLogicalRange(rangeBeforeData, prependedBars)")
+  assert.ok(snapshot > 0 && snapshot < firstDataReplacement && firstDataReplacement < restored)
+  assert.match(chartCode, /chart\.timeScale\(\)\.getVisibleLogicalRange\(\) \?\? visibleRangeRef\.current/)
+  assert.match(chartCode, /displayBars\.findIndex\(\(bar\) => bar\.time === previous\.firstTime\)/)
 
   assert.deepEqual(chartTimeRangeForBars(bars, futureTimes, 30, 8), { from: 71, to: 108 })
   const tradingCalendarBars = [

@@ -30,6 +30,7 @@ export interface LightweightLogicalRange {
 
 export interface LightweightTimeScaleApi {
   fitContent(): void
+  getVisibleLogicalRange(): LightweightLogicalRange | null
   setVisibleRange(range: { from: number; to: number }): void
   setVisibleLogicalRange(range: LightweightLogicalRange): void
   timeToCoordinate(time: number): number | null
