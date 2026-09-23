@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import type { ResearchReportDetailViewModel } from "@/modules/research-reports"
 
 import { AnalysisPanel } from "./analysis-panel"
 import { PdfViewer } from "./pdf-viewer"
+import { ReportSummaryImage } from "./report-summary-image"
 import {
   nextCitationNavigationState,
   type CitationNavigationState,
@@ -32,6 +34,14 @@ function categoryLabel(category: ResearchReportDetailViewModel["category"]): str
   }
 }
 
+function recommendationLabel(report: ResearchReportDetailViewModel): string {
+  const recommendation = report.recommendation?.trim() || "Chưa có khuyến nghị"
+  const target = report.targetPrice !== null
+    ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(report.targetPrice)
+    : null
+  return target ? `${recommendation} • Mục tiêu ${target}` : recommendation
+}
+
 function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStatus"]): string {
   switch (status) {
     case "ready": return "Phân tích sẵn sàng"
@@ -44,6 +54,9 @@ function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStat
 
 export function ReportDetailShell({ report }: { report: ResearchReportDetailViewModel }) {
   const router = useRouter()
+  const summaryImageUrl = report.summaryImageStatus === "ready"
+    ? `/api/research-reports/${report.id}/summary-image${report.summaryImageGeneratedAt ? `?v=${encodeURIComponent(report.summaryImageGeneratedAt)}` : ""}`
+    : null
   const [navigation, setNavigation] = useState<CitationNavigationState>({
     activeTab: "pdf",
     requestedPage: null,
@@ -145,6 +158,39 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
           </div>
         </div>
       </header>
+
+      {summaryImageUrl ? (
+        <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 sm:p-4">
+          <ReportSummaryImage
+            src={summaryImageUrl}
+            alt={`Tóm tắt hình ảnh báo cáo ${report.title}`}
+            title={report.title}
+          />
+          <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.07] pt-3 text-[11px] text-zinc-500 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-bold text-zinc-300">{report.sourceName}</span>
+              <span aria-hidden="true">•</span>
+              <time dateTime={report.publishDate}>{formatPublishDate(report.publishDate)}</time>
+              <span aria-hidden="true">•</span>
+              <span className="font-bold text-amber-200/85">{recommendationLabel(report)}</span>
+            </div>
+            {report.analysis?.tickerMentions.length ? (
+              <div className="flex flex-wrap gap-1.5">
+                {report.analysis.tickerMentions.map((mention) => (
+                  <Link
+                    key={mention.ticker}
+                    href={`/reports?ticker=${encodeURIComponent(mention.ticker)}`}
+                    prefetch={false}
+                    className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-2.5 py-1 font-black text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-300/[0.12]"
+                  >
+                    {mention.ticker}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <div className="lg:hidden" role="tablist" aria-label="Nội dung báo cáo">
         <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/20 p-1">

@@ -34,7 +34,7 @@ export async function findResearchReportDetailRow(
 ): Promise<Record<string, unknown> | null> {
   const result = await client
     .from(REPORT_TABLE)
-    .select("id,title,source_name,publish_date,category,sector_name,link,content_hash,parsed_page_count,ingestion_status,analysis_status")
+    .select("id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,link,content_hash,parsed_page_count,ingestion_status,analysis_status,summary_image_status,summary_image_generated_at")
     .eq("id", reportId)
     .maybeSingle()
 

@@ -2965,6 +2965,11 @@ export type Database = {
           sector_name: string | null
           source_name: string
           source_payload: Json
+          summary_image_analysis_id: string | null
+          summary_image_error: string | null
+          summary_image_generated_at: string | null
+          summary_image_path: string | null
+          summary_image_status: string
           target_price: number | null
           title: string
           updated_at: string
@@ -2990,6 +2995,11 @@ export type Database = {
           sector_name?: string | null
           source_name: string
           source_payload: Json
+          summary_image_analysis_id?: string | null
+          summary_image_error?: string | null
+          summary_image_generated_at?: string | null
+          summary_image_path?: string | null
+          summary_image_status?: string
           target_price?: number | null
           title: string
           updated_at?: string
@@ -3015,11 +3025,24 @@ export type Database = {
           sector_name?: string | null
           source_name?: string
           source_payload?: Json
+          summary_image_analysis_id?: string | null
+          summary_image_error?: string | null
+          summary_image_generated_at?: string | null
+          summary_image_path?: string | null
+          summary_image_status?: string
           target_price?: number | null
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "market_research_reports_summary_image_analysis_id_fkey"
+            columns: ["summary_image_analysis_id"]
+            isOneToOne: false
+            referencedRelation: "market_research_report_analyses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       market_trading_sessions: {
         Row: {
