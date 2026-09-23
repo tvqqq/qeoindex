@@ -120,10 +120,25 @@ export function buildResearchReportSummaryImageFields(input: {
   const keyPoints = compactLines(stringArray(input.analysis.key_points), 4)
   const catalysts = compactLines(stringArray(input.analysis.catalysts), 3)
   const risks = compactLines(stringArray(input.analysis.risks), 3)
-  const tickers = input.mentions
+  const recommendedMentions = input.mentions.filter((row) =>
+    Boolean(nonEmptyString(row.recommendation_text)) || positiveNumber(row.target_price) !== null)
+  const otherMentions = input.mentions.filter((row) => !recommendedMentions.includes(row))
+  const tickers = [...recommendedMentions, ...otherMentions]
     .map(tickerLabel)
     .filter((value): value is string => value !== null)
-    .slice(0, 8)
+
+  const providerCode = nonEmptyString(input.report.code)?.toUpperCase() ?? ""
+  if (/^[A-Z0-9]{2,12}$/.test(providerCode) && !tickers.some((item) => item.startsWith(`${providerCode} •`) || item === providerCode)) {
+    const providerRecommendation = nonEmptyString(input.report.recommendation)
+    const providerTarget = positiveNumber(input.report.target_price)
+    const providerParts = [providerCode]
+    if (providerRecommendation) providerParts.push(providerRecommendation)
+    if (providerTarget !== null) {
+      providerParts.push(`Mục tiêu ${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(providerTarget)} VND`)
+    }
+    tickers.unshift(providerParts.join(" • "))
+  }
+  tickers.splice(8)
 
   const services = [
     "TÓM TẮT BÁO CÁO",
@@ -133,7 +148,7 @@ export function buildResearchReportSummaryImageFields(input: {
     catalysts.length ? "ĐỘNG LỰC / CATALYSTS" : null,
     ...catalysts.map((item) => `• ${item}`),
     tickers.length ? "" : null,
-    tickers.length ? "MÃ CỔ PHIẾU LIÊN QUAN" : null,
+    tickers.length ? "MÃ CỔ PHIẾU KHUYẾN NGHỊ / LIÊN QUAN" : null,
     ...tickers,
     risks.length ? "" : null,
     risks.length ? "RỦI RO" : null,
@@ -158,7 +173,7 @@ export function buildResearchReportSummaryImageFields(input: {
     `Chủ đề báo cáo: ${title}.`,
     sectorName ? `Ngành/chủ đề: ${sectorName}.` : "",
     "Bố cục rõ ràng gồm: Luận điểm chính, Động lực/Catalysts, Rủi ro, Mã cổ phiếu liên quan.",
-    tickers.length ? `Hiển thị thật rõ các mã cổ phiếu: ${tickers.map((item) => item.split(" • ")[0]).join(", ")} dưới dạng badge lớn, dễ đọc.` : "",
+    tickers.length ? `Hiển thị thật rõ các mã cổ phiếu: ${tickers.map((item) => item.split(" • ")[0]).join(", ")} dưới dạng badge lớn, dễ đọc; ưu tiên visual hierarchy cho mã có khuyến nghị hoặc giá mục tiêu.` : "",
     "Tăng chi tiết hình ảnh minh họa gắn trực tiếp với ngành, sản phẩm, tài sản, chuỗi giá trị hoặc bối cảnh được nêu trong báo cáo.",
     "Chỉ dùng motif hình ảnh có thể suy ra từ tiêu đề và nội dung báo cáo; không thêm câu chuyện, slogan hay dữ liệu thị trường không có trong báo cáo.",
     visualEvidence ? `Evidence để định hướng hình ảnh: ${visualEvidence}.` : "",
