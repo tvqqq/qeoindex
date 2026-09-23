@@ -203,7 +203,7 @@ function toCatalogItem(row: Record<string, unknown>): ResearchReportCatalogItem 
     sectorName: nonEmptyString(row.sector_name),
     recommendation: nonEmptyString(row.recommendation),
     targetPrice: finiteNumber(row.target_price),
-    code: nonEmptyString(row.code),
+    code: nonEmptyString(row.code)?.toUpperCase() ?? null,
     ingestionStatus: nonEmptyString(row.ingestion_status) ?? "discovered",
     analysisStatus: nonEmptyString(row.analysis_status) ?? "pending",
     summaryImageStatus: nonEmptyString(row.summary_image_status) ?? "pending",
@@ -221,14 +221,23 @@ export async function getResearchReportCatalog(
 
   let tickerReportIds: string[] | null = null
   if (query.ticker) {
-    const mentionResult = await (client.from(MENTION_TABLE) as CatalogQueryBuilder)
-      .select("report_id")
-      .eq("ticker", query.ticker)
-      .limit(2000)
+    const [mentionResult, directCodeResult] = await Promise.all([
+      (client.from(MENTION_TABLE) as CatalogQueryBuilder)
+        .select("report_id")
+        .eq("ticker", query.ticker)
+        .limit(2000),
+      (client.from(REPORT_TABLE) as CatalogQueryBuilder)
+        .select("id")
+        .eq("code", query.ticker)
+        .limit(2000),
+    ])
     if (mentionResult.error) throw supabaseError("Research report ticker filter lookup failed", mentionResult.error)
-    tickerReportIds = [...new Set((mentionResult.data ?? [])
-      .map((row) => nonEmptyString(row.report_id))
-      .filter((value): value is string => value !== null))]
+    if (directCodeResult.error) throw supabaseError("Research report code filter lookup failed", directCodeResult.error)
+
+    tickerReportIds = [...new Set([
+      ...(mentionResult.data ?? []).map((row) => nonEmptyString(row.report_id)),
+      ...(directCodeResult.data ?? []).map((row) => nonEmptyString(row.id)),
+    ].filter((value): value is string => value !== null))]
   }
 
   let builder = (client.from(REPORT_TABLE) as CatalogQueryBuilder)
@@ -329,11 +338,17 @@ export async function getResearchReportCatalog(
     }
   }
 
-  const items = reportEntries.map(({ item }) => ({
-    ...item,
-    description: descriptions.get(item.id) ?? null,
-    relatedTickers: relatedTickers.get(item.id) ?? [],
-  }))
+  const items = reportEntries.map(({ item }) => {
+    const tickerList = relatedTickers.get(item.id) ?? []
+    const directCode = item.code && /^[A-Z0-9]{2,12}$/.test(item.code) ? item.code : null
+    return {
+      ...item,
+      description: descriptions.get(item.id) ?? null,
+      relatedTickers: directCode && !tickerList.includes(directCode)
+        ? [directCode, ...tickerList].slice(0, 8)
+        : tickerList,
+    }
+  })
   const total = Math.max(0, result.count ?? items.length)
   const lastSuccessfulSyncAt = nonEmptyString(syncResult.data?.updated_at)
 
