@@ -224,14 +224,37 @@ async function relatedReportIdsForTicker(
   if (analysisIds.length === 0) return []
 
   const analysisResult = await (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
-    .select("id,report_id")
+    .select("id,report_id,content_hash")
     .in("id", analysisIds)
     .limit(500)
   if (analysisResult.error) throw supabaseError("Research report ticker analysis lookup failed", analysisResult.error)
 
-  return Array.from(new Set((analysisResult.data ?? [])
-    .map((row) => nonEmptyString(row.report_id))
-    .filter((value): value is string => Boolean(value))))
+  const hashesByReport = new Map<string, Set<string>>()
+  for (const row of analysisResult.data ?? []) {
+    const reportId = nonEmptyString(row.report_id)
+    const contentHash = nonEmptyString(row.content_hash)
+    if (!reportId || !contentHash) continue
+    const hashes = hashesByReport.get(reportId) ?? new Set<string>()
+    hashes.add(contentHash)
+    hashesByReport.set(reportId, hashes)
+  }
+  const reportIds = Array.from(hashesByReport.keys())
+  if (reportIds.length === 0) return []
+
+  const reportResult = await (client.from(REPORT_TABLE) as CatalogQueryBuilder)
+    .select("id,content_hash")
+    .in("id", reportIds)
+    .limit(500)
+  if (reportResult.error) throw supabaseError("Research report ticker current-content lookup failed", reportResult.error)
+
+  return (reportResult.data ?? [])
+    .filter((row) => {
+      const reportId = nonEmptyString(row.id)
+      const contentHash = nonEmptyString(row.content_hash)
+      return Boolean(reportId && contentHash && hashesByReport.get(reportId)?.has(contentHash))
+    })
+    .map((row) => nonEmptyString(row.id))
+    .filter((value): value is string => Boolean(value))
 }
 
 export async function getResearchReportCatalog(
