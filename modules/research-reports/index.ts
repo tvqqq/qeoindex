@@ -46,6 +46,15 @@ export type {
   CouncilReportEvidenceSelection,
 } from "./council-evidence.ts"
 export { toResearchReportUpsertRow, upsertResearchReports } from "./repository.ts"
+export {
+  buildResearchReportSummaryImageFields,
+  ensureResearchReportSummaryImage,
+} from "./summary-image.ts"
+export type {
+  ResearchReportSummaryImageClient,
+  ResearchReportSummaryImageInput,
+  ResearchReportSummaryImageResult,
+} from "./summary-image.ts"
 export type {
   ProcessResearchReportResult,
   ResearchReportCategory,
