@@ -55,7 +55,7 @@ function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStat
 export function ReportDetailShell({ report }: { report: ResearchReportDetailViewModel }) {
   const router = useRouter()
   const summaryImageUrl = report.summaryImageStatus === "ready"
-    ? `/api/research/reports/${report.id}/summary-image${report.summaryImageGeneratedAt ? `?v=${encodeURIComponent(report.summaryImageGeneratedAt)}` : ""}`
+    ? `/api/research-reports/${report.id}/summary-image${report.summaryImageGeneratedAt ? `?v=${encodeURIComponent(report.summaryImageGeneratedAt)}` : ""}`
     : null
   const [navigation, setNavigation] = useState<CitationNavigationState>({
     activeTab: "pdf",
