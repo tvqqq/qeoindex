@@ -98,25 +98,24 @@ test("Research Reports catalog card keeps whole-card navigation while the summar
   assert.match(code, /dateLabel\(item\.publishDate\)/)
 })
 
-test("Research Reports catalog description comes only from the current analyzed report summary, never raw chunks", () => {
+test("Research Reports catalog does not hydrate or render the old description body", () => {
   const service = source("modules/research-reports/catalog.ts")
   const page = source("app/reports/page.tsx")
 
-  assert.match(service, /description:\s*string\s*\|\s*null/)
   assert.match(service, /content_hash/)
   assert.match(service, /market_research_report_analyses/)
-  assert.match(service, /executive_summary/)
   assert.match(service, /report_id/)
+  assert.doesNotMatch(service, /executive_summary/)
   assert.doesNotMatch(service, /market_research_report_chunks/)
-  assert.match(page, /item\.description/)
+  assert.doesNotMatch(page, /item\.description/)
 })
 
-test("Research report cards use neutral failed states, equal-height structure, category colors, and clickable source filters", () => {
+test("Research report cards keep equal-height structure, category colors, source filters, and neutral image fallbacks", () => {
   const code = source("app/reports/page.tsx")
 
-  assert.match(code, /ingestionStatus === ["']failed["'][\s\S]{0,180}slate/)
-  assert.match(code, /analysisStatus === ["']failed["'][\s\S]{0,180}slate/)
-  assert.doesNotMatch(code, /analysisStatus === ["']failed["'][\s\S]{0,180}(rose|red)-/)
+  assert.match(code, /summaryImageStatus === ["']failed["']/)
+  assert.match(code, /Chưa tạo được ảnh tóm tắt/)
+  assert.match(code, /Ảnh tóm tắt đang được chuẩn bị/)
   assert.match(code, /macro[\s\S]{0,220}emerald/)
   assert.match(code, /strategy[\s\S]{0,220}cyan/)
   assert.match(code, /sector[\s\S]{0,220}amber/)
