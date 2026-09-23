@@ -20,6 +20,9 @@
 - Page/chunk citations are projected from canonical retrieved evidence after fail-closed runtime validation.
 - Chat history is request-scoped and bounded; there is no persistent chat storage.
 - Broker recommendations, stances, forecasts, valuations, and target prices are SOURCE OPINION. They are not verified company facts and cannot override deterministic AI Council authority.
+- A successful current report analysis may produce one report-grounded landscape A4 summary image through the isolated server-side image-creator adapter. Image generation is downstream of canonical analysis publication: failure to create the image must not invalidate or rewrite the report analysis.
+- Summary images are version-bound to the current `analysis_id`, stored in the private `research-report-images` Supabase Storage bucket, and exposed to authenticated browsers only through `GET /api/research-reports/[id]/summary-image`. The browser never receives a raw storage object path.
+- External image prompts may use only persisted report metadata, structured analysis and ticker mentions. They must not add unrelated market slogans/narratives or QeoIndex branding; broker/date/recommendation remain compact source-opinion metadata.
 - Detail UI reads only browser-safe metadata, current persisted analysis, and ticker evidence; it does not expose raw `pdf_url`, provider payloads, or chunks.
 - PDF bytes are served only through authenticated `GET /api/research-reports/[id]/pdf`, which resolves the stored report URL server-side and reuses the existing secure PDF fetch policy.
 - Analysis, ticker, and Q&A citations share one page-navigation contract into the single-page PDF.js viewer.
