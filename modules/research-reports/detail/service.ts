@@ -90,6 +90,15 @@ function confidence(value: unknown): { score: number; flags: string[] } {
   return { score, flags: stringArray(row.flags) }
 }
 
+function finiteNumber(value: unknown): number | null {
+  const numeric = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+      ? Number(value)
+      : Number.NaN
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 function positiveNumber(value: unknown): number | null {
   const numeric = typeof value === "number"
     ? value
@@ -147,6 +156,11 @@ function baseReportViewModel(row: Record<string, unknown>): ResearchReportDetail
     publishDate: nonEmptyString(row.publish_date) ?? "",
     category: category(row.category),
     sectorName: nullableString(row.sector_name),
+    recommendation: nullableString(row.recommendation),
+    targetPrice: finiteNumber(row.target_price),
+    code: nullableString(row.code)?.toUpperCase() ?? null,
+    summaryImageStatus: nonEmptyString(row.summary_image_status) ?? "pending",
+    summaryImageGeneratedAt: nullableString(row.summary_image_generated_at),
     originalSourceLink: safeHttpsLink(row.link),
     originalPdfUrl: null,
     parsedPageCount: parsedPageCount(row.parsed_page_count),
