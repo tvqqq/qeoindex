@@ -64,6 +64,29 @@ test("top navigation restores Insights as a styled parent menu with three child 
   assert.equal(nav.includes("label: \"Tín hiệu giao dịch\""), false, "legacy research modules should stay consolidated under the research hub")
 })
 
+test("every TopNav destination uses a stable, accessible full-screen navigation loading state", () => {
+  const nav = source("components/top-nav.tsx")
+  const linkCount = nav.match(/<Link(?=[\s>])/g)?.length ?? 0
+  const onNavigateCount = nav.match(/onNavigate=\{\(\) => startTopNavNavigation\(/g)?.length ?? 0
+  const noPrefetchCount = nav.match(/prefetch=\{false\}/g)?.length ?? 0
+  const headerCloseIndex = nav.lastIndexOf("</header>")
+  const pendingOverlayRenderIndex = nav.indexOf("{pendingHref ? <TopNavNavigationLoading /> : null}")
+
+  assert.match(nav, /const \[pendingHref, setPendingHref\] = useState<string \| null>\(null\)/)
+  assert.match(nav, /function TopNavNavigationLoading\(\)[\s\S]*?pointer-events-auto fixed inset-0 z-\[100\]/)
+  assert.match(nav, /role="status"/)
+  assert.match(nav, /BRAND\.name/)
+  assert.match(nav, /motion-reduce:animate-none/)
+  assert.doesNotMatch(nav, /aria-busy="true"/)
+  assert.match(nav, /if \(pathname === href\)/, "same-route clicks should not show the loading screen")
+  assert.match(nav, /setTimeout\(clearPendingNavigation, 15_000\)/, "stalled navigations should clear after a bounded timeout")
+  assert.match(nav, /addEventListener\("pageshow"/)
+  assert.match(nav, /addEventListener\("popstate"/)
+  assert.ok(pendingOverlayRenderIndex > headerCloseIndex, "the shared overlay should render outside the dropdown and header links")
+  assert.equal(onNavigateCount, linkCount, "every TopNav destination should start loading through onNavigate")
+  assert.equal(noPrefetchCount, linkCount, "TopNav destinations should keep automatic prefetch disabled")
+})
+
 test("shared shell typography follows the semantic scale while preserving ticker glow", () => {
   const layout = source("app/layout.tsx")
   const nav = source("components/top-nav.tsx")
