@@ -5109,6 +5109,10 @@ export type Database = {
       }
       qeo_trigger_market_snapshot_bootstrap: { Args: never; Returns: number }
       qeo_trigger_market_universe_monthly: { Args: never; Returns: number }
+      qeo_trigger_research_report_image_backfill: {
+        Args: { p_max_reports?: number; p_reason?: string }
+        Returns: number
+      }
       qeo_trigger_research_reports_daily: { Args: never; Returns: number }
       qeo_verify_eod_scheduler_secret: {
         Args: { p_secret: string }
