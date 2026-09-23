@@ -84,37 +84,35 @@ test("Research Reports catalog uses one, two, then three columns as viewport wid
   assert.match(code, /className=["'][^"']*grid[^"']*md:grid-cols-2[^"']*xl:grid-cols-3[^"']*["']/)
 })
 
-test("Research Reports catalog card is a whole-card detail link with report type icon, status panels, and source/date tags", () => {
+test("Research Reports catalog card uses generated report image, compact footer metadata, and ticker filters", () => {
   const code = source("app/reports/page.tsx")
 
   assert.match(code, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
-  assert.doesNotMatch(code, />\s*Mở báo cáo\s*</)
-  assert.match(code, /categoryIcon\(item\.category\)/)
-  assert.match(code, /TRẠNG THÁI AI/)
-  assert.match(code, /KHUYẾN NGHỊ/)
+  assert.match(code, /<ReportSummaryImage/)
+  assert.match(code, /summaryImageStatus === "ready"/)
+  assert.doesNotMatch(code, /TRẠNG THÁI AI/)
+  assert.doesNotMatch(code, /text-\[10px\][^\n]*KHUYẾN NGHỊ/)
   assert.match(code, /item\.sourceName/)
   assert.match(code, /dateLabel\(item\.publishDate\)/)
+  assert.match(code, /recommendation\.primary/)
+  assert.match(code, /catalogHref\(query, \{ ticker, page: 1 \}\)/)
 })
 
-test("Research Reports catalog description comes only from the current analyzed report summary, never raw chunks", () => {
+test("Research Reports catalog keeps current-analysis metadata without rendering description text", () => {
   const service = source("modules/research-reports/catalog.ts")
   const page = source("app/reports/page.tsx")
 
-  assert.match(service, /description:\s*string\s*\|\s*null/)
   assert.match(service, /content_hash/)
   assert.match(service, /market_research_report_analyses/)
+  assert.match(service, /market_research_report_ticker_mentions/)
   assert.match(service, /executive_summary/)
-  assert.match(service, /report_id/)
   assert.doesNotMatch(service, /market_research_report_chunks/)
-  assert.match(page, /item\.description/)
+  assert.doesNotMatch(page, /item\.description/)
 })
 
-test("Research report cards use neutral failed states, equal-height structure, category colors, and clickable source filters", () => {
+test("Research report cards keep equal-height category styling and clickable source filters", () => {
   const code = source("app/reports/page.tsx")
 
-  assert.match(code, /ingestionStatus === ["']failed["'][\s\S]{0,180}slate/)
-  assert.match(code, /analysisStatus === ["']failed["'][\s\S]{0,180}slate/)
-  assert.doesNotMatch(code, /analysisStatus === ["']failed["'][\s\S]{0,180}(rose|red)-/)
   assert.match(code, /macro[\s\S]{0,220}emerald/)
   assert.match(code, /strategy[\s\S]{0,220}cyan/)
   assert.match(code, /sector[\s\S]{0,220}amber/)
@@ -122,7 +120,6 @@ test("Research report cards use neutral failed states, equal-height structure, c
   assert.match(code, /h-full/)
   assert.match(code, /\/reports\?source=/)
   assert.match(code, /encodeURIComponent\(item\.sourceName\)/)
-  assert.doesNotMatch(code, /Nhấn để xem chi tiết/)
 })
 
 test("Research report recommendation panel identifies buy or sell ticker and shows target price only when present", () => {
@@ -171,13 +168,21 @@ test("desktop report detail keeps chat below PDF when visible and switches to a 
   assert.match(shell, /data-report-analysis-column[\s\S]*data-report-panel=["']analysis["'][\s\S]*<AnalysisPanel/)
 })
 
-test("report cards place status panels directly below the title and only show description for ready AI analysis", () => {
+test("report cards place the generated summary immediately below the title and keep recommendation in the footer", () => {
   const page = source("app/reports/page.tsx")
 
-  assert.doesNotMatch(page, /min-h-\[84px\]/)
-  assert.doesNotMatch(page, /<p className=["'][^"']*h-\[60px\][^"']*["']>/)
-  assert.match(
-    page,
-    /<h2[\s\S]{0,500}\{item\.title\}[\s\S]{0,500}TRẠNG THÁI AI[\s\S]{0,1000}KHUYẾN NGHỊ[\s\S]{0,1000}item\.analysisStatus === ["']ready["'][\s\S]{0,500}descriptionView\(item\)/,
-  )
+  assert.doesNotMatch(page, /TRẠNG THÁI AI/)
+  assert.doesNotMatch(page, /descriptionView\(item\)/)
+  assert.match(page, /<h2[\s\S]{0,700}\{item\.title\}[\s\S]{0,900}<ReportSummaryImage/)
+  assert.match(page, /border-t[\s\S]{0,1200}item\.sourceName[\s\S]{0,1000}recommendation\.primary/)
+})
+
+
+test("generated research summary image has an accessible click-to-zoom lightbox", () => {
+  const image = source("components/research-reports/report-summary-image.tsx")
+  assert.match(image, /aria-label=\{\`Phóng to ảnh tóm tắt báo cáo/)
+  assert.match(image, /role="dialog"/)
+  assert.match(image, /aria-modal="true"/)
+  assert.match(image, /event\.key === "Escape"/)
+  assert.match(image, /aspect-\[297\/210\]/)
 })
