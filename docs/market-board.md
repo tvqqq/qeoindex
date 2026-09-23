@@ -10,7 +10,7 @@ The authenticated `/` page verifies the Supabase server session before loading b
 - Broker batch quotes for current quote fields.
 - The shared 5-minute intraday snapshot cache for mini-chart history.
 
-The SSR model is cached through the QeoIndex UI cache with a short live-session TTL. This lets the first render contain usable prices and chart history before the browser WebSocket becomes live.
+The SSR model is cached through the QeoIndex UI cache with a short session-aware TTL. This lets the first render contain usable prices and chart history before the browser WebSocket becomes live. The cache namespace is versioned so a release that changes intraday completeness semantics can invalidate stale board payloads immediately.
 
 When SSR already provides usable multi-point history for at least 95% of the canonical universe, the browser does not immediately call `/api/market/intraday` again on first mount. A session rollover still increments the reload key and forces a fresh browser history bootstrap.
 
@@ -53,12 +53,12 @@ A failed persistence write never disables the locally active filter. A failed fu
 
 1. Vercel Runtime Cache exact session bucket.
 2. Upstash Redis exact session bucket when configured.
-3. Today's latest known-good snapshot from Redis/Runtime Cache; during a live session it is accepted only when generated in the current or immediately previous 5-minute bucket.
+3. Today's latest known-good snapshot from Redis/Runtime Cache; during a live session it is accepted only when generated in the current or immediately previous 5-minute bucket, while lunch-break reuse must already cover the final 11:25 morning bar for the required universe coverage.
 4. Provider fan-out only when no acceptable cached snapshot exists.
 
 The provider path tries the DNSE 5-minute chart endpoint first and falls back to Yahoo when required. Fetch concurrency remains bounded at 12 symbols.
 
-`/api/market/intraday` follows the same stale-while-live strategy, but live-session reuse is freshness-bounded. An exact current bucket remains preferred; a `latest` fallback is accepted only from the current or immediately previous 5-minute bucket. Older same-day snapshots fall through to provider refresh so a user opening the board mid-session receives the elapsed 09:15-to-now chart history before realtime continues. Lunch and closed-session reuse keep their existing semantics.
+`/api/market/intraday` follows the same stale-while-live strategy, but reuse is session-aware. During live trading, an exact current bucket remains preferred and a `latest` fallback is accepted only from the current or immediately previous 5-minute bucket. During lunch, both exact `lunch_break` and `latest` snapshots must already cover the final 11:25 morning bar for enough rows; otherwise the service falls through to provider refresh. This keeps the complete 09:15–11:25 morning chart visible while realtime ingestion is paused, then allows realtime to continue from 13:00.
 
 Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/market/index-candles` and `/api/market/intraday`. The cache-first and SSR-history-reuse changes directly target the intraday portion of that failure mode.
 
@@ -102,6 +102,7 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 - The quote reconcile is session-guarded and preserves a newer realtime quote if one arrives while the request is in flight; its current-session reference may still update the baseline. The reconcile endpoint accepts a same-session snapshot as-is, but a snapshot from exactly the previous trading session is downgraded to a neutral previous-close fallback with zero session volume; older snapshots fail closed instead of carrying stale volume/reference/limit prices into the new day.
 - Open orderbooks clear cached depth, matched trades, foreign flow, put-through rows, and chart history at the same boundary. In-flight Supabase/REST snapshots are ignored during ATO so yesterday's data cannot race back into the UI.
 - Mini charts are deliberately blank from 09:00 through 09:14:59. DNSE 1-minute OHLC frames are accepted only from 09:15 through 14:29:59 and collapsed into one close per 5-minute bucket.
+- During the 11:30–13:00 lunch break, realtime frames are ignored but the already-completed morning mini-chart remains visible through the 11:25 bucket. A fresh page load during lunch must hydrate that morning history rather than reuse an earlier partial-session cache.
 - From 14:30 the live mini chart is frozen. At EOD availability (14:46 onward), the intraday snapshot is reloaded and may add the final 14:45 point once.
 - The 09:00 notification is a bounded, opaque status alert with reduced-motion support; it does not add persistent blur or compositor-heavy animation.
 
@@ -134,6 +135,6 @@ If production is still hot after this change, profile before adding more throttl
 - `tests/market-board-stock-filter-api.test.ts` covers authenticated persistence, settings merge, canonical symbol bounds, batch reconcile, and bounded snapshot fallback.
 - `tests/market-board-stock-filter-ui.test.ts` covers portal placement, modal controls, daily cache identity, filtered WS scoping, fresh-quote gating, and full-board reconcile/remount behavior.
 - `tests/market-board-filter-avg50-regression.test.ts` locks KLTB 50-session liquidity semantics, six-column KFSP grouping, bank/securities mandatory selection, and minimum-one-per-column behavior.
-- `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, latest-session fallback, and live-session freshness gating for cached mini-chart snapshots.
+- `pnpm test:intraday` covers bucket replacement/rollover, replay ordering, unit normalization, latest-session fallback, live-session freshness gating, and lunch-break morning-tail completeness for cached mini-chart snapshots.
 - `pnpm test:supabase` covers final snapshot RLS and Auth/API security contracts.
 - GitHub `Verify` also runs the production Next.js build before a PR can be considered release-ready.

@@ -75,7 +75,7 @@ test("Filter CP sector rules mirror six board columns and preserve mandatory/min
 
 test("Filter CP UI wires averageVolume50d and six sector columns", () => {
   assert.match(pageSource, /averageVolume50d: stock\.averageVolume50d/)
-  assert.match(pageSource, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v7"/)
+  assert.match(pageSource, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v8"/)
   assert.match(modalSource, /Thanh khoản \(KLTB 50 phiên\)/)
   assert.match(modalSource, /groupFilterSectorsByBoardColumn/)
   assert.match(modalSource, /hasRequiredFilterSectorSelections/)
