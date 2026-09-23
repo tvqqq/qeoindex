@@ -267,6 +267,7 @@ test("QEO-274 summary image schema and generator preserve a private, report-grou
   const generator = readFileSync("modules/research-reports/summary-image.ts", "utf8")
   const catalog = readFileSync("app/reports/page.tsx", "utf8")
   const detail = readFileSync("components/research-reports/report-detail-shell.tsx", "utf8")
+  const imageRoute = readFileSync("app/api/research-reports/[id]/summary-image/route.ts", "utf8")
 
   assert.match(sql, /summary_image_status[\s\S]*pending[\s\S]*generating[\s\S]*ready[\s\S]*failed/i)
   assert.match(sql, /research-report-images/)
@@ -285,4 +286,8 @@ test("QEO-274 summary image schema and generator preserve a private, report-grou
   assert.match(catalog, /href=\{catalogHref\(query, \{ ticker, page: 1 \}\)\}/)
   assert.match(detail, /ReportSummaryImage/)
   assert.match(detail, /\/reports\?ticker=/)
+  assert.match(imageRoute, /getServerAuthContext/)
+  assert.match(imageRoute, /research-report-images/)
+  assert.match(imageRoute, /summary_image_path/)
+  assert.doesNotMatch(imageRoute, /getPublicUrl|createSignedUrl/)
 })
