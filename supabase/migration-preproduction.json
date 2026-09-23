@@ -163,10 +163,10 @@
     {
       "logicalName": "qeo274_research_report_summary_images",
       "repositoryVersion": "20260923171000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-274 PR #559 report-grounded image generation, private Storage proxy and preproduction DB gates",
-      "rationale": "QEO-274 adds report summary-image lifecycle metadata and a private research-report-images Storage bucket. The migration remains repo-ahead until the exact PR head passes Verify plus zero-to-latest replay/generated-type checks and production promotion/readback is explicitly authorized."
+      "productionVersion": "20260923104634",
+      "state": "MAPPED",
+      "evidence": "QEO-274 PR #559 exact-head Verify #4424 + DB Drift #1449, production migration 20260923104634, and live schema/private Storage readback",
+      "rationale": "Supabase production applied the reviewed QEO-274 summary-image lifecycle and private research-report-images bucket as version 20260923104634 after PR #559 exact-head gates were green. Live readback verified all five summary_image_* columns, the summary-image status index, and the private 8 MB PNG/JPEG/WebP bucket; repository replay keeps reviewed version 20260923171000."
     }
   ]
 }
