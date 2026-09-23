@@ -4,7 +4,20 @@ import { getServerAuthContext } from "@/modules/auth/server"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 const IMAGE_BUCKET = "research-report-images"
-const NO_STORE_HEADERS = { "Cache-Control": "private, max-age=300, stale-while-revalidate=3600" }
+const IMAGE_CACHE_HEADERS = { "Cache-Control": "private, max-age=300, stale-while-revalidate=3600" }
+
+interface ReportImageLookup {
+  from(table: string): {
+    select(columns: string): {
+      eq(column: string, value: unknown): {
+        maybeSingle(): PromiseLike<{
+          data: { summary_image_status?: string; summary_image_path?: string | null } | null
+          error: { message?: string } | null
+        }>
+      }
+    }
+  }
+}
 
 function contentType(path: string, fallback: string | null): string {
   if (fallback?.startsWith("image/")) return fallback
@@ -21,7 +34,7 @@ export async function GET(
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { id } = await params
-  const result = await (auth.supabase as any)
+  const result = await (auth.supabase as unknown as ReportImageLookup)
     .from("market_research_reports")
     .select("summary_image_status,summary_image_path")
     .eq("id", id)
@@ -46,7 +59,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": contentType(path, download.data.type || null),
-      ...NO_STORE_HEADERS,
+      ...IMAGE_CACHE_HEADERS,
     },
   })
 }
