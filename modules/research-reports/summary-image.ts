@@ -141,31 +141,54 @@ export function buildResearchReportSummaryImageFields(input: {
   }
 }
 
-function findUrl(value: unknown): string | null {
-  if (typeof value === "string") {
-    const match = value.match(/https?:\/\/[^\s"'<>]+/i)
-    return match?.[0] ?? null
+function safeImageUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null
+
+  try {
+    const url = new URL(value.trim(), IMAGE_CREATOR_URL)
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null
+    const path = url.pathname.toLowerCase()
+    const imagePath = /\.(?:png|jpe?g|webp|gif|avif)(?:$|[?#])/.test(`${path}${url.search}`)
+    const imageHint = /(?:image|generated|output|media|upload)/i.test(path)
+    return imagePath || imageHint ? url.toString() : null
+  } catch {
+    return null
   }
+}
+
+function findJsonImageUrl(value: unknown): string | null {
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findUrl(item)
+      const found = findJsonImageUrl(item)
       if (found) return found
     }
     return null
   }
-  if (value && typeof value === "object") {
-    const row = value as Record<string, unknown>
-    for (const key of ["image_url", "imageUrl", "url", "src", "output_url", "generated_url", "data"]) {
-      if (!(key in row)) continue
-      const found = findUrl(row[key])
-      if (found) return found
-    }
-    for (const nested of Object.values(row)) {
-      const found = findUrl(nested)
-      if (found) return found
-    }
+  if (!value || typeof value !== "object") return null
+
+  const row = value as Record<string, unknown>
+  for (const key of ["image_url", "imageUrl", "output_url", "generated_url", "src"]) {
+    const found = safeImageUrl(row[key])
+    if (found) return found
+  }
+
+  for (const key of ["data", "result", "output", "images"]) {
+    if (!(key in row)) continue
+    const found = findJsonImageUrl(row[key])
+    if (found) return found
   }
   return null
+}
+
+function findHtmlImageUrl(body: string): string | null {
+  const imgMatches = body.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)
+  for (const match of imgMatches) {
+    const found = safeImageUrl(match[1])
+    if (found) return found
+  }
+
+  const explicitUrl = body.match(/https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|webp|gif|avif)(?:\?[^\s"'<>]*)?/i)
+  return safeImageUrl(explicitUrl?.[0])
 }
 
 async function parseImageUrl(response: Response): Promise<string | null> {
@@ -176,15 +199,14 @@ async function parseImageUrl(response: Response): Promise<string | null> {
   if (contentType.includes("json") || /^[\s]*[\[{]/.test(body)) {
     try {
       const parsed = JSON.parse(body)
-      const found = findUrl(parsed)
-      if (found) return new URL(found, IMAGE_CREATOR_URL).toString()
+      const found = findJsonImageUrl(parsed)
+      if (found) return found
     } catch {
-      // Fall through to URL extraction from text.
+      // Some deployments return an HTML fragment despite a JSON-ish content type.
     }
   }
 
-  const found = findUrl(body)
-  return found ? new URL(found, IMAGE_CREATOR_URL).toString() : null
+  return findHtmlImageUrl(body)
 }
 
 async function setSummaryImageState(
