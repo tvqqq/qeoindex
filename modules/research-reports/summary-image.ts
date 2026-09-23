@@ -257,6 +257,47 @@ async function fetchWithTimeout(
   }
 }
 
+function isAllowedGeneratedImageUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase()
+  return url.protocol === "https:"
+    && (
+      hostname === "nguyennhatnam.com"
+      || hostname.endsWith(".nguyennhatnam.com")
+      || hostname.endsWith(".oaiusercontent.com")
+      || hostname.endsWith(".openaiusercontent.com")
+      || /^oai[a-z0-9-]*\.blob\.core\.windows\.net$/.test(hostname)
+    )
+}
+
+async function downloadGeneratedImage(fetchImpl: typeof fetch, source: string): Promise<GeneratedImage> {
+  let url = new URL(source, IMAGE_CREATOR_URL)
+
+  for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
+    if (!isAllowedGeneratedImageUrl(url)) {
+      throw new Error("Image creator returned an untrusted image URL")
+    }
+
+    const response = await fetchWithTimeout(fetchImpl, url.toString(), { redirect: "manual" })
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location")
+      if (!location || redirectCount === 3) throw new Error("Generated image download redirect was invalid")
+      url = new URL(location, url)
+      continue
+    }
+
+    if (!response.ok) throw new Error(`Generated image download failed with HTTP ${response.status}`)
+    const contentType = imageContentType(response.headers.get("content-type"))
+    if (!contentType) throw new Error("Generated image download returned a non-image response")
+    const contentLength = Number(response.headers.get("content-length") || 0)
+    if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+      throw new Error("Generated research image exceeds the 8 MB storage limit")
+    }
+    return boundedBytes(new Uint8Array(await response.arrayBuffer()), contentType)
+  }
+
+  throw new Error("Generated image download exceeded redirect limit")
+}
+
 async function imageFromSource(fetchImpl: typeof fetch, source: string): Promise<GeneratedImage> {
   if (source.startsWith("data:")) {
     const match = source.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i)
@@ -265,13 +306,7 @@ async function imageFromSource(fetchImpl: typeof fetch, source: string): Promise
     return boundedBytes(new Uint8Array(Buffer.from(match[2], "base64")), contentType)
   }
 
-  const url = new URL(source, IMAGE_CREATOR_URL)
-  if (url.protocol !== "https:") throw new Error("Image creator returned a non-HTTPS image URL")
-  const response = await fetchWithTimeout(fetchImpl, url.toString(), { redirect: "follow" })
-  if (!response.ok) throw new Error(`Generated image download failed with HTTP ${response.status}`)
-  const contentType = imageContentType(response.headers.get("content-type"))
-  if (!contentType) throw new Error("Generated image download returned a non-image response")
-  return boundedBytes(new Uint8Array(await response.arrayBuffer()), contentType)
+  return downloadGeneratedImage(fetchImpl, source)
 }
 
 async function parseImageCreatorResponse(fetchImpl: typeof fetch, response: Response): Promise<GeneratedImage> {
