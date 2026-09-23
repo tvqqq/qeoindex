@@ -23,6 +23,10 @@ function qeo80Migration() {
   return readFileSync(matches[0], "utf8")
 }
 
+function qeo274Migration() {
+  return readFileSync("supabase/migrations/20260923171000_qeo274_research_report_summary_images.sql", "utf8")
+}
+
 const sampleTopiReport = {
   code: "",
   link: "thach-thuc-lien-tiep",
@@ -201,6 +205,7 @@ test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
     category: "sector",
     search: "dầu khí test",
     source: "PHS",
+    ticker: "",
     fromDate: "2026-08-01",
     toDate: "2026-09-05",
     page: 500,
@@ -213,6 +218,7 @@ test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
     page: "0",
   })
   assert.equal(invalid.category, null)
+  assert.equal(invalid.ticker, "")
   assert.equal(invalid.fromDate, null)
   assert.equal(invalid.toDate, null)
   assert.equal(invalid.page, 1)
@@ -224,7 +230,7 @@ test("QEO-83 catalog pagination fills responsive 2-column and 3-column card rows
   assert.equal(RESEARCH_REPORT_CATALOG_PAGE_SIZE % 3, 0)
 })
 
-test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycle states", () => {
+test("QEO-83 catalog stays server-driven while QEO-274 adds current-analysis ticker/image metadata", () => {
   const service = readFileSync("modules/research-reports/catalog.ts", "utf8")
   const page = readFileSync("app/reports/page.tsx", "utf8")
   const loading = readFileSync("app/reports/loading.tsx", "utf8")
@@ -232,21 +238,47 @@ test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycl
 
   assert.match(service, /order\("publish_date", \{ ascending: false \}\)[\s\S]*order\("id", \{ ascending: false \}\)/)
   assert.match(service, /range\(offset, offset \+ RESEARCH_REPORT_CATALOG_PAGE_SIZE - 1\)/)
-  assert.doesNotMatch(service, /market_research_report_chunks|market_research_report_ticker_mentions/)
+  assert.doesNotMatch(service, /market_research_report_chunks/)
+  assert.match(service, /market_research_report_ticker_mentions/)
+  assert.match(service, /summary_image_status/)
+  assert.match(service, /tickerReportIds/)
   assert.match(page, /canonical: "\/reports"/)
   assert.match(page, /getResearchReportCatalog/)
   assert.match(page, /name="q"/)
   assert.match(page, /name="source"/)
+  assert.match(page, /name="ticker"/)
   assert.match(page, /name="from"/)
   assert.match(page, /name="to"/)
   assert.match(page, /Vĩ mô tiền tệ/)
   assert.match(page, /Chiến lược/)
   assert.match(page, /Ngành/)
-  assert.match(page, /Đang xử lý/)
-  assert.match(page, /Chưa phân tích/)
-  assert.match(page, /Đọc PDF lỗi/)
+  assert.match(page, /Ảnh tóm tắt đang được chuẩn bị/)
+  assert.match(page, /Ảnh tóm tắt chưa tạo được/)
+  assert.match(page, /ReportSummaryImage/)
   assert.match(page, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
   assert.match(nav, /href: "\/reports"/)
   assert.match(loading, /TopNav/)
   assert.match(loading, /aria-busy="true"/)
+})
+
+
+test("QEO-274 summary image schema and generator preserve a private, report-grounded contract", () => {
+  const sql = qeo274Migration()
+  const generator = readFileSync("modules/research-reports/summary-image.ts", "utf8")
+  const catalog = readFileSync("app/reports/page.tsx", "utf8")
+  const detail = readFileSync("components/research-reports/report-detail-shell.tsx", "utf8")
+
+  assert.match(sql, /summary_image_status[\s\S]*pending[\s\S]*generating[\s\S]*ready[\s\S]*failed/i)
+  assert.match(sql, /research-report-images/)
+  assert.match(sql, /false,[\s\S]*8388608/)
+  assert.match(generator, /DEFAULT_IMAGE_CREATOR_NONCE = "05f3482112"/)
+  assert.match(generator, /wpaiic_nonce/)
+  assert.match(generator, /1536x1024/)
+  assert.match(generator, /MÃ CỔ PHIẾU LIÊN QUAN/)
+  assert.match(generator, /Không thêm câu chuyện, slogan hay dữ liệu thị trường không có trong báo cáo/)
+  assert.doesNotMatch(generator, /QeoIndex/)
+  assert.match(catalog, /summaryImageStatus === "ready"/)
+  assert.match(catalog, /href=\{catalogHref\(query, \{ ticker, page: 1 \}\)\}/)
+  assert.match(detail, /ReportSummaryImage/)
+  assert.match(detail, /\/reports\?ticker=/)
 })
