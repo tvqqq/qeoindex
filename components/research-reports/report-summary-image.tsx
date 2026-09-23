@@ -33,7 +33,7 @@ export function ReportSummaryImage({
           event.stopPropagation()
           setOpen(true)
         }}
-        className="group/image relative block w-full overflow-hidden rounded-2xl border border-white/[0.09] bg-black/20 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+        className="group/image pointer-events-auto relative block w-full overflow-hidden rounded-2xl border border-white/[0.09] bg-black/20 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
         aria-label={`Phóng to ảnh tóm tắt: ${alt}`}
       >
         <img
