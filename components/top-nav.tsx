@@ -6,6 +6,7 @@ import { createPortal } from "react-dom"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { BrainCircuit, Briefcase, CandlestickChart, ChevronDown, Compass, FileText, GitCommit, LayoutDashboard, Sparkles, Terminal } from "lucide-react"
 
+import { BrandLoadingScreen } from "@/components/brand-loading-screen"
 import { BRAND } from "@/modules/shared/brand"
 
 const COMMIT_SHA = process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || ""
@@ -98,27 +99,32 @@ function getInsightsActiveStyle(pathname: string) {
   return null
 }
 
-function TopNavNavigationLoading() {
+const TOP_NAVIGATION_LOADING_COPY: Record<string, { page: string; detail: string }> = {
+  "/": { page: "Trang chủ", detail: "Chuẩn bị không gian làm việc" },
+  "/board": { page: "Bảng điện", detail: "Chuẩn bị dữ liệu thị trường" },
+  "/portfolio": { page: "Danh mục", detail: "Chuẩn bị danh mục đầu tư" },
+  "/admin": { page: "Quản trị", detail: "Chuẩn bị công cụ quản trị" },
+}
+
+function getTopNavigationLoadingCopy(href: string) {
+  const page = TOP_NAVIGATION_LOADING_COPY[href]
+  if (page) return { label: `Đang tải ${page.page}`, detail: page.detail }
+
+  const insightPage = INSIGHTS_ITEMS.find((item) => item.href === href)
+  if (insightPage) return { label: `Đang tải ${insightPage.label}`, detail: insightPage.description }
+
+  return { label: "Đang tải trang", detail: "Chuẩn bị nội dung trang" }
+}
+
+function TopNavNavigationLoading({ href }: { href: string }) {
+  const copy = getTopNavigationLoadingCopy(href)
+
   return createPortal(
-    <div
-      className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-[#070a0e] text-white"
-    >
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10" aria-hidden="true">
-            <CandlestickChart className="size-5 text-emerald-300" />
-          </span>
-          <span className="font-ticker text-lg font-extrabold italic tracking-tight">{BRAND.name}</span>
-        </div>
-        <div className="flex items-center gap-2.5 text-sm text-slate-300" role="status">
-          <span
-            aria-hidden="true"
-            className="size-5 animate-spin rounded-full border-2 border-emerald-400/25 border-t-emerald-300 motion-reduce:animate-none"
-          />
-          <span>Đang tải trang...</span>
-        </div>
-      </div>
-    </div>,
+    <BrandLoadingScreen
+      label={copy.label}
+      detail={copy.detail}
+      className="pointer-events-auto fixed inset-0 z-[100] flex min-h-screen items-center justify-center overflow-hidden bg-[#05080b] text-white"
+    />,
     document.body,
   )
 }
@@ -387,7 +393,7 @@ export function TopNav() {
         </div>
       ) : null}
     </header>
-    {pendingHref ? <TopNavNavigationLoading /> : null}
+    {pendingHref ? <TopNavNavigationLoading href={pendingHref} /> : null}
     </>
   )
 }
