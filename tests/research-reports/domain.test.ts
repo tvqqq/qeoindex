@@ -277,7 +277,7 @@ test("QEO-274 summary image schema and generator preserve a private, report-grou
   assert.match(generator, /custom_width", "1754"/)
   assert.match(generator, /custom_height", "1240"/)
   assert.match(generator, /MÃ CỔ PHIẾU KHUYẾN NGHỊ \/ LIÊN QUAN/)
-  assert.match(generator, /Không thêm câu chuyện, slogan hay dữ liệu thị trường không có trong báo cáo/)
+  assert.match(generator, /không thêm câu chuyện, slogan hay dữ liệu thị trường không có trong báo cáo/i)
   assert.doesNotMatch(generator, /QeoIndex/)
   assert.match(generator, /isAllowedGeneratedImageUrl/)
   assert.match(generator, /redirect: "manual"/)
