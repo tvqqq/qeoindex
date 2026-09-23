@@ -9,12 +9,11 @@ import {
   Factory,
   FileText,
   Landmark,
-  Lightbulb,
   Search,
-  Sparkles,
 } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
+import { ReportSummaryImage } from "@/components/research-reports/report-summary-image"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/modules/auth/server"
 import {
@@ -35,6 +34,7 @@ type SearchParams = {
   category?: string | string[]
   q?: string | string[]
   source?: string | string[]
+  ticker?: string | string[]
   from?: string | string[]
   to?: string | string[]
   page?: string | string[]
@@ -97,21 +97,6 @@ function targetPriceLabel(value: number) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
 }
 
-function statusView(item: ResearchReportCatalogItem) {
-  if (item.ingestionStatus === "needs_ocr") return { label: "Cần OCR", className: "border-amber-400/30 bg-amber-400/[0.09] text-amber-200" }
-  if (item.ingestionStatus === "unsupported") return { label: "Không hỗ trợ", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
-  if (item.ingestionStatus === "failed") return { label: "Đọc PDF lỗi", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
-  if (item.analysisStatus === "ready") return { label: "Đã phân tích", className: "border-emerald-400/30 bg-emerald-400/[0.09] text-emerald-200" }
-  if (item.analysisStatus === "processing") return { label: "Đang xử lý", className: "border-cyan-400/30 bg-cyan-400/[0.09] text-cyan-200" }
-  if (item.analysisStatus === "failed") return { label: "Phân tích lỗi", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
-  return { label: "Chưa phân tích", className: "border-violet-400/25 bg-violet-400/[0.07] text-violet-200" }
-}
-
-function descriptionView(item: ResearchReportCatalogItem) {
-  if (item.description) return item.description
-  return "Chưa có mô tả tóm tắt cho phiên bản phân tích hiện tại."
-}
-
 function recommendationView(item: ResearchReportCatalogItem) {
   const rawRecommendation = item.recommendation?.trim() || "Chưa có"
   const normalized = rawRecommendation.toUpperCase()
@@ -130,6 +115,7 @@ function catalogHref(query: ResearchReportCatalogQuery, patch: Partial<ResearchR
   if (next.category) params.set("category", next.category)
   if (next.search) params.set("q", next.search)
   if (next.source) params.set("source", next.source)
+  if (next.ticker) params.set("ticker", next.ticker)
   if (next.fromDate) params.set("from", next.fromDate)
   if (next.toDate) params.set("to", next.toDate)
   if (next.page > 1) params.set("page", String(next.page))
@@ -215,6 +201,7 @@ export default async function ResearchReportsCatalogPage({
 
           <form method="get" action="/reports" className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.4fr)_minmax(150px,.7fr)_170px_170px_auto]">
             {query.category ? <input type="hidden" name="category" value={query.category} /> : null}
+            {query.ticker ? <input type="hidden" name="ticker" value={query.ticker} /> : null}
             <label className="relative block">
               <span className="sr-only">Tìm theo tiêu đề, nguồn hoặc ngành</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
@@ -246,6 +233,19 @@ export default async function ResearchReportsCatalogPage({
               Lọc báo cáo
             </button>
           </form>
+          {query.ticker ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+              <span>Đang lọc báo cáo liên quan mã</span>
+              <span className="rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-2.5 py-1 font-black text-cyan-100">{query.ticker}</span>
+              <Link
+                href={catalogHref(query, { ticker: "", page: 1 })}
+                prefetch={false}
+                className="font-bold text-slate-300 underline decoration-white/20 underline-offset-4 hover:text-white"
+              >
+                Bỏ lọc
+              </Link>
+            </div>
+          ) : null}
         </section>
 
         {catalog.hasDegradedRows ? (
@@ -269,8 +269,10 @@ export default async function ResearchReportsCatalogPage({
           ) : (
             <div className="grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
               {catalog.items.map((item) => {
-                const status = statusView(item)
                 const recommendation = recommendationView(item)
+                const summaryImageUrl = item.summaryImageStatus === "ready"
+                  ? `/api/research/reports/${item.id}/summary-image${item.summaryImageGeneratedAt ? `?v=${encodeURIComponent(item.summaryImageGeneratedAt)}` : ""}`
+                  : null
                 return (
                   <article
                     key={item.id}
@@ -304,33 +306,43 @@ export default async function ResearchReportsCatalogPage({
                         {item.title}
                       </h2>
 
-                      <div className="mt-4 grid grid-cols-2 gap-2.5">
-                        <div className={`h-[98px] min-w-0 rounded-2xl border p-3.5 ${status.className}`}>
-                          <div className="text-[10px] font-black uppercase tracking-[0.16em] opacity-75">TRẠNG THÁI AI</div>
-                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
-                            <Sparkles className="size-4 shrink-0" aria-hidden="true" />
-                            <span className="truncate">{status.label}</span>
+                      <div className="mt-4">
+                        {summaryImageUrl ? (
+                          <ReportSummaryImage
+                            src={summaryImageUrl}
+                            alt={`Tóm tắt hình ảnh báo cáo ${item.title}`}
+                            title={item.title}
+                            compact
+                          />
+                        ) : (
+                          <div className="flex aspect-[297/210] items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-black/20 px-5 text-center">
+                            <div>
+                              <FileText className="mx-auto size-6 text-slate-600" aria-hidden="true" />
+                              <p className="mt-2 text-xs font-bold text-slate-400">
+                                {item.summaryImageStatus === "failed" ? "Ảnh tóm tắt chưa tạo được" : "Ảnh tóm tắt đang được chuẩn bị"}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="h-[98px] min-w-0 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] p-3.5 text-amber-100">
-                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200/70">KHUYẾN NGHỊ</div>
-                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
-                            <Lightbulb className="size-4 shrink-0 text-amber-300" aria-hidden="true" />
-                            <span className="truncate">{recommendation.primary}</span>
-                          </div>
-                          {recommendation.target ? (
-                            <div className="mt-1 truncate pl-6 text-[11px] font-semibold text-amber-200/75">{recommendation.target}</div>
-                          ) : null}
-                        </div>
+                        )}
                       </div>
 
-                      {item.analysisStatus === "ready" ? (
-                        <p className="mt-4 line-clamp-3 text-sm leading-5 text-slate-400">
-                          {descriptionView(item)}
-                        </p>
+                      {item.relatedTickers.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {item.relatedTickers.map((ticker) => (
+                            <Link
+                              key={ticker}
+                              href={catalogHref(query, { ticker, page: 1 })}
+                              prefetch={false}
+                              aria-label={`Lọc báo cáo liên quan ${ticker}`}
+                              className="pointer-events-auto relative z-20 rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-2.5 py-1 text-[11px] font-black text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-300/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                            >
+                              {ticker}
+                            </Link>
+                          ))}
+                        </div>
                       ) : null}
 
-                      <div className="mt-auto pt-5">
+                      <div className="mt-auto pt-4">
                         <div className="border-t border-white/[0.075] pt-4">
                           <div className="flex flex-wrap items-center gap-2">
                             <Link
@@ -345,6 +357,10 @@ export default async function ResearchReportsCatalogPage({
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.035] px-2.5 py-1.5 text-[11px] font-bold tabular-nums text-slate-300">
                               <CalendarDays className="size-3.5 shrink-0 text-slate-400" aria-hidden="true" />
                               {dateLabel(item.publishDate)}
+                            </span>
+                            <span className="inline-flex max-w-full items-center rounded-full border border-amber-300/20 bg-amber-300/[0.06] px-2.5 py-1.5 text-[11px] font-black text-amber-100">
+                              <span className="truncate">{recommendation.primary}</span>
+                              {recommendation.target ? <span className="ml-1.5 font-semibold text-amber-200/70">• {recommendation.target}</span> : null}
                             </span>
                           </div>
                         </div>
