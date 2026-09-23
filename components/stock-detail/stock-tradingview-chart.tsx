@@ -1099,6 +1099,11 @@ export function StockTradingViewChart({
     }
 
     const previous = renderedRef.current
+    // setData can emit range changes while the series are being replaced.
+    // Capture the user's viewport before those events overwrite the range ref.
+    const rangeBeforeData = previous
+      ? chart.timeScale().getVisibleLogicalRange() ?? visibleRangeRef.current
+      : null
     const latest = displayBars.at(-1)
     const canUpdateLatest = canIncrementallyUpdateLatest(previous, displayBars)
       && previous?.futureLength === futureTimes.length
@@ -1143,14 +1148,16 @@ export function StockTradingViewChart({
 
     if (displayBars.length > 0 && !previous) {
       setLatestVisibleRange()
-    } else if (previous && visibleRangeRef.current && displayBars[0]?.time < previous.firstTime) {
+    } else if (previous && rangeBeforeData && displayBars[0]?.time < previous.firstTime) {
       // Prepending older history shifts logical indexes. Preserve the user's
       // current viewport instead of fitting the chart on every refresh.
-      const shift = displayBars.length - previous.actualLength
-      const range = shiftVisibleLogicalRange(visibleRangeRef.current, shift)
-      chart.timeScale().setVisibleLogicalRange(range)
-      visibleRangeRef.current = range
-      setVisibleRangeState(range)
+      const prependedBars = displayBars.findIndex((bar) => bar.time === previous.firstTime)
+      if (prependedBars > 0) {
+        const range = shiftVisibleLogicalRange(rangeBeforeData, prependedBars)
+        chart.timeScale().setVisibleLogicalRange(range)
+        visibleRangeRef.current = range
+        setVisibleRangeState(range)
+      }
     }
 
     if (latest) {
