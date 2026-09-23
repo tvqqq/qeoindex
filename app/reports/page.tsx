@@ -315,7 +315,7 @@ export default async function ResearchReportsCatalogPage({
                             compact
                           />
                         ) : (
-                          <div className="flex aspect-[3/2] items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-black/20 px-5 text-center">
+                          <div className="flex aspect-[297/210] items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-black/20 px-5 text-center">
                             <div>
                               <FileText className="mx-auto size-6 text-slate-600" aria-hidden="true" />
                               <p className="mt-2 text-xs font-bold text-slate-400">
