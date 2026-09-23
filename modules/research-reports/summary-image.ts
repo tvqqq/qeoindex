@@ -359,10 +359,10 @@ async function submitImageCreator(
   form.set("wpaiic_action", "generate")
   form.set("wpaiic_nonce", nonce)
   for (const [key, value] of Object.entries(fields)) form.set(key, value)
-  form.set("size_choice", "1536x1024")
+  form.set("size_choice", "custom")
   form.set("quality", "auto")
-  form.set("custom_width", "")
-  form.set("custom_height", "")
+  form.set("custom_width", "1754")
+  form.set("custom_height", "1240")
   form.set("model", "gpt-image-2.5-sunburst")
 
   const response = await fetchWithTimeout(fetchImpl, IMAGE_CREATOR_URL, {
