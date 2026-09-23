@@ -6,6 +6,7 @@ import {
 import { processResearchReport } from "../analysis/pipeline.ts"
 import { discoverTopiReports } from "../providers/topi.ts"
 import { upsertResearchReports } from "../repository.ts"
+import { ensureResearchReportSummaryImage } from "../summary-image.ts"
 import type { ProcessResearchReportResult, ResearchReportSourceRecord } from "../types.ts"
 import type { ResearchReportWorkflowCandidate, ResearchReportsWorkflowMode } from "./orchestrator.ts"
 import {
@@ -326,6 +327,21 @@ export async function processResearchReportRunStep(input: {
     await retryDelay(attempt)
   }
   if (!result) throw new Error("Research report processing did not produce a result")
+
+  if (
+    (result.status === "ready" || result.status === "skipped_existing")
+    && result.analysisId
+    && result.contentHash
+  ) {
+    await ensureResearchReportSummaryImage(
+      db as unknown as Parameters<typeof ensureResearchReportSummaryImage>[0],
+      {
+        reportId: result.reportId,
+        analysisId: result.analysisId,
+        contentHash: result.contentHash,
+      },
+    )
+  }
 
   const nextBudgetSnapshot = budget.snapshot()
   const outcome = classifyOutcome(result, nextBudgetSnapshot)

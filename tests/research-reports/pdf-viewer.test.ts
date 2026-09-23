@@ -84,37 +84,38 @@ test("Research Reports catalog uses one, two, then three columns as viewport wid
   assert.match(code, /className=["'][^"']*grid[^"']*md:grid-cols-2[^"']*xl:grid-cols-3[^"']*["']/)
 })
 
-test("Research Reports catalog card is a whole-card detail link with report type icon, status panels, and source/date tags", () => {
+test("Research Reports catalog card keeps whole-card navigation while the summary image owns zoom and footer metadata", () => {
   const code = source("app/reports/page.tsx")
 
   assert.match(code, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
   assert.doesNotMatch(code, />\s*Mở báo cáo\s*</)
   assert.match(code, /categoryIcon\(item\.category\)/)
-  assert.match(code, /TRẠNG THÁI AI/)
-  assert.match(code, /KHUYẾN NGHỊ/)
+  assert.match(code, /ReportSummaryImage/)
+  assert.match(code, /summaryImageUrl/)
+  assert.doesNotMatch(code, /TRẠNG THÁI AI/)
+  assert.match(code, /recommendation\.primary/)
   assert.match(code, /item\.sourceName/)
   assert.match(code, /dateLabel\(item\.publishDate\)/)
 })
 
-test("Research Reports catalog description comes only from the current analyzed report summary, never raw chunks", () => {
+test("Research Reports catalog does not hydrate or render the old description body", () => {
   const service = source("modules/research-reports/catalog.ts")
   const page = source("app/reports/page.tsx")
 
-  assert.match(service, /description:\s*string\s*\|\s*null/)
   assert.match(service, /content_hash/)
   assert.match(service, /market_research_report_analyses/)
-  assert.match(service, /executive_summary/)
   assert.match(service, /report_id/)
+  assert.doesNotMatch(service, /executive_summary/)
   assert.doesNotMatch(service, /market_research_report_chunks/)
-  assert.match(page, /item\.description/)
+  assert.doesNotMatch(page, /item\.description/)
 })
 
-test("Research report cards use neutral failed states, equal-height structure, category colors, and clickable source filters", () => {
+test("Research report cards keep equal-height structure, category colors, source filters, and neutral image fallbacks", () => {
   const code = source("app/reports/page.tsx")
 
-  assert.match(code, /ingestionStatus === ["']failed["'][\s\S]{0,180}slate/)
-  assert.match(code, /analysisStatus === ["']failed["'][\s\S]{0,180}slate/)
-  assert.doesNotMatch(code, /analysisStatus === ["']failed["'][\s\S]{0,180}(rose|red)-/)
+  assert.match(code, /summaryImageStatus === ["']failed["']/)
+  assert.match(code, /Chưa tạo được ảnh tóm tắt/)
+  assert.match(code, /Ảnh tóm tắt đang được chuẩn bị/)
   assert.match(code, /macro[\s\S]{0,220}emerald/)
   assert.match(code, /strategy[\s\S]{0,220}cyan/)
   assert.match(code, /sector[\s\S]{0,220}amber/)
@@ -171,13 +172,16 @@ test("desktop report detail keeps chat below PDF when visible and switches to a 
   assert.match(shell, /data-report-analysis-column[\s\S]*data-report-panel=["']analysis["'][\s\S]*<AnalysisPanel/)
 })
 
-test("report cards place status panels directly below the title and only show description for ready AI analysis", () => {
+test("report cards replace AI status and description panels with a zoomable generated image and ticker filters", () => {
   const page = source("app/reports/page.tsx")
+  const image = source("components/research-reports/report-summary-image.tsx")
 
-  assert.doesNotMatch(page, /min-h-\[84px\]/)
-  assert.doesNotMatch(page, /<p className=["'][^"']*h-\[60px\][^"']*["']>/)
-  assert.match(
-    page,
-    /<h2[\s\S]{0,500}\{item\.title\}[\s\S]{0,500}TRẠNG THÁI AI[\s\S]{0,1000}KHUYẾN NGHỊ[\s\S]{0,1000}item\.analysisStatus === ["']ready["'][\s\S]{0,500}descriptionView\(item\)/,
-  )
+  assert.match(page, /<ReportSummaryImage/)
+  assert.match(page, /item\.summaryImageUrl/)
+  assert.match(page, /item\.tickers\.map/)
+  assert.match(page, /catalogHref\(query, \{ ticker, page: 1 \}\)/)
+  assert.doesNotMatch(page, /TRẠNG THÁI AI/)
+  assert.doesNotMatch(page, /descriptionView\(item\)/)
+  assert.match(image, /role=["']dialog["']/)
+  assert.match(image, /Phóng to/)
 })

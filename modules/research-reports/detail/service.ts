@@ -147,6 +147,14 @@ function baseReportViewModel(row: Record<string, unknown>): ResearchReportDetail
     publishDate: nonEmptyString(row.publish_date) ?? "",
     category: category(row.category),
     sectorName: nullableString(row.sector_name),
+    recommendation: nullableString(row.recommendation),
+    code: nonEmptyString(row.code)?.toUpperCase() ?? null,
+    summaryImageUrl:
+      nonEmptyString(row.summary_image_status) === "ready"
+      && nonEmptyString(row.summary_image_content_hash) === nonEmptyString(row.content_hash)
+        ? safeHttpsLink(row.summary_image_url)
+        : null,
+    summaryImageStatus: nonEmptyString(row.summary_image_status) ?? "pending",
     originalSourceLink: safeHttpsLink(row.link),
     originalPdfUrl: null,
     parsedPageCount: parsedPageCount(row.parsed_page_count),

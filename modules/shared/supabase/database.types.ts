@@ -2965,6 +2965,12 @@ export type Database = {
           sector_name: string | null
           source_name: string
           source_payload: Json
+          summary_image_content_hash: string | null
+          summary_image_error: string | null
+          summary_image_generated_at: string | null
+          summary_image_prompt_version: string | null
+          summary_image_status: string
+          summary_image_url: string | null
           target_price: number | null
           title: string
           updated_at: string
@@ -2990,6 +2996,12 @@ export type Database = {
           sector_name?: string | null
           source_name: string
           source_payload: Json
+          summary_image_content_hash?: string | null
+          summary_image_error?: string | null
+          summary_image_generated_at?: string | null
+          summary_image_prompt_version?: string | null
+          summary_image_status?: string
+          summary_image_url?: string | null
           target_price?: number | null
           title: string
           updated_at?: string
@@ -3015,6 +3027,12 @@ export type Database = {
           sector_name?: string | null
           source_name?: string
           source_payload?: Json
+          summary_image_content_hash?: string | null
+          summary_image_error?: string | null
+          summary_image_generated_at?: string | null
+          summary_image_prompt_version?: string | null
+          summary_image_status?: string
+          summary_image_url?: string | null
           target_price?: number | null
           title?: string
           updated_at?: string

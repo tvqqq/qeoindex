@@ -194,6 +194,7 @@ test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
     category: "SECTOR",
     q: "  dầu, khí_% (test)  ",
     source: "  PHS  ",
+    ticker: " gvr ",
     from: "2026-09-05",
     to: "2026-08-01",
     page: "9999",
@@ -201,6 +202,7 @@ test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
     category: "sector",
     search: "dầu khí test",
     source: "PHS",
+    ticker: "GVR",
     fromDate: "2026-08-01",
     toDate: "2026-09-05",
     page: 500,
@@ -213,6 +215,7 @@ test("QEO-83 catalog query normalization is URL-stable and bounded", () => {
     page: "0",
   })
   assert.equal(invalid.category, null)
+  assert.equal(invalid.ticker, "")
   assert.equal(invalid.fromDate, null)
   assert.equal(invalid.toDate, null)
   assert.equal(invalid.page, 1)
@@ -232,7 +235,10 @@ test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycl
 
   assert.match(service, /order\("publish_date", \{ ascending: false \}\)[\s\S]*order\("id", \{ ascending: false \}\)/)
   assert.match(service, /range\(offset, offset \+ RESEARCH_REPORT_CATALOG_PAGE_SIZE - 1\)/)
-  assert.doesNotMatch(service, /market_research_report_chunks|market_research_report_ticker_mentions/)
+  assert.doesNotMatch(service, /market_research_report_chunks/)
+  assert.match(service, /market_research_report_ticker_mentions/)
+  assert.match(service, /summary_image_url/)
+  assert.match(service, /query\.ticker/)
   assert.match(page, /canonical: "\/reports"/)
   assert.match(page, /getResearchReportCatalog/)
   assert.match(page, /name="q"/)
@@ -242,9 +248,10 @@ test("QEO-83 catalog is canonical metadata-only server UI with explicit lifecycl
   assert.match(page, /Vĩ mô tiền tệ/)
   assert.match(page, /Chiến lược/)
   assert.match(page, /Ngành/)
-  assert.match(page, /Đang xử lý/)
-  assert.match(page, /Chưa phân tích/)
-  assert.match(page, /Đọc PDF lỗi/)
+  assert.match(page, /ReportSummaryImage/)
+  assert.match(page, /summaryImageUrl/)
+  assert.match(page, /item\.tickers/)
+  assert.match(page, /Khuyến nghị:/)
   assert.match(page, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
   assert.match(nav, /href: "\/reports"/)
   assert.match(loading, /TopNav/)
