@@ -301,7 +301,7 @@ export default async function ResearchReportsCatalogPage({
                         {item.title}
                       </h2>
 
-                      <div className="mt-4 pointer-events-auto relative z-20">
+                      <div className="pointer-events-none relative z-20 mt-4">
                         {item.summaryImageUrl ? (
                           <ReportSummaryImage
                             src={item.summaryImageUrl}
