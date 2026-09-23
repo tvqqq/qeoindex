@@ -11,6 +11,7 @@ import {
   upsertResearchReports,
   type ResearchReportSourceRecord,
 } from "../../modules/research-reports/index.ts"
+import { parseResearchReportImageCreatorResponse } from "../../modules/research-reports/summary-image.ts"
 
 function qeo80Migration() {
   const directories = ["supabase/migrations", "supabase/pending-migrations"].filter(existsSync)
@@ -262,6 +263,47 @@ test("QEO-83 catalog stays server-driven while QEO-274 adds current-analysis tic
 })
 
 
+test("QEO-276 image creator accepts the production raw base64 PNG response contract", async () => {
+  const pngBytes = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d,
+  ])
+  const response = new Response(JSON.stringify({
+    success: true,
+    b64: pngBytes.toString("base64"),
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  })
+
+  const parsed = await parseResearchReportImageCreatorResponse(
+    (async () => { throw new Error("remote fetch should not be used for raw base64") }) as typeof fetch,
+    response,
+  )
+
+  assert.equal(parsed.contentType, "image/png")
+  assert.equal(parsed.extension, "png")
+  assert.deepEqual([...parsed.bytes], [...pngBytes])
+})
+
+test("QEO-276 image creator rejects arbitrary raw base64 that is not a supported image", async () => {
+  const response = new Response(JSON.stringify({
+    success: true,
+    b64: Buffer.from("not an image").toString("base64"),
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  })
+
+  await assert.rejects(
+    () => parseResearchReportImageCreatorResponse(
+      (async () => { throw new Error("remote fetch should not be used for invalid raw base64") }) as typeof fetch,
+      response,
+    ),
+    /did not contain an image/i,
+  )
+})
+
 test("QEO-274 summary image schema and generator preserve a private, report-grounded contract", () => {
   const sql = qeo274Migration()
   const generator = readFileSync("modules/research-reports/summary-image.ts", "utf8")
@@ -273,6 +315,9 @@ test("QEO-274 summary image schema and generator preserve a private, report-grou
   assert.match(sql, /research-report-images/)
   assert.match(sql, /false,[\s\S]*8388608/)
   assert.match(generator, /DEFAULT_IMAGE_CREATOR_NONCE = "05f3482112"/)
+  assert.match(generator, /IMAGE_CREATOR_GENERATION_TIMEOUT_MS = 180_000/)
+  assert.match(generator, /fetchWithTimeout\(fetchImpl, IMAGE_CREATOR_URL,[\s\S]*IMAGE_CREATOR_GENERATION_TIMEOUT_MS/)
+  assert.match(generator, /for \(const key of \["b64", "base64"\]\)/)
   assert.match(generator, /wpaiic_nonce/)
   assert.match(generator, /custom_width", "1754"/)
   assert.match(generator, /custom_height", "1240"/)

@@ -8,6 +8,8 @@ const IMAGE_CREATOR_URL = "https://nguyennhatnam.com/tool/image-creator.php"
 const IMAGE_CREATOR_ORIGIN = "https://nguyennhatnam.com"
 const DEFAULT_IMAGE_CREATOR_NONCE = "05f3482112"
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const MAX_BASE64_IMAGE_CHARS = Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 8
+const IMAGE_CREATOR_GENERATION_TIMEOUT_MS = 180_000
 const MAX_ERROR_CHARS = 500
 
 type DbError = { message?: string } | null
@@ -211,6 +213,48 @@ function boundedBytes(bytes: Uint8Array, contentType: GeneratedImage["contentTyp
   return { bytes, contentType, extension: imageExtension(contentType) }
 }
 
+function base64ImageContentType(value: unknown): GeneratedImage["contentType"] | null {
+  if (typeof value !== "string") return null
+  const candidate = value.replace(/\s+/g, "").trim()
+  if (
+    candidate.length < 12
+    || candidate.length > MAX_BASE64_IMAGE_CHARS
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(candidate)
+  ) return null
+
+  const prefix = new Uint8Array(Buffer.from(candidate.slice(0, 32), "base64"))
+  if (
+    prefix.length >= 8
+    && prefix[0] === 0x89
+    && prefix[1] === 0x50
+    && prefix[2] === 0x4e
+    && prefix[3] === 0x47
+    && prefix[4] === 0x0d
+    && prefix[5] === 0x0a
+    && prefix[6] === 0x1a
+    && prefix[7] === 0x0a
+  ) return "image/png"
+
+  if (prefix.length >= 3 && prefix[0] === 0xff && prefix[1] === 0xd8 && prefix[2] === 0xff) {
+    return "image/jpeg"
+  }
+
+  if (
+    prefix.length >= 12
+    && String.fromCharCode(...prefix.slice(0, 4)) === "RIFF"
+    && String.fromCharCode(...prefix.slice(8, 12)) === "WEBP"
+  ) return "image/webp"
+
+  return null
+}
+
+function rawBase64ImageSource(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const candidate = value.replace(/\s+/g, "").trim()
+  const contentType = base64ImageContentType(candidate)
+  return contentType ? `data:${contentType};base64,${candidate}` : null
+}
+
 function extractImageSource(value: unknown): string | null {
   if (typeof value === "string") {
     const candidate = value.trim().replace(/&amp;/g, "&")
@@ -227,6 +271,11 @@ function extractImageSource(value: unknown): string | null {
   }
   if (value && typeof value === "object") {
     const row = value as Record<string, unknown>
+    for (const key of ["b64", "base64"]) {
+      if (!(key in row)) continue
+      const candidate = rawBase64ImageSource(row[key])
+      if (candidate) return candidate
+    }
     for (const key of ["image_url", "url", "src", "image", "data", "output"]) {
       if (!(key in row)) continue
       const candidate = extractImageSource(row[key])
@@ -307,7 +356,7 @@ async function imageFromSource(fetchImpl: typeof fetch, source: string): Promise
   return downloadGeneratedImage(fetchImpl, source)
 }
 
-async function parseImageCreatorResponse(fetchImpl: typeof fetch, response: Response): Promise<GeneratedImage> {
+export async function parseResearchReportImageCreatorResponse(fetchImpl: typeof fetch, response: Response): Promise<GeneratedImage> {
   const directType = imageContentType(response.headers.get("content-type"))
   if (directType) {
     if (!response.ok) throw new Error(`Image creator failed with HTTP ${response.status}`)
@@ -367,8 +416,8 @@ async function submitImageCreator(
     method: "POST",
     headers: requestHeaders(cookie),
     body: form,
-  })
-  return parseImageCreatorResponse(fetchImpl, response)
+  }, IMAGE_CREATOR_GENERATION_TIMEOUT_MS)
+  return parseResearchReportImageCreatorResponse(fetchImpl, response)
 }
 
 function extractNonce(html: string): string | null {
