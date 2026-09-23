@@ -84,14 +84,16 @@ test("Research Reports catalog uses one, two, then three columns as viewport wid
   assert.match(code, /className=["'][^"']*grid[^"']*md:grid-cols-2[^"']*xl:grid-cols-3[^"']*["']/)
 })
 
-test("Research Reports catalog card is a whole-card detail link with report type icon, status panels, and source/date tags", () => {
+test("Research Reports catalog card keeps whole-card navigation while the summary image owns zoom and footer metadata", () => {
   const code = source("app/reports/page.tsx")
 
   assert.match(code, /href=\{`\/research\/reports\/\$\{item\.id\}`\}/)
   assert.doesNotMatch(code, />\s*Mở báo cáo\s*</)
   assert.match(code, /categoryIcon\(item\.category\)/)
-  assert.match(code, /TRẠNG THÁI AI/)
-  assert.match(code, /KHUYẾN NGHỊ/)
+  assert.match(code, /ReportSummaryImage/)
+  assert.match(code, /summaryImageUrl/)
+  assert.doesNotMatch(code, /TRẠNG THÁI AI/)
+  assert.match(code, /recommendation\.primary/)
   assert.match(code, /item\.sourceName/)
   assert.match(code, /dateLabel\(item\.publishDate\)/)
 })
@@ -171,13 +173,16 @@ test("desktop report detail keeps chat below PDF when visible and switches to a 
   assert.match(shell, /data-report-analysis-column[\s\S]*data-report-panel=["']analysis["'][\s\S]*<AnalysisPanel/)
 })
 
-test("report cards place status panels directly below the title and only show description for ready AI analysis", () => {
+test("report cards replace AI status and description panels with a zoomable generated image and ticker filters", () => {
   const page = source("app/reports/page.tsx")
+  const image = source("components/research-reports/report-summary-image.tsx")
 
-  assert.doesNotMatch(page, /min-h-\[84px\]/)
-  assert.doesNotMatch(page, /<p className=["'][^"']*h-\[60px\][^"']*["']>/)
-  assert.match(
-    page,
-    /<h2[\s\S]{0,500}\{item\.title\}[\s\S]{0,500}TRẠNG THÁI AI[\s\S]{0,1000}KHUYẾN NGHỊ[\s\S]{0,1000}item\.analysisStatus === ["']ready["'][\s\S]{0,500}descriptionView\(item\)/,
-  )
+  assert.match(page, /<ReportSummaryImage/)
+  assert.match(page, /item\.summaryImageUrl/)
+  assert.match(page, /item\.tickers\.map/)
+  assert.match(page, /catalogHref\(query, \{ ticker, page: 1 \}\)/)
+  assert.doesNotMatch(page, /TRẠNG THÁI AI/)
+  assert.doesNotMatch(page, /descriptionView\(item\)/)
+  assert.match(image, /role=["']dialog["']/)
+  assert.match(image, /Phóng to/)
 })
