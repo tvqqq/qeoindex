@@ -55,7 +55,7 @@ export function ReportSummaryImage({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-3 sm:p-6"
+          className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-3 sm:p-6"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) setOpen(false)
           }}
