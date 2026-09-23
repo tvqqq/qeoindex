@@ -2,9 +2,12 @@ import type { ResearchReportCategory } from "./types.ts"
 
 const REPORT_TABLE = "market_research_reports"
 const ANALYSIS_TABLE = "market_research_report_analyses"
+const MENTION_TABLE = "market_research_report_ticker_mentions"
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000"
 const MAX_ERROR_CHARS = 500
 const MAX_SEARCH_CHARS = 100
 const MAX_SOURCE_CHARS = 80
+const MAX_TICKER_CHARS = 12
 const MAX_DESCRIPTION_CHARS = 280
 
 export const RESEARCH_REPORT_CATALOG_PAGE_SIZE = 24
@@ -16,6 +19,7 @@ export interface ResearchReportCatalogQuery {
   category: ResearchReportCatalogCategory | null
   search: string
   source: string
+  ticker: string
   fromDate: string | null
   toDate: string | null
   page: number
@@ -34,6 +38,9 @@ export interface ResearchReportCatalogItem {
   code: string | null
   ingestionStatus: string
   analysisStatus: string
+  summaryImageStatus: string
+  summaryImageGeneratedAt: string | null
+  relatedTickers: string[]
 }
 
 export interface ResearchReportCatalogResult {
@@ -124,6 +131,7 @@ export function normalizeResearchReportCatalogQuery(raw: {
   category?: string | string[]
   q?: string | string[]
   source?: string | string[]
+  ticker?: string | string[]
   from?: string | string[]
   to?: string | string[]
   page?: string | string[]
@@ -134,6 +142,8 @@ export function normalizeResearchReportCatalogQuery(raw: {
     : null
   const search = normalizedSearch(first(raw.q))
   const source = normalizedText(first(raw.source), MAX_SOURCE_CHARS)
+  const tickerCandidate = normalizedText(first(raw.ticker), MAX_TICKER_CHARS).toUpperCase()
+  const ticker = /^[A-Z0-9]{2,12}$/.test(tickerCandidate) ? tickerCandidate : ""
   let fromDate = normalizedIsoDate(first(raw.from))
   let toDate = normalizedIsoDate(first(raw.to))
   if (fromDate && toDate && fromDate > toDate) [fromDate, toDate] = [toDate, fromDate]
@@ -142,6 +152,7 @@ export function normalizeResearchReportCatalogQuery(raw: {
     category,
     search,
     source,
+    ticker,
     fromDate,
     toDate,
     page: normalizedPage(first(raw.page)),
@@ -195,6 +206,9 @@ function toCatalogItem(row: Record<string, unknown>): ResearchReportCatalogItem 
     code: nonEmptyString(row.code),
     ingestionStatus: nonEmptyString(row.ingestion_status) ?? "discovered",
     analysisStatus: nonEmptyString(row.analysis_status) ?? "pending",
+    summaryImageStatus: nonEmptyString(row.summary_image_status) ?? "pending",
+    summaryImageGeneratedAt: nonEmptyString(row.summary_image_generated_at),
+    relatedTickers: [],
   }
 }
 
@@ -205,12 +219,29 @@ export async function getResearchReportCatalog(
   const query = normalizeResearchReportCatalogQuery(rawQuery)
   const offset = (query.page - 1) * RESEARCH_REPORT_CATALOG_PAGE_SIZE
 
+  let tickerReportIds: string[] | null = null
+  if (query.ticker) {
+    const mentionResult = await (client.from(MENTION_TABLE) as CatalogQueryBuilder)
+      .select("report_id")
+      .eq("ticker", query.ticker)
+      .limit(2000)
+    if (mentionResult.error) throw supabaseError("Research report ticker filter lookup failed", mentionResult.error)
+    tickerReportIds = [...new Set((mentionResult.data ?? [])
+      .map((row) => nonEmptyString(row.report_id))
+      .filter((value): value is string => value !== null))]
+  }
+
   let builder = (client.from(REPORT_TABLE) as CatalogQueryBuilder)
     .select(
-      "id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,ingestion_status,analysis_status,content_hash",
+      "id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,ingestion_status,analysis_status,content_hash,summary_image_status,summary_image_generated_at",
       { count: "exact" },
     )
 
+  if (tickerReportIds) {
+    builder = tickerReportIds.length > 0
+      ? builder.in("id", tickerReportIds)
+      : builder.eq("id", EMPTY_UUID)
+  }
   if (query.category) builder = builder.eq("category", query.category)
   if (query.source) builder = builder.eq("source_name", query.source)
   if (query.fromDate) builder = builder.gte("publish_date", query.fromDate)
@@ -251,22 +282,49 @@ export async function getResearchReportCatalog(
     .filter((entry) => entry.item.analysisStatus === "ready" && entry.contentHash)
     .map((entry) => entry.item.id)
   const descriptions = new Map<string, string>()
+  const currentAnalysisIds = new Map<string, string>()
 
   if (analyzedReportIds.length > 0) {
     const analysisResult = await (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
-      .select("report_id,content_hash,executive_summary,processed_at,created_at")
+      .select("id,report_id,content_hash,executive_summary,processed_at,created_at")
       .in("report_id", analyzedReportIds)
       .order("processed_at", { ascending: false })
       .order("created_at", { ascending: false })
 
     if (!analysisResult.error) {
       for (const row of analysisResult.data ?? []) {
+        const analysisId = nonEmptyString(row.id)
         const reportId = nonEmptyString(row.report_id)
         const contentHash = nonEmptyString(row.content_hash)
-        const description = catalogDescription(row.executive_summary)
-        if (!reportId || !contentHash || !description || descriptions.has(reportId)) continue
+        if (!analysisId || !reportId || !contentHash || currentAnalysisIds.has(reportId)) continue
         if (currentContentHashes.get(reportId) !== contentHash) continue
-        descriptions.set(reportId, description)
+        currentAnalysisIds.set(reportId, analysisId)
+        const description = catalogDescription(row.executive_summary)
+        if (description) descriptions.set(reportId, description)
+      }
+    }
+  }
+
+  const reportIdByAnalysisId = new Map(
+    [...currentAnalysisIds.entries()].map(([reportId, analysisId]) => [analysisId, reportId]),
+  )
+  const relatedTickers = new Map<string, string[]>()
+  const currentAnalysisIdList = [...reportIdByAnalysisId.keys()]
+  if (currentAnalysisIdList.length > 0) {
+    const mentionResult = await (client.from(MENTION_TABLE) as CatalogQueryBuilder)
+      .select("analysis_id,ticker")
+      .in("analysis_id", currentAnalysisIdList)
+      .order("ticker", { ascending: true })
+
+    if (!mentionResult.error) {
+      for (const row of mentionResult.data ?? []) {
+        const analysisId = nonEmptyString(row.analysis_id)
+        const ticker = nonEmptyString(row.ticker)?.toUpperCase() ?? ""
+        const reportId = analysisId ? reportIdByAnalysisId.get(analysisId) : null
+        if (!reportId || !/^[A-Z0-9]{2,12}$/.test(ticker)) continue
+        const list = relatedTickers.get(reportId) ?? []
+        if (!list.includes(ticker) && list.length < 8) list.push(ticker)
+        relatedTickers.set(reportId, list)
       }
     }
   }
@@ -274,6 +332,7 @@ export async function getResearchReportCatalog(
   const items = reportEntries.map(({ item }) => ({
     ...item,
     description: descriptions.get(item.id) ?? null,
+    relatedTickers: relatedTickers.get(item.id) ?? [],
   }))
   const total = Math.max(0, result.count ?? items.length)
   const lastSuccessfulSyncAt = nonEmptyString(syncResult.data?.updated_at)
