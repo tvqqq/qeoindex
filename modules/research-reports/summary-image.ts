@@ -234,7 +234,7 @@ async function loadSummaryInputs(client: ResearchReportSummaryImageClient, input
 async function generateImageUrl(fields: ReturnType<typeof buildResearchReportSummaryImageFields>): Promise<string> {
   const body = new FormData()
   body.set("wpaiic_action", "generate")
-  body.set("wpaiic_nonce", process.env.RESEARCH_REPORT_IMAGE_CREATOR_NONCE?.trim() || DEFAULT_IMAGE_CREATOR_NONCE)
+  body.set("wpaiic_nonce", DEFAULT_IMAGE_CREATOR_NONCE)
   body.set("location", fields.location)
   body.set("headline", fields.headline)
   body.set("slogan", fields.slogan)
@@ -256,7 +256,7 @@ async function generateImageUrl(fields: ReturnType<typeof buildResearchReportSum
       headers: {
         Referer: IMAGE_CREATOR_URL,
         Origin: "https://nguyennhatnam.com",
-        "User-Agent": "Mozilla/5.0 QeoIndexResearch/1.0",
+        "User-Agent": "Mozilla/5.0",
       },
       body,
       signal: controller.signal,
