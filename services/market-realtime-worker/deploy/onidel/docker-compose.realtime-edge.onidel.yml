@@ -1,0 +1,25 @@
+name: qeo-realtime-edge
+
+services:
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: qeo-realtime-caddy
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      - /opt/qeoindex/deploy/Caddyfile.qeo-realtime.onidel:/etc/caddy/Caddyfile:ro
+      - qeo-realtime-caddy-data:/data
+      - qeo-realtime-caddy-config:/config
+
+volumes:
+  qeo-realtime-caddy-data:
+    name: qeo-realtime-caddy-data
+  qeo-realtime-caddy-config:
+    name: qeo-realtime-caddy-config

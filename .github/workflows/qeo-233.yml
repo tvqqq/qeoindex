@@ -1,0 +1,43 @@
+name: QEO-233
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "docs/superpowers/plans/2026-09-15-qeo-233-daily-provenance-backfill-compat.md"
+      - "tests/qeo-233-daily-provenance-runtime.cases.ts"
+      - "tests/helpers/qeo-232-daily-provenance-schema-contract.ts"
+      - "supabase/migrations/*_qeo233_daily_ohlcv_provenance*.sql"
+      - "modules/market/history/daily-provenance.ts"
+      - "modules/market/history/ohlcv-store.ts"
+      - "modules/market/history/daily-integrity.ts"
+      - "modules/eod/no-trade-repair-step.ts"
+      - "modules/market/chart-data/service.ts"
+      - "modules/market/chart-data/maintenance.ts"
+      - "modules/market/history/daily-cold-history.ts"
+      - "modules/market/history/ohlcv-grouped.ts"
+      - ".github/workflows/qeo-233.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/qeo-233-daily-provenance-runtime.cases.ts"
+      - "supabase/migrations/*_qeo233_daily_ohlcv_provenance*.sql"
+      - "modules/market/history/daily-provenance.ts"
+      - ".github/workflows/qeo-233.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test tests/qeo-232-daily-provenance-contract.cases.ts tests/qeo-233-daily-provenance-runtime.cases.ts

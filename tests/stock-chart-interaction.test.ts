@@ -10,6 +10,23 @@ import {
   canIncrementallyUpdateLatest,
   fingerprintOhlcvPrefix,
 } from "../components/stock-detail/chart/chart-render-diff.ts"
+import {
+  chartHistoryIdentity,
+  renderBarsForChartIdentity,
+} from "../components/stock-detail/chart/chart-history-identity.ts"
+import {
+  canonicalPaneGeometry,
+  drawablePaneBudget,
+} from "../components/stock-detail/chart/chart-pane-geometry.ts"
+import {
+  chartTimeRangeForBars,
+  shiftVisibleLogicalRange,
+} from "../components/stock-detail/chart/chart-viewport.ts"
+import {
+  clampDrawingPoint,
+  hasCanonicalDrawingAnchor,
+  isInsideDrawingBounds,
+} from "../components/stock-detail/chart/drawing-bounds.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -83,6 +100,29 @@ test("corrected prior candle forces a full render instead of latest-only update"
   assert.match(chartCode, /barFingerprint/)
 })
 
+test("chart history identity never exposes the previous timeframe family during reset", () => {
+  const daily = [{ timeframe: "1D", time: 1 }]
+  const weekly = [{ timeframe: "1W", time: 7 }]
+  const monthly = [{ timeframe: "1M", time: 30 }]
+
+  let committedKey = chartHistoryIdentity("VIC", "1D")
+  let committedBars = daily
+  for (const [timeframe, targetBars] of [["1W", weekly], ["1M", monthly], ["1D", daily]] as const) {
+    const requestedKey = chartHistoryIdentity("VIC", timeframe)
+    const rendered = renderBarsForChartIdentity(committedKey, requestedKey, committedBars, targetBars)
+    assert.deepEqual(rendered, targetBars, `${timeframe} must render its own family before layout reset commits`)
+    assert.notEqual(rendered, committedBars)
+    committedKey = requestedKey
+    committedBars = targetBars
+  }
+
+  assert.deepEqual(
+    renderBarsForChartIdentity(committedKey, chartHistoryIdentity("VIC", "1W"), committedBars, []),
+    [],
+    "an unprepared target must render an empty/loading state, never stale bars",
+  )
+})
+
 test("coordinate bridge interpolates missing anchors and keeps pointer work logarithmic", () => {
   const timeline = [100, 200, 300, 400, 500]
   const coordinateForTime = (time: number) => time / 10
@@ -104,16 +144,37 @@ test("coordinate bridge interpolates missing anchors and keeps pointer work loga
   assert.ok(calls < 40, `binary search should not scan ${denseTimeline.length} timestamps (calls=${calls})`)
 })
 
-test("future timestamps are real LWC whitespace and reserve at least half a viewport", () => {
+test("timeframe reset uses canonical timestamps while history prepend preserves logical position", () => {
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const bars = Array.from({ length: 100 }, (_, index) => ({ time: index + 1 }))
+  const futureTimes = Array.from({ length: 12 }, (_, index) => 101 + index)
 
   assert.match(chartCode, /projectFutureTimes/)
   assert.match(chartCode, /futureTimes\.map\(\(time\) => \(\{ time \}\)\)/)
   assert.match(chartCode, /Math\.ceil\(Math\.max\(1, displayBars\.length\) \* 0\.5\)/)
   assert.match(chartCode, /const rightOffset = DEFAULT_RIGHT_OFFSET_BARS/)
   assert.doesNotMatch(chartCode, /Math\.max\(DEFAULT_RIGHT_OFFSET_BARS, Math\.ceil\(visibleBars \* 0\.5\)\)/)
+  assert.match(chartCode, /chartTimeRangeForBars/)
+  assert.match(chartCode, /setVisibleRange/)
   assert.match(chartCode, /setVisibleLogicalRange/)
   assert.match(chartCode, /Prepending older history shifts logical indexes/)
+
+  assert.deepEqual(chartTimeRangeForBars(bars, futureTimes, 30, 8), { from: 71, to: 108 })
+  const tradingCalendarBars = [
+    { time: Date.UTC(2026, 8, 11) / 1000 },
+    { time: Date.UTC(2026, 8, 14) / 1000 },
+    { time: Date.UTC(2026, 8, 18) / 1000 },
+    { time: Date.UTC(2026, 8, 25) / 1000 },
+  ]
+  const projectedSessions = [
+    Date.UTC(2026, 8, 28) / 1000,
+    Date.UTC(2026, 9, 2) / 1000,
+  ]
+  assert.deepEqual(
+    chartTimeRangeForBars(tradingCalendarBars, projectedSessions, 3, 1),
+    { from: tradingCalendarBars[1].time, to: projectedSessions[0] },
+  )
+  assert.deepEqual(shiftVisibleLogicalRange({ from: 10.5, to: 20.5 }, 7), { from: 17.5, to: 27.5 })
 })
 
 test("native panes own volume, permanent maximized RSI/MACD and collapse heights", () => {
@@ -124,12 +185,54 @@ test("native panes own volume, permanent maximized RSI/MACD and collapse heights
   assert.match(chartCode, /runtime\.HistogramSeries/)
   assert.match(chartCode, /chart\.panes\(\)/)
   assert.match(chartCode, /panes\[0\]\?\.setHeight\(paneHeights\.main\)/)
-  assert.match(chartCode, /Math\.round\(overlayHeight \* 0\.15\)/)
+  assert.match(chartCode, /canonicalPaneGeometry/)
   assert.match(chartCode, /isRsiCollapsed/)
   assert.match(chartCode, /isMacdCollapsed/)
   assert.match(chartCode, /priceFormat: \{ type: "price", precision: 2, minMove: 0\.01 \}/)
   assert.match(chartCode, /priceFormat: \{ type: "price", precision: 4, minMove: 0\.0001 \}/)
   assert.match(chartCode, /indicatorVisibility/)
+
+  const expanded = canonicalPaneGeometry({
+    hostHeight: 1072,
+    isMaximized: true,
+    rsiCollapsed: false,
+    macdCollapsed: false,
+  })
+  const collapsed = canonicalPaneGeometry({
+    hostHeight: 1072,
+    isMaximized: true,
+    rsiCollapsed: true,
+    macdCollapsed: true,
+  })
+  assert.equal(expanded.main + expanded.volume + expanded.rsi + expanded.macd, drawablePaneBudget(1072))
+  assert.equal(collapsed.main + collapsed.volume + collapsed.rsi + collapsed.macd, drawablePaneBudget(1072))
+  assert.equal(collapsed.rsi, 24)
+  assert.equal(collapsed.macd, 24)
+})
+
+test("chart wheel history and drawing bounds have one explicit owner", () => {
+  const wrapperCode = source("components/stock-detail/stock-tradingview-chart-data.tsx")
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const canvasCode = source("components/stock-detail/chart/stock-chart-drawing-canvas.tsx")
+
+  assert.doesNotMatch(wrapperCode, /onWheelCapture/)
+  assert.match(chartCode, /handleScroll:[\s\S]*mouseWheel: true/)
+  assert.match(chartCode, /handleScale:[\s\S]*mouseWheel: true/)
+  assert.match(chartCode, /width=\{drawingWidth\}/)
+  assert.match(chartCode, /height=\{mainPaneHeight\}/)
+  assert.match(chartCode, /getHeight/)
+  assert.match(chartCode, /data-chart-pane-geometry/)
+  assert.match(chartCode, /onDrawingComplete=\{\(\) => setActiveTool\("cursor"\)\}/)
+  assert.match(canvasCode, /clipPathId/)
+  assert.match(canvasCode, /data-drawing-width/)
+  assert.match(canvasCode, /hasCanonicalDrawingAnchor/)
+
+  const bounds = { width: 900, height: 500 }
+  assert.deepEqual(clampDrawingPoint({ x: -10, y: 530 }, bounds), { x: 0, y: 500 })
+  assert.equal(isInsideDrawingBounds({ x: 450, y: 250 }, bounds), true)
+  assert.equal(isInsideDrawingBounds({ x: 450, y: 501 }, bounds), false)
+  assert.equal(hasCanonicalDrawingAnchor({ time: 100, price: 25.5 }), true)
+  assert.equal(hasCanonicalDrawingAnchor({ time: 100 }), false)
 })
 
 test("indicator controls cover all persisted overlays with aligned cloud and volume profile", () => {
@@ -193,4 +296,26 @@ test("drawing tools retain object management, text editing, and persistence", ()
   assert.match(toolsCode, /Đang đồng bộ nét vẽ/)
   assert.match(toolsCode, /disabled=\{!drawingReady\}/)
   assert.match(canvasCode, /pointerEvents: !drawingReady/)
+})
+
+test("QEO-241 chart product exposes only fixed 1D, 1W and 1M controls", () => {
+  const typesCode = source("components/stock-detail/chart/stock-chart-types.ts")
+  const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
+
+  assert.match(typesCode, /export type ChartTimeframe = "1D" \| "1W" \| "1M"/)
+  assert.match(typesCode, /QUICK_TIMEFRAMES[^\n]*\["1D", "1W", "1M"\]/)
+  assert.doesNotMatch(typesCode, /"3D"|"1Q"|"1Y"/)
+  assert.match(chartCode, /QUICK_TIMEFRAMES\.map/)
+  assert.doesNotMatch(chartCode, /showTfDropdown|setShowTfDropdown|Chọn khung thời gian|ALL_TIMEFRAMES\.map/)
+})
+
+test("QEO-241 ticker navigation no longer has a 3D remote preparation special case", () => {
+  const workstationCode = source("components/stock-detail/stock-detail-workstation.tsx")
+  assert.doesNotMatch(workstationCode, /targetTimeframe\s*===\s*["']3D["']/)
+})
+
+test("QEO-241 OHLCV route fails closed for retired 3D, 1Q and 1Y resolutions", () => {
+  const routeCode = source("app/api/market/ohlcv/route.ts")
+  assert.match(routeCode, /new Set\(\["3D",\s*"1Q",\s*"1Y"\]\)/)
+  assert.match(routeCode, /TIMEFRAME_RETIRED/)
 })

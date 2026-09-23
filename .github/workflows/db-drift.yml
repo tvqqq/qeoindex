@@ -63,13 +63,54 @@ jobs:
       - name: Compile TypeScript
         run: pnpm typecheck
       - name: Rehearse QEO-108 quarantined chart cutover
+        if: hashFiles('supabase/migrations/*_qeo238_retire_intraday_schema.sql') == ''
         run: bash scripts/db/rehearse-qeo108-chart-storage.sh
       - name: Rehearse QEO-149 two-session chart concurrency
+        if: hashFiles('supabase/migrations/*_qeo238_retire_intraday_schema.sql') == ''
         run: bash scripts/db/rehearse-qeo149-concurrency.sh
       - name: Rehearse QEO-147 complete-cache readiness
+        if: hashFiles('supabase/migrations/*_qeo238_retire_intraday_schema.sql') == ''
         run: bash scripts/db/rehearse-qeo147-readiness.sh
       - name: Rehearse QEO-148 closed-range coordination
+        if: hashFiles('supabase/migrations/*_qeo238_retire_intraday_schema.sql') == ''
         run: bash scripts/db/rehearse-qeo148-closed-range.sh
+      - name: Verify QEO-238 retired chart schema
+        if: hashFiles('supabase/migrations/*_qeo238_retire_intraday_schema.sql') != ''
+        run: |
+          docker exec -i supabase_db_qeoindex psql -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if to_regclass('public.chart_ohlcv_intraday') is not null
+               or to_regclass('public.chart_ohlcv_derived_hourly') is not null
+               or to_regclass('public.chart_ohlcv_derived_hourly_readiness') is not null
+               or to_regclass('public.chart_ohlcv_backfill_ranges') is not null
+               or to_regclass('public.chart_ohlcv_cold_manifests') is not null
+               or to_regclass('public.chart_ohlcv_provenance_batches') is not null then
+              raise exception 'QEO-238 retired chart relations still exist';
+            end if;
+            if to_regclass('public.chart_ohlcv_intraday_content_version_seq') is not null then
+              raise exception 'QEO-238 retired chart sequence still exists';
+            end if;
+            if to_regprocedure('public.qeo_upsert_chart_intraday_bars(text,jsonb)') is not null
+               or to_regprocedure('public.qeo_chart_intraday_coverage(text[],timestamp with time zone)') is not null
+               or to_regprocedure('public.qeo_validate_chart_derived_hourly_manifests(uuid[])') is not null then
+              raise exception 'QEO-238 retired chart routines still exist';
+            end if;
+            if to_regprocedure('public.qeo_prune_verified_chart_daily_partition(uuid,text,integer)') is null then
+              raise exception 'QEO-238 must preserve the historical Daily prune tombstone signature';
+            end if;
+            if exists (
+              select 1 from cron.job
+              where jobname in (
+                'qeoindex-chart-intraday-maintenance-1450-ict',
+                'qeoindex-chart-archive-catchup-1645-ict'
+              )
+            ) then
+              raise exception 'QEO-238 retired chart cron jobs still exist';
+            end if;
+          end
+          $$;
+          SQL
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup

@@ -11,7 +11,7 @@ import tabRailStyles from "./stock-tabs-panel.module.css"
 import { StockWatchlistSidebar } from "./stock-watchlist-sidebar"
 import {
   adjacentPrefetchTargets,
-  prefetchInitialStableChartHistory,
+  deriveChartBarsFromDailySeed,
   prepareInitialChartHistory,
   type PreparedChartHistory,
 } from "./chart/chart-history"
@@ -23,13 +23,18 @@ import { cn } from "@/modules/shared/ui/cn"
 
 type NavigationHistoryMode = "push" | "none"
 
+interface RenderedChartState {
+  ticker: string
+  timeframe: ChartTimeframe
+}
+
 export function StockDetailWorkstation({ data: initialData }: { data: StockDetailData }) {
   const [currentData, setCurrentData] = useState<StockDetailData>(initialData)
   const [activeTicker, setActiveTicker] = useState<string>(initialData.ticker)
   const [pendingTicker, setPendingTicker] = useState<string | null>(null)
   const [chartNavigationTimeframe, setChartNavigationTimeframe] = useState<ChartTimeframeNavigationRequest | null>(null)
   const [preparedChartInitial, setPreparedChartInitial] = useState<PreparedChartHistory | null>(null)
-  const [currentChartTimeframe, setCurrentChartTimeframe] = useState<ChartTimeframe>("1D")
+  const [renderedChart, setRenderedChart] = useState<RenderedChartState | null>(null)
   const [prefetchRevision, setPrefetchRevision] = useState(0)
   const isTransitioning = pendingTicker !== null
 
@@ -72,7 +77,16 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
 
   const handleChartTimeframeChange = useCallback((timeframe: ChartTimeframe) => {
     currentChartTimeframeRef.current = timeframe
-    setCurrentChartTimeframe(timeframe)
+  }, [])
+
+  const handleChartRendered = useCallback((ticker: string, timeframe: ChartTimeframe) => {
+    const sym = ticker.trim().toUpperCase()
+    currentChartTimeframeRef.current = timeframe
+    setRenderedChart((current) => (
+      current?.ticker === sym && current.timeframe === timeframe
+        ? current
+        : { ticker: sym, timeframe }
+    ))
   }, [])
 
   const handleVisibleWatchlistChange = useCallback((tickers: string[]) => {
@@ -101,21 +115,23 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
       const targetTimeframe = navigationRequest.timeframe
 
       try {
-        const [targetData, targetPrepared] = await Promise.all([
-          getStockDetail(sym),
-          prepareInitialChartHistory({
-            ticker: sym,
-            timeframe: targetTimeframe,
-            signal: controller.signal,
-          }),
-        ])
+        const targetData = await getStockDetail(sym)
+        if (controller.signal.aborted || navigationGenerationRef.current !== generation) return
+
+        const seededBars = deriveChartBarsFromDailySeed(targetData.bars, targetTimeframe)
+        const targetPrepared = seededBars.length > 0
+          ? null
+          : await prepareInitialChartHistory({
+              ticker: sym,
+              timeframe: targetTimeframe,
+              signal: controller.signal,
+            })
         if (controller.signal.aborted || navigationGenerationRef.current !== generation) return
 
         setPreparedChartInitial(targetPrepared)
         chartNavigationTimeframeRef.current = navigationRequest
         setChartNavigationTimeframe(navigationRequest)
         currentChartTimeframeRef.current = targetTimeframe
-        setCurrentChartTimeframe(targetTimeframe)
         setCurrentData(targetData)
         setActiveTicker(sym)
         setPendingTicker(null)
@@ -154,13 +170,17 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
     let cancelled = false
     const warmAdjacent = () => {
       if (cancelled) return
-      const targets = adjacentPrefetchTargets(visibleWatchlistTickersRef.current, activeTicker)
-      for (const ticker of targets) {
-        void Promise.allSettled([
-          getStockDetail(ticker),
-          prefetchInitialStableChartHistory({ ticker, timeframe: currentChartTimeframe }),
-        ])
+      if (!renderedChart || renderedChart.ticker !== activeTicker) return
+      const timeframe = renderedChart.timeframe
+      const warmTarget = async (ticker: string) => {
+        const data = await getStockDetail(ticker)
+        if (cancelled) return
+        const seededBars = deriveChartBarsFromDailySeed(data.bars, timeframe)
+        if (seededBars.length > 0) return
+        await prepareInitialChartHistory({ ticker, timeframe })
       }
+      const targets = adjacentPrefetchTargets(visibleWatchlistTickersRef.current, activeTicker)
+      void Promise.allSettled(targets.map(warmTarget))
     }
 
     if (typeof window.requestIdleCallback === "function") {
@@ -176,7 +196,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [activeTicker, currentChartTimeframe, getStockDetail, prefetchRevision])
+  }, [activeTicker, getStockDetail, prefetchRevision, renderedChart])
 
   const [isChartMaximized, setIsChartMaximized] = useState(false)
 
@@ -206,7 +226,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
         timeframe: currentChartTimeframeRef.current,
       }
       chartNavigationTimeframeRef.current = navigationRequest
-      setChartNavigationTimeframe(navigationRequest)
       void handleSelectTicker(nextTicker)
     }
 
@@ -271,6 +290,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
               navigationTimeframe={chartNavigationTimeframe}
               preparedInitial={preparedChartInitial}
               onTimeframeChange={handleChartTimeframeChange}
+              onRendered={handleChartRendered}
             />
 
             <div className={tabRailStyles.cardRailScope}>

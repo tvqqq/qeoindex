@@ -15,10 +15,11 @@ test("stock-detail-data provides clean company name without repeating ticker or 
   assert.match(code, /HPG:\s*"Tập đoàn Hòa Phát"/)
   assert.match(code, /VHM:\s*"Công ty Cổ phần Vinhomes"/)
 
-  // resolveCleanCompanyName helper exists and is used
+  // resolveCleanCompanyName helper exists and is used for both current ticker
+  // and canonical watchlist rows regardless of the local iterator variable name.
   assert.match(code, /resolveCleanCompanyName/)
   assert.match(code, /resolveCleanCompanyName\(decoded/)
-  assert.match(code, /resolveCleanCompanyName\(sym/)
+  assert.match(code, /resolveCleanCompanyName\(item\.ticker/)
 })
 
 test("StockIdentity includes getSectorIcon and displays sector icon before industry name", () => {

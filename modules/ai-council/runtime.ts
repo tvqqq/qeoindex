@@ -19,6 +19,7 @@ export interface AiCouncilRuntimeOptions {
   includePromptEvidence?: boolean
   includeEodMarketOverlay?: boolean
   ratingDate?: string
+  tickers?: string[]
 }
 
 export async function getAiCouncilRuntimeData(
@@ -29,6 +30,7 @@ export async function getAiCouncilRuntimeData(
     includeHistory: options.includeHistory,
     includePromptEvidence: options.includePromptEvidence,
     ratingDate: options.ratingDate,
+    tickers: options.tickers,
   }
   const data = options.includeEodMarketOverlay
     ? await getAiCouncilEodData(supabase, dataOptions)

@@ -592,7 +592,7 @@ Then verify:
 - representative systemd unit parses;
 - root-wrapper mode/content is correct;
 - `/opt/qeoindex/env`, SSH private keys, Docker layers and database dumps are absent;
-- any restored Hermes SQLite DB passes `PRAGMA integrity_check` when applicable.
+- any restored Hermes SQLite DB passes `PRAGMA integrity_check` on a disposable copy that includes adjacent `-wal` / `-shm` / `-journal` sidecars when present; never open the manifest-controlled quarantine DB directly;\n- `qeo-backup-manifest.sha256` still passes after SQLite validation, proving the quarantine tree was not mutated.
 
 Do not promote this drill restore onto live production paths.
 

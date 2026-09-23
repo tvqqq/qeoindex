@@ -35,7 +35,7 @@ function response(input: ChartRangeInput): ChartHistoryResponse {
 
 test("QEO-172 fresh no-store request never joins an in-flight stable/default request", async () => {
   clearChartHistoryCache()
-  const input: ChartRangeInput = { ticker: "VIC", timeframe: "1h", from: 1, to: 2 }
+  const input: ChartRangeInput = { ticker: "VIC", timeframe: "1D", from: 1, to: 2 }
   const seen: Array<RequestInit["cache"]> = []
   let release!: () => void
   const gate = new Promise<void>((resolve) => { release = resolve })
@@ -62,7 +62,7 @@ test("QEO-172 fresh no-store request never joins an in-flight stable/default req
 
 test("QEO-172 repeated covered stable range is local, network-free and resolves within 50ms", async () => {
   clearChartHistoryCache()
-  const input: ChartRangeInput = { ticker: "VCB", timeframe: "1h", from: 1, to: 2 }
+  const input: ChartRangeInput = { ticker: "VCB", timeframe: "1D", from: 1, to: 2 }
   const now = new Date("2026-09-12T10:00:00+07:00")
   let fetchCount = 0
   const fetchImpl = async () => {

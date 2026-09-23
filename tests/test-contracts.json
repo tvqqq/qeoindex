@@ -1185,6 +1185,15 @@
       ]
     },
     {
+      "path": "tests/qeo201-beszel-upcloud.test.ts",
+      "owner": "tooling",
+      "invariant": "QEO-201 keeps Beszel version-pinned, private-only, Unix-socket connected, Docker-write-isolated, and bounded on the UpCloud host.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/qeo186-contributor-producer.test.ts",
       "owner": "market",
       "invariant": "QEO-186 persists full-feed KFSP return inputs and derives fail-closed Qeo VNINDEX contributor estimates for Market Insights.",

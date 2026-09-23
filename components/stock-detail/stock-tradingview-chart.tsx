@@ -1,12 +1,10 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { toPng } from "html-to-image"
 import {
   CalendarDays,
   Camera,
-  Check,
-  ChevronDown,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -26,7 +24,13 @@ import { StockChartIndicatorModal } from "./chart/stock-chart-indicator-modal"
 import { StockChartObjectManager } from "./chart/stock-chart-object-manager"
 import { StockChartTextEditor } from "./chart/stock-chart-text-editor"
 import { boundChartTimeToTimeline, bridgeCoordinateToTime, bridgeTimeToCoordinate } from "./chart/chart-coordinate-bridge"
+import {
+  canonicalPaneGeometry,
+  type MeasuredPaneGeometry,
+  type PaneGeometry,
+} from "./chart/chart-pane-geometry"
 import { canIncrementallyUpdateLatest, fingerprintOhlcvPrefix } from "./chart/chart-render-diff"
+import { chartTimeRangeForBars, shiftVisibleLogicalRange } from "./chart/chart-viewport"
 import {
   calculateBollingerBands,
   calculateIchimokuBaseSeries,
@@ -40,7 +44,6 @@ import {
 import { projectFutureTimes } from "./chart/future-timeline"
 import { aggregateBarsByTimeframe } from "./chart/stock-chart-timeframes"
 import {
-  ALL_TIMEFRAMES,
   DEFAULT_INDICATOR_CONFIG,
   QUICK_TIMEFRAMES,
   type ChartTimeframe,
@@ -50,7 +53,6 @@ import {
   type VolumeProfileData,
 } from "./chart/stock-chart-types"
 import { useUserChartSync } from "./chart/use-user-chart-sync"
-import { useCanonicalMinuteBars } from "./chart/use-canonical-minute-bars"
 
 interface StockTradingViewChartProps {
   ticker: string
@@ -62,13 +64,11 @@ interface StockTradingViewChartProps {
   currentPrice?: number
   changePct?: number
   navigationTimeframe?: ChartTimeframe | null
+  onPaneGeometryChange?: (geometry: MeasuredPaneGeometry) => void
 }
 
 const DEFAULT_RIGHT_OFFSET_BARS = 8
 const MIN_MAX_RIGHT_OFFSET_BARS = 32
-const EXPANDED_SUBPANE_HEIGHT = 92
-const COLLAPSED_SUBPANE_HEIGHT = 24
-const VOLUME_PANE_HEIGHT = 64
 const INITIAL_MAX_VISIBLE_BARS = 180
 
 type ChartDimensions = { width: number; height: number }
@@ -468,6 +468,7 @@ export function StockTradingViewChart({
   currentPrice,
   changePct,
   navigationTimeframe,
+  onPaneGeometryChange,
 }: StockTradingViewChartProps) {
   const {
     timeframe,
@@ -507,14 +508,9 @@ export function StockTradingViewChart({
         showQeoBase129: false,
       }, [indicators, isMaximized])
 
-  const minuteBars = useCanonicalMinuteBars({ ticker, enabled: timeframe === "1m" })
   const displayBars = useMemo(
-    () => normalizeBars(
-      timeframe === "1m"
-        ? minuteBars.bars
-        : aggregateBarsByTimeframe(bars, hourlyBars, timeframe),
-    ),
-    [bars, hourlyBars, minuteBars.bars, timeframe],
+    () => normalizeBars(aggregateBarsByTimeframe(bars, hourlyBars, timeframe)),
+    [bars, hourlyBars, timeframe],
   )
   const futureCount = Math.max(
     MIN_MAX_RIGHT_OFFSET_BARS,
@@ -604,6 +600,8 @@ export function StockTradingViewChart({
   const chartGenerationRef = useRef(0)
   const pocPriceLineRef = useRef<LightweightPriceLineApi | null>(null)
   const renderedRef = useRef<RenderedData | null>(null)
+  const renderedTimeframeRef = useRef<ChartTimeframe | null>(null)
+  const timeframeRef = useRef(timeframe)
   const visibleRangeRef = useRef<{ from: number; to: number } | null>(null)
   const overlayFrameRef = useRef<number | null>(null)
   const [chartReady, setChartReady] = useState(false)
@@ -611,9 +609,9 @@ export function StockTradingViewChart({
   const [dimensions, setDimensions] = useState<ChartDimensions>({ width: 0, height: 0 })
   const [visibleRangeState, setVisibleRangeState] = useState<{ from: number; to: number } | null>(null)
   const [overlayRevision, setOverlayRevision] = useState(0)
+  const [latestCandleX, setLatestCandleX] = useState<number | null>(null)
   const [priceAxisGutter, setPriceAxisGutter] = useState(80)
   const [crosshairTime, setCrosshairTime] = useState<number | null>(null)
-  const [showTfDropdown, setShowTfDropdown] = useState(false)
   const [showIndicatorModal, setShowIndicatorModal] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [activeTool, setActiveTool] = useState<DrawingTool>("cursor")
@@ -627,6 +625,14 @@ export function StockTradingViewChart({
   const [editingTextDrawingId, setEditingTextDrawingId] = useState<string | null>(null)
   const [isRsiCollapsed, setIsRsiCollapsed] = useState(false)
   const [isMacdCollapsed, setIsMacdCollapsed] = useState(false)
+  const [measuredPaneGeometry, setMeasuredPaneGeometry] = useState<{
+    key: string
+    geometry: PaneGeometry
+  } | null>(null)
+
+  useEffect(() => {
+    timeframeRef.current = timeframe
+  }, [timeframe])
 
   useEffect(() => {
     if (drawingSyncStatus !== "ready") return
@@ -663,24 +669,18 @@ export function StockTradingViewChart({
   }
   const overlayWidth = dimensions.width || 1000
   const overlayHeight = dimensions.height || (isMaximized ? 640 : 340)
-  const paneHeights = useMemo(() => {
-    if (!isMaximized) return {
-      main: overlayHeight,
-      volume: VOLUME_PANE_HEIGHT,
-      rsi: 0,
-      macd: 0,
-    }
-    const volume = Math.max(72, Math.round(overlayHeight * 0.15))
-    const rsi = isRsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : Math.max(72, Math.round(overlayHeight * 0.15))
-    const macd = isMacdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : Math.max(72, Math.round(overlayHeight * 0.15))
-    return {
-      main: Math.max(220, overlayHeight - volume - rsi - macd),
-      volume,
-      rsi,
-      macd,
-    }
-  }, [isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
-  const mainPaneHeight = paneHeights.main
+  const paneHeights = useMemo(() => canonicalPaneGeometry({
+    hostHeight: overlayHeight,
+    isMaximized: Boolean(isMaximized),
+    rsiCollapsed: isRsiCollapsed,
+    macdCollapsed: isMacdCollapsed,
+  }), [isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
+  const paneGeometryKey = `${overlayHeight}:${isMaximized}:${isRsiCollapsed}:${isMacdCollapsed}`
+  const effectivePaneHeights = measuredPaneGeometry?.key === paneGeometryKey
+    ? measuredPaneGeometry.geometry
+    : paneHeights
+  const mainPaneHeight = effectivePaneHeights.main
+  const drawingWidth = Math.max(0, overlayWidth - priceAxisGutter)
   useEffect(() => {
     if (!chartReady) return
     const measured = chartRef.current?.panes()[0]?.getRightPriceScale?.().width?.()
@@ -715,6 +715,13 @@ export function StockTradingViewChart({
       (candidate) => chartRef.current?.timeScale().timeToCoordinate(candidate) ?? null,
     )
   }, [allTimes])
+  useEffect(() => {
+    const latestTime = displayBars.at(-1)?.time
+    const frame = window.requestAnimationFrame(() => {
+      setLatestCandleX(latestTime == null || !chartReady ? null : timeToX(latestTime))
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [chartReady, displayBars, overlayRevision, timeToX])
 
   const volumeProfile = useMemo(() => {
     if (!effectiveIndicators.showVolumeProfile || displayBars.length === 0) return null
@@ -757,29 +764,19 @@ export function StockTradingViewChart({
     // forcing half of the first view to be empty.
     const rightOffset = DEFAULT_RIGHT_OFFSET_BARS
     chart.applyOptions({ timeScale: { rightOffset } })
-    const range = {
-      from: Math.max(-0.5, displayBars.length - visibleBars),
-      to: displayBars.length - 1 + rightOffset,
-    }
-    chart.timeScale().setVisibleLogicalRange(range)
-    visibleRangeRef.current = range
-    setVisibleRangeState(range)
-  }, [displayBars.length])
+    const range = chartTimeRangeForBars(displayBars, futureTimes, visibleBars, rightOffset)
+    if (range) chart.timeScale().setVisibleRange(range)
+  }, [displayBars, futureTimes])
 
   const setVisibleBars = useCallback((count: number) => {
     const chart = chartRef.current
     if (!chart || displayBars.length === 0) return
     const visible = Math.min(displayBars.length, Math.max(15, count))
     const rightOffset = DEFAULT_RIGHT_OFFSET_BARS
-    const range = {
-      from: Math.max(-0.5, displayBars.length - visible),
-      to: displayBars.length - 1 + rightOffset,
-    }
     chart.applyOptions({ timeScale: { rightOffset } })
-    chart.timeScale().setVisibleLogicalRange(range)
-    visibleRangeRef.current = range
-    setVisibleRangeState(range)
-  }, [displayBars.length])
+    const range = chartTimeRangeForBars(displayBars, futureTimes, visible, rightOffset)
+    if (range) chart.timeScale().setVisibleRange(range)
+  }, [displayBars, futureTimes])
 
   const handleResetView = useCallback(() => {
     setLatestVisibleRange()
@@ -807,7 +804,8 @@ export function StockTradingViewChart({
     window.setTimeout(() => setExportStatus(null), 1800)
   }, [ticker, timeframe])
 
-  // A ticker/timeframe generation owns one LWC instance. Cleanup invalidates
+  // A ticker generation owns one LWC instance. Timeframe-only changes reuse
+  // the instance and update formatting/data in place. Cleanup still invalidates
   // the generation before a slow CDN promise can resolve.
   useEffect(() => {
     const host = chartHostRef.current
@@ -822,6 +820,7 @@ export function StockTradingViewChart({
     setChartReady(false)
     setRuntimeError(null)
     renderedRef.current = null
+    renderedTimeframeRef.current = null
     visibleRangeRef.current = null
     seriesRef.current = null
 
@@ -829,6 +828,7 @@ export function StockTradingViewChart({
       .then((runtime) => {
         if (disposed || chartGenerationRef.current !== generation || !host.isConnected) return
 
+        const initialTimeframe = timeframeRef.current
         chart = runtime.createChart(host, {
           width: Math.max(1, host.clientWidth),
           height: Math.max(1, host.clientHeight),
@@ -855,16 +855,16 @@ export function StockTradingViewChart({
           },
           timeScale: {
             borderColor: "rgba(255,255,255,0.08)",
-            timeVisible: timeframe.includes("m") || timeframe.includes("h"),
+            timeVisible: initialTimeframe.includes("m") || initialTimeframe.includes("h"),
             secondsVisible: false,
             rightOffset: DEFAULT_RIGHT_OFFSET_BARS,
             barSpacing: 7,
             minBarSpacing: 2,
-            tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),
+            tickMarkFormatter: (time: unknown) => formatAxisTime(time, initialTimeframe),
           },
           localization: {
             locale: "vi-VN",
-            timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),
+            timeFormatter: (time: unknown) => formatCrosshairTime(time, initialTimeframe),
           },
           crosshair: {
             vertLine: { color: "rgba(148,163,184,0.42)", labelBackgroundColor: "#334155" },
@@ -1041,10 +1041,27 @@ export function StockTradingViewChart({
       chartRef.current = null
       seriesRef.current = null
       renderedRef.current = null
+      renderedTimeframeRef.current = null
       visibleRangeRef.current = null
       setChartReady(false)
     }
-  }, [scheduleOverlayPaint, ticker, timeframe])
+  }, [scheduleOverlayPaint, ticker])
+
+  // Keep timeframe-specific axis formatting in sync while reusing the ticker-owned chart instance.
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !chartReady) return
+    chart.applyOptions({
+      timeScale: {
+        timeVisible: timeframe.includes("m") || timeframe.includes("h"),
+        tickMarkFormatter: (time: unknown) => formatAxisTime(time, timeframe),
+      },
+      localization: {
+        locale: "vi-VN",
+        timeFormatter: (time: unknown) => formatCrosshairTime(time, timeframe),
+      },
+    })
+  }, [chartReady, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1073,12 +1090,19 @@ export function StockTradingViewChart({
     applyIndicatorStyle(series.macdHistogram, styles.macd, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdZero, { ...styles.macd, color: "#64748b", width: 1, opacity: 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showMacd)
 
+    const previousTimeframe = renderedTimeframeRef.current
+    const timeframeChanged = previousTimeframe !== timeframe
+    if (timeframeChanged) {
+      renderedRef.current = null
+      visibleRangeRef.current = null
+      renderedTimeframeRef.current = timeframe
+    }
+
     const previous = renderedRef.current
     const latest = displayBars.at(-1)
     const canUpdateLatest = canIncrementallyUpdateLatest(previous, displayBars)
       && previous?.futureLength === futureTimes.length
 
-    series.futureAxis.setData(renderPayload.futureAxis)
     if (displayBars.length === 0) {
       series.candles.setData([])
       series.volume.setData([])
@@ -1113,6 +1137,9 @@ export function StockTradingViewChart({
     series.macdSignal.setData(renderPayload.macdSignal)
     series.macdHistogram.setData(renderPayload.macdHistogram)
     series.macdZero.setData(renderPayload.macdZero)
+    // Apply future whitespace last. On a reused chart instance this keeps the
+    // real dataset authoritative before the projection horizon is extended.
+    series.futureAxis.setData(renderPayload.futureAxis)
 
     if (displayBars.length > 0 && !previous) {
       setLatestVisibleRange()
@@ -1120,10 +1147,7 @@ export function StockTradingViewChart({
       // Prepending older history shifts logical indexes. Preserve the user's
       // current viewport instead of fitting the chart on every refresh.
       const shift = displayBars.length - previous.actualLength
-      const range = {
-        from: visibleRangeRef.current.from + shift,
-        to: visibleRangeRef.current.to + shift,
-      }
+      const range = shiftVisibleLogicalRange(visibleRangeRef.current, shift)
       chart.timeScale().setVisibleLogicalRange(range)
       visibleRangeRef.current = range
       setVisibleRangeState(range)
@@ -1150,17 +1174,20 @@ export function StockTradingViewChart({
     renderPayload,
     scheduleOverlayPaint,
     setLatestVisibleRange,
+    timeframe,
     viewSettings,
   ])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const chart = chartRef.current
     if (!chart || !chartReady) return
     const panes = chart.panes()
-    panes[0]?.setHeight(paneHeights.main)
     panes[1]?.setHeight(paneHeights.volume)
     panes[2]?.setHeight(paneHeights.rsi)
     panes[3]?.setHeight(paneHeights.macd)
+    // Main is applied last so native pane redistribution cannot steal height
+    // from the already-budgeted indicator panes.
+    panes[0]?.setHeight(paneHeights.main)
     panes[1]?.getRightPriceScale?.().applyOptions({
       visible: true,
       ticksVisible: true,
@@ -1178,8 +1205,48 @@ export function StockTradingViewChart({
       borderVisible: isMaximized,
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
+
+    const measureNativePanes = () => {
+      const heights = panes.slice(0, 4).map((pane) => pane?.getHeight?.())
+      if (
+        heights.length !== 4
+        || heights.some((height) => typeof height !== "number" || !Number.isFinite(height) || height < 0)
+      ) return
+      const [main, volume, rsi, macd] = heights as [number, number, number, number]
+      const geometry = {
+        main,
+        volume,
+        rsi,
+        macd,
+        drawableHeight: main + volume + rsi + macd,
+      }
+      setMeasuredPaneGeometry((current) => (
+        current?.key === paneGeometryKey
+        && current.geometry.main === main
+        && current.geometry.volume === volume
+        && current.geometry.rsi === rsi
+        && current.geometry.macd === macd
+          ? current
+          : { key: paneGeometryKey, geometry }
+      ))
+      onPaneGeometryChange?.({
+        ...geometry,
+        plotTop: plotContainerRef.current?.offsetTop ?? 0,
+      })
+    }
+
+    measureNativePanes()
+    const measurementFrame = window.requestAnimationFrame(measureNativePanes)
     scheduleOverlayPaint()
-  }, [chartReady, isMaximized, paneHeights, scheduleOverlayPaint])
+    return () => window.cancelAnimationFrame(measurementFrame)
+  }, [
+    chartReady,
+    isMaximized,
+    onPaneGeometryChange,
+    paneGeometryKey,
+    paneHeights,
+    scheduleOverlayPaint,
+  ])
 
   const updateDrawingFlag = useCallback((id: string, key: "hidden" | "locked") => {
     const drawing = drawings.find((item) => item.id === id)
@@ -1207,77 +1274,23 @@ export function StockTradingViewChart({
     ? drawings.find((drawing) => drawing.id === editingTextDrawingId) ?? null
     : null
   const editingPosition = editingTextDrawing?.points[0] ?? { x: 24, y: 24 }
-  const timeframeGroups = useMemo(() => {
-    const groups = new Map<string, typeof ALL_TIMEFRAMES>()
-    for (const item of ALL_TIMEFRAMES) {
-      const group = groups.get(item.group) ?? []
-      group.push(item)
-      groups.set(item.group, group)
-    }
-    return [...groups.entries()]
-  }, [])
-  const unsupportedEmpty = displayBars.length === 0 && !isLoading && !(timeframe === "1m" && minuteBars.status === "loading")
-  const loadingState = isLoading || (timeframe === "1m" && minuteBars.status === "loading")
+  const unsupportedEmpty = displayBars.length === 0 && !isLoading
+  const loadingState = isLoading
 
   return (
     <div className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[#080b10]", isMaximized ? "h-full" : "min-h-[340px]")}>
       <div className="relative z-30 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.08] bg-[#0d1118] px-2 py-1.5">
         <div className="flex min-w-0 items-center gap-1">
-          {isMaximized && <>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowTfDropdown((open) => !open)}
-              className="flex items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1 font-mono text-[11px] font-bold text-slate-200 transition-colors hover:bg-white/[0.08]"
-              aria-label="Chọn khung thời gian"
-            >
-              {timeframe}
-              <ChevronDown className="size-3 text-slate-500" />
-            </button>
-            {showTfDropdown && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Đóng chọn khung thời gian"
-                  className="fixed inset-0 z-40 cursor-default"
-                  onClick={() => setShowTfDropdown(false)}
-                />
-                <div className="absolute left-0 top-8 z-50 w-[min(520px,calc(100vw-24px))] rounded-lg border border-white/[0.12] bg-[#0b0f15] p-2 shadow-[0_18px_52px_rgba(0,0,0,0.82)]">
-                  <div className="grid grid-cols-4 divide-x divide-white/[0.08]">
-                    {timeframeGroups.map(([group, items]) => (
-                      <div key={group} className="min-w-0 px-2 first:pl-0 last:pr-0">
-                        <div className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">{group}</div>
-                        {items.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => {
-                              setTimeframe(item.id)
-                              setShowTfDropdown(false)
-                            }}
-                            className="flex w-full items-center gap-2 rounded px-1 py-1 text-left text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
-                          >
-                            <span className="w-8 shrink-0 text-left font-mono text-[11px] font-bold">{item.id}</span>
-                            <span className="truncate text-[10px]">{item.label}</span>
-                            {item.id === timeframe && <Check className="ml-auto size-3.5 shrink-0 text-cyan-400" />}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="hidden items-center gap-0.5 sm:flex">
+          <div className="flex items-center gap-0.5" role="group" aria-label="Khung thời gian">
             {QUICK_TIMEFRAMES.map((item) => (
               <button
                 key={item}
                 type="button"
                 onClick={() => setTimeframe(item)}
+                disabled={isLoading}
+                aria-pressed={timeframe === item}
                 className={cn(
-                  "rounded px-1.5 py-1 font-mono text-[10px] transition-colors",
+                  "rounded px-1.5 py-1 font-mono text-[10px] transition-colors disabled:cursor-wait disabled:opacity-50",
                   timeframe === item ? "bg-cyan-300/10 text-cyan-200" : "text-slate-500 hover:bg-white/[0.05] hover:text-slate-200",
                 )}
               >
@@ -1286,27 +1299,28 @@ export function StockTradingViewChart({
             ))}
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              title="Chỉ báo kỹ thuật"
-              onClick={() => setShowIndicatorModal((open) => !open)}
-              className="flex items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
-            >
-              <SlidersHorizontal className="size-3.5" />
-              <span className="hidden md:inline">Indicators</span>
-            </button>
-            {showIndicatorModal && (
-              <StockChartIndicatorModal
-                config={indicators}
-                onChange={handleIndicatorConfigChange}
-                viewSettings={viewSettings}
-                onViewSettingsChange={setViewSettings}
-                onClose={() => setShowIndicatorModal(false)}
-              />
-            )}
-          </div>
-          <span className="hidden rounded border border-white/[0.08] px-1.5 py-1 font-mono text-[9px] text-slate-600 lg:inline">Nến Nhật</span>
+          {isMaximized && <>
+            <div className="relative">
+              <button
+                type="button"
+                title="Chỉ báo kỹ thuật"
+                onClick={() => setShowIndicatorModal((open) => !open)}
+                className="flex items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+              >
+                <SlidersHorizontal className="size-3.5" />
+                <span className="hidden md:inline">Indicators</span>
+              </button>
+              {showIndicatorModal && (
+                <StockChartIndicatorModal
+                  config={indicators}
+                  onChange={handleIndicatorConfigChange}
+                  viewSettings={viewSettings}
+                  onViewSettingsChange={setViewSettings}
+                  onClose={() => setShowIndicatorModal(false)}
+                />
+              )}
+            </div>
+            <span className="hidden rounded border border-white/[0.08] px-1.5 py-1 font-mono text-[9px] text-slate-600 lg:inline">Nến Nhật</span>
           </>}
           {!isMaximized && <span className="rounded border border-white/[0.08] px-2 py-1 font-mono text-[10px] text-slate-400">Nến Nhật · Volume · MA20</span>}
         </div>
@@ -1361,6 +1375,13 @@ export function StockTradingViewChart({
         ref={plotContainerRef}
         className={cn("relative min-h-0 flex-1 overflow-hidden bg-[#080b10]", isMaximized ? "min-h-0" : "min-h-[300px]")}
         data-chart-plot="lightweight"
+        data-chart-price-pane-height={effectivePaneHeights.main}
+        data-chart-volume-pane-height={effectivePaneHeights.volume}
+        data-chart-rsi-pane-height={effectivePaneHeights.rsi}
+        data-chart-macd-pane-height={effectivePaneHeights.macd}
+        data-chart-pane-geometry={measuredPaneGeometry?.key === paneGeometryKey ? "native" : "planned"}
+        data-chart-latest-candle-x={latestCandleX ?? ""}
+        data-chart-drawable-width={drawingWidth}
       >
         <div
           ref={chartHostRef}
@@ -1380,7 +1401,7 @@ export function StockTradingViewChart({
           volumeProfile={volumeProfile}
           timeToX={timeToX}
           priceToY={priceToY}
-          rsiPaneTop={paneHeights.main + paneHeights.volume}
+          rsiPaneTop={effectivePaneHeights.main + effectivePaneHeights.volume}
           rsiPriceToY={rsiPriceToY}
           showRsiBand={isMaximized && effectiveIndicators.showRsi}
           priceAxisGutter={priceAxisGutter}
@@ -1499,8 +1520,8 @@ export function StockTradingViewChart({
         )}
 
         {isMaximized && <StockChartDrawingCanvas
-          width={overlayWidth}
-          height={overlayHeight}
+          width={drawingWidth}
+          height={mainPaneHeight}
           drawings={drawings}
           selectedId={selectedDrawingId}
           onSelectDrawing={setSelectedDrawingId}
@@ -1519,6 +1540,7 @@ export function StockTradingViewChart({
           timeToX={timeToX}
           xToTime={xToTime}
           drawingReady={drawingSyncStatus === "ready"}
+          onDrawingComplete={() => setActiveTool("cursor")}
         />}
 
         {isMaximized && (
@@ -1530,9 +1552,9 @@ export function StockTradingViewChart({
                 const next = !isRsiCollapsed
                 setIsRsiCollapsed(next)
                 setViewSettings((previous: ChartViewSettings) => ({ ...previous, rsiCollapsed: next }))
-                chartRef.current?.panes()[2]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
               }}
-              className="absolute right-2 top-[62%] z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
+              style={{ top: `${effectivePaneHeights.main + effectivePaneHeights.volume + 2}px` }}
+              className="absolute right-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
             >
               {isRsiCollapsed ? "+" : "−"}
             </button>
@@ -1543,9 +1565,9 @@ export function StockTradingViewChart({
                 const next = !isMacdCollapsed
                 setIsMacdCollapsed(next)
                 setViewSettings((previous: ChartViewSettings) => ({ ...previous, macdCollapsed: next }))
-                chartRef.current?.panes()[3]?.setHeight(next ? COLLAPSED_SUBPANE_HEIGHT : EXPANDED_SUBPANE_HEIGHT)
               }}
-              className="absolute right-2 bottom-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
+              style={{ top: `${effectivePaneHeights.main + effectivePaneHeights.volume + effectivePaneHeights.rsi + 3}px` }}
+              className="absolute right-2 z-40 flex size-5 items-center justify-center rounded border border-white/15 bg-[#111820]/95 font-mono text-[12px] font-bold text-slate-300 shadow transition-colors hover:bg-white/10 hover:text-white"
             >
               {isMacdCollapsed ? "+" : "−"}
             </button>

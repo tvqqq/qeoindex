@@ -39,6 +39,7 @@ import {
   MARKET_SESSION_RESET_EVENT,
   newSessionReferencePoint,
   shouldAcceptRealtimeMiniChart,
+  shouldResetForNewTradingDay,
   type MarketUiPhase,
 } from "@/modules/market/realtime/session-ui"
 import { setSoundEnabled, playWhaleSound } from "@/modules/shared/ui/sound-engine"
@@ -112,6 +113,26 @@ type IntradayHistoryResponse = {
   histories?: Record<string, { symbol: string; provider: "Yahoo" | null; points: IntradayPoint[]; reference: number | null; price: number | null; change: number | null; changePercent: number | null; lastBarAt: number | null; error: string | null }>
 }
 type IndexHistoryResponse = { ok: boolean; quotes?: Record<string, IndexQuote> }
+type QuoteReconcileResponse = {
+  ok: boolean
+  quotes?: Record<string, {
+    symbol: string
+    price: number | null
+    reference: number | null
+    ceiling: number | null
+    floor: number | null
+    change: number | null
+    changePercent: number | null
+    volume: number | null
+    foreignBuyVolume?: number | null
+    foreignSellVolume?: number | null
+    foreignBuyValue?: number | null
+    foreignSellValue?: number | null
+    foreignNetValue?: number | null
+    foreignRoom?: number | null
+  }>
+  updatedAt?: string
+}
 
 const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
 const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
@@ -425,10 +446,6 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
 
           <div className="space-y-1.5 font-mono text-[11px] text-muted-2">
             <div className="flex justify-between">
-              <span>Nguồn dữ liệu:</span>
-              <span className="text-foreground font-sans">Yahoo 5m + DNSE via Supabase</span>
-            </div>
-            <div className="flex justify-between">
               <span>Độ rộng TT:</span>
               <span>
                 <b className="text-up">▲ {advances}</b> · <b className="text-down">▼ {declines}</b>
@@ -542,7 +559,7 @@ const FloatingMarketStatus = memo(function FloatingMarketStatus({
             {isLunch
               ? "Giờ nghỉ trưa"
               : streamState === "LIVE"
-                ? "DNSE LIVE"
+                ? "REALTIME LIVE"
                 : streamState === "CONNECTING"
                   ? "Đang kết nối"
                   : streamState === "CLOSED" || !sessionOpen
@@ -608,6 +625,7 @@ export function LiveMarketBoard({
   const [lastMessageAt, setLastMessageAt] = useState("")
   const [reconnectKey, setReconnectKey] = useState(0)
   const [historyReloadKey, setHistoryReloadKey] = useState(0)
+  const [quoteReloadKey, setQuoteReloadKey] = useState(0)
   const [marketUiPhase, setMarketUiPhase] = useState<MarketUiPhase>(() => getMarketUiPhase())
   const [showSessionOpenAlert, setShowSessionOpenAlert] = useState(false)
   const [query, setQuery] = useState("")
@@ -679,6 +697,7 @@ export function LiveMarketBoard({
   const sessionOpenAlertTimer = useRef<number | null>(null)
   const eodReloadTimers = useRef<number[]>([])
   const didResetCurrentAto = useRef(false)
+  const activeSessionDayRef = useRef(vietnamSessionDay())
 
   const scheduleMarketOrderingRefresh = useCallback((snapshot: Record<string, LiveStockQuote | IndexQuote>) => {
     latestCommittedQuotesRef.current = snapshot
@@ -753,10 +772,16 @@ export function LiveMarketBoard({
 
   const resetForNewTradingSession = useCallback((now = new Date(), notify = true) => {
     didResetCurrentAto.current = true
+    const nextSessionDay = vietnamSessionDay(now)
+    const isTradingDayRollover = activeSessionDayRef.current !== nextSessionDay
+    activeSessionDayRef.current = nextSessionDay
     const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
     for (const [symbol, current] of Object.entries(quotesRef.current)) {
       if ("value" in current) {
-        const reference = indexReferences.current[symbol] || current.value - (current.change ?? 0)
+        const reference = isTradingDayRollover && current.value > 0
+          ? current.value
+          : indexReferences.current[symbol] || current.value - (current.change ?? 0)
+        if (reference > 0) indexReferences.current[symbol] = reference
         resetQuotes[symbol] = {
           ...current,
           value: reference > 0 ? reference : current.value,
@@ -772,12 +797,16 @@ export function LiveMarketBoard({
         continue
       }
       const fallback = universe.find((stock) => stock.ticker === symbol)?.lastClose
-      const reference = dailyReferences.current[symbol] || current.reference || fallback || current.price
+      const reference = isTradingDayRollover && current.price > 0
+        ? current.price
+        : current.reference || dailyReferences.current[symbol] || fallback || current.price || 0
       if (reference > 0) dailyReferences.current[symbol] = reference
       resetQuotes[symbol] = {
         ...current,
         price: reference,
         reference,
+        ceiling: isTradingDayRollover ? undefined : current.ceiling,
+        floor: isTradingDayRollover ? undefined : current.floor,
         change: 0,
         changePercent: 0,
         volume: 0,
@@ -810,6 +839,7 @@ export function LiveMarketBoard({
       detail: { sessionDate: vietnamSessionDay(now) },
     }))
     setReconnectKey((key) => key + 1)
+    setQuoteReloadKey((key) => key + 1)
     for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
     eodReloadTimers.current = []
     if (notify) {
@@ -890,6 +920,101 @@ export function LiveMarketBoard({
     }
     return covered / symbolList.length >= SSR_HISTORY_COVERAGE_MIN
   }, [initialHistories, symbolList])
+
+  useEffect(() => {
+    if (quoteReloadKey === 0 || symbolList.length === 0) return
+
+    const controller = new AbortController()
+    const requestedAt = Date.now()
+    const requestedSessionDay = activeSessionDayRef.current
+    let disposed = false
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/market/quotes", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ symbols: symbolList }),
+          signal: controller.signal,
+        })
+        const payload = await response.json() as QuoteReconcileResponse
+        if (
+          disposed ||
+          !response.ok ||
+          !payload.ok ||
+          !payload.quotes ||
+          activeSessionDayRef.current !== requestedSessionDay
+        ) return
+
+        const currentQuotes = quotesRef.current
+        const nextQuotes = { ...currentQuotes }
+        const receivedAt = payload.updatedAt || new Date().toISOString()
+
+        for (const symbol of symbolList) {
+          const quote = payload.quotes[symbol]
+          if (!quote) continue
+
+          const existing = currentQuotes[symbol] as LiveStockQuote | undefined
+          const reference = quote.reference && quote.reference > 0
+            ? quote.reference
+            : existing?.reference || dailyReferences.current[symbol] || 0
+          if (reference > 0) dailyReferences.current[symbol] = reference
+
+          const existingUpdatedAt = existing?.updatedAt ? Date.parse(existing.updatedAt) : 0
+          const hasNewerLiveQuote = Number.isFinite(existingUpdatedAt) && existingUpdatedAt > requestedAt
+          const price = hasNewerLiveQuote
+            ? existing?.price
+            : quote.price && quote.price > 0 ? quote.price : existing?.price || reference
+          if (!price || price <= 0) continue
+
+          const change = reference > 0 ? price - reference : (quote.change ?? existing?.change ?? 0)
+          const changePercent = reference > 0
+            ? (change / reference) * 100
+            : (quote.changePercent ?? existing?.changePercent ?? 0)
+
+          nextQuotes[symbol] = {
+            ...(existing ?? {}),
+            symbol,
+            price,
+            reference: reference || undefined,
+            ceiling: quote.ceiling === null ? undefined : (quote.ceiling ?? existing?.ceiling),
+            floor: quote.floor === null ? undefined : (quote.floor ?? existing?.floor),
+            change,
+            changePercent,
+            volume: hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume),
+            foreignBuyVolume: hasNewerLiveQuote ? existing?.foreignBuyVolume : (quote.foreignBuyVolume ?? existing?.foreignBuyVolume),
+            foreignSellVolume: hasNewerLiveQuote ? existing?.foreignSellVolume : (quote.foreignSellVolume ?? existing?.foreignSellVolume),
+            foreignBuyValue: hasNewerLiveQuote ? existing?.foreignBuyValue : (quote.foreignBuyValue ?? existing?.foreignBuyValue),
+            foreignSellValue: hasNewerLiveQuote ? existing?.foreignSellValue : (quote.foreignSellValue ?? existing?.foreignSellValue),
+            foreignNetValue: hasNewerLiveQuote ? existing?.foreignNetValue : (quote.foreignNetValue ?? existing?.foreignNetValue),
+            foreignRoom: quote.foreignRoom ?? existing?.foreignRoom,
+            updatedAt: hasNewerLiveQuote && existing?.updatedAt ? existing.updatedAt : receivedAt,
+          }
+        }
+
+        quotesRef.current = nextQuotes
+        latestCommittedQuotesRef.current = nextQuotes
+        quotesDirtyRef.current = false
+        lastOrderingRefreshAt.current = Date.now()
+        if (marketOrderingTimer.current !== null) {
+          window.clearTimeout(marketOrderingTimer.current)
+          marketOrderingTimer.current = null
+        }
+        setQuotes(nextQuotes)
+        setOrderingQuotes(nextQuotes)
+      } catch (error) {
+        if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("Market board session quote reconcile unavailable", error)
+        }
+      }
+    })()
+
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [quoteReloadKey, symbolList])
 
   useEffect(() => {
     if (!symbolList.length) return
@@ -1027,21 +1152,29 @@ export function LiveMarketBoard({
       setIsLunch((prev) => (prev !== lunch ? lunch : prev))
 
       const nextPhase = getMarketUiPhase(now)
+      const needsTradingDayReset = shouldResetForNewTradingDay(activeSessionDayRef.current, now)
+      const needsHistoryReloadAfterReset = needsTradingDayReset && nextPhase !== "ATO"
+
+      if (needsTradingDayReset) {
+        resetForNewTradingSession(now, nextPhase === "ATO")
+        if (needsHistoryReloadAfterReset) setHistoryReloadKey((key) => key + 1)
+      }
+
       if (marketUiPhaseRef.current !== nextPhase) {
         const previousPhase = marketUiPhaseRef.current
         marketUiPhaseRef.current = nextPhase
         setMarketUiPhase(nextPhase)
         if (nextPhase === "ATO") {
-          resetForNewTradingSession(now)
+          if (!needsTradingDayReset) resetForNewTradingSession(now)
         } else if (nextPhase === "CONTINUOUS" || nextPhase === "EOD") {
-          setHistoryReloadKey((key) => key + 1)
+          if (!needsHistoryReloadAfterReset) setHistoryReloadKey((key) => key + 1)
           if (nextPhase === "EOD") {
             for (const timer of eodReloadTimers.current) window.clearTimeout(timer)
             eodReloadTimers.current = [4 * 60_000, 14 * 60_000].map((delay) => window.setTimeout(() => {
               setHistoryReloadKey((key) => key + 1)
             }, delay))
           }
-          if (previousPhase === "PRE_MARKET") setReconnectKey((key) => key + 1)
+          if (previousPhase === "PRE_MARKET" && !needsTradingDayReset) setReconnectKey((key) => key + 1)
         } else if (nextPhase === "PRE_MARKET") {
           didResetCurrentAto.current = false
         }

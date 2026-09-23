@@ -3,6 +3,10 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isVietnamSecuritiesTradingDateKey, vietnamDateKey } from "@/modules/market/calendar"
 import { fetchDailyMarketHistoryWindow } from "@/modules/market/history/index"
+import {
+  assertDailyProvenanceConsistent,
+  persistDailyOhlcvRows,
+} from "./daily-provenance"
 
 const MAX_REPAIR_TICKERS = 10
 const DAY_MS = 86_400_000
@@ -22,6 +26,7 @@ type StoredZeroVolumeRow = {
   provider?: unknown
   source_url?: unknown
   provider_detail?: unknown
+  provenance_consistent?: unknown
 }
 
 type StoredLegacyYahooRow = StoredZeroVolumeRow & {
@@ -92,16 +97,18 @@ async function loadUnclassifiedZeroDates(supabase: SupabaseClient, tickers: stri
   const pageSize = 1000
   while (true) {
     const { data, error } = await supabase
-      .from("market_ohlcv_history")
-      .select("ticker,bar_time,provider,source_url,provider_detail")
+      .from("market_ohlcv_history_compat")
+      .select("ticker,bar_time,provider,source_url,provider_detail,provenance_consistent")
       .eq("timeframe", "1D")
       .eq("volume", 0)
       .in("ticker", tickers)
       .order("ticker", { ascending: true })
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
+
     if (error) throw new Error(`Load zero-volume Daily rows failed: ${error.message}`)
     const page = (data || []) as StoredZeroVolumeRow[]
+    assertDailyProvenanceConsistent(page as Array<Record<string, unknown>>, "Load zero-volume Daily rows")
     for (const row of page) {
       if (isVerifiedNoTradeRow(row)) continue
       const ticker = String(row.ticker || "").trim().toUpperCase()
@@ -123,16 +130,18 @@ async function loadLegacyYahooBasisRows(supabase: SupabaseClient, tickers: strin
   const pageSize = 1000
   while (true) {
     const { data, error } = await supabase
-      .from("market_ohlcv_history")
-      .select("ticker,bar_time,provider,source_url,provider_detail,volume")
+      .from("market_ohlcv_history_compat")
+      .select("ticker,bar_time,provider,source_url,provider_detail,volume,provenance_consistent")
       .eq("timeframe", "1D")
       .eq("provider", "Fallback")
       .in("ticker", tickers)
       .order("ticker", { ascending: true })
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
+
     if (error) throw new Error(`Load legacy Yahoo Daily rows failed: ${error.message}`)
     const page = (data || []) as StoredLegacyYahooRow[]
+    assertDailyProvenanceConsistent(page as Array<Record<string, unknown>>, "Load legacy Yahoo Daily rows")
     for (const row of page) {
       const ticker = String(row.ticker || "").trim().toUpperCase()
       const sourceUrl = String(row.source_url || "")
@@ -187,7 +196,7 @@ async function repairTicker(
     if (bar.volume === 0 && history.provider !== "VCI" && history.provider !== "DNSE") return []
     return [{
       ticker,
-      timeframe: "1D",
+      timeframe: "1D" as const,
       bar_time: new Date(bar.time * 1000).toISOString(),
       open: bar.open,
       high: bar.high,
@@ -234,12 +243,7 @@ async function repairTicker(
     }
   }
 
-  if (rows.length) {
-    const { error } = await supabase
-      .from("market_ohlcv_history")
-      .upsert(rows, { onConflict: "ticker,timeframe,bar_time" })
-    if (error) throw new Error(`Persist Daily integrity repair for ${ticker} failed: ${error.message}`)
-  }
+  if (rows.length) await persistDailyOhlcvRows(supabase, rows)
 
   const finalUnresolvedSessions = suspectDates.filter((dateKey) => !repairedDates.has(dateKey))
   return {

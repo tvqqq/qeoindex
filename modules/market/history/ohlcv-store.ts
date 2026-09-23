@@ -8,6 +8,10 @@ import {
   type HistoricalProvider,
   type RawHistoryTimeframe,
 } from "./contract.ts"
+import {
+  assertDailyProvenanceConsistent,
+  persistDailyOhlcvRows,
+} from "./daily-provenance.ts"
 import type { OhlcvBar } from "../../shared/technical/indicators.ts"
 
 export const OHLCV_BATCH_SIZE = 10
@@ -91,6 +95,7 @@ type StoredOhlcvRow = {
   provider_detail?: unknown
   source_url?: unknown
   fetched_at?: unknown
+  provenance_consistent?: unknown
 }
 
 type TickerRefreshSuccess = {
@@ -217,12 +222,7 @@ function toStoredRows(input: {
 }
 
 async function upsertStoredRows(supabase: SupabaseClient, rows: ReturnType<typeof toStoredRows>) {
-  for (let offset = 0; offset < rows.length; offset += OHLCV_UPSERT_CHUNK_SIZE) {
-    const chunk = rows.slice(offset, offset + OHLCV_UPSERT_CHUNK_SIZE)
-    if (!chunk.length) continue
-    const { error } = await supabase.from("market_ohlcv_history").upsert(chunk, { onConflict: "ticker,timeframe,bar_time" })
-    if (error) throw new Error(`OHLCV history upsert failed: ${error.message}`)
-  }
+  await persistDailyOhlcvRows(supabase, rows)
 }
 
 async function persistBootstrapComplete(
@@ -378,14 +378,16 @@ export async function loadCachedOhlcvHistory(
   const pageSize = 1000
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase
-      .from("market_ohlcv_history")
-      .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at")
+      .from("market_ohlcv_history_compat")
+      .select("ticker,timeframe,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,fetched_at,provenance_consistent")
       .eq("ticker", ticker)
       .eq("timeframe", "1D")
       .order("bar_time", { ascending: true })
       .range(offset, offset + pageSize - 1)
+
     if (error) throw new Error(`OHLCV cache read failed for ${ticker} 1D: ${error.message}`)
     const page = (data || []) as StoredOhlcvRow[]
+    assertDailyProvenanceConsistent(page as Array<Record<string, unknown>>, `OHLCV cache read for ${ticker}`)
     rows.push(...page)
     if (page.length < pageSize) break
   }

@@ -6,6 +6,7 @@ import { SlidersHorizontal } from "lucide-react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { cn } from "@/modules/shared/ui/cn"
 import {
+  deriveChartBarsFromDailySeed,
   prepareInitialChartHistory,
   type PreparedChartHistory,
 } from "./chart/chart-history"
@@ -14,7 +15,7 @@ import {
   calculateRsiSeries,
   calculateVolumeSma,
 } from "./chart/stock-chart-indicators"
-import { CanonicalMinuteBarsContext } from "./chart/use-canonical-minute-bars"
+import type { MeasuredPaneGeometry } from "./chart/chart-pane-geometry"
 import { ALL_TIMEFRAMES, type ChartTimeframe } from "./chart/stock-chart-types"
 import { useChartHistory } from "./chart/use-chart-history"
 import {
@@ -35,6 +36,7 @@ interface StockTradingViewChartDataProps {
   navigationTimeframe?: ChartTimeframeNavigationRequest | null
   preparedInitial?: PreparedChartHistory | null
   onTimeframeChange?: (timeframe: ChartTimeframe) => void
+  onRendered?: (ticker: string, timeframe: ChartTimeframe) => void
 }
 
 export interface ChartTimeframeNavigationRequest {
@@ -47,7 +49,6 @@ interface TimeframeEventDetail {
   timeframe: ChartTimeframe
 }
 
-const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h", "4h"])
 const SUPPORTED_TIMEFRAMES = new Set<ChartTimeframe>(ALL_TIMEFRAMES.map(({ id }) => id))
 
 function formatMetric(value: number | null | undefined, digits = 2) {
@@ -82,6 +83,7 @@ function HistoryBoundChart({
   changePct,
   navigationTimeframe,
   preparedInitial,
+  onRendered,
   onTimeframeClickCapture,
   preparingTimeframe,
 }: StockTradingViewChartDataProps & {
@@ -99,29 +101,32 @@ function HistoryBoundChart({
     loadOlder,
     liveState,
     liveError,
-    liveProvider,
-    lastUpdatedAt,
   } = useChartHistory({ ticker, timeframe, seedDailyBars, preparedInitial })
 
   const dragStartXRef = useRef<number | null>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const [paneTime, setPaneTime] = useState<number | null>(null)
+  const [paneGeometry, setPaneGeometry] = useState<MeasuredPaneGeometry | null>(null)
+  const handlePaneGeometryChange = useCallback((geometry: MeasuredPaneGeometry) => {
+    setPaneGeometry((current) => (
+      current?.plotTop === geometry.plotTop
+      && current.main === geometry.main
+      && current.volume === geometry.volume
+      && current.rsi === geometry.rsi
+      && current.macd === geometry.macd
+        ? current
+        : geometry
+    ))
+  }, [])
   const requestOlder = useCallback(() => {
     if (!loading && !loadingOlder && hasMore) void loadOlder()
   }, [hasMore, loadOlder, loading, loadingOlder])
 
-  useEffect(() => {
-    if (timeframe !== "1m" || loading || loadingOlder || !hasMore || error) return
-    void loadOlder()
-  }, [error, hasMore, loadOlder, loading, loadingOlder, timeframe])
-
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (timeframe === "1m") return
     if (event.button === 0) dragStartXRef.current = event.clientX
   }
 
   const handleMouseMoveCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (timeframe === "1m") return
     const start = dragStartXRef.current
     if (start == null || (event.buttons & 1) === 0) return
     if (event.clientX - start >= 80) {
@@ -131,16 +136,6 @@ function HistoryBoundChart({
   }
 
   const resolvedBars = bars.length ? bars : timeframe === "1D" ? seedDailyBars : []
-  const canonicalMinuteOverride = {
-    ticker: ticker.trim().toUpperCase(),
-    bars: resolvedBars,
-  }
-  const liveTimestamp = lastUpdatedAt
-    ? new Date(lastUpdatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-    : null
-  const providerWarning = LIVE_TIMEFRAMES.has(timeframe) && liveState === "stale"
-    ? `${liveProvider ?? "Realtime"}${liveTimestamp ? ` · ${liveTimestamp}` : ""}`
-    : null
 
   const paneSeries = useMemo(() => {
     if (!isMaximized || resolvedBars.length === 0) return null
@@ -198,22 +193,17 @@ function HistoryBoundChart({
     terminal?.removeAttribute("data-chart-rendered-key")
     if (loading || resolvedBars.length === 0) return
 
-    let secondFrame = 0
-    const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => {
-        const latestTime = resolvedBars.at(-1)?.time ?? 0
-        terminalRef.current?.setAttribute(
-          "data-chart-rendered-key",
-          `${ticker.trim().toUpperCase()}:${timeframe}:${resolvedBars.length}:${latestTime}`,
-        )
-      })
-    })
-
-    return () => {
-      window.cancelAnimationFrame(firstFrame)
-      if (secondFrame) window.cancelAnimationFrame(secondFrame)
-    }
-  }, [loading, resolvedBars, ticker, timeframe])
+    // StockTradingViewChart is the child of this wrapper, so its passive
+    // effect applies the Lightweight Charts series before this parent effect
+    // runs. Publish readiness immediately after that data-apply work instead
+    // of padding the measurement with two synthetic animation frames.
+    const latestTime = resolvedBars.at(-1)?.time ?? 0
+    terminalRef.current?.setAttribute(
+      "data-chart-rendered-key",
+      `${ticker.trim().toUpperCase()}:${timeframe}:${resolvedBars.length}:${latestTime}`,
+    )
+    onRendered?.(ticker, timeframe)
+  }, [loading, onRendered, resolvedBars, ticker, timeframe])
 
   return (
     <div
@@ -229,23 +219,19 @@ function HistoryBoundChart({
       onMouseMoveCapture={handleMouseMoveCapture}
       onMouseUpCapture={() => { dragStartXRef.current = null }}
       onMouseLeave={() => { dragStartXRef.current = null }}
-      onWheelCapture={(event) => {
-        if (timeframe !== "1m" && event.deltaY > 0) requestOlder()
-      }}
     >
-      <CanonicalMinuteBarsContext.Provider value={canonicalMinuteOverride}>
-        <StockTradingViewChart
-          ticker={ticker}
-          bars={resolvedBars}
-          hourlyBars={resolvedBars}
-          isLoading={loading}
-          isMaximized={isMaximized}
-          onToggleMaximize={onToggleMaximize}
-          currentPrice={currentPrice}
-          changePct={changePct}
-          navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
-        />
-      </CanonicalMinuteBarsContext.Provider>
+      <StockTradingViewChart
+        ticker={ticker}
+        bars={resolvedBars}
+        hourlyBars={resolvedBars}
+        isLoading={loading}
+        isMaximized={isMaximized}
+        onToggleMaximize={onToggleMaximize}
+        currentPrice={currentPrice}
+        changePct={changePct}
+        navigationTimeframe={navigationTimeframe?.ticker.toUpperCase() === ticker.toUpperCase() ? navigationTimeframe.timeframe : null}
+        onPaneGeometryChange={handlePaneGeometryChange}
+      />
 
       <div
         data-chart-financial-header
@@ -264,12 +250,6 @@ function HistoryBoundChart({
         <span className={liveState === "live" ? "text-emerald-300" : liveState === "stale" ? "text-amber-300" : "text-slate-500"}>
           {liveState.toUpperCase()}
         </span>
-        {providerWarning && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span className="truncate text-amber-300/90">{providerWarning}</span>
-          </>
-        )}
       </div>
 
       {preparingTimeframe && (
@@ -297,7 +277,8 @@ function HistoryBoundChart({
           <div
             data-chart-pane-header="volume"
             data-chart-pane-time={paneTime ?? ""}
-            className="pointer-events-none absolute left-11 top-[55.5%] z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+            style={{ top: paneGeometry ? `${paneGeometry.plotTop + paneGeometry.main + 2}px` : "55.5%" }}
+            className="pointer-events-none absolute left-11 z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
           >
             <span className="font-semibold text-slate-300">Volume</span>
             <span className="text-slate-400">{formatCompactVolume(paneBar?.volume)}</span>
@@ -315,7 +296,8 @@ function HistoryBoundChart({
           <div
             data-chart-pane-header="rsi"
             data-chart-pane-time={paneTime ?? ""}
-            className="pointer-events-none absolute left-11 top-[70.5%] z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+            style={{ top: paneGeometry ? `${paneGeometry.plotTop + paneGeometry.main + paneGeometry.volume + 3}px` : "70.5%" }}
+            className="pointer-events-none absolute left-11 z-30 flex h-5 max-w-[70%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
           >
             <span className="font-semibold text-violet-300">RSI 14</span>
             <span className="text-violet-200/85">{formatMetric(paneRsi)}</span>
@@ -340,7 +322,8 @@ function HistoryBoundChart({
           <div
             data-chart-pane-header="macd"
             data-chart-pane-time={paneTime ?? ""}
-            className="pointer-events-none absolute left-11 top-[85.5%] z-30 flex h-5 max-w-[75%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+            style={{ top: paneGeometry ? `${paneGeometry.plotTop + paneGeometry.main + paneGeometry.volume + paneGeometry.rsi + 4}px` : "85.5%" }}
+            className="pointer-events-none absolute left-11 z-30 flex h-5 max-w-[75%] items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
           >
             <span className="font-semibold text-sky-300">MACD</span>
             <span className="text-sky-200/85">{formatMetric(paneMacd, 4)}</span>
@@ -397,7 +380,7 @@ function HistoryBoundChart({
 }
 
 export function StockTradingViewChartData(props: StockTradingViewChartDataProps) {
-  const { navigationTimeframe, onTimeframeChange, preparedInitial: externalPrepared, ticker } = props
+  const { navigationTimeframe, onTimeframeChange, preparedInitial: externalPrepared, seedDailyBars, ticker } = props
   const normalizedTicker = ticker.toUpperCase()
   const externalPreparedForTicker = externalPrepared?.ticker === normalizedTicker ? externalPrepared : null
   const requestedTimeframe = navigationTimeframe?.ticker.toUpperCase() === normalizedTicker
@@ -428,6 +411,22 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
     if (nextTimeframe === committedTimeframeRef.current) return
     const generation = preparationRef.current.generation + 1
     preparationRef.current.controller?.abort()
+
+    const seededBars = deriveChartBarsFromDailySeed(seedDailyBars, nextTimeframe)
+    if (seededBars.length > 0) {
+      preparationRef.current = { generation, controller: null }
+      committedTimeframeRef.current = nextTimeframe
+      setPreparedInitial(null)
+      setCommittedTimeframe(nextTimeframe)
+      onTimeframeChange?.(nextTimeframe)
+      if (replayButton?.isConnected) {
+        replayTimeframeClickRef.current = true
+        replayButton.click()
+      }
+      setPreparingTimeframe(null)
+      return
+    }
+
     const controller = new AbortController()
     preparationRef.current = { generation, controller }
     setPreparingTimeframe(nextTimeframe)
@@ -458,7 +457,7 @@ export function StockTradingViewChartData(props: StockTradingViewChartDataProps)
         setPreparingTimeframe(null)
       }
     }
-  }, [onTimeframeChange, ticker])
+  }, [onTimeframeChange, seedDailyBars, ticker])
 
   const handleTimeframeClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (replayTimeframeClickRef.current) {

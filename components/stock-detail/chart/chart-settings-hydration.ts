@@ -24,6 +24,17 @@ export function shouldApplyRemoteChartSettings(
 }
 
 /**
+ * Field-level hydration must never replace an explicit local/navigation intent.
+ * Other untouched fields can still hydrate even when a different field changed.
+ */
+export function shouldApplyRemoteChartSettingsField(
+  localFieldIntents: ReadonlySet<ChartSettingsField>,
+  field: ChartSettingsField,
+): boolean {
+  return !localFieldIntents.has(field)
+}
+
+/**
  * Merge the fields that were not locally edited after hydration started. A
  * timeframe click, for example, keeps its local timeframe while adopting the
  * remote drawing set and indicator preferences that were still in flight.

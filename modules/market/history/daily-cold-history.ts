@@ -10,6 +10,7 @@ import type { CanonicalOhlcvBar } from "@/modules/market/chart-data/contract"
 import { isCanonicalDailyHotRowUsable } from "@/modules/market/chart-data/daily-authority"
 import { DAILY_BACKFILL_DAYS } from "@/modules/market/history/contract"
 import { fetchDailyMarketHistoryWindow, type DailyHistoryBarPolicy } from "@/modules/market/history/index"
+import { assertDailyProvenanceConsistent } from "./daily-provenance"
 
 const DAY_MS = 86_400_000
 const DAILY_DEEP_CHUNK_DAYS = 4 * 366
@@ -18,6 +19,7 @@ const MAX_CHUNKS_PER_TICKER = 3
 const HOT_ARCHIVE_READ_LIMIT = 400
 
 type StoredDailyRow = {
+  ticker?: unknown
   bar_time?: unknown
   open?: unknown
   high?: unknown
@@ -27,6 +29,7 @@ type StoredDailyRow = {
   provider?: unknown
   provider_detail?: unknown
   source_url?: unknown
+  provenance_consistent?: unknown
 }
 
 export type DailyLeftEdgeStatus = "IN_PROGRESS" | "PROVIDER_BOUNDARY" | "LISTING_BOUNDARY" | "UNRECOVERABLE" | "RETRYABLE_ERROR"
@@ -177,16 +180,18 @@ async function loadTerminalStatus(supabase: SupabaseClient, ticker: string): Pro
 export async function archiveExpiredDailyHotHistory(supabase: SupabaseClient, ticker: string, now = new Date()) {
   const cutoff = new Date(now.getTime() - DAILY_BACKFILL_DAYS * DAY_MS)
   const { data, error } = await supabase
-    .from("market_ohlcv_history")
-    .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
+    .from("market_ohlcv_history_compat")
+    .select("ticker,bar_time,open,high,low,close,volume,provider,provider_detail,source_url,provenance_consistent")
     .eq("ticker", ticker)
     .eq("timeframe", "1D")
     .lt("bar_time", cutoff.toISOString())
     .order("bar_time", { ascending: true })
     .limit(HOT_ARCHIVE_READ_LIMIT)
-  if (error) throw new Error(`Load expired Daily hot rows failed for ${ticker}: ${error.message}`)
 
+  if (error) throw new Error(`Load expired Daily hot rows failed for ${ticker}: ${error.message}`)
   const rows = (data || []) as StoredDailyRow[]
+  assertDailyProvenanceConsistent(rows as Array<Record<string, unknown>>, `Load expired Daily hot rows for ${ticker}`)
+
   const parsedRows = rows.map((row) => ({ row, bar: toBar(row) }))
     .filter((item): item is { row: StoredDailyRow; bar: CanonicalOhlcvBar } => Boolean(item.bar))
   if (!parsedRows.length) return { rows: 0, manifests: [] as string[] }

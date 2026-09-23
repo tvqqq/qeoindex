@@ -1,20 +1,19 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { OhlcvBar } from "@/modules/shared/technical/indicators"
 import { chartHistoryFloor } from "@/modules/market/chart-data/history-policy"
-import { vietnamDateKey } from "@/modules/market/calendar"
-import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import type { ChartTimeframe } from "./stock-chart-types"
 import {
+  deriveChartBarsFromDailySeed,
   loadInitialChartHistory,
   mergeChartBars,
   olderChartHistoryRange,
   requestChartRange,
-  requestFreshChartRange,
   type ChartHistoryResponse,
   type PreparedChartHistory,
 } from "./chart-history"
+import { chartHistoryIdentity, renderBarsForChartIdentity } from "./chart-history-identity"
 
 interface UseChartHistoryOptions {
   ticker: string
@@ -25,9 +24,6 @@ interface UseChartHistoryOptions {
 
 type LiveState = "closed" | "live" | "stale"
 
-const LIVE_REFRESH_INTERVAL_MS = 5_000
-const LIVE_TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "30m", "1h", "2h", "4h"])
-
 function mergeCoverage(
   current: ChartHistoryResponse["coverage"] | null,
   incoming: ChartHistoryResponse["coverage"],
@@ -35,11 +31,6 @@ function mergeCoverage(
   if (!current) return incoming
   const complete = current.complete && incoming.complete
   return { complete, state: complete ? "COMPLETE" as const : "PARTIAL" as const }
-}
-
-function resultLiveState(result: ChartHistoryResponse): LiveState {
-  if (result.metadata?.sessionState !== "LIVE") return "closed"
-  return result.errors.some((item) => item.code === "PROVIDER_UNAVAILABLE") ? "stale" : "live"
 }
 
 function preparedMatches(prepared: PreparedChartHistory | null | undefined, ticker: string, timeframe: ChartTimeframe) {
@@ -50,32 +41,35 @@ function preparedMatches(prepared: PreparedChartHistory | null | undefined, tick
   )
 }
 
-function vietnamSessionOpenEpoch(now: Date) {
-  return Math.floor(Date.parse(`${vietnamDateKey(now)}T09:00:00+07:00`) / 1000)
-}
-
 export function useChartHistory({
   ticker,
   timeframe,
   seedDailyBars = [],
   preparedInitial = null,
 }: UseChartHistoryOptions) {
+  const requestedKey = chartHistoryIdentity(ticker, timeframe)
   const exactPrepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
-  const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : []))
-  const [loading, setLoading] = useState(() => !exactPrepared)
+  const seedBars = useMemo(
+    () => deriveChartBarsFromDailySeed(seedDailyBars, timeframe),
+    [seedDailyBars, timeframe],
+  )
+  const hasUsableDailySeed = seedBars.length > 0
+  const [bars, setBars] = useState<OhlcvBar[]>(() => exactPrepared?.result.bars ?? seedBars)
+  const [stateKey, setStateKey] = useState(requestedKey)
+  const [loading, setLoading] = useState(() => !exactPrepared && !hasUsableDailySeed)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [coverage, setCoverage] = useState<ChartHistoryResponse["coverage"] | null>(() => exactPrepared?.result.coverage ?? null)
   const [hasMore, setHasMore] = useState(true)
-  const [liveState, setLiveState] = useState<LiveState>(() => exactPrepared ? resultLiveState(exactPrepared.result) : "closed")
-  const [liveError, setLiveError] = useState<string | null>(null)
-  const [liveProvider, setLiveProvider] = useState<string | null>(() => exactPrepared?.result.metadata?.provider ?? null)
+  const [liveState] = useState<LiveState>("closed")
+  const [liveError] = useState<string | null>(null)
+  const [liveProvider] = useState<string | null>(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(() => exactPrepared?.result.metadata?.lastUpdatedAt ?? exactPrepared?.result.generatedAt ?? null)
 
   const barsRef = useRef(bars)
+  const stateKeyRef = useRef(requestedKey)
   const generationRef = useRef(0)
   const olderRequestRef = useRef(false)
-  const liveRequestRef = useRef(false)
   const horizonToRef = useRef<number | null>(null)
   const historyCursorRef = useRef<number | null>(null)
 
@@ -83,35 +77,41 @@ export function useChartHistory({
     barsRef.current = bars
   }, [bars])
 
-  // A prepared ticker/timeframe swap is already validated before its parent
-  // commits. Synchronize the hook's render state in the layout phase so React
-  // cannot paint the new ticker/timeframe with bars left from the previous
-  // committed dataset. Initial network work remains asynchronous below.
   useLayoutEffect(() => {
     const generation = ++generationRef.current
     const controller = new AbortController()
     const prepared = preparedMatches(preparedInitial, ticker, timeframe) ? preparedInitial : null
-    const initialBars = prepared?.result.bars ?? (timeframe === "1D" ? seedDailyBars : [])
+    const initialBars = prepared?.result.bars ?? seedBars
+    stateKeyRef.current = requestedKey
+    setStateKey(requestedKey)
     barsRef.current = initialBars
     historyCursorRef.current = prepared?.range.from ?? null
     setBars(initialBars)
-    setLoading(!prepared)
+    setLoading(!prepared && !hasUsableDailySeed)
     setLoadingOlder(false)
     olderRequestRef.current = false
-    liveRequestRef.current = false
     setError(null)
     setCoverage(prepared?.result.coverage ?? null)
-    setLiveState(prepared ? resultLiveState(prepared.result) : "closed")
-    setLiveError(prepared?.result.errors.some((item) => item.code === "PROVIDER_UNAVAILABLE")
-      ? "Dữ liệu realtime tạm thời không khả dụng."
-      : null)
-    setLiveProvider(prepared?.result.metadata?.provider ?? null)
     setLastUpdatedAt(prepared?.result.metadata?.lastUpdatedAt ?? prepared?.result.generatedAt ?? null)
 
     if (prepared) {
       const horizonTo = prepared.range.to
       horizonToRef.current = horizonTo
       setHasMore(prepared.range.from > chartHistoryFloor(timeframe, horizonTo) + 1)
+      return () => controller.abort()
+    }
+
+    if (hasUsableDailySeed) {
+      const horizonTo = seedDailyBars.at(-1)?.time ?? seedBars.at(-1)?.time ?? null
+      const historyCursor = seedDailyBars.at(0)?.time ?? seedBars.at(0)?.time ?? null
+      horizonToRef.current = horizonTo
+      historyCursorRef.current = historyCursor
+      setHasMore(Boolean(
+        horizonTo
+        && historyCursor
+        && historyCursor > chartHistoryFloor(timeframe, horizonTo) + 1,
+      ))
+      setLoading(false)
       return () => controller.abort()
     }
 
@@ -131,9 +131,6 @@ export function useChartHistory({
         historyCursorRef.current = range.from
         setCoverage(result.coverage)
         setHasMore(range.from > chartHistoryFloor(timeframe, to) + 1)
-        setLiveState(resultLiveState(result))
-        setLiveError(result.errors.some((item) => item.code === "PROVIDER_UNAVAILABLE") ? "Dữ liệu realtime tạm thời không khả dụng." : null)
-        setLiveProvider(result.metadata?.provider ?? null)
         setLastUpdatedAt(result.metadata?.lastUpdatedAt ?? result.generatedAt ?? null)
       })
       .catch((cause: unknown) => {
@@ -146,55 +143,10 @@ export function useChartHistory({
       })
 
     return () => controller.abort()
-  }, [preparedInitial, seedDailyBars, ticker, timeframe])
-
-  useEffect(() => {
-    if (!LIVE_TIMEFRAMES.has(timeframe)) return
-    const generation = generationRef.current
-
-    const refreshLiveTail = async () => {
-      const now = new Date()
-      const session = getMarketSessionStatus(now)
-      if (!session.isLiveSession) {
-        setLiveState("closed")
-        setLiveError(null)
-        return
-      }
-      if (liveRequestRef.current) return
-
-      const to = Math.floor(now.getTime() / 1000)
-      const from = Math.max(chartHistoryFloor(timeframe, to), vietnamSessionOpenEpoch(now))
-      if (from >= to) return
-
-      liveRequestRef.current = true
-      try {
-        const result = await requestFreshChartRange({ ticker, timeframe, from, to })
-        if (generationRef.current !== generation) return
-        setBars((current) => {
-          const mergedBars = mergeChartBars(current, result.bars)
-          barsRef.current = mergedBars
-          return mergedBars
-        })
-        const nextLiveState = resultLiveState(result)
-        setLiveState(nextLiveState)
-        setLiveError(nextLiveState === "stale" ? "Dữ liệu realtime tạm thời không khả dụng." : null)
-        if (result.metadata?.provider) setLiveProvider(result.metadata.provider)
-        setLastUpdatedAt(result.metadata?.lastUpdatedAt ?? result.generatedAt ?? new Date().toISOString())
-      } catch (cause) {
-        if (generationRef.current !== generation) return
-        setLiveState("stale")
-        setLiveError(cause instanceof Error ? cause.message : "Không thể làm mới dữ liệu realtime.")
-      } finally {
-        liveRequestRef.current = false
-      }
-    }
-
-    const timer = window.setInterval(() => { void refreshLiveTail() }, LIVE_REFRESH_INTERVAL_MS)
-    return () => window.clearInterval(timer)
-  }, [ticker, timeframe])
+  }, [hasUsableDailySeed, preparedInitial, requestedKey, seedBars, seedDailyBars, ticker, timeframe])
 
   const loadOlder = useCallback(async () => {
-    if (olderRequestRef.current || !hasMore) return
+    if (stateKeyRef.current !== requestedKey || olderRequestRef.current || !hasMore) return
     const cursor = historyCursorRef.current ?? barsRef.current[0]?.time
     const horizonTo = horizonToRef.current
     if (!cursor || !horizonTo) {
@@ -230,19 +182,39 @@ export function useChartHistory({
       if (generationRef.current === generation) setLoadingOlder(false)
       olderRequestRef.current = false
     }
-  }, [hasMore, ticker, timeframe])
+  }, [hasMore, requestedKey, ticker, timeframe])
+
+  const targetBars = exactPrepared?.result.bars ?? seedBars
+  const targetLoading = !exactPrepared && !hasUsableDailySeed
+  const targetCoverage = exactPrepared?.result.coverage ?? null
+  const targetLastUpdatedAt = exactPrepared?.result.metadata?.lastUpdatedAt ?? exactPrepared?.result.generatedAt ?? null
+  const targetHasMore = exactPrepared
+    ? exactPrepared.range.from > chartHistoryFloor(timeframe, exactPrepared.range.to) + 1
+    : hasUsableDailySeed
+      ? (() => {
+          const horizonTo = seedDailyBars.at(-1)?.time ?? seedBars.at(-1)?.time ?? null
+          const historyCursor = seedDailyBars.at(0)?.time ?? seedBars.at(0)?.time ?? null
+          return Boolean(
+            horizonTo
+            && historyCursor
+            && historyCursor > chartHistoryFloor(timeframe, horizonTo) + 1,
+          )
+        })()
+      : true
+  const renderKeyMatches = stateKey === requestedKey
+  const renderBars = renderBarsForChartIdentity(stateKey, requestedKey, bars, targetBars)
 
   return {
-    bars,
-    loading,
-    loadingOlder,
-    error,
-    coverage,
-    hasMore,
+    bars: renderBars,
+    loading: renderKeyMatches ? loading : targetLoading,
+    loadingOlder: renderKeyMatches ? loadingOlder : false,
+    error: renderKeyMatches ? error : null,
+    coverage: renderKeyMatches ? coverage : targetCoverage,
+    hasMore: renderKeyMatches ? hasMore : targetHasMore,
     loadOlder,
     liveState,
     liveError,
     liveProvider,
-    lastUpdatedAt,
+    lastUpdatedAt: renderKeyMatches ? lastUpdatedAt : targetLastUpdatedAt,
   }
 }

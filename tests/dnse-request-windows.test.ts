@@ -79,20 +79,58 @@ test("DNSE board budget guard leaves popup orderbook subscription untouched", ()
   assert.equal(rewriteDnseBoardSubscriptionMessage(orderbook), orderbook)
 })
 
-test("QEO-175 gives Market Board a Supabase realtime transport instead of a browser DNSE socket", () => {
+test("QEO-225 gives Market Board an authenticated relay hot path without a browser provider socket", () => {
   const boardSource = readFileSync("components/live-market-board.tsx", "utf8")
   const streamSource = readFileSync("modules/market/providers/dnse/market-stream.ts", "utf8")
+  const relaySource = readFileSync("modules/market/realtime/relay-client.ts", "utf8")
 
   assert.doesNotMatch(boardSource, /new WebSocket\(authJson\.url\)/)
   assert.match(boardSource, /subscribeDnseMarketFrames/)
   assert.match(boardSource, /subscribeDnseMarketStreamState/)
-  assert.match(streamSource, /getSupabaseBrowserClient/)
+  assert.match(streamSource, /getAuthenticatedSupabaseRealtimeClient/)
   assert.match(streamSource, /market_realtime_bus/)
-  assert.match(streamSource, /postgres_changes/)
+  assert.match(streamSource, /subscribeMarketRelay/)
+  assert.doesNotMatch(streamSource, /postgres_changes|\.channel\(/)
   assert.match(streamSource, /synthesizeDnseOhlcFromTickMessage/)
+  assert.match(streamSource, /for \(let index = 0; index < pending\.length; index \+= 1\)/)
+  assert.match(streamSource, /pending\.slice\(index\)/)
+  assert.match(relaySource, /\/api\/market\/realtime-token/)
+  assert.match(relaySource, /new WebSocket\(url\)/)
 })
 
-test("QEO-175 realtime bus is authenticated-read, service-write, publication-enabled, and bounded", () => {
+test("QEO-225 authenticates relay before subscribing while Supabase is bootstrap-only", () => {
+  const relay = readFileSync("modules/market/realtime/relay-client.ts", "utf8")
+  const market = readFileSync("modules/market/providers/dnse/market-stream.ts", "utf8")
+  const orderbook = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  const openIndex = relay.indexOf("new WebSocket(url)")
+  const authIndex = relay.indexOf('type: "auth", token')
+  const subscribeIndex = relay.indexOf('type: "subscribe", topics')
+  assert.ok(openIndex >= 0, "relay transport must create one physical browser WebSocket")
+  assert.ok(authIndex > openIndex, "relay token must be sent after WebSocket open")
+  assert.ok(subscribeIndex > authIndex, "logical subscriptions must follow relay authentication")
+  assert.doesNotMatch(relay, /\?token=|searchParams.*token/i)
+  assert.match(market, /await getAuthenticatedSupabaseRealtimeClient\(\)/)
+  assert.match(orderbook, /await getAuthenticatedSupabaseRealtimeClient\(\)/)
+  assert.doesNotMatch(market, /supabase\.realtime|postgres_changes|\.channel\(/)
+  assert.doesNotMatch(orderbook, /supabase\.realtime|private:\s*true|\.on\("broadcast"|\.channel\(/)
+})
+
+test("QEO-225 relay token route is feature-gated, short-lived, and not URL-borne", () => {
+  const route = readFileSync("app/api/market/realtime-token/route.ts", "utf8")
+  const token = readFileSync("modules/market/realtime/relay-token.ts", "utf8")
+  const client = readFileSync("modules/market/realtime/relay-client.ts", "utf8")
+
+  assert.match(route, /requireApiFeature\("market_board"\)/)
+  assert.match(route, /QEO_MARKET_REALTIME_SIGNING_SECRET/)
+  assert.match(route, /Cache-Control["']?:\s*["']no-store/)
+  assert.match(token, /MARKET_REALTIME_TOKEN_TTL_SECONDS\s*=\s*60/)
+  assert.match(client, /fetch\("\/api\/market\/realtime-token"/)
+  assert.match(client, /JSON\.stringify\(\{ type: "auth", token \}\)/)
+  assert.doesNotMatch(client, /new WebSocket\([^\n]*(token|access_token|apikey)/i)
+})
+
+test("QEO-175 realtime bus remains authenticated recovery storage and bounded", () => {
   const migration = readFileSync("supabase/migrations/20260912074500_qeo175_market_realtime_bus.sql", "utf8")
 
   assert.match(migration, /create table if not exists public\.market_realtime_bus/i)
@@ -104,27 +142,34 @@ test("QEO-175 realtime bus is authenticated-read, service-write, publication-ena
   assert.match(migration, /octet_length\(frames::text\)[\s\S]*524288/i)
 })
 
-test("QEO-175 centralized worker contract remains bounded after the QEO-196 runtime cutover", () => {
+test("QEO-225 worker keeps durable checkpoints bounded while relay owns live delivery", () => {
   const stream = readFileSync("services/market-realtime-worker/internal/dnse/stream.go", "utf8")
   const config = readFileSync("services/market-realtime-worker/internal/config/config.go", "utf8")
   const buffer = readFileSync("services/market-realtime-worker/internal/realtime/buffer.go", "utf8")
   const publisher = readFileSync("services/market-realtime-worker/internal/supabase/client.go", "utf8")
   const worker = readFileSync("services/market-realtime-worker/internal/worker/run.go", "utf8")
+  const checkpoint = readFileSync("services/market-realtime-worker/internal/worker/checkpoint_writer.go", "utf8")
 
   assert.match(stream, /tick\.G1\.json/)
   assert.match(stream, /market_index\.VNINDEX\.json/)
   assert.match(config, /MARKET_REALTIME_FLUSH_MS/)
-  assert.match(config, /1000/)
-  assert.match(config, /MARKET_UNIVERSE_REFRESH_MS/)
-  assert.match(config, /300000/)
+  assert.match(config, /QEO_MARKET_REALTIME_MARKET_FLUSH_MS/)
+  assert.match(config, /QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS/)
   assert.match(buffer, /524288/)
-  assert.match(publisher, /SUPABASE_SERVICE_ROLE_KEY|serviceRoleKey/)
   assert.match(publisher, /market_realtime_bus/)
   assert.match(publisher, /CurrentSequence/)
-  assert.match(worker, /NextSequence/)
+  assert.match(worker, /relay\.NewHub/)
+  assert.match(worker, /relay\.NewServer/)
+  assert.match(worker, /hub\.Publish\(\s*"market"/)
+  assert.match(worker, /hub\.Publish\(\s*"orderbook:"\+symbol/)
+  assert.match(worker, /newCheckpointWriter/)
+  assert.doesNotMatch(worker, /newOrderbookPublisher/)
+  assert.doesNotMatch(worker, /PublishPrivateBroadcast/)
+  assert.match(checkpoint, /go writer\.run\(\)/)
+  assert.match(checkpoint, /PublishCheckpoint/)
 })
 
-test("QEO-196 cuts the centralized realtime runtime over to a bounded Go worker", () => {
+test("QEO-196 keeps the bounded Go worker runtime foundation", () => {
   const goModPath = "services/market-realtime-worker/go.mod"
   const mainPath = "services/market-realtime-worker/cmd/market-realtime-worker/main.go"
   const configPath = "services/market-realtime-worker/internal/config/config.go"
@@ -154,25 +199,36 @@ test("QEO-196 cuts the centralized realtime runtime over to a bounded Go worker"
   assert.match(configSource, /MARKET_UNIVERSE_REFRESH_MS/)
   assert.match(supabaseSource, /market_realtime_bus/)
   assert.match(supabaseSource, /CurrentSequence/)
-  assert.match(workerSource, /NextSequence/)
 
   assert.equal(existsSync("services/market-realtime-worker/railway.json"), false)
   assert.equal(existsSync("services/market-realtime-worker/composer.json"), false)
 })
 
-test("QEO-196 UpCloud runtime has no public port and is fail-closed until E2E timer enablement", () => {
+test("QEO-225 exposes the worker relay on loopback only and keeps existing market timers", () => {
   const dockerfilePath = "services/market-realtime-worker/Dockerfile"
   const composePath = "services/market-realtime-worker/deploy/upcloud/docker-compose.upcloud.yml"
+  const opsComposePath = "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml"
+  const envExamplePath = "services/market-realtime-worker/.env.example"
   const servicePath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime.service"
   const startTimerPath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime-start.timer"
   const stopTimerPath = "services/market-realtime-worker/deploy/upcloud/qeo-market-realtime-stop.timer"
 
-  for (const path of [dockerfilePath, composePath, servicePath, startTimerPath, stopTimerPath]) {
-    assert.equal(existsSync(path), true, `missing QEO-196 UpCloud artifact: ${path}`)
+  for (const path of [
+    dockerfilePath,
+    composePath,
+    opsComposePath,
+    envExamplePath,
+    servicePath,
+    startTimerPath,
+    stopTimerPath,
+  ]) {
+    assert.equal(existsSync(path), true, `missing UpCloud artifact: ${path}`)
   }
 
   const dockerfile = readFileSync(dockerfilePath, "utf8")
   const compose = readFileSync(composePath, "utf8")
+  const opsCompose = readFileSync(opsComposePath, "utf8")
+  const envExample = readFileSync(envExamplePath, "utf8")
   const service = readFileSync(servicePath, "utf8")
   const startTimer = readFileSync(startTimerPath, "utf8")
   const stopTimer = readFileSync(stopTimerPath, "utf8")
@@ -182,11 +238,179 @@ test("QEO-196 UpCloud runtime has no public port and is fail-closed until E2E ti
   assert.match(compose, /mem_limit:\s*384m/i)
   assert.match(compose, /cpus:\s*["']?0\.[0-9]+/i)
   assert.match(compose, /\/opt\/qeoindex\/env\/market-realtime-worker\.env/)
-  assert.doesNotMatch(compose, /ports:/i)
+  const portsBlock = compose.match(/^    ports:[ \t]*\n((?:^      -[^\n]*(?:\n|$))+)/m)?.[1]
+  assert.ok(portsBlock, "worker relay must declare a Compose ports block")
+  const workerPublishedPorts = [...portsBlock.matchAll(/^[ \t]*-[ \t]*(?:"([^"]+)"|'([^']+)'|([^ \t#]+))/gm)]
+    .map(([, doubleQuoted, singleQuoted, bare]) => doubleQuoted ?? singleQuoted ?? bare)
+  assert.deepEqual(
+    workerPublishedPorts,
+    ["127.0.0.1:8790:8787"],
+    "worker relay must publish exactly one loopback mapping; unqualified, wildcard, IPv6, and extra ports are forbidden",
+  )
+  const workerPort = workerPublishedPorts[0]?.match(/^127\.0\.0\.1:(\d+):(\d+)$/)
+  const opsPort = opsCompose.match(/["']127\.0\.0\.1:(\d+):(\d+)["']/)
+  assert.ok(workerPort, "worker relay must publish one loopback port")
+  assert.ok(opsPort, "ops-dashboard must publish one loopback port")
+  assert.equal(workerPort[1], "8790", "worker relay host port must not collide with ops-dashboard")
+  assert.equal(workerPort[2], "8787", "worker relay container port must remain 8787")
+  assert.equal(opsPort[1], "8787", "ops-dashboard owns host loopback port 8787")
+  assert.equal(opsPort[2], "8787", "ops-dashboard container port must remain 8787")
+  assert.notEqual(workerPort[1], opsPort[1], "worker and ops-dashboard host ports must differ")
+  assert.doesNotMatch(compose, /0\.0\.0\.0:/, "worker relay must not bind a public host interface")
+  assert.match(envExample, /^# QEO-225 authenticated browser relay\. Never commit the real signing secret\.$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_SIGNING_SECRET=$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_ALLOWED_ORIGINS=https:\/\/example\.com$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_LISTEN_ADDR=:8787$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_AUTH_TIMEOUT_MS=5000$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_PING_MS=15000$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_SEND_QUEUE=64$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_MARKET_FLUSH_MS=100$/m)
+  assert.match(envExample, /^QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS=50$/m)
   assert.match(service, /WorkingDirectory=\/opt\/qeoindex\/repo\/services\/market-realtime-worker/)
   assert.match(service, /--no-build/)
   assert.match(startTimer, /01:55:00\s+UTC/)
   assert.match(startTimer, /Persistent=true/)
   assert.match(stopTimer, /07:50:00\s+UTC/)
   assert.match(stopTimer, /Persistent=true/)
+})
+
+test("QEO-254 keeps the Onidel public edge canonical, hardened, and loopback-upstream only", () => {
+  const caddyPath = "services/market-realtime-worker/deploy/onidel/Caddyfile.qeo-realtime.onidel"
+  const composePath = "services/market-realtime-worker/deploy/onidel/docker-compose.realtime-edge.onidel.yml"
+
+  for (const path of [caddyPath, composePath]) {
+    assert.equal(existsSync(path), true, `missing Onidel realtime edge artifact: ${path}`)
+  }
+
+  const caddy = readFileSync(caddyPath, "utf8")
+  const compose = readFileSync(composePath, "utf8")
+
+  assert.match(caddy, /^realtime\.qeoqeo\.com\s*\{/m)
+  assert.match(caddy, /bind\s+216\.176\.238\.116/)
+  assert.match(caddy, /reverse_proxy\s+127\.0\.0\.1:8790/)
+  assert.doesNotMatch(caddy, /reverse_proxy\s+(?!127\.0\.0\.1)/)
+
+  assert.match(compose, /image:\s*caddy:2\.11\.4-alpine/)
+  assert.match(compose, /restart:\s*unless-stopped/)
+  assert.match(compose, /network_mode:\s*host/)
+  assert.match(compose, /read_only:\s*true/)
+  assert.match(compose, /no-new-privileges:true/)
+  assert.match(compose, /cap_drop:[\s\S]*- ALL/)
+  assert.match(compose, /cap_add:[\s\S]*- NET_BIND_SERVICE/)
+  assert.match(compose, /\/opt\/qeoindex\/deploy\/Caddyfile\.qeo-realtime\.onidel:\/etc\/caddy\/Caddyfile:ro/)
+  assert.match(compose, /qeo-realtime-caddy-data:\/data/)
+  assert.match(compose, /qeo-realtime-caddy-config:\/config/)
+  assert.doesNotMatch(compose, /env_file:|environment:/)
+})
+
+test("QEO-225 removes browser-direct provider orderbook transport and Supabase Broadcast hot path", () => {
+  const transportPath = "modules/market/providers/dnse/orderbook-stream.ts"
+  assert.equal(existsSync(transportPath), true, "centralized orderbook transport must exist")
+
+  const panel = readFileSync("components/orderbook/live-orderbook-panel.tsx", "utf8")
+  const transport = readFileSync(transportPath, "utf8")
+
+  assert.doesNotMatch(panel, /new WebSocket\(authJson\.url\)/)
+  assert.doesNotMatch(panel, /\/api\/market\/stream-auth/)
+  assert.match(panel, /subscribeDnseOrderbookFrames/)
+  assert.match(transport, /subscribeMarketRelay/)
+  assert.doesNotMatch(transport, /private:\s*true|\.on\("broadcast"|\.channel\(/)
+  assert.doesNotMatch(transport, /ws-openapi\.dnse\.com\.vn/)
+})
+
+test("QEO-216 provider ownership still uses four bounded supplemental sockets and reuses canonical ticks", () => {
+  const planPath = "services/market-realtime-worker/internal/worker/orderbook_plan.go"
+  const bufferPath = "services/market-realtime-worker/internal/realtime/orderbook_buffer.go"
+  assert.equal(existsSync(planPath), true, "orderbook provider shard planner must exist")
+  assert.equal(existsSync(bufferPath), true, "orderbook fanout buffer must exist")
+
+  const stream = readFileSync("services/market-realtime-worker/internal/dnse/stream.go", "utf8")
+  const plan = readFileSync(planPath, "utf8")
+  const worker = readFileSync("services/market-realtime-worker/internal/worker/run.go", "utf8")
+  const config = readFileSync("services/market-realtime-worker/internal/config/config.go", "utf8")
+
+  assert.match(stream, /top_price\.G1\.json/)
+  assert.match(stream, /tick_extra\.G1\.json/)
+  assert.match(stream, /foreign\.G1\.json/)
+  assert.match(plan, /maxOrderbookSymbolsPerSocket\s*=\s*50/)
+  assert.match(plan, /maxOrderbookSupplementalSockets\s*=\s*4/)
+  assert.match(worker, /orderbook-0/)
+  assert.match(worker, /onTickFrame[\s\S]*orderbookBuffer\.Push/)
+  assert.match(config, /QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS/)
+  assert.match(config, /50/)
+  assert.doesNotMatch(stream, /func OrderbookChannels[\s\S]*ohlc\.1\.json/)
+})
+
+test("QEO-216 historical private Broadcast policy remains scoped even though QEO-225 no longer consumes it", () => {
+  const migrationPath = "supabase/migrations/20260914090000_qeo216_orderbook_realtime_broadcast.sql"
+  assert.equal(existsSync(migrationPath), true, "QEO-216 Realtime authorization migration must remain auditable")
+
+  const migration = readFileSync(migrationPath, "utf8")
+  assert.match(migration, /on\s+"?realtime"?\."?messages"?/i)
+  assert.match(migration, /for\s+select/i)
+  assert.match(migration, /to\s+authenticated/i)
+  assert.match(migration, /realtime\.topic\(\)/i)
+  assert.match(migration, /orderbook:v1:/i)
+  assert.match(migration, /extension[\s\S]*broadcast/i)
+  assert.doesNotMatch(migration, /for\s+insert[\s\S]*to\s+authenticated/i)
+})
+
+test("QEO-223 keeps backend provider topology private in Market Board status UI", () => {
+  const boardSource = readFileSync("components/live-market-board.tsx", "utf8")
+  const statusStart = boardSource.indexOf("const FloatingMarketStatus")
+  const statusEnd = boardSource.indexOf("function extractInitialRefs")
+  assert.ok(statusStart >= 0 && statusEnd > statusStart, "FloatingMarketStatus component must exist")
+  const statusSource = boardSource.slice(statusStart, statusEnd)
+
+  assert.match(statusSource, /REALTIME LIVE/)
+  assert.doesNotMatch(statusSource, /DNSE LIVE/)
+  assert.doesNotMatch(statusSource, /Nguồn dữ liệu:/)
+  assert.doesNotMatch(statusSource, /Yahoo 5m \+ DNSE via Supabase/)
+  assert.doesNotMatch(statusSource, /UPCLOUD RELAY LIVE/)
+})
+
+test("QEO-235 uses DNSE multicast receive time for provider-to-worker latency", () => {
+  const orderbookStream = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+  assert.match(
+    orderbookStream,
+    /function providerIngressTimestampMs[\s\S]*frame\.multicastReceiveTime \?\? frame\.time/,
+    "provider latency must prefer DNSE multicastReceiveTime before exchange/event time",
+  )
+})
+
+test("QEO-235 clears latency samples across relay continuity boundaries", () => {
+  const orderbookStream = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+  assert.match(orderbookStream, /const resetLatencySamples = \(\) =>/)
+  assert.match(orderbookStream, /latencySamples\.splice\(0, latencySamples\.length\)/)
+  assert.match(orderbookStream, /latencyFrameCount = 0/)
+  assert.match(orderbookStream, /nextLatencyReportAt = LATENCY_REPORT_EVERY/)
+
+  const resetBaseline = orderbookStream.match(
+    /const resetLiveBaseline = \(\) => \{[\s\S]*?\n  \}/,
+  )?.[0] ?? ""
+  assert.match(
+    resetBaseline,
+    /resetLatencySamples\(\)/,
+    "a worker epoch/recovery boundary must not mix latency samples from the previous epoch",
+  )
+})
+
+test("QEO-237 keeps provider ingress and exchange-event end-to-end latency on separate timestamp semantics", () => {
+  const orderbookStream = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  assert.match(
+    orderbookStream,
+    /function providerIngressTimestampMs[\s\S]*frame\.multicastReceiveTime/,
+    "provider-to-worker diagnostics must continue to use DNSE multicast receive time",
+  )
+  assert.match(
+    orderbookStream,
+    /function eventTimestampMs[\s\S]*frame\.time \?\? frame\.t/,
+    "end-to-end latency must start from the exchange/event timestamp instead of DNSE multicast ingress time",
+  )
+  assert.match(orderbookStream, /providerToWorker:\s*latencyBetween\(providerIngressAt, workerReceivedAt\)/)
+  assert.match(
+    orderbookStream,
+    /endToEnd:\s*eventMatchesCurrentSession\s*\?\s*latencyBetween\(eventAt, browserReceivedAt\)\s*:\s*null/,
+  )
 })

@@ -7,6 +7,8 @@ services:
     env_file:
       - /opt/qeoindex/env/market-realtime-worker.env
     restart: "no"
+    ports:
+      - "127.0.0.1:8790:8787"
     mem_limit: 384m
     cpus: "0.75"
     read_only: true

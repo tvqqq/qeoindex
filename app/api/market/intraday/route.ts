@@ -6,6 +6,7 @@ import {
   getCachedIntraday5mSnapshot,
   getIntraday5mSnapshot,
 } from "@/modules/market/realtime/intraday-5m-service"
+import { miniChartPointsForDisplay } from "@/modules/market/realtime/session-ui"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -39,8 +40,16 @@ export async function GET(request: Request) {
     snapshot = await getIntraday5mSnapshot(symbols, now)
   }
 
-  const histories = Object.fromEntries(snapshot.rows.map((row) => [row.symbol, row]))
-  const successCount = snapshot.rows.filter((row) => row.points.length > 0).length
+  const displayRows = snapshot.rows.map((row) => {
+    const points = miniChartPointsForDisplay(row.points, now)
+    return {
+      ...row,
+      points,
+      lastBarAt: points.at(-1)?.time ?? null,
+    }
+  })
+  const histories = Object.fromEntries(displayRows.map((row) => [row.symbol, row]))
+  const successCount = displayRows.filter((row) => row.points.length > 0).length
 
   return NextResponse.json({
     ok: successCount > 0,

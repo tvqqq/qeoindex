@@ -1,24 +1,23 @@
-import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
-import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
-import { runChartIntradayArchiveLifecycle } from "@/modules/market/chart-data/archive-lifecycle"
-import { QEO107_HOT_RETENTION_SESSIONS, qeo107BootstrapTarget, readChartIntradayCoverageReport } from "@/modules/market/chart-data/bootstrap"
-import { QEO107_STAGED_MAX_TICKERS } from "@/modules/market/chart-data/bootstrap-workflow-steps"
-import { runChartDerivedHourlyRecovery } from "@/modules/market/chart-data/derived-hourly-recovery"
-import { readChartIntradayMaintenanceReport } from "@/modules/market/chart-data/maintenance"
-import { getCanonicalUniverse } from "@/modules/market/universe/index"
+import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
-import { chartIntradayBootstrapWorkflow } from "@/workflows/chart-intraday-bootstrap"
-import { chartIntradayHotContinuityWorkflow } from "@/workflows/chart-intraday-hot-continuity"
-import { chartIntradayMaintenanceWorkflow } from "@/workflows/chart-intraday-maintenance"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
+
+const RETIRED_CHART_MODES = new Set([
+  "chart-coverage",
+  "chart-maintenance-coverage",
+  "chart-maintenance",
+  "chart-bootstrap",
+  "chart-archive",
+  "chart-derived-recovery",
+])
 
 function bearerToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? ""
@@ -36,130 +35,21 @@ function vietnamDateKey(date: Date) {
 }
 
 function historicalStartedAt(sessionDate: string, now: Date) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
-    throw new Error("sessionDate must use YYYY-MM-DD")
-  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) throw new Error("sessionDate must use YYYY-MM-DD")
   const parsed = new Date(`${sessionDate}T08:15:00.000Z`)
-  if (Number.isNaN(parsed.getTime()) || vietnamDateKey(parsed) !== sessionDate) {
-    throw new Error("sessionDate is not a valid calendar date")
-  }
-  if (sessionDate >= vietnamDateKey(now)) {
-    throw new Error("sessionDate backfill must be earlier than today in Asia/Ho_Chi_Minh")
-  }
+  if (Number.isNaN(parsed.getTime()) || vietnamDateKey(parsed) !== sessionDate) throw new Error("sessionDate is not a valid calendar date")
+  if (sessionDate >= vietnamDateKey(now)) throw new Error("sessionDate backfill must be earlier than today in Asia/Ho_Chi_Minh")
   return parsed.toISOString()
-}
-
-function archivePartitionLimit(value: string | null) {
-  if (!value) return 1
-  if (!/^\d+$/.test(value)) return null
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12 ? parsed : null
-}
-
-function stagedBootstrapTickers(value: string | null) {
-  if (value == null) return []
-  if (value.trim() === "") return null
-  const tickers = [...new Set(value.split(",").map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))]
-  if (!tickers.length || tickers.length > QEO107_STAGED_MAX_TICKERS) return null
-  if (tickers.some((ticker) => !/^[A-Z0-9]{2,12}$/.test(ticker))) return null
-  return tickers
 }
 
 async function isQeoIndexSchedulerAuthorized(request: Request) {
   if (isMachineRequestAuthorized(request, [process.env.CRON_SECRET], { allowUnconfiguredInDevelopment: true })) return true
-
   const token = bearerToken(request)
   if (!token) return false
   const supabase = getSupabaseServerClient()
   if (!supabase) return false
-
   const { data, error } = await supabase.rpc("qeo_verify_eod_scheduler_secret", { p_secret: token })
   return !error && data === true
-}
-
-async function chartCoverage(request: NextRequest) {
-  const supabase = getSupabaseServerClient()
-  if (!supabase) return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
-  try {
-    const referenceAt = new Date()
-    const universe = await getCanonicalUniverse()
-    const rows = await readChartIntradayCoverageReport(supabase, {
-      tickers: universe.stocks.map((stock) => stock.ticker),
-      referenceAt,
-    })
-    const target = qeo107BootstrapTarget(referenceAt)
-    return NextResponse.json({
-      ok: rows.length === universe.selectedCount,
-      mode: "chart-coverage",
-      universe: {
-        runId: universe.runId,
-        sourceAsOfDate: universe.sourceAsOfDate,
-        selectedCount: universe.selectedCount,
-      },
-      target: {
-        hotRetentionSessions: QEO107_HOT_RETENTION_SESSIONS,
-        targetFrom: new Date(target.targetFrom * 1000).toISOString(),
-        targetTo: new Date(target.targetTo * 1000).toISOString(),
-        hotCutoff: new Date(target.hotCutoff * 1000).toISOString(),
-        chunkCount: target.chunks.length,
-      },
-      summary: {
-        tickerCount: rows.length,
-        hotCoveredTickers: rows.filter((row) => row.hotSessionCount >= QEO107_HOT_RETENTION_SESSIONS).length,
-        partialHotTickers: rows.filter((row) => row.hotSessionCount > 0 && row.hotSessionCount < QEO107_HOT_RETENTION_SESSIONS).length,
-        coldCoveredTickers: rows.filter((row) => row.coldManifestCount > 0).length,
-        derivedHourlyCoveredTickers: rows.filter((row) => row.derivedHourlyRowCount > 0).length,
-        providerGapTickers: rows.filter((row) => row.providerGapCount > 0).length,
-        retryableFailureTickers: rows.filter((row) => row.retryableFailureCount > 0).length,
-        failedAttemptTickers: rows.filter((row) => row.failedAttemptCount > 0).length,
-      },
-      rows,
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await notifyOpsError({ source: "qeo107-chart-coverage", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
-    return NextResponse.json({ ok: false, mode: "chart-coverage", error: message }, { status: 500 })
-  }
-}
-
-async function chartMaintenanceCoverage(request: NextRequest) {
-  if (request.method !== "GET") {
-    return NextResponse.json({ ok: false, error: "Chart maintenance coverage requires GET." }, { status: 405, headers: { Allow: "GET" } })
-  }
-  const supabase = getSupabaseServerClient()
-  if (!supabase) return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
-  try {
-    const referenceAt = new Date()
-    const universe = await getCanonicalUniverse()
-    const rows = await readChartIntradayMaintenanceReport(supabase, {
-      tickers: universe.stocks.map((stock) => stock.ticker),
-      referenceAt,
-    })
-    return NextResponse.json({
-      ok: rows.length === universe.selectedCount,
-      mode: "chart-maintenance-coverage",
-      universe: {
-        runId: universe.runId,
-        sourceAsOfDate: universe.sourceAsOfDate,
-        selectedCount: universe.selectedCount,
-      },
-      expectedSession: rows[0]?.expectedSession ?? null,
-      summary: {
-        tickerCount: rows.length,
-        verifiedCurrent: rows.filter((row) => row.current).length,
-        noTrade: rows.filter((row) => row.evidenceCategory === "no_trade").length,
-        suspension: rows.filter((row) => row.evidenceCategory === "suspension").length,
-        providerGap: rows.filter((row) => row.evidenceCategory === "provider_gap").length,
-        failure: rows.filter((row) => row.evidenceCategory === "failure").length,
-        unknown: rows.filter((row) => row.evidenceCategory === "unknown").length,
-      },
-      rows,
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await notifyOpsError({ source: "qeo150-chart-maintenance-coverage", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
-    return NextResponse.json({ ok: false, mode: "chart-maintenance-coverage", error: message }, { status: 500 })
-  }
 }
 
 async function trigger(request: NextRequest) {
@@ -168,119 +58,16 @@ async function trigger(request: NextRequest) {
   }
 
   const mode = request.nextUrl.searchParams.get("mode")?.trim() || ""
-  if (mode === "chart-coverage") return chartCoverage(request)
-  if (mode === "chart-maintenance-coverage") return chartMaintenanceCoverage(request)
-
-  if (mode === "chart-maintenance") {
-    if (request.method !== "POST") {
-      return NextResponse.json({ ok: false, error: "Chart maintenance requires POST." }, { status: 405, headers: { Allow: "POST" } })
-    }
-    try {
-      const startedAt = new Date().toISOString()
-      const dispatchId = `qeo150-${randomUUID()}`
-      const hotContinuityDispatchId = `qeo180-${randomUUID()}`
-      const run = await start(chartIntradayMaintenanceWorkflow, [startedAt, dispatchId])
-      let hotContinuityWorkflowRunId: string | null = null
-      let hotContinuityDispatchError: string | null = null
-      try {
-        const continuityRun = await start(chartIntradayHotContinuityWorkflow, [startedAt, hotContinuityDispatchId])
-        hotContinuityWorkflowRunId = continuityRun.runId
-      } catch (error) {
-        hotContinuityDispatchError = error instanceof Error ? error.message : String(error)
-        await notifyOpsError({
-          source: "qeo180-chart-hot-continuity",
-          message: hotContinuityDispatchError,
-          path: request.nextUrl.pathname,
-          method: request.method,
-          status: 500,
-        })
-      }
-      return NextResponse.json({
-        ok: true,
-        mode,
-        scope: "canonical_200",
-        dispatchId,
-        workflowRunId: run.runId,
-        hotContinuityDispatchId,
-        hotContinuityWorkflowRunId,
-        hotContinuityDispatchError,
-        startedAt,
-      }, { status: 202 })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      await notifyOpsError({ source: "qeo150-chart-maintenance", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
-      return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
-    }
+  if (RETIRED_CHART_MODES.has(mode)) {
+    return NextResponse.json({
+      ok: false,
+      error: {
+        code: "INTRADAY_CHART_OPERATION_RETIRED",
+        message: "Intraday chart storage operations are retired by QEO-238.",
+      },
+    }, { status: 410, headers: { "Cache-Control": "private, no-store" } })
   }
-
-  if (mode === "chart-bootstrap") {
-    if (request.method !== "POST") {
-      return NextResponse.json({ ok: false, error: "Chart bootstrap requires POST." }, { status: 405, headers: { Allow: "POST" } })
-    }
-    const requestedTickers = stagedBootstrapTickers(request.nextUrl.searchParams.get("tickers"))
-    if (requestedTickers == null) {
-      return NextResponse.json({
-        ok: false,
-        error: `tickers must be a comma-separated canonical subset of at most ${QEO107_STAGED_MAX_TICKERS} symbols. Omit tickers for canonical-200 bootstrap.`,
-      }, { status: 400 })
-    }
-    try {
-      if (requestedTickers.length) {
-        const universe = await getCanonicalUniverse()
-        const canonicalTickers = new Set(universe.stocks.map((stock) => stock.ticker.toUpperCase()))
-        const outsideCanonical = requestedTickers.filter((ticker) => !canonicalTickers.has(ticker))
-        if (outsideCanonical.length) {
-          return NextResponse.json({
-            ok: false,
-            error: `QEO-107 staged tickers must belong to the canonical universe: ${outsideCanonical.join(", ")}`,
-          }, { status: 400 })
-        }
-      }
-
-      const startedAt = new Date().toISOString()
-      const run = await start(chartIntradayBootstrapWorkflow, [startedAt, requestedTickers])
-      return NextResponse.json({
-        ok: true,
-        mode,
-        scope: requestedTickers.length ? "staged" : "canonical_200",
-        tickers: requestedTickers,
-        workflowRunId: run.runId,
-        startedAt,
-      }, { status: 202 })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      await notifyOpsError({ source: "qeo107-chart-bootstrap", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
-      return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
-    }
-  }
-
-  if (mode === "chart-archive" || mode === "chart-derived-recovery") {
-    if (request.method !== "POST") {
-      return NextResponse.json({ ok: false, error: "Chart storage recovery requires POST." }, { status: 405, headers: { Allow: "POST" } })
-    }
-    const maxPartitions = archivePartitionLimit(request.nextUrl.searchParams.get("maxPartitions"))
-    if (maxPartitions == null) {
-      return NextResponse.json({ ok: false, error: "maxPartitions must be an integer from 1 to 12." }, { status: 400 })
-    }
-    const supabase = getSupabaseServerClient()
-    if (!supabase) {
-      return NextResponse.json({ ok: false, error: "Canonical market data service unavailable." }, { status: 503 })
-    }
-    try {
-      const result = mode === "chart-archive"
-        ? await runChartIntradayArchiveLifecycle(supabase, { referenceAt: new Date(), maxPartitions })
-        : await runChartDerivedHourlyRecovery(supabase, { referenceAt: new Date(), maxPartitions })
-      return NextResponse.json({ ok: result.status !== "partial", mode, result }, { status: result.status === "partial" ? 207 : 200 })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      await notifyOpsError({ source: mode === "chart-archive" ? "qeo103-chart-archive" : "qeo103-chart-derived-recovery", message, path: request.nextUrl.pathname, method: request.method, status: 500 })
-      return NextResponse.json({ ok: false, mode, error: message }, { status: 500 })
-    }
-  }
-
-  if (mode) {
-    return NextResponse.json({ ok: false, error: "Unsupported EOD operation mode." }, { status: 400 })
-  }
+  if (mode) return NextResponse.json({ ok: false, error: "Unsupported EOD operation mode." }, { status: 400 })
 
   const now = new Date()
   const sessionDate = request.nextUrl.searchParams.get("sessionDate")?.trim() || ""

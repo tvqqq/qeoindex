@@ -6,6 +6,7 @@ import {
   isVietnamSecuritiesTradingDateKey,
   vietnamDateKey,
 } from "@/modules/market/calendar"
+import { assertDailyProvenanceConsistent } from "@/modules/market/history/daily-provenance"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { createSupabaseColdOhlcvStorage, type ColdOhlcvStorage } from "./cold-store"
 import type {
@@ -29,7 +30,11 @@ import {
   upsertHotIntradayBars,
 } from "./hot-store"
 import { activeMinuteStart, partitionLiveMinuteBars } from "./live-session"
-import { detectTradingSessionGaps, normalizeCanonicalBars } from "./normalize"
+import {
+  detectTradingSessionGaps,
+  normalizeCanonicalBars,
+  reconcileLiveTailProviderBars,
+} from "./normalize"
 import type { ChartPerformanceRecorder, ChartPerfStage } from "./performance"
 import {
   createPrimaryChartOhlcvProvider,
@@ -164,16 +169,18 @@ async function loadDailyRows(supabase: SupabaseClient, request: CanonicalChartOh
   const rows: Array<Record<string, unknown>> = []
   for (let offset = 0; ; offset += DAILY_READ_PAGE_SIZE) {
     const { data, error } = await supabase
-      .from("market_ohlcv_history")
-      .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url")
+      .from("market_ohlcv_history_compat")
+      .select("bar_time,open,high,low,close,volume,provider,provider_detail,source_url,provenance_consistent")
       .eq("ticker", request.ticker)
       .eq("timeframe", "1D")
       .gte("bar_time", new Date(request.from * 1000).toISOString())
       .lte("bar_time", new Date(request.to * 1000).toISOString())
       .order("bar_time", { ascending: true })
       .range(offset, offset + DAILY_READ_PAGE_SIZE - 1)
+
     if (error) throw new ChartDataUnavailableError("Canonical Daily PostgreSQL storage unavailable")
     const page = (data || []) as Array<Record<string, unknown>>
+    assertDailyProvenanceConsistent(page, `Canonical Daily chart read for ${request.ticker}`)
     rows.push(...page)
     if (page.length < DAILY_READ_PAGE_SIZE) break
   }
@@ -459,7 +466,11 @@ async function loadIntraday(deps: ChartDataServiceDeps, request: CanonicalChartO
       const partition = partitionLiveMinuteBars(providerResult.bars, currentMinuteStart, true)
       if (!partition.responseBars.length) throw new ProviderRangeFetchError("Provider returned no usable live-tail 1m bars")
       latestProvider = providerResult.provider
-      tagged.push(...partition.responseBars.map((bar) => ({ source: "provider" as const, bar })))
+      tagged.splice(
+        0,
+        tagged.length,
+        ...reconcileLiveTailProviderBars(tagged, partition.responseBars),
+      )
       normalized = normalizeCanonicalBars(tagged)
 
       if (partition.completedBars.length) {

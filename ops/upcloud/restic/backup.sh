@@ -13,6 +13,7 @@ STAGE_ROOT=/var/lib/qeo-backup/stage/current
 LOCK_FILE=/var/lock/qeo-restic-backup.lock
 HERMES_UNIT=""
 HERMES_STOPPED=0
+BESZEL_STOPPED=0
 BACKUP_OK=0
 
 restart_hermes_if_needed() {
@@ -22,8 +23,16 @@ restart_hermes_if_needed() {
   fi
 }
 
+restart_beszel_if_needed() {
+  if [[ "$BESZEL_STOPPED" -eq 1 ]]; then
+    systemctl start qeo-beszel.service >/dev/null
+    BESZEL_STOPPED=0
+  fi
+}
+
 cleanup() {
   local rc="$1"
+  restart_beszel_if_needed || true
   restart_hermes_if_needed || true
   if [[ "$STAGE_ROOT" == /var/lib/qeo-backup/stage/* ]]; then
     rm -rf -- "$STAGE_ROOT"
@@ -46,14 +55,24 @@ hermes_gateway_stop "$HERMES_UNIT" >/dev/null
 HERMES_STOPPED=1
 stage_hermes_data "$STAGE_ROOT"
 restart_hermes_if_needed
+
+if [[ -d /opt/qeoindex/state/beszel ]]; then
+  if systemctl is-active --quiet qeo-beszel.service; then
+    systemctl stop qeo-beszel.service
+    BESZEL_STOPPED=1
+  fi
+  stage_beszel_data "$STAGE_ROOT"
+  restart_beszel_if_needed
+fi
+
 build_stage "$STAGE_ROOT"
 
 (
   cd "$STAGE_ROOT"
   printf 'contract_version=1\ncreated_utc=%s\nsource_host=%s\n' "$(date -u +%FT%TZ)" "$(hostname)" > qeo-backup-metadata.txt
   find . -type f ! -name qeo-backup-manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > qeo-backup-manifest.sha256
-  restic backup . --host qeo-upcloud-operational --tag qeo-upcloud-operational
+  restic backup . --host "$QEO_RESTIC_BACKUP_HOST" --tag "$QEO_RESTIC_BACKUP_TAG"
 )
-restic snapshots --latest 1 --host qeo-upcloud-operational --tag qeo-upcloud-operational >/dev/null
+restic snapshots --latest 1 --host "$QEO_RESTIC_BACKUP_HOST" --tag "$QEO_RESTIC_BACKUP_TAG" >/dev/null
 BACKUP_OK=1
 heartbeat_success "${QEO_RESTIC_BACKUP_HEARTBEAT_URL:-}" || true

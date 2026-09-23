@@ -31,6 +31,10 @@ source_restic_runtime() {
   : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is required}"
   : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required}"
   : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required}"
+  export QEO_RESTIC_BACKUP_HOST="${QEO_RESTIC_BACKUP_HOST:-qeo-upcloud-operational}"
+  export QEO_RESTIC_BACKUP_TAG="${QEO_RESTIC_BACKUP_TAG:-qeo-upcloud-operational}"
+  [[ "$QEO_RESTIC_BACKUP_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid QEO_RESTIC_BACKUP_HOST" >&2; return 78; }
+  [[ "$QEO_RESTIC_BACKUP_TAG" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid QEO_RESTIC_BACKUP_TAG" >&2; return 78; }
 }
 
 heartbeat_request() {
@@ -44,14 +48,20 @@ heartbeat_fail() { heartbeat_request "$1" /fail; }
 HERMES_RUNTIME_USER=hermes
 
 discover_hermes_gateway_unit() {
-  local uid units count
+  local uid system_units user_units refs count
   uid="$(id -u "$HERMES_RUNTIME_USER")"
-  units="$(runuser -u "$HERMES_RUNTIME_USER" -- env "XDG_RUNTIME_DIR=/run/user/$uid" \
+  system_units="$(systemctl list-unit-files 'hermes-gateway-*.service' --no-legend --no-pager \
+    | awk '$1 ~ /^hermes-gateway-.*\.service$/ {print $1}' | sort -u)"
+  user_units="$(runuser -u "$HERMES_RUNTIME_USER" -- env "XDG_RUNTIME_DIR=/run/user/$uid" \
     systemctl --user list-unit-files 'hermes-gateway-*.service' --no-legend --no-pager \
     | awk '$1 ~ /^hermes-gateway-.*\.service$/ {print $1}' | sort -u)"
-  count="$(printf '%s\n' "$units" | sed '/^$/d' | wc -l | tr -d ' ')"
+  refs="$(
+    { printf '%s\n' "$system_units" | sed '/^$/d' | sed 's/^/system|/'; \
+      printf '%s\n' "$user_units" | sed '/^$/d' | sed 's/^/user|/'; } | sort -u
+  )"
+  count="$(printf '%s\n' "$refs" | sed '/^$/d' | wc -l | tr -d ' ')"
   [[ "$count" -eq 1 ]] || { echo "Expected exactly one Hermes gateway unit; found $count" >&2; return 69; }
-  printf '%s\n' "$units"
+  printf '%s\n' "$refs"
 }
 
 hermes_user_systemctl() {
@@ -61,5 +71,16 @@ hermes_user_systemctl() {
     systemctl --user "$action" "$unit"
 }
 
-hermes_gateway_stop() { hermes_user_systemctl stop "$1"; }
-hermes_gateway_start() { hermes_user_systemctl start "$1"; }
+hermes_gateway_systemctl() {
+  local action="$1" ref="$2" scope unit
+  scope="${ref%%|*}"
+  unit="${ref#*|}"
+  case "$scope" in
+    system) systemctl "$action" "$unit" ;;
+    user) hermes_user_systemctl "$action" "$unit" ;;
+    *) echo "Invalid Hermes gateway reference: $ref" >&2; return 69 ;;
+  esac
+}
+
+hermes_gateway_stop() { hermes_gateway_systemctl stop "$1"; }
+hermes_gateway_start() { hermes_gateway_systemctl start "$1"; }

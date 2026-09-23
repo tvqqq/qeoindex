@@ -10,10 +10,12 @@ import { buildMultiTimeframeStudies } from "@/modules/research/multi-timeframe"
 import {
   getCachedDailyHistory,
   getCachedHourlyHistory,
-  getCachedResearchData,
-  getCachedScannerData,
+  getCachedResearchTickerData,
+  getCachedScannerTickerData,
 } from "@/modules/shared/cache/request-cache"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
+import type { ScannerData } from "@/modules/signals/scanner/data"
 import { getInsightsRatingForTicker, type InsightsRatingRow } from "@/modules/research/insights/data"
 
 export const VN_TOP_COMPANY_NAMES: Record<string, string> = {
@@ -57,7 +59,7 @@ export const VN_TOP_COMPANY_NAMES: Record<string, string> = {
   HCM: "Công ty Cổ phần Chứng khoán TP.HCM (HSC)",
   DGC: "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang",
   DCM: "Công ty Cổ phần Phân bón Dầu khí Cà Mau",
-  DPM: "Tổng Công ty Phân bón và Hóa chất Dầu khí (Phú Mỹ)",
+  DPM: "Tổng Công ty Phân bón và Hóa chất Dầu khí Phú Mỹ",
   KDH: "Công ty Cổ phần Đầu tư và Kinh doanh Nhà Khang Điền",
   NLG: "Công ty Cổ phần Đầu tư Nam Long",
   DIG: "Tổng Công ty Cổ phần Đầu tư Phát triển Xây dựng (DIC Corp)",
@@ -110,6 +112,29 @@ type StockCouncilOutcomeRow = {
   direction_correct_5d: boolean | null
 }
 
+type StockWatchlistRatingRow = {
+  ticker: string
+  company_name: string | null
+  price: number | null
+  price_change_pct: number | null
+}
+
+type StockDetailBootstrapStage = "research" | "scanner" | "daily" | "councilRuntime" | "aiHistory" | "rating" | "watchlist"
+type StockDetailBootstrapTimings = Partial<Record<StockDetailBootstrapStage | "total", number>>
+
+async function measureStockDetailBootstrapStage<T>(
+  timings: StockDetailBootstrapTimings,
+  stage: StockDetailBootstrapStage,
+  load: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now()
+  try {
+    return await load()
+  } finally {
+    timings[stage] = Number((performance.now() - startedAt).toFixed(1))
+  }
+}
+
 function nullableNumber(value: unknown) {
   if (value == null || value === "") return null
   const parsed = Number(value)
@@ -134,15 +159,20 @@ function isAiCouncilRuntimeData(value: unknown): value is AiCouncilRuntimeData {
   return typeof runtime.data?.generatedAt === "string" && Array.isArray(runtime.data?.stocks)
 }
 
-async function getStockDetailCouncilRuntime(supabase: SupabaseClient) {
+async function getStockDetailCouncilRuntime(supabase: SupabaseClient, ticker: string) {
+  const normalized = ticker.trim().toUpperCase()
   return readThroughUiCache({
-    namespace: "stock-detail-ai-council-v1",
-    key: "current",
-    tag: "qeoindex-stock-detail-ai-council-v1",
-    name: "QeoIndex stock-detail AI Council runtime",
+    namespace: "stock-detail-ai-council-v2",
+    key: `ticker:${normalized}`,
+    tag: "qeoindex-stock-detail-ai-council-v2",
+    name: `QeoIndex stock-detail AI Council ${normalized}`,
     ttlSeconds: 5 * 60,
     validate: isAiCouncilRuntimeData,
-    load: () => getAiCouncilRuntimeData(supabase, { includeHistory: false, includePromptEvidence: false }),
+    load: () => getAiCouncilRuntimeData(supabase, {
+      includeHistory: false,
+      includePromptEvidence: false,
+      tickers: [normalized],
+    }),
   })
 }
 
@@ -214,6 +244,65 @@ async function getTickerAiCouncilHistory(
   })
 }
 
+function buildWatchlistFallback(scannerData: ScannerData): StockWatchlistItem[] {
+  return scannerData.universe.slice(0, 30).map((item) => {
+    const scan = scannerData.latestScans[item.ticker]
+    const price = nullableNumber(scan?.price) ?? 0
+    const changePct = nullableNumber(scan?.changePct) ?? 0
+    return {
+      ticker: item.ticker,
+      companyName: resolveCleanCompanyName(item.ticker, [item.companyName], item.sector),
+      price,
+      change: price * changePct / 100,
+      changePct,
+    }
+  })
+}
+
+async function getStockDetailWatchlistSnapshot(
+  supabase: SupabaseClient,
+  scannerData: ScannerData,
+): Promise<StockWatchlistItem[]> {
+  const targets = scannerData.universe.slice(0, 30)
+  const tickers = targets.map((item) => item.ticker)
+  if (!tickers.length) return []
+
+  const latest = await supabase
+    .from("insights_stock_ratings")
+    .select("as_of_date")
+    .eq("is_published", true)
+    .eq("source", "kfsp")
+    .in("ticker", tickers)
+    .order("as_of_date", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (latest.error || !latest.data?.as_of_date) return buildWatchlistFallback(scannerData)
+
+  const rowsResult = await supabase
+    .from("insights_stock_ratings")
+    .select("ticker,company_name,price,price_change_pct")
+    .eq("is_published", true)
+    .eq("source", "kfsp")
+    .eq("as_of_date", String(latest.data.as_of_date))
+    .in("ticker", tickers)
+  if (rowsResult.error) return buildWatchlistFallback(scannerData)
+
+  const byTicker = new Map(((rowsResult.data || []) as StockWatchlistRatingRow[]).map((row) => [row.ticker, row] as const))
+  return targets.map((item) => {
+    const row = byTicker.get(item.ticker)
+    const scan = scannerData.latestScans[item.ticker]
+    const price = nullableNumber(row?.price) ?? nullableNumber(scan?.price) ?? 0
+    const changePct = nullableNumber(row?.price_change_pct) ?? nullableNumber(scan?.changePct) ?? 0
+    return {
+      ticker: item.ticker,
+      companyName: resolveCleanCompanyName(item.ticker, [row?.company_name, item.companyName], item.sector),
+      price,
+      change: price * changePct / 100,
+      changePct,
+    }
+  })
+}
+
 export function resolveCleanCompanyName(
   ticker: string,
   candidates: (string | null | undefined)[],
@@ -244,32 +333,45 @@ export async function fetchStockDetailData(
     decoded = "HPG"
   }
 
-  const councilRuntimePromise = supabase
-    ? getStockDetailCouncilRuntime(supabase).catch(() => null)
-    : Promise.resolve(null)
-  const aiHistoryPromise = supabase
+  const bootstrapStartedAt = performance.now()
+  const bootstrapTimings: StockDetailBootstrapTimings = {}
+  const canonicalDailySupabase = getSupabaseServerClient()
+  const councilRuntimePromise = measureStockDetailBootstrapStage(bootstrapTimings, "councilRuntime", () => supabase
+    ? getStockDetailCouncilRuntime(supabase, decoded).catch(() => null)
+    : Promise.resolve(null))
+  const aiHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "aiHistory", () => supabase
     ? getTickerAiCouncilHistory(supabase, decoded).catch(() => [] as AiCouncilHistoryEntry[])
-    : Promise.resolve([] as AiCouncilHistoryEntry[])
-  const ratingRowPromise = supabase
+    : Promise.resolve([] as AiCouncilHistoryEntry[]))
+  const ratingRowPromise = measureStockDetailBootstrapStage(bootstrapTimings, "rating", () => supabase
     ? getInsightsRatingForTicker(supabase, decoded).catch(() => null)
-    : Promise.resolve(null)
-  const dailyHistoryPromise = supabase
-    ? getCanonicalDailySeed(supabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
-    : getCachedDailyHistory(decoded)
-  // Stock-detail navigation must not block on external intraday providers. The chart
-  // owns 1H/4H loading through the canonical /api/market/ohlcv path after render.
+    : Promise.resolve(null))
+  const dailyHistoryPromise = measureStockDetailBootstrapStage(bootstrapTimings, "daily", () => supabase
+    ? canonicalDailySupabase
+      ? getCanonicalDailySeed(canonicalDailySupabase, decoded).catch(() => ({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily storage unavailable" }))
+      : Promise.resolve({ bars: [], provider: "CANONICAL_DAILY", detail: "Canonical Daily service client unavailable" })
+    : getCachedDailyHistory(decoded))
+  const researchDataPromise = measureStockDetailBootstrapStage(bootstrapTimings, "research", () => getCachedResearchTickerData(decoded))
+  const scannerDataPromise = measureStockDetailBootstrapStage(bootstrapTimings, "scanner", () => getCachedScannerTickerData(decoded))
+  const watchlistPromise = scannerDataPromise.then((scannerData) => measureStockDetailBootstrapStage(
+    bootstrapTimings,
+    "watchlist",
+    () => supabase ? getStockDetailWatchlistSnapshot(supabase, scannerData) : Promise.resolve(buildWatchlistFallback(scannerData)),
+  ))
+  // Stock-detail navigation must not block on retired intraday providers. Daily-derived
+  // chart history owns all active timeframes after QEO-238.
   const hourlyHistoryPromise = supabase
-    ? Promise.resolve({ bars: [], provider: "CANONICAL_CHART_API", detail: "1H/4H loaded lazily by /api/market/ohlcv" })
+    ? Promise.resolve({ bars: [], provider: "CANONICAL_CHART_API", detail: "Intraday retired; active chart timeframes derive from canonical Daily" })
     : getCachedHourlyHistory(decoded)
 
-  const [researchData, scannerData, dailyHistory, hourlyHistory, councilRuntime, aiHistory, loadedRatingRow] = await Promise.all([
-    getCachedResearchData(),
-    getCachedScannerData(),
+  const [researchData, scannerData, dailyHistory, hourlyHistory, councilRuntime, aiHistory, loadedRatingRow, watchlistSnapshot] = await Promise.all([
+    researchDataPromise,
+    scannerDataPromise,
     dailyHistoryPromise,
     hourlyHistoryPromise,
     councilRuntimePromise,
     aiHistoryPromise,
     ratingRowPromise,
+    watchlistPromise,
   ])
   const aiStock = councilRuntime?.data.stocks.find((s) => s.ticker === decoded)
 
@@ -303,24 +405,7 @@ export async function fetchStockDetailData(
   const roe = fa?.roe ?? null
   const eps = pe && price ? Math.round(price / pe) : null
 
-  const scanRows = Object.values(scannerData.latestScans)
-  const watchlist: StockWatchlistItem[] = (
-    scanRows.length > 0 ? scanRows.slice(0, 30) : FA_SCREEN_ROWS.slice(0, 30)
-  ).map((row) => {
-    const sym = row.ticker
-    const uItem = scannerData.universe.find((u) => u.ticker === sym)
-    const faRow = FA_SCREEN_ROWS.find((f) => f.ticker === sym)
-    const p = "price" in row && typeof row.price === "number" ? row.price : 28000
-    const cp = "changePct" in row && typeof row.changePct === "number" ? row.changePct : 0
-    return {
-      ticker: sym,
-      companyName: resolveCleanCompanyName(sym, [uItem?.companyName], faRow?.sector),
-      price: p,
-      change: (p * cp) / 100,
-      changePct: cp,
-    }
-  })
-
+  const watchlist = [...watchlistSnapshot]
   if (!watchlist.some((w) => w.ticker === decoded)) {
     watchlist.unshift({
       ticker: decoded,
@@ -357,7 +442,7 @@ export async function fetchStockDetailData(
     })
   }
 
-  return {
+  const result: StockDetailData = {
     ticker: decoded,
     companyName: resolvedCompanyName,
     exchange: universeItem?.rank ? "HOSE" : "HNX",
@@ -390,6 +475,10 @@ export async function fetchStockDetailData(
     watchlist,
     ratingRow,
   }
+
+  bootstrapTimings.total = Number((performance.now() - bootstrapStartedAt).toFixed(1))
+  console.info("[qeo172-stock-detail-bootstrap]", JSON.stringify({ ticker: decoded, stageMs: bootstrapTimings }))
+  return result
 }
 
 export function buildFallbackRatingRow(data: {

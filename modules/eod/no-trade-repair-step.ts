@@ -1,4 +1,5 @@
 import type { OhlcvBar } from "../shared/technical/indicators.ts"
+import { persistDailyOhlcvRows } from "../market/history/daily-provenance.ts"
 
 const FINAL_ORDERBOOK_CUTOFF_HOUR_UTC = 7
 const FINAL_ORDERBOOK_CUTOFF_MINUTE_UTC = 45
@@ -188,7 +189,7 @@ export async function runEodNoTradeDailyRepairStep(
       repairedTickers.push(ticker)
       return [{
         ticker,
-        timeframe: "1D",
+        timeframe: "1D" as const,
         bar_time: new Date(bar.time * 1000).toISOString(),
         open: bar.open,
         high: bar.high,
@@ -202,12 +203,7 @@ export async function runEodNoTradeDailyRepairStep(
       }]
     })
 
-    if (rows.length) {
-      const upsert = await supabase
-        .from("market_ohlcv_history")
-        .upsert(rows, { onConflict: "ticker,timeframe,bar_time" })
-      if (upsert.error) throw new Error(`Persist verified final Daily repair failed: ${upsert.error.message}`)
-    }
+    if (rows.length) await persistDailyOhlcvRows(supabase, rows)
   }
 
   const finalRows = await supabase

@@ -183,8 +183,11 @@ export function hourlyOverlapRange(bars: CanonicalOhlcvBar[]) {
 }
 
 /**
- * Overlay retained HOT minutes on complete derived hours without treating a
- * partial HOT hour as a replacement for its non-overlapping raw minutes.
+ * Overlay retained HOT minutes on complete derived hours. COLD remains required
+ * whenever HOT touches an already-derived bucket so a partial HOT hour can
+ * never replace the non-overlapping RAW minutes. A HOT-only bucket that fills
+ * a derived gap can be aggregated directly; range-level source authority is
+ * proven separately by the caller before the public result can be COMPLETE.
  */
 export function overlayHourlyHotOnDerived(input: {
   derived: CanonicalOhlcvBar[]
@@ -192,14 +195,19 @@ export function overlayHourlyHotOnDerived(input: {
   hot: CanonicalOhlcvBar[]
 }) {
   const affectedBuckets = new Set(input.hot.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null))
+  const derivedBuckets = new Set(input.derived.map((bar) => bar.time))
   const affectedCold = input.cold.filter((bar) => {
     const bucket = hourlyBucketStart(bar.time)
     return bucket != null && affectedBuckets.has(bucket)
   })
   const coldBuckets = new Set(affectedCold.map((bar) => hourlyBucketStart(bar.time)).filter((time): time is number => time != null))
+  const hotOnlyBuckets = new Set(
+    [...affectedBuckets].filter((bucket) => !coldBuckets.has(bucket) && !derivedBuckets.has(bucket)),
+  )
+  const rebuildBuckets = new Set([...coldBuckets, ...hotOnlyBuckets])
   const affectedHot = input.hot.filter((bar) => {
     const bucket = hourlyBucketStart(bar.time)
-    return bucket != null && coldBuckets.has(bucket)
+    return bucket != null && rebuildBuckets.has(bucket)
   })
   const normalized = normalizeCanonicalBars([
     ...affectedCold.map((bar) => ({ source: "cold" as const, bar })),
@@ -208,10 +216,12 @@ export function overlayHourlyHotOnDerived(input: {
   const rebuilt = aggregateChartTimeframe(normalized.bars, "1h")
   const rebuiltBuckets = new Set(rebuilt.map((bar) => bar.time))
   const fallback = input.derived.filter((bar) => !coldBuckets.has(bar.time) || !rebuiltBuckets.has(bar.time))
+  const unresolvedHotOverlap = [...affectedBuckets].some((bucket) => !rebuildBuckets.has(bucket))
+    || [...rebuildBuckets].some((bucket) => !rebuiltBuckets.has(bucket))
   return {
     bars: [...fallback, ...rebuilt].sort((a, b) => a.time - b.time),
     integrityIssues: normalized.integrityIssues,
-    unresolvedHotOverlap: affectedBuckets.size !== coldBuckets.size || coldBuckets.size !== rebuiltBuckets.size,
+    unresolvedHotOverlap,
   }
 }
 

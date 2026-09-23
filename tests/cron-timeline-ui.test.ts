@@ -11,7 +11,7 @@ function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance, research automation, recovery, and retired maintenance", () => {
+test("buildCronTimelineModel separates active automation, recovery, and QEO-238 retired chart maintenance", () => {
   const { jobs } = buildAdminJobViews(
     EFFECTIVE_ADMIN_JOB_CATALOG,
     [
@@ -42,6 +42,15 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
         lastStatus: "succeeded",
         lastStartedAt: "2026-09-03T07:50:00.000Z",
         lastFinishedAt: "2026-09-03T07:50:02.000Z",
+      },
+      {
+        jobId: 23,
+        jobName: "qeoindex-chart-archive-catchup-1645-ict",
+        schedule: "45 9 * * 1-5",
+        active: true,
+        lastStatus: "succeeded",
+        lastStartedAt: "2026-09-03T09:45:00.000Z",
+        lastFinishedAt: "2026-09-03T09:45:02.000Z",
       },
       {
         jobId: 21,
@@ -75,11 +84,8 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(research.daysLabel, "Hàng ngày")
   assert.equal(research.schedulerName, "research-reports-daily-0705-ict")
 
-  const chartMaintenance = timeline.lanes[1].jobs.find((j) => j.key === "qeoindex.chart_intraday_maintenance")
-  assert.ok(chartMaintenance)
-  assert.equal(chartMaintenance.timeIctLabel, "14:50 ICT")
-  assert.equal(chartMaintenance.daysLabel, "T2-T6")
-  assert.equal(chartMaintenance.schedulerName, "qeoindex-chart-intraday-maintenance-1450-ict")
+  assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "qeoindex.chart_intraday_maintenance"), false)
+  assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "qeoindex.chart_archive_catchup"), false)
 
   const eodJob = timeline.lanes[2].jobs.find((j) => j.key === "qeoindex.eod_pipeline")
   assert.ok(eodJob)
@@ -104,7 +110,7 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "market.sync_eod"), false)
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.rating_daily"), false)
   assert.equal(timeline.lanes[1].jobs.some((j) => j.key === "kfsp.ttai_history"), false)
-  assert.equal(timeline.totalScheduled, 5, "signals + research reports + chart maintenance + canonical EOD + intraday market sync")
+  assert.equal(timeline.totalScheduled, 4, "signals + research reports + canonical EOD + intraday market sync")
 
   const recoveryKeys = timeline.lanes[3].jobs.map((job) => job.key).sort()
   assert.deepEqual(recoveryKeys, [
@@ -137,7 +143,20 @@ test("buildCronTimelineModel separates v4 scheduled ownership, chart maintenance
   assert.equal(backfill.schedulerName, undefined)
 
   const disabledKeys = timeline.lanes[4].jobs.map((job) => job.key).sort()
-  assert.deepEqual(disabledKeys, ["market.cache_invalidate", "market.sync_eod", "wyckoff.run"])
+  assert.deepEqual(disabledKeys, [
+    "market.cache_invalidate",
+    "market.sync_eod",
+    "qeoindex.chart_archive_catchup",
+    "qeoindex.chart_intraday_maintenance",
+    "wyckoff.run",
+  ])
+  for (const key of ["qeoindex.chart_intraday_maintenance", "qeoindex.chart_archive_catchup"]) {
+    const retiredChartJob = timeline.lanes[4].jobs.find((job) => job.key === key)
+    assert.ok(retiredChartJob)
+    assert.equal(retiredChartJob.displayType, "manual")
+    assert.equal(retiredChartJob.manualPolicy, "disabled")
+    assert.equal(retiredChartJob.schedulerName, undefined)
+  }
   const retiredMarketEod = timeline.lanes[4].jobs.find((job) => job.key === "market.sync_eod")
   assert.ok(retiredMarketEod)
   assert.equal(retiredMarketEod.displayType, "manual")
@@ -167,12 +186,24 @@ test("manual recovery lane is backed by the dispatch allowlist, not manualPolicy
   assert.equal(timeline.totalManual, 0)
 })
 
-test("daily signals scans the full canonical universe instead of a positional Top50 subset", () => {
+test("daily signals scans the full canonical universe through bounded durable batches", () => {
   const workflow = source("workflows/daily-signal-workflow.ts")
   const scannerRunner = source("modules/signals/scanner/runner.ts")
 
-  assert.match(workflow, /return runScannerUniverse\(\)/)
-  assert.doesNotMatch(workflow, /runScannerUniverse\(\{\s*limit:\s*50/)
+  assert.match(workflow, /DAILY_SCANNER_BATCH_SIZE\s*=\s*25/)
+  assert.match(workflow, /DAILY_SCANNER_MAX_ATTEMPTS\s*=\s*4/)
+  assert.match(workflow, /prepareDailyScannerAttemptStep\.maxRetries\s*=\s*0/)
+  assert.match(workflow, /refreshDailyScannerBatchAttemptStep\.maxRetries\s*=\s*0/)
+  assert.match(workflow, /Math\.ceil\(plan\.targets\.length\s*\/\s*DAILY_SCANNER_BATCH_SIZE\)/)
+  assert.match(workflow, /runScannerBatch\(plan,\s*\{\s*offset,\s*limit:\s*DAILY_SCANNER_BATCH_SIZE\s*\}\)/)
+  assert.match(workflow, /Daily scanner batch .* failed after/)
+  assert.match(workflow, /updateSignalsDailyStageStep\(runId,\s*"SCANNER"/)
+  assert.doesNotMatch(workflow, /return runScannerUniverse\(\)/)
+
+  assert.match(scannerRunner, /Freeze membership \+ previous-scan evidence once per logical run/)
+  assert.match(scannerRunner, /previousResult:\s*rowToPreviousResult\(previousRow\)/)
+  assert.match(scannerRunner, /requested !== plan\.targets\.length/)
+  assert.match(scannerRunner, /await invalidateScannerDataCache\(\)/)
   assert.doesNotMatch(scannerRunner, /100 cache invalidations/)
 })
 

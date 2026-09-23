@@ -63,6 +63,102 @@
       "state": "MAPPED",
       "evidence": "QEO-175 PR #467 exact-head Verify #3824 and DB Drift #1289; production migration 20260912051019; schema/RLS/publication readback plus rollback service-role upsert smoke",
       "rationale": "Supabase assigned production version 20260912051019 while repository replay keeps reviewed version 20260912074500. Production readback confirms the bounded bus schema and constraints, RLS, authenticated read-only access, service_role CRUD, anon denial, replica identity full and supabase_realtime publication. A service_role upsert smoke succeeded inside a rolled-back transaction. Worker runtime cutover remains isolated to QEO-196."
+    },
+    {
+      "logicalName": "qeo216_orderbook_realtime_broadcast",
+      "repositoryVersion": "20260914090000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-216 approved centralized orderbook spec, TDD RED/GREEN contracts, and PR #484 preproduction gates",
+      "rationale": "QEO-216 adds authenticated private Supabase Broadcast authorization for centralized popup orderbook fanout while keeping DNSE credentials and upstream sockets server-owned. It remains repo-ahead until the exact PR head passes full Verify and DB replay, then the migration is promoted and production RLS/Broadcast behavior is read back."
+    },
+    {
+      "logicalName": "qeo220_preserve_market_ai_terminal_cause",
+      "repositoryVersion": "20260914102000",
+      "productionVersion": "20260914102101",
+      "state": "MAPPED",
+      "evidence": "QEO-220 PR #489 exact-head Verify #3980 and DB Drift #1355; production migration 20260914102101; live function-definition readback; 2026-09-11 replay succeeded within the $0.03 cap",
+      "rationale": "Supabase assigned production version 20260914102101 while repository replay keeps reviewed version 20260914102000. Production readback confirms mark_market_ai_completion_unknown preserves the sanitized p_error_code while retaining completion_unknown terminal semantics and the model_started_at guard. A retryable 2026-09-11 Market Synthesis replay then succeeded on attempt 2 using gpt-5.6-terra at $0.02621 estimated cost, proving the QEO-219 cost-bound path is cleared."
+    },
+    {
+      "logicalName": "qeo228_chart_archive_catchup",
+      "repositoryVersion": "20260915073500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-228 production retention evidence identified the 48-partition EOD throughput cap; PR #501 focused archive catch-up contract and exact-head preproduction gates",
+      "rationale": "QEO-228 adds a dedicated 16:45 ICT post-EOD scheduler that dispatches bounded durable canonical-universe catch-up through the existing verified fail-closed 1m archive lifecycle. It does not weaken checksum/readback/content-retention proof or authorize uncovered deletion. The migration remains repo-ahead until exact-head Verify and zero-to-latest DB replay pass, then production promotion and scheduler/readback acceptance are completed."
+    },
+    {
+      "logicalName": "qeo233_daily_ohlcv_provenance_schema",
+      "repositoryVersion": "20260915083000",
+      "productionVersion": "20260915090954",
+      "state": "MAPPED",
+      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: focused QEO-232/QEO-233 contracts, Verify 34950444143, DB Drift 34950444002, merge SHA 5c6ea378eeab3da9cd15abd804ccbfea4f67682, production migration 20260915090954, and live schema/FK/nullability readback",
+      "rationale": "Supabase assigned production version 20260915090954 while repository replay keeps reviewed version 20260915083000. Production readback confirms the additive immutable Daily provenance registry exists, market_ohlcv_history.provenance_id remains nullable, the reference is ON DELETE RESTRICT, and no historical backfill or legacy-column removal was performed during rollout."
+    },
+    {
+      "logicalName": "qeo233_daily_ohlcv_provenance_compat",
+      "repositoryVersion": "20260915083500",
+      "productionVersion": "20260915091036",
+      "state": "MAPPED",
+      "evidence": "QEO-233 exact-head 97b30a0c292941ae64c6c901c6a77a44caa1aba5: Verify 34950444143, DB Drift 34950444002, production migration 20260915091036, width-10 grouped RPC readback with mismatch_rows=0, and Vercel READY deployment dpl_DhvT8RZMZ7JaHs9awVdYAvYdRVs6 on merge SHA 5c6ea378eeab3da9cd15abd804ccbfea4f67682",
+      "rationale": "Supabase assigned production version 20260915091036 while repository replay keeps reviewed version 20260915083500. Production readback confirms the compatibility view and bounded capacity-gated backfill RPC are present, grouped Daily output preserves the width-10 ABI, mismatch_rows is zero, and the historical provenance backfill remains separately gated rather than being invoked by migration."
+    },
+    {
+      "logicalName": "qeo234_daily_provenance_bridge",
+      "repositoryVersion": "20260915193000",
+      "productionVersion": "20260915223907",
+      "state": "MAPPED",
+      "evidence": "QEO-234 Stage-1 production bridge readback: 348,691 rows, pending/mismatch/compat all zero, legacy long fields nullable, grouped width-10 preserved, and old-compatible application remained healthy",
+      "rationale": "Supabase assigned production version 20260915223907 while repository replay keeps reviewed version 20260915193000. The bridge made only the two long provenance fields nullable and moved live provenance consumers to registry-backed logical reads without destructive column removal or physical reclaim."
+    },
+    {
+      "logicalName": "qeo234_daily_provenance_cutover",
+      "repositoryVersion": "20260915194500",
+      "productionVersion": "20260916013520",
+      "state": "MAPPED",
+      "evidence": "QEO-234 Stage-2 production cutover preserved 348,691 rows and deterministic logical SHA-256 f4c24ccf7f5db0fd4dd2b2d97ec2eed850fe878a1d713d20364f1aafcbbee124 with zero pending/orphan/provider/compat inconsistencies; final five-ticker route canary passed",
+      "rationale": "Supabase assigned production version 20260916013520 while repository replay keeps reviewed version 20260915194500. The cutover enforces provenance_id NOT NULL, removes only provider_detail/source_url, retires the QEO-233 backfill RPC, and preserves registry-backed logical APIs. It performs no physical rewrite or index removal."
+    },
+    {
+      "logicalName": "qeo234_registry_aware_daily_precedence",
+      "repositoryVersion": "20260916073000",
+      "productionVersion": "20260916012108",
+      "state": "MAPPED",
+      "evidence": "QEO-234 PR #508 RED/GREEN contract evidence plus production promotion 20260916012108 and five-ticker compact-writer canary PASS before Stage-2",
+      "rationale": "Supabase assigned production version 20260916012108 while repository replay keeps reviewed version 20260916073000. Daily provider precedence now resolves logical long provenance through provenance_id when available, preserving QEO-106 authority semantics for compact writes before and after final column removal."
+    },
+    {
+      "logicalName": "qeo234_drop_redundant_daily_lookup_idx",
+      "repositoryVersion": "20260916080000",
+      "productionVersion": "20260916022351",
+      "state": "MAPPED",
+      "evidence": "QEO-234 PR #509 exact-head gates GREEN; squash merge 2405e6564b54407827db5f841a23aff1ae2e41ae; production migration 20260916022351; 348,691 rows preserved; market_ohlcv_history_lookup_idx absent; market_ohlcv_history_pkey intact; five-ticker post-drop probe used backward Index Only Scan; database/relation physical bytes fell by exactly 20,357,120 bytes, the removed index size",
+      "rationale": "Supabase assigned production version 20260916022351 while repository replay keeps reviewed version 20260916080000. The migration removed only the redundant Daily lookup index after the approved transactional benchmark. Post-drop capacity remeasurement confirmed ~19.41 MiB immediate reclaim with the heap unchanged. Ordinary VACUUM (ANALYZE) left only 6 estimated dead tuples; the conservative rewrite peak was 575,571,271 bytes, above the 470,000,000-byte VACUUM FULL gate, so no physical heap rewrite was attempted."
+    },
+    {
+      "logicalName": "qeo236_daily_5y_retention",
+      "repositoryVersion": "20260916102000",
+      "productionVersion": "20260916033201",
+      "state": "MAPPED",
+      "evidence": "QEO-236 PR #512 exact-head EOD v4 35051787291, Verify 35051787344 and DB Drift 35051787317 GREEN; squash merge e2f94482cae761d7df7f0bb85137cf0c52585153; production migration 20260916033201; rolling-5Y purge deleted 118,678 Daily rows and retained 230,013 with zero rows before the cutoff; ordinary VACUUM ANALYZE left n_dead_tup=0; five-ticker latest-300 read probe used backward market_ohlcv_history_pkey Index Scan with no seq scan",
+      "rationale": "Supabase assigned production version 20260916033201 while repository replay keeps reviewed version 20260916102000. Production readback confirms the service-role-only safe-retention RPC now owns rolling 5-calendar-year Daily pruning from a Vietnam-local cutoff, retaining the full cutoff date and requiring no cold/archive copy. Post-purge compact live tuple bytes were 70,476,048 and the conservative estimated VACUUM FULL peak was 517,586,912 bytes, above the 470,000,000-byte gate, so no physical heap rewrite was attempted."
+    },
+    {
+      "logicalName": "qeo238_stop_intraday_schedulers",
+      "repositoryVersion": "20260916141000",
+      "productionVersion": "20260916073134",
+      "state": "MAPPED",
+      "evidence": "QEO-238 exact-head Verify #4244 and DB Drift #1435 GREEN; production migration 20260916073134; post-apply cron readback count=0; docs/db/evidence/qeo238-production-retirement-2026-09-16.json",
+      "rationale": "Supabase assigned production version 20260916073134 while repository replay keeps reviewed version 20260916141000. Phase 1 removed only qeoindex-chart-intraday-maintenance-1450-ict and qeoindex-chart-archive-catchup-1645-ict, preventing retired stock-chart intraday persistence from regenerating before Storage and schema cleanup."
+    },
+    {
+      "logicalName": "qeo238_retire_intraday_schema",
+      "repositoryVersion": "20260916142000",
+      "productionVersion": "20260916074442",
+      "state": "MAPPED",
+      "evidence": "QEO-238 Storage API empty readback 0 objects/0 bytes; production migration 20260916074442; six retired relations plus sequence and representative RPCs absent; Daily PK/tombstone preserved; targeted VACUUM FULL reduced DB to 167,931,027 bytes; docs/db/evidence/qeo238-production-retirement-2026-09-16.json",
+      "rationale": "Supabase assigned production version 20260916074442 while repository replay keeps reviewed version 20260916142000. Phase 2 explicitly retired the isolated stock-chart intraday tables, sequence, triggers and exact-signature helper/RPC graph without CASCADE while preserving QEO-236 Daily five-year retention and the historical Daily prune tombstone. After retirement created sufficient headroom under the 470,000,000-byte gate, targeted VACUUM FULL ANALYZE compacted market_ohlcv_history with all 230,013 rows and market_ohlcv_history_pkey intact."
     }
   ]
 }

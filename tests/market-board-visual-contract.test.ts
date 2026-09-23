@@ -28,6 +28,7 @@ const boardTransitionSource = readFileSync(new URL("../components/smoothui/marke
 const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
 const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", import.meta.url), "utf8")
 const marketStreamSource = readFileSync(new URL("../modules/market/providers/dnse/market-stream.ts", import.meta.url), "utf8")
+const marketRuntimeSource = readFileSync(new URL("../modules/market/providers/dnse/market-runtime.ts", import.meta.url), "utf8")
 
 function boardColumnsAt(width: number) {
   if (width >= 1280) return 6
@@ -75,6 +76,16 @@ test("daily performance stays anchored to reference price, never session open", 
   assert.match(boardSource, /dailyReferences\.current\[symbol\] = history\.reference/)
   assert.doesNotMatch(boardSource, /OPEN_PRICE_KEYS|INDEX_OPEN_KEYS|openingReferences|indexOpeningReferences/)
   assert.match(stockSource, /giá tham chiếu \(đóng cửa phiên trước\)/)
+})
+
+test("orderbook session bootstrap never treats today's open as reference price", () => {
+  assert.match(marketRuntimeSource, /const explicitRef = fastOverview\?\.refPrice \?\? latestQuote\?\.reference \?\? null/)
+  assert.match(marketRuntimeSource, /const explicitCeil = fastOverview\?\.ceiling \?\? latestQuote\?\.ceiling \?\? null/)
+  assert.match(marketRuntimeSource, /const explicitFloor = fastOverview\?\.floor \?\? latestQuote\?\.floor \?\? null/)
+  assert.doesNotMatch(marketRuntimeSource, /refPrice = firstBarOpen \?\? firstTradePrice \?\? matchPrice/)
+  assert.match(marketRuntimeSource, /latestQuote\.reference = refPrice \?\? latestQuote\.reference/)
+  assert.match(orderbookSource, /if \(normPrice > ref\) return "text-up font-bold"/)
+  assert.match(orderbookSource, /if \(normPrice < ref\) return "text-down font-bold"/)
 })
 
 test("strong gainer highlight is static and therefore reduced-motion safe", () => {
@@ -170,6 +181,22 @@ test("sparklines keep the pre-regression 5m history and live fallback pipeline",
   assert.match(boardSource, /out\[ticker\] = pts\.map\(\(p\) => p\.close\)/)
 })
 
+test("line-only market-board sparklines split green above and red below reference", () => {
+  assert.match(stockSource, /<Sparkline[^>]*fill=\{false\}/)
+  assert.match(sparklineSource, /const REFERENCE_UP_COLOR = "#22c98a"/)
+  assert.match(sparklineSource, /const REFERENCE_DOWN_COLOR = "#ff4757"/)
+  assert.match(sparklineSource, /const splitAtReference = !fill && ref != null && refY != null/)
+  assert.match(sparklineSource, /clipPath id=\{`spark-above-\$\{uid\}`\}/)
+  assert.match(sparklineSource, /clipPath id=\{`spark-below-\$\{uid\}`\}/)
+  assert.match(sparklineSource, /stroke=\{REFERENCE_UP_COLOR\}/)
+  assert.match(sparklineSource, /stroke=\{REFERENCE_DOWN_COLOR\}/)
+})
+
+test("market-board sparkline capacity preserves 48 five-minute points plus one live endpoint", () => {
+  assert.match(stockSource, /const MAX_BOARD_SPARK_POINTS = 48/)
+  assert.match(sparklineSource, /const MAX_SPARKLINE_POINTS = 49/)
+})
+
 test("intraday API prefers today's cached snapshot before expensive provider fan-out", () => {
   assert.match(intradayRouteSource, /getCachedIntraday5mSnapshot/)
   assert.match(intradayRouteSource, /cacheLayer = snapshot \? "cache" : "provider"/)
@@ -179,6 +206,20 @@ test("intraday API prefers today's cached snapshot before expensive provider fan
 
 test("09:00 session reset clears board and every open orderbook atomically", () => {
   assert.match(boardSource, /const resetForNewTradingSession = useCallback/)
+  assert.match(boardSource, /const activeSessionDayRef = useRef\(vietnamSessionDay\(\)\)/)
+  assert.match(boardSource, /shouldResetForNewTradingDay\(activeSessionDayRef\.current, now\)/)
+  assert.match(boardSource, /if \(needsTradingDayReset\)[\s\S]*resetForNewTradingSession\(now, nextPhase === "ATO"\)/)
+  assert.match(boardSource, /activeSessionDayRef\.current = nextSessionDay/)
+  assert.match(boardSource, /const isTradingDayRollover = activeSessionDayRef\.current !== nextSessionDay/)
+  assert.match(boardSource, /const reference = isTradingDayRollover && current\.price > 0[\s\S]*dailyReferences\.current\[symbol\]/)
+  assert.match(boardSource, /ceiling: isTradingDayRollover \? undefined : current\.ceiling/)
+  assert.match(boardSource, /floor: isTradingDayRollover \? undefined : current\.floor/)
+  assert.match(boardSource, /setQuoteReloadKey\(\(key\) => key \+ 1\)/)
+  assert.match(boardSource, /fetch\("\/api\/market\/quotes",[\s\S]*method: "POST"/)
+  assert.match(boardSource, /activeSessionDayRef\.current !== requestedSessionDay/)
+  assert.match(boardSource, /hasNewerLiveQuote[\s\S]*existingUpdatedAt > requestedAt/)
+  assert.match(boardSource, /ceiling: quote\.ceiling === null \? undefined : \(quote\.ceiling \?\? existing\?\.ceiling\)/)
+  assert.match(boardSource, /floor: quote\.floor === null \? undefined : \(quote\.floor \?\? existing\?\.floor\)/)
   assert.match(boardSource, /window\.dispatchEvent\(new CustomEvent\(MARKET_SESSION_RESET_EVENT/)
   assert.match(boardSource, /priceHistoryRef\.current = resetHistory/)
   assert.match(orderbookSource, /window\.addEventListener\(MARKET_SESSION_RESET_EVENT, resetSession\)/)
@@ -338,6 +379,7 @@ test("central realtime bus preserves the provider budget and tick-driven mini ch
   assert.doesNotMatch(boardSource, /new WebSocket\(/)
   assert.doesNotMatch(boardSource, /\/api\/market\/stream-auth/)
   assert.match(marketStreamSource, /market_realtime_bus/)
-  assert.match(marketStreamSource, /postgres_changes/)
+  assert.match(marketStreamSource, /subscribeMarketRelay/)
+  assert.doesNotMatch(marketStreamSource, /postgres_changes|\.channel\(/)
   assert.match(marketStreamSource, /synthesizeDnseOhlcFromTickMessage/)
 })

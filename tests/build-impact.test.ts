@@ -136,6 +136,7 @@ test("QEO-211 Beszel adapter follows current PocketBase telemetry schema", async
   const { loadBeszelSnapshot } = await import("../services/ops-dashboard/src/providers/beszel.ts")
   const originalFetch = globalThis.fetch
   const observedAt = new Date().toISOString()
+  const now = Date.now()
 
   globalThis.fetch = async (input) => {
     const url = typeof input === "string"
@@ -179,7 +180,11 @@ test("QEO-211 Beszel adapter follows current PocketBase telemetry schema", async
     }
     if (url.includes("/api/collections/containers/records")) {
       return Response.json({
-        items: [{ name: "qeo-worker", status: "running", cpu: 7.5, memory: 128 }],
+        items: [
+          { name: "qeo-worker", status: "Up a minute", cpu: 7.5, memory: 128, updated: now },
+          { name: "qeo-worker", status: "Up 8 minutes", cpu: 99, memory: 999, updated: now - 8 * 60_000 },
+          { name: "retired-worker", status: "Up 20 minutes", cpu: 1, memory: 64, updated: now - 20 * 60_000 },
+        ],
       })
     }
     return new Response("not found", { status: 404 })
@@ -197,6 +202,8 @@ test("QEO-211 Beszel adapter follows current PocketBase telemetry schema", async
     assert.equal(result.data?.load1, 0.7)
     assert.equal(result.data?.load5, 0.5)
     assert.equal(result.data?.load15, 0.3)
+    assert.equal(result.data?.containers.length, 1)
+    assert.equal(result.data?.containers[0]?.name, "qeo-worker")
     assert.equal(result.data?.containers[0]?.cpuPercent, 7.5)
     assert.equal(result.data?.containers[0]?.memoryMb, 128)
   } finally {
@@ -207,6 +214,7 @@ test("QEO-211 Beszel adapter follows current PocketBase telemetry schema", async
 test("QEO-211 deployment and PWA contracts keep operations data private and network-fresh", () => {
   const required = [
     "services/ops-dashboard/deploy/upcloud/docker-compose.upcloud.yml",
+    "services/ops-dashboard/deploy/upcloud/qeo-ops-dashboard.service",
     "services/ops-dashboard/public/app.js",
     "services/ops-dashboard/public/sw.js",
     "services/ops-dashboard/ops-dashboard.env.example",
@@ -217,11 +225,16 @@ test("QEO-211 deployment and PWA contracts keep operations data private and netw
   }
 
   const compose = source(required[0])
-  const client = source(required[1])
-  const worker = source(required[2])
-  const envExample = source(required[3])
+  const unit = source(required[1])
+  const client = source(required[2])
+  const worker = source(required[3])
+  const envExample = source(required[4])
 
+  assert.match(compose, /^name:\s*qeo-ops-dashboard$/m)
   assert.match(compose, /127\.0\.0\.1:8787:8787/)
+  assert.match(compose, /QEO_OPS_BESZEL_URL:\s*http:\/\/qeo-beszel-hub:8090/)
+  assert.match(compose, /qeo-monitoring/)
+  assert.match(unit, /docker network create --driver bridge --internal qeo-monitoring/)
   assert.doesNotMatch(compose, /\/var\/run\/docker\.sock/)
   assert.doesNotMatch(compose, /network_mode:\s*host/)
 

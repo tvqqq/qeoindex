@@ -78,6 +78,7 @@ Use these recovery-only locations:
 /var/tmp/qeo-restore/             temporary restored snapshots
 /opt/qeoindex/repo/               fresh GitHub checkout
 /opt/qeoindex/env/                independently provisioned runtime secrets
+/opt/qeoindex/state/beszel/       restored Beszel monitoring history/config when present
 /opt/hermes/data/                 restored Hermes persistent state
 /opt/hermes/deploy/               restored Hermes deployment state
 ```
@@ -107,7 +108,10 @@ Confirm:
 - SSH access is stable;
 - unexpected public ports are absent;
 - enough disk space exists for repository restore staging;
+- the dedicated `hermes:hermes` and `qeo:qeo` service identities already exist on the replacement host;
 - no QeoIndex/Hermes production timers are active yet.
+
+Do not reuse source-host numeric UID/GID values as identity authority. Replacement hosts can legitimately assign the same numeric IDs to different account names. The promotion helper therefore requires semantic service accounts before copying live state.
 
 If any of those assumptions are false, stop and resolve them before recovery.
 
@@ -155,7 +159,7 @@ sudo chown root:root /etc/restic/qeoindex/repository-password /etc/restic/qeoind
 sudo chmod 0600 /etc/restic/qeoindex/repository-password /etc/restic/qeoindex/runtime.env
 ```
 
-`runtime.env` must expose only the variables required by Restic's S3-compatible backend and QEO-202 heartbeat integration. Do not `cat`, `env`, `set -x`, `printenv` or otherwise dump it.
+`runtime.env` must expose only the variables required by Restic's S3-compatible backend and QEO-202 heartbeat integration. A replacement host may also set non-secret snapshot identity variables `QEO_RESTIC_BACKUP_HOST` and `QEO_RESTIC_BACKUP_TAG`; if omitted, both retain the historical `qeo-upcloud-operational` default for backward compatibility. Do not `cat`, `env`, `set -x`, `printenv` or otherwise dump it.
 
 Load the credential file only in the root recovery shell and set the Restic repository/password-file variables using the deployed QEO-202 configuration. Never embed credential values in command arguments.
 
@@ -235,7 +239,48 @@ Required checks:
 - representative source/restore hashes match backup-drill expectations when recorded;
 - restored permissions are compatible with the expected live ownership/modes.
 
-If a restored Hermes SQLite database is present, run an integrity check against the staged copy before it is promoted. Do not start Hermes against an unchecked restored SQLite file.
+If restored Hermes SQLite databases are present, validate them **without opening the manifest-controlled quarantine files directly**. Opening a SQLite database can create, checkpoint, truncate, or remove adjacent `-wal` / `-shm` files even when the intended operation is only `PRAGMA integrity_check`, which invalidates the backup manifest.
+
+Use disposable verification copies instead:
+
+```bash
+SQLITE_CHECK_ROOT="$(mktemp -d /var/tmp/qeo-sqlite-check.XXXXXX)"
+trap 'rm -rf -- "$SQLITE_CHECK_ROOT"' EXIT
+
+index=0
+while IFS= read -r db; do
+  index=$((index + 1))
+  check_dir="$SQLITE_CHECK_ROOT/$index"
+  install -d -m 0700 "$check_dir"
+  base="$(basename "$db")"
+
+  cp -p -- "$db" "$check_dir/$base"
+  for suffix in -wal -shm -journal; do
+    [[ -f "${db}${suffix}" ]] && cp -p -- "${db}${suffix}" "$check_dir/${base}${suffix}"
+  done
+
+  result="$(sqlite3 "$check_dir/$base" 'PRAGMA integrity_check;')"
+  [[ "$result" == "ok" ]] || {
+    echo "SQLite integrity check failed for staged database copy: $db" >&2
+    exit 66
+  }
+done < <(
+  find "$RESTORE_ROOT/opt/hermes/data" -type f \
+    \( -name '*.sqlite' -o -name '*.sqlite3' -o -name '*.db' \) \
+    | sort
+)
+
+rm -rf -- "$SQLITE_CHECK_ROOT"
+trap - EXIT
+
+# Prove the quarantine tree remained byte-for-byte unchanged.
+(
+  cd "$RESTORE_ROOT"
+  sha256sum --check qeo-backup-manifest.sha256 >/dev/null
+)
+```
+
+Do not start Hermes against an unchecked restored SQLite file, and do not promote if the manifest fails after validation.
 
 The metadata contract version must be `1`. Stop on an unsupported version.
 
@@ -271,8 +316,10 @@ The helper consumes the already-restored quarantine tree. It does not choose/dow
 Expected helper responsibilities:
 
 - verify restore-root safety and manifest/version;
-- restore Hermes deploy/state;
-- restore QeoIndex host-only deploy state when present;
+- restore Hermes deploy/state, then normalize every non-root entry under those service paths to `hermes:hermes`;
+- restore QeoIndex host-only deploy state when present, then normalize every non-root entry there to `qeo:qeo`;
+- restore Beszel persistent state under `/opt/qeoindex/state/beszel` as `root:root` when present; the Agent `KEY/TOKEN` env is never restored and must be provisioned independently;
+- preserve root-owned entries only when their group is also root; stop for manual review if a root-owned entry carries an ambiguous non-root numeric group;
 - install approved QeoIndex systemd units and root-owned wrappers;
 - run `systemctl daemon-reload`;
 - leave SSH/UFW/sudoers/Docker daemon copies as reference-only material for manual review;
@@ -292,6 +339,8 @@ Recreate QeoIndex runtime secrets independently under:
 Use the existing project contract: real production env files are host-side secret files, not Git or Restic state.
 
 Verify only filenames, owners and modes. Do not print values.
+
+Beszel Agent credentials are part of this independent secret provisioning contract. If Beszel state was restored, recreate `/opt/qeoindex/env/beszel-agent.env` from a fresh/approved Hub system credential before starting `qeo-beszel.service`.
 
 Typical permission check:
 
@@ -345,6 +394,8 @@ Recommended order:
 4. QeoIndex EOD worker manual smoke path;
 5. monitoring/backup support services.
 
+The backup helper supports exactly one Hermes gateway in either system-service or per-user systemd topology. If zero or multiple Hermes gateway units are discoverable across those scopes, backup must fail closed rather than guessing which runtime to quiesce.
+
 For every service:
 
 - start manually;
@@ -386,12 +437,13 @@ After the replacement host is operational:
 
 1. revoke the temporary R2 restore credential;
 2. provision the normal least-privilege backup credential for the new host;
-3. run one fresh backup using the deployed QEO-202 backup service;
-4. verify a new snapshot appears with host/tag `qeo-upcloud-operational`;
-5. verify the external backup success heartbeat;
-6. record backup runtime and size;
-7. remove `/var/tmp/qeo-restore/<snapshot-id>` after recovery evidence is captured and no further inspection is needed;
-8. verify no temporary plaintext recovery/staging copy remains.
+3. set a semantic replacement-host snapshot identity when the recovered host is not UpCloud, for example `QEO_RESTIC_BACKUP_HOST=qeo-onidel-operational` and `QEO_RESTIC_BACKUP_TAG=qeo-onidel-operational`;
+4. run one fresh backup using the deployed QEO-202 backup service;
+5. verify a new snapshot appears with the configured host/tag;
+6. verify the external backup success heartbeat;
+7. record backup runtime and size;
+8. remove `/var/tmp/qeo-restore/<snapshot-id>` after recovery evidence is captured and no further inspection is needed;
+9. verify no temporary plaintext recovery/staging copy remains.
 
 Do not delete the original Restic repository history as part of normal host replacement.
 

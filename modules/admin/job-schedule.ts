@@ -3,12 +3,14 @@ import type { AdminJobDefinition, AdminJobView } from "./types.ts"
 /**
  * Historical pg_cron name → logical job mapping.
  *
- * Keep retired names here so v3 cron snapshots and audit evidence remain readable
- * after QEO-64. Active ownership is expressed only by JOB_KEY_TO_PG_CRON_NAME.
+ * Keep retired names here so historical cron snapshots and audit evidence remain
+ * readable after QEO-238. Active ownership is expressed only by
+ * JOB_KEY_TO_PG_CRON_NAME.
  */
 export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.freeze({
   "qeoindex-eod-pipeline-1515-ict": "qeoindex.eod_pipeline",
   "qeoindex-chart-intraday-maintenance-1450-ict": "qeoindex.chart_intraday_maintenance",
+  "qeoindex-chart-archive-catchup-1645-ict": "qeoindex.chart_archive_catchup",
   "research-reports-daily-0705-ict": "research_reports.daily",
   "kfsp-rating-daily-7am-ict": "kfsp.rating_daily",
   "kfsp-ttai-history-daily-1am-ict": "kfsp.ttai_history",
@@ -20,9 +22,8 @@ export const PG_CRON_NAME_TO_JOB_KEY: Readonly<Record<string, string>> = Object.
   "sync-universe-eod-1450": "market.sync_eod",
 })
 
-/** Active pg_cron ownership after QEO-64/QEO-85/QEO-150 cutovers. */
+/** Active pg_cron ownership after QEO-238 intraday retirement. */
 export const JOB_KEY_TO_PG_CRON_NAME: Readonly<Record<string, string>> = Object.freeze({
-  "qeoindex.chart_intraday_maintenance": "qeoindex-chart-intraday-maintenance-1450-ict",
   "research_reports.daily": "research-reports-daily-0705-ict",
   "market.sync_5m": "sync-universe-5m",
 })
@@ -61,8 +62,8 @@ export interface ScheduleConflict {
 
 /**
  * Statically detects known operational schedule overlaps from job metadata.
- * Retained for legacy catalog/audit inputs; the effective QEO-64 catalog no
- * longer exposes a scheduled standalone market EOD job.
+ * Retained for legacy catalog/audit inputs; the effective catalog no longer
+ * exposes a scheduled standalone market EOD job.
  */
 export function findScheduleConflicts(jobs: (AdminJobDefinition | AdminJobView)[]): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = []

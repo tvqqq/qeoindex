@@ -1,8 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
-import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart } from "../modules/market/realtime/session-ui.ts"
+import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart, shouldResetForNewTradingDay } from "../modules/market/realtime/session-ui.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -122,25 +123,123 @@ test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", ()
   assert.equal(getMarketUiPhase(new Date("2026-08-18T07:46:00Z")), "EOD")
 })
 
+test("QEO-262 trading-date rollover resets stale tabs even when ATO was skipped", () => {
+  const priorTradingDay = "2026-08-17"
+
+  // Same phase before/after sleep: a tab frozen Monday during CONTINUOUS can
+  // resume Tuesday at 10:00 ICT directly into CONTINUOUS and must still reset.
+  assert.equal(shouldResetForNewTradingDay(priorTradingDay, new Date("2026-08-18T03:00:00Z")), true)
+
+  // Do not reset before the next session actually opens.
+  assert.equal(shouldResetForNewTradingDay(priorTradingDay, new Date("2026-08-18T01:59:59Z")), false)
+
+  // Once the active session day has been recorded, subsequent checks are no-ops.
+  assert.equal(shouldResetForNewTradingDay("2026-08-18", new Date("2026-08-18T03:00:00Z")), false)
+
+  // Weekend rollover is not a trading-session reset.
+  assert.equal(shouldResetForNewTradingDay("2026-08-21", new Date("2026-08-22T03:00:00Z")), false)
+
+  // A stale Friday tab must reset when Monday trading is active, including after ATO.
+  assert.equal(shouldResetForNewTradingDay("2026-08-21", new Date("2026-08-24T03:00:00Z")), true)
+
+  // If the machine wakes only after market close, refresh the stale trading day too.
+  assert.equal(shouldResetForNewTradingDay(priorTradingDay, new Date("2026-08-18T08:00:00Z")), true)
+})
+
 test("mini chart is hidden in ATO, live only from 09:15 to 14:30, then adds one final EOD point", () => {
   const points = [
     { time: Date.parse("2026-08-18T02:00:00Z") / 1000, close: 10 },
     { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 10.1 },
     { time: Date.parse("2026-08-18T07:30:00Z") / 1000, close: 10.4 },
     { time: Date.parse("2026-08-18T07:45:00Z") / 1000, close: 10.5 },
+    { time: Date.parse("2026-08-18T07:50:00Z") / 1000, close: 10.5 },
   ]
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T02:05:00Z")), [])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T03:00:00Z")), [points[1]])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:35:00Z")), [points[1], points[2]])
-  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:50:00Z")), [points[1], points[2], points[3]])
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T07:55:00Z")), [points[1], points[2], points[3]])
   assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-22T03:00:00Z")), points)
   assert.equal(shouldAcceptRealtimeMiniChart(points[1].time), true)
   assert.equal(shouldAcceptRealtimeMiniChart(points[0].time), false)
   assert.equal(shouldAcceptRealtimeMiniChart(points[2].time), false)
 })
 
+test("QEO-242 afternoon mini chart keeps morning history and drops synthetic lunch buckets", () => {
+  const points = [
+    { time: Date.parse("2026-08-18T04:25:00Z") / 1000, close: 10.1 }, // 11:25 ICT
+    { time: Date.parse("2026-08-18T04:30:00Z") / 1000, close: 10.1 }, // 11:30 synthetic
+    { time: Date.parse("2026-08-18T05:00:00Z") / 1000, close: 10.1 }, // 12:00 synthetic
+    { time: Date.parse("2026-08-18T05:55:00Z") / 1000, close: 10.1 }, // 12:55 synthetic
+    { time: Date.parse("2026-08-18T06:00:00Z") / 1000, close: 10.2 }, // 13:00 ICT
+    { time: Date.parse("2026-08-18T06:05:00Z") / 1000, close: 10.3 }, // 13:05 ICT
+  ]
+
+  assert.deepEqual(miniChartPointsForDisplay(points, new Date("2026-08-18T06:10:00Z")), [
+    points[0],
+    points[4],
+    points[5],
+  ])
+})
+
+test("QEO-242 full-day mini chart fits the existing 48-point capacity after lunch gaps are removed", () => {
+  const start = Date.parse("2026-08-18T02:15:00Z") / 1000
+  const stop = Date.parse("2026-08-18T07:30:00Z") / 1000
+  const points: Array<{ time: number; close: number }> = []
+
+  for (let time = start, index = 0; time <= stop; time += 300, index += 1) {
+    points.push({ time, close: 10 + index / 100 })
+  }
+
+  const display = miniChartPointsForDisplay(points, new Date("2026-08-18T07:30:00Z"))
+  assert.equal(display.length, 46)
+  assert.equal(display[0]?.time, start)
+  assert.equal(display.at(-1)?.time, stop)
+  assert.equal(display.some((point) => isLunchBreak(new Date(point.time * 1000))), false)
+  assert.ok(display.length <= 48)
+})
+
+test("QEO-242 SSR and browser hydration apply mini-chart policy without mutating shared cache semantics", () => {
+  const boardPage = readFileSync("app/board/page.tsx", "utf8")
+  const intradayRoute = readFileSync("app/api/market/intraday/route.ts", "utf8")
+  const service = readFileSync("modules/market/realtime/intraday-5m-service.ts", "utf8")
+
+  assert.match(boardPage, /miniChartPointsForDisplay\(cachedRow\.points, now\)/)
+  assert.match(boardPage, /miniChartPointsForDisplay\(snap\.intraday_1m as unknown as IntradayPoint\[\], now\)/)
+  assert.match(intradayRoute, /miniChartPointsForDisplay\(row\.points, now\)/)
+  assert.match(intradayRoute, /lastBarAt: points\.at\(-1\)\?\.time \?\? null/)
+  assert.doesNotMatch(service, /miniChartPointsForDisplay/)
+})
+
 test("new session reference history starts at 09:15 ICT", () => {
   assert.deepEqual(newSessionReferencePoint(58.5, new Date("2026-08-18T02:00:00Z")), [
     { time: Date.parse("2026-08-18T02:15:00Z") / 1000, close: 58.5 },
   ])
+})
+
+test("QEO-237 resets orderbook latency samples at VN session boundaries and excludes stale-phase end-to-end frames", () => {
+  const orderbook = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  assert.match(orderbook, /getMarketSessionStatus/)
+  assert.match(orderbook, /let latencySessionPhase/)
+  assert.match(
+    orderbook,
+    /if \(latencySessionPhase !== currentSession\.phase\)[\s\S]*resetLatencySamples\(\)[\s\S]*latencySessionPhase = currentSession\.phase/,
+  )
+  assert.match(orderbook, /eventSessionPhase[\s\S]*=== currentSession\.phase/)
+  assert.match(orderbook, /endToEnd:\s*eventMatchesCurrentSession\s*\?\s*latencyBetween\(eventAt, browserReceivedAt\)\s*:\s*null/)
+})
+
+test("QEO-237 measures browser delivery with one monotonic clock instead of worker/browser wall clocks", () => {
+  const relay = readFileSync("modules/market/realtime/relay-client.ts", "utf8")
+  const orderbook = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+
+  assert.match(relay, /browserReceivedAtMonotonicMs:\s*number/)
+  assert.match(relay, /const browserReceivedAtMonotonicMs = performance\.now\(\)/)
+  assert.match(relay, /parseDataMessage\(payload, browserReceivedAtMonotonicMs\)/)
+  assert.match(orderbook, /const subscriberReceivedAtMonotonicMs = performance\.now\(\)/)
+  assert.match(
+    orderbook,
+    /delivery:\s*latencyBetween\(message\.browserReceivedAtMonotonicMs, subscriberReceivedAtMonotonicMs\)/,
+  )
+  assert.doesNotMatch(orderbook, /delivery:\s*latencyBetween\(publishedAt, browserReceivedAt\)/)
 })

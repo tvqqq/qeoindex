@@ -1,0 +1,4 @@
+realtime.qeoqeo.com {
+	bind 216.176.238.116
+	reverse_proxy 127.0.0.1:8790
+}

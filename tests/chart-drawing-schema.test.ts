@@ -20,12 +20,8 @@ test("validateDrawingV2 accepts a well-formed V2 drawing", () => {
     ],
     sourceTimeframe: "1D",
     visibility: "global",
-    style: {
-      color: "#00f0ff",
-      lineWidth: 2,
-    },
+    style: { color: "#00f0ff", lineWidth: 2 },
   }
-
   const result = validateDrawingV2(validDrawing)
   assert.equal(result.valid, true)
   assert.deepEqual(result.errors, [])
@@ -37,18 +33,12 @@ test("validateDrawingV2 accepts valid text and icon drawings", () => {
     id: "draw-text-1",
     tool: "text",
     anchors: [{ time: 1700000000, price: 100 }],
-    sourceTimeframe: "15m",
+    sourceTimeframe: "1W",
     visibility: "source-timeframe",
-    style: {
-      color: "#ffffff",
-      lineWidth: 1,
-      fontSize: 14,
-    },
+    style: { color: "#ffffff", lineWidth: 1, fontSize: 14 },
     text: "Key resistance level",
   }
-
-  const resultText = validateDrawingV2(textDrawing)
-  assert.equal(resultText.valid, true)
+  assert.equal(validateDrawingV2(textDrawing).valid, true)
 
   const iconDrawing: PersistedDrawingV2 = {
     schemaVersion: 2,
@@ -57,17 +47,29 @@ test("validateDrawingV2 accepts valid text and icon drawings", () => {
     anchors: [{ time: 1700000000, price: 95 }],
     sourceTimeframe: "1D",
     visibility: "global",
-    style: {
-      color: "#f59e0b",
-      lineWidth: 2,
-    },
+    style: { color: "#f59e0b", lineWidth: 2 },
     iconType: "star",
     locked: true,
     hidden: false,
   }
+  assert.equal(validateDrawingV2(iconDrawing).valid, true)
+})
 
-  const resultIcon = validateDrawingV2(iconDrawing)
-  assert.equal(resultIcon.valid, true)
+test("QEO-241 validateDrawingV2 rejects retired source timeframes", () => {
+  for (const sourceTimeframe of ["15m", "3D", "1Q", "1Y"]) {
+    const retired = {
+      schemaVersion: 2,
+      id: `legacy-${sourceTimeframe}`,
+      tool: "trendline",
+      anchors: [{ time: 1700000000, price: 50 }],
+      sourceTimeframe,
+      visibility: "source-timeframe",
+      style: { color: "#00f0ff", lineWidth: 2 },
+    }
+    const result = validateDrawingV2(retired)
+    assert.equal(result.valid, false, `${sourceTimeframe} must be rejected by the active schema`)
+    assert.ok(result.errors.some((error) => error.includes("Invalid sourceTimeframe")))
+  }
 })
 
 test("validateDrawingV2 rejects non-finite coordinates (NaN, Infinity)", () => {
@@ -147,10 +149,7 @@ test("validateDrawingV2 enforces anchor count constraints", () => {
     schemaVersion: 2,
     id: "draw-too-many-anchors",
     tool: "rectangle",
-    anchors: Array.from({ length: MAX_ANCHORS_PER_DRAWING + 1 }, (_, i) => ({
-      time: 1700000000 + i * 1000,
-      price: 50 + i,
-    })),
+    anchors: Array.from({ length: MAX_ANCHORS_PER_DRAWING + 1 }, (_, i) => ({ time: 1700000000 + i * 1000, price: 50 + i })),
     sourceTimeframe: "1D",
     visibility: "global",
     style: { color: "#00f0ff", lineWidth: 2 },
@@ -186,17 +185,9 @@ test("validateDrawingsCollectionV2 enforces maximum drawings per ticker", () => 
     visibility: "global",
     style: { color: "#00f0ff", lineWidth: 2 },
   }
-
-  const withinLimit = Array.from({ length: MAX_DRAWINGS_PER_TICKER }, (_, i) => ({
-    ...baseDrawing,
-    id: `draw-${i}`,
-  }))
+  const withinLimit = Array.from({ length: MAX_DRAWINGS_PER_TICKER }, (_, i) => ({ ...baseDrawing, id: `draw-${i}` }))
   assert.equal(validateDrawingsCollectionV2(withinLimit).valid, true)
-
-  const overLimit = Array.from({ length: MAX_DRAWINGS_PER_TICKER + 1 }, (_, i) => ({
-    ...baseDrawing,
-    id: `draw-${i}`,
-  }))
+  const overLimit = Array.from({ length: MAX_DRAWINGS_PER_TICKER + 1 }, (_, i) => ({ ...baseDrawing, id: `draw-${i}` }))
   const overResult = validateDrawingsCollectionV2(overLimit)
   assert.equal(overResult.valid, false)
   assert.ok(overResult.errors[0].includes("exceeds maximum limit"))

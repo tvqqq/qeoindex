@@ -24,10 +24,7 @@ import {
   sourceRangeForResolution,
   splitCanonicalSourceRange,
 } from "../modules/market/chart-data/timeframes.ts"
-import {
-  ALL_TIMEFRAMES,
-  QUICK_TIMEFRAMES,
-} from "../components/stock-detail/chart/stock-chart-types.ts"
+import { ALL_TIMEFRAMES, QUICK_TIMEFRAMES } from "../components/stock-detail/chart/stock-chart-types.ts"
 import {
   adjacentWatchlistTicker,
   shouldIgnoreStockDetailShortcut,
@@ -58,22 +55,9 @@ function bar(iso: string, open: number, high = open + 1, low = open - 1, close =
   return { time: epoch(iso), open, high, low, close, volume }
 }
 
-test("Timeframe definitions contain all requested intervals", () => {
-  assert.deepEqual(QUICK_TIMEFRAMES, ["15m", "1h", "1D", "1W"])
-
-  const ids = ALL_TIMEFRAMES.map((t) => t.id)
-  assert.ok(ids.includes("1m"))
-  assert.ok(ids.includes("15m"))
-  assert.ok(ids.includes("30m"))
-  assert.ok(ids.includes("1h"))
-  assert.ok(ids.includes("2h"))
-  assert.ok(ids.includes("4h"))
-  assert.ok(ids.includes("1D"))
-  assert.ok(ids.includes("3D"))
-  assert.ok(ids.includes("1W"))
-  assert.ok(ids.includes("1M"))
-  assert.ok(ids.includes("1Q"))
-  assert.ok(ids.includes("1Y"))
+test("QEO-241 timeframe definitions expose exactly 1D, 1W and 1M", () => {
+  assert.deepEqual(QUICK_TIMEFRAMES, ["1D", "1W", "1M"])
+  assert.deepEqual(ALL_TIMEFRAMES.map((timeframe) => timeframe.id), ["1D", "1W", "1M"])
 })
 
 test("Technical indicators calculate valid series", () => {
@@ -118,36 +102,24 @@ test("Technical indicators calculate valid series", () => {
   assert.ok(vp.buckets.some((b) => b.isPoc))
 })
 
-test("Timeframe aggregation never fabricates intraday candles from Daily bars", () => {
+test("QEO-241 active timeframe aggregation derives only Daily, Weekly and Monthly candles", () => {
   const daily = aggregateBarsByTimeframe(mockBars, undefined, "1D")
   assert.ok(daily.length > 0)
-
   const weekly = aggregateBarsByTimeframe(mockBars, undefined, "1W")
   assert.ok(weekly.length > 0 && weekly.length <= daily.length)
-
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "1m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "15m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "30m"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "1h"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "2h"), [])
-  assert.deepEqual(aggregateBarsByTimeframe(mockBars, undefined, "4h"), [])
+  const monthly = aggregateBarsByTimeframe(mockBars, undefined, "1M")
+  assert.ok(monthly.length > 0 && monthly.length <= daily.length)
 })
 
-test("QEO-93 aggregates intraday OHLCV without crossing the VN lunch break", () => {
+test("QEO-93 historical intraday aggregation never crosses the VN lunch break", () => {
   const out = aggregateChartTimeframe([
     bar("2026-09-04T04:15:00Z", 10, 11, 9.5, 10.5, 100),
     bar("2026-09-04T04:29:00Z", 10.5, 12, 10, 11, 200),
     bar("2026-09-04T06:00:00Z", 11, 11.5, 10.8, 11.2, 300),
   ], "15m")
-
   assert.equal(out.length, 2)
   assert.deepEqual(out[0], {
-    time: epoch("2026-09-04T04:15:00Z"),
-    open: 10,
-    high: 12,
-    low: 9.5,
-    close: 11,
-    volume: 300,
+    time: epoch("2026-09-04T04:15:00Z"), open: 10, high: 12, low: 9.5, close: 11, volume: 300,
   })
   assert.equal(out[1].time, epoch("2026-09-04T06:00:00Z"))
 })
@@ -159,14 +131,13 @@ test("QEO-93 3D aggregation follows actual Daily sessions across weekends", () =
     bar("2026-09-07T00:00:00Z", 12, 13, 11, 12.5),
     bar("2026-09-08T00:00:00Z", 13, 14, 12, 13.5),
   ], "3D")
-
   assert.equal(out.length, 2)
   assert.equal(out[0].open, 10)
   assert.equal(out[0].close, 12.5)
   assert.equal(out[1].open, 13)
 })
 
-test("QEO-93 source routing and chunking never derive intraday from Daily", () => {
+test("QEO-93 historical source routing never derives intraday from Daily", () => {
   for (const resolution of ["1m", "15m", "30m", "1h", "2h", "4h"] as const) {
     assert.equal(canonicalSourceResolution(resolution), "1m")
   }
@@ -177,7 +148,6 @@ test("QEO-93 source routing and chunking never derive intraday from Daily", () =
   const from = epoch("2026-09-02T03:00:00Z")
   const weekly = sourceRangeForResolution("1W", from, epoch("2026-09-05T03:00:00Z"))
   assert.ok(weekly.from < from)
-
   const chunks = splitCanonicalSourceRange("1m", epoch("2026-01-01T00:00:00Z"), epoch("2026-03-15T00:00:00Z"))
   assert.ok(chunks.length >= 3)
   assert.ok(chunks.every((chunk) => chunk.to - chunk.from <= 31 * 86400))
@@ -192,7 +162,7 @@ test("QEO-93 chart history merge is prepend-safe and timestamp-deduped", () => {
   assert.equal(merged[1].open, 21)
 })
 
-test("QEO-93 identical history requests coalesce while in flight", async () => {
+test("QEO-238 identical Daily history requests coalesce while in flight", async () => {
   let fetches = 0
   const fakeFetch = async () => {
     fetches += 1
@@ -200,7 +170,7 @@ test("QEO-93 identical history requests coalesce while in flight", async () => {
     return new Response(JSON.stringify({
       ok: true,
       ticker: "VIC",
-      resolution: "15m",
+      resolution: "1D",
       from: 100,
       to: 200,
       bars: [{ time: 120, open: 1, high: 2, low: 1, close: 2, volume: 10 }],
@@ -210,24 +180,20 @@ test("QEO-93 identical history requests coalesce while in flight", async () => {
       errors: [],
     }), { status: 200, headers: { "Content-Type": "application/json" } })
   }
-
   await Promise.all([
-    requestChartRange({ ticker: "VIC", timeframe: "15m", from: 100, to: 200 }, undefined, fakeFetch),
-    requestChartRange({ ticker: "VIC", timeframe: "15m", from: 100, to: 200 }, undefined, fakeFetch),
+    requestChartRange({ ticker: "VIC", timeframe: "1D", from: 100, to: 200 }, undefined, fakeFetch),
+    requestChartRange({ ticker: "VIC", timeframe: "1D", from: 100, to: 200 }, undefined, fakeFetch),
   ])
   assert.equal(fetches, 1)
-  assert.ok(historyWindowSeconds("15m") >= 21 * 86400)
-  assert.ok(historyWindowSeconds("4h") >= 180 * 86400)
+  assert.equal(historyWindowSeconds("1D"), 0)
 })
 
-test("QEO-92 removes synthetic micro-volatility and adds canonical chart-data boundaries", () => {
+test("QEO-92 historical chart-data boundaries remain discoverable until schema retirement", () => {
   const timeframeSource = source("components/stock-detail/chart/stock-chart-timeframes.ts")
   const dnseSource = source("modules/market/providers/dnse/history.ts")
-
   assert.doesNotMatch(timeframeSource, /deriveSubHourlyBars|micro-volatility|Math\.sin/i)
   assert.doesNotMatch(timeframeSource, /hourly\s*=\s*.*daily\.slice/i)
   assert.match(dnseSource, /fetchMinuteOhlcvRange/)
-
   for (const path of [
     "modules/market/chart-data/contract.ts",
     "modules/market/chart-data/normalize.ts",
@@ -236,26 +202,21 @@ test("QEO-92 removes synthetic micro-volatility and adds canonical chart-data bo
     "modules/market/chart-data/cold-store.ts",
     "modules/market/chart-data/service.ts",
     "app/api/market/ohlcv/route.ts",
-  ]) {
-    assert.equal(existsSync(path), true, `${path} must exist`)
-  }
+  ]) assert.equal(existsSync(path), true, `${path} must exist`)
 })
 
-test("QEO-92 canonical merge is sorted, deduped, hot-preferred and mismatch-aware", async () => {
+test("QEO-92 historical canonical merge is sorted, deduped, hot-preferred and mismatch-aware", async () => {
   const { normalizeCanonicalBars, detectSequenceGaps } = await import("../modules/market/chart-data/normalize.ts")
-
   const result = normalizeCanonicalBars([
     { source: "cold", bar: { time: 100, open: 10, high: 12, low: 9, close: 11, volume: 100 } },
     { source: "hot", bar: { time: 100, open: 10, high: 13, low: 9, close: 12, volume: 120 } },
     { source: "hot", bar: { time: 160, open: 12, high: 13, low: 11, close: 12.5, volume: 90 } },
     { source: "provider", bar: { time: 220, open: 0, high: 1, low: 1, close: 1, volume: 10 } },
   ])
-
-  assert.deepEqual(result.bars.map((bar: { time: number }) => bar.time), [100, 160])
+  assert.deepEqual(result.bars.map((item: { time: number }) => item.time), [100, 160])
   assert.equal(result.bars[0].close, 12)
   assert.ok(result.integrityIssues.some((issue: { kind: string }) => issue.kind === "SOURCE_MISMATCH"))
   assert.ok(result.integrityIssues.some((issue: { kind: string }) => issue.kind === "INVALID_BAR"))
-
   assert.deepEqual(detectSequenceGaps([
     { time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 },
     { time: 220, open: 1, high: 1, low: 1, close: 1, volume: 1 },
@@ -266,7 +227,6 @@ test("QEO-93 workstation uses unified history wrapper and lazy-load intent", () 
   const wrapper = source("components/stock-detail/stock-tradingview-chart-data.tsx")
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
   const timeframeSource = source("components/stock-detail/chart/stock-chart-timeframes.ts")
-
   assert.match(wrapper, /useChartHistory/)
   assert.match(wrapper, /loadOlder/)
   assert.match(wrapper, /onMouseMoveCapture/)
@@ -277,29 +237,26 @@ test("QEO-93 workstation uses unified history wrapper and lazy-load intent", () 
 
 test("StockTradingViewChart keeps one native chart instance across compact and maximized modes", () => {
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-
   assert.match(code, /isMaximized \?/)
   assert.match(code, /Maximize2/)
   assert.match(code, /Minimize2/)
-
   assert.match(code, /loadLightweightCharts/)
   assert.match(code, /runtime\.createChart/)
   assert.match(code, /runtime\.CandlestickSeries/)
   assert.match(code, /chart\.panes\(\)/)
   assert.match(code, /panes\[0\]\?\.setHeight\(paneHeights\.main\)/)
+  assert.match(code, /canonicalPaneGeometry/)
   assert.match(code, /effectiveIndicators\.showRsi/)
   assert.match(code, /effectiveIndicators\.showMacd/)
   assert.match(code, /effectiveIndicators\.showIchimoku/)
   assert.match(code, /effectiveIndicators\.showBollinger/)
   assert.match(code, /effectiveIndicators\.showVolumeProfile/)
-
   assert.match(code, /<StockChartDrawingTools/)
   assert.match(code, /<StockChartDrawingCanvas/)
 })
 
-test("StockTradingViewChart renders explicit unavailable state for unsupported intraday timeframes", () => {
+test("StockTradingViewChart renders explicit unavailable state for an empty active timeframe", () => {
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-
   assert.match(code, /displayBars\.length\s*===\s*0/)
   assert.match(code, /Khung \$\{timeframe\} hiện chưa có dữ liệu nến hoàn tất/)
   assert.doesNotMatch(code, /if \(!displayBars\.length/)
@@ -307,21 +264,17 @@ test("StockTradingViewChart renders explicit unavailable state for unsupported i
 
 test("StockDetailWorkstation handles isChartMaximized and hides sidebar/tabs", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
-
   assert.match(workstation, /isChartMaximized/)
   assert.match(workstation, /setIsChartMaximized/)
-
   assert.match(workstation, /!isChartMaximized && \(\s*<aside/)
   assert.match(workstation, /!isChartMaximized && <StockCompanyHeader/)
   assert.match(workstation, /!isChartMaximized && <StockTabsPanel/)
-
   assert.match(workstation, /StockWatchlistSidebar/)
   assert.match(workstation, /onToggleMaximize=\{\(\) => setIsChartMaximized\(\(prev\) => !prev\)\}/)
 })
 
 test("StockDetailWorkstation binds guarded fullscreen shortcuts to watchlist navigation", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
-
   assert.match(workstation, /window\.addEventListener\("keydown", handleChartShortcut\)/)
   assert.match(workstation, /event\.key === "`" \|\| event\.code === "Backquote"/)
   assert.match(workstation, /event\.key !== "ArrowUp" && event\.key !== "ArrowDown"/)
@@ -336,10 +289,7 @@ test("StockDetailWorkstation binds guarded fullscreen shortcuts to watchlist nav
 })
 
 test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
-  const blockedTarget = {
-    closest: (selectors: string) => selectors.includes("input") ? {} : null,
-  }
-
+  const blockedTarget = { closest: (selectors: string) => selectors.includes("input") ? {} : null }
   assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)
   assert.equal(shouldIgnoreStockDetailShortcut({ target: {}, ctrlKey: true }), true)
   assert.equal(shouldIgnoreStockDetailShortcut({ target: {}, defaultPrevented: true }), true)
@@ -350,7 +300,6 @@ test("fullscreen shortcut guards ignore editors and modifier/composition events"
 
 test("fullscreen watchlist navigation stops at both ends without wrapping", () => {
   const tickers = ["VIC", "VHM", "HPG"]
-
   assert.equal(adjacentWatchlistTicker(tickers, "VHM", "previous"), "VIC")
   assert.equal(adjacentWatchlistTicker(tickers, "VHM", "next"), "HPG")
   assert.equal(adjacentWatchlistTicker(tickers, "VIC", "previous"), null)
@@ -360,29 +309,20 @@ test("fullscreen watchlist navigation stops at both ends without wrapping", () =
 
 test("StockTradingViewChart cannot trap an empty persisted timeframe behind the loading return", () => {
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-
   assert.doesNotMatch(code, /if \(!displayBars\.length \|\| !chartMetrics \|\| visibleBars\.length === 0\)/)
   assert.match(code, /Khung \$\{timeframe\} hiện chưa có dữ liệu nến hoàn tất/)
 })
 
-test("StockTradingViewChart consumes canonical raw 1m from the chart-data API", () => {
+test("QEO-238 StockTradingViewChart no longer consumes canonical raw 1m", () => {
   const code = source("components/stock-detail/stock-tradingview-chart.tsx")
-  const hook = source("components/stock-detail/chart/use-canonical-minute-bars.ts")
-
-  assert.match(code, /useCanonicalMinuteBars/)
-  assert.match(code, /timeframe === "1m"/)
-  assert.match(hook, /\/api\/market\/ohlcv/)
-  assert.match(hook, /resolution:\s*"1m"/)
+  assert.doesNotMatch(code, /useCanonicalMinuteBars/)
+  assert.doesNotMatch(code, /timeframe === "1m"/)
 })
 
 import "./qeo-100-market-data.cases.ts"
 
-
-test("Future chart timeline uses canonical Vietnam securities holidays", () => {
+test("Future Daily chart timeline uses canonical Vietnam securities holidays", () => {
   const fridayClose = Math.floor(Date.parse("2026-08-28T14:45:00+07:00") / 1000)
-  const [nextIntraday] = projectFutureTimes(fridayClose, "15m", 1)
   const [nextDaily] = projectFutureTimes(fridayClose, "1D", 1)
-
-  assert.equal(new Date(nextIntraday * 1000).toISOString(), "2026-09-03T02:00:00.000Z")
   assert.equal(new Date(nextDaily * 1000).toISOString(), "2026-09-03T07:45:00.000Z")
 })
