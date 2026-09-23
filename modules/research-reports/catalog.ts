@@ -6,7 +6,6 @@ const MENTION_TABLE = "market_research_report_ticker_mentions"
 const MAX_ERROR_CHARS = 500
 const MAX_SEARCH_CHARS = 100
 const MAX_SOURCE_CHARS = 80
-const MAX_DESCRIPTION_CHARS = 280
 
 export const RESEARCH_REPORT_CATALOG_PAGE_SIZE = 24
 export const RESEARCH_REPORT_CATALOG_CATEGORIES = ["macro", "strategy", "sector"] as const
@@ -26,7 +25,6 @@ export interface ResearchReportCatalogQuery {
 export interface ResearchReportCatalogItem {
   id: string
   title: string
-  description: string | null
   sourceName: string
   publishDate: string
   category: ResearchReportCategory
@@ -163,12 +161,6 @@ function nonEmptyString(value: unknown): string | null {
   return normalized ? normalized : null
 }
 
-function catalogDescription(value: unknown): string | null {
-  const summary = nonEmptyString(value)
-  if (!summary) return null
-  return normalizedText(summary, MAX_DESCRIPTION_CHARS)
-}
-
 function finiteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string" && value.trim()) {
@@ -194,7 +186,6 @@ function toCatalogItem(row: Record<string, unknown>): ResearchReportCatalogItem 
   return {
     id,
     title,
-    description: null,
     sourceName,
     publishDate,
     category: reportCategory(row.category),
@@ -299,12 +290,11 @@ export async function getResearchReportCatalog(
   const analyzedReportIds = reportEntries
     .filter((entry) => entry.item.analysisStatus === "ready" && entry.contentHash)
     .map((entry) => entry.item.id)
-  const descriptions = new Map<string, string>()
   const currentAnalysisIds = new Map<string, string>()
 
   if (analyzedReportIds.length > 0) {
     const analysisResult = await (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
-      .select("id,report_id,content_hash,executive_summary,processed_at,created_at")
+      .select("id,report_id,content_hash,processed_at,created_at")
       .in("report_id", analyzedReportIds)
       .order("processed_at", { ascending: false })
       .order("created_at", { ascending: false })
@@ -313,12 +303,10 @@ export async function getResearchReportCatalog(
       for (const row of analysisResult.data ?? []) {
         const reportId = nonEmptyString(row.report_id)
         const contentHash = nonEmptyString(row.content_hash)
-        const description = catalogDescription(row.executive_summary)
         if (!reportId || !contentHash) continue
         if (currentContentHashes.get(reportId) !== contentHash) continue
         const analysisId = nonEmptyString(row.id)
         if (analysisId && !currentAnalysisIds.has(reportId)) currentAnalysisIds.set(reportId, analysisId)
-        if (description && !descriptions.has(reportId)) descriptions.set(reportId, description)
       }
     }
   }
@@ -351,7 +339,6 @@ export async function getResearchReportCatalog(
     if (item.code && /^[A-Z0-9]{2,12}$/.test(item.code)) tickers.add(item.code)
     return {
       ...item,
-      description: descriptions.get(item.id) ?? null,
       tickers: Array.from(tickers).slice(0, 8),
     }
   })
