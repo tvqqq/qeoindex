@@ -41,7 +41,7 @@ export function ReportSummaryImage({
         <img
           src={src}
           alt={alt}
-          className="aspect-[3/2] w-full object-contain"
+          className="aspect-[297/210] w-full object-contain"
           loading={compact ? "lazy" : "eager"}
         />
         <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-2.5 py-1.5 text-[10px] font-bold text-white/85 opacity-0 backdrop-blur-sm transition group-hover/image:opacity-100 group-focus-visible/image:opacity-100">
