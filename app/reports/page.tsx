@@ -97,21 +97,6 @@ function targetPriceLabel(value: number) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
 }
 
-function statusView(item: ResearchReportCatalogItem) {
-  if (item.ingestionStatus === "needs_ocr") return { label: "Cần OCR", className: "border-amber-400/30 bg-amber-400/[0.09] text-amber-200" }
-  if (item.ingestionStatus === "unsupported") return { label: "Không hỗ trợ", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
-  if (item.ingestionStatus === "failed") return { label: "Đọc PDF lỗi", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
-  if (item.analysisStatus === "ready") return { label: "Đã phân tích", className: "border-emerald-400/30 bg-emerald-400/[0.09] text-emerald-200" }
-  if (item.analysisStatus === "processing") return { label: "Đang xử lý", className: "border-cyan-400/30 bg-cyan-400/[0.09] text-cyan-200" }
-  if (item.analysisStatus === "failed") return { label: "Phân tích lỗi", className: "border-slate-400/25 bg-slate-400/[0.07] text-slate-300" }
-  return { label: "Chưa phân tích", className: "border-violet-400/25 bg-violet-400/[0.07] text-violet-200" }
-}
-
-function descriptionView(item: ResearchReportCatalogItem) {
-  if (item.description) return item.description
-  return "Chưa có mô tả tóm tắt cho phiên bản phân tích hiện tại."
-}
-
 function recommendationView(item: ResearchReportCatalogItem) {
   const rawRecommendation = item.recommendation?.trim() || "Chưa có"
   const normalized = rawRecommendation.toUpperCase()
