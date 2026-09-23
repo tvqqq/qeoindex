@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import type { ResearchReportDetailViewModel } from "@/modules/research-reports"
 
 import { AnalysisPanel } from "./analysis-panel"
 import { PdfViewer } from "./pdf-viewer"
+import { ReportSummaryImage } from "./report-summary-image"
 import {
   nextCitationNavigationState,
   type CitationNavigationState,
@@ -121,10 +123,6 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 max-w-5xl">
             <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-              <span>{report.sourceName}</span>
-              <span aria-hidden="true">•</span>
-              <time dateTime={report.publishDate}>{formatPublishDate(report.publishDate)}</time>
-              <span aria-hidden="true">•</span>
               <span>{categoryLabel(report.category)}</span>
               {report.sectorName ? (
                 <>
@@ -134,17 +132,61 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
               ) : null}
             </div>
             <h1 className="mt-2 text-xl font-semibold leading-tight text-zinc-100 sm:text-2xl">{report.title}</h1>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-zinc-300">
-                {analysisStatusLabel(report.analysisStatus)}
-              </span>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+              <span>{report.sourceName}</span>
+              <span aria-hidden="true">•</span>
+              <time dateTime={report.publishDate}>{formatPublishDate(report.publishDate)}</time>
+              {report.recommendation ? (
+                <>
+                  <span aria-hidden="true">•</span>
+                  <span className="font-semibold text-amber-200/85">Khuyến nghị: {report.recommendation}</span>
+                </>
+              ) : null}
+              <span aria-hidden="true">•</span>
+              <span>{analysisStatusLabel(report.analysisStatus)}</span>
               {report.parsedPageCount > 0 ? (
-                <span className="text-zinc-500">{report.parsedPageCount} trang đã nhận diện</span>
+                <>
+                  <span aria-hidden="true">•</span>
+                  <span>{report.parsedPageCount} trang</span>
+                </>
               ) : null}
             </div>
+            {report.analysis?.tickerMentions.length ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {report.analysis.tickerMentions.map((mention) => (
+                  <Link
+                    key={mention.ticker}
+                    href={`/reports?ticker=${encodeURIComponent(mention.ticker)}`}
+                    prefetch={false}
+                    className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.05] px-2.5 py-1 text-[11px] font-black tracking-wide text-cyan-100 transition-colors hover:bg-cyan-300/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                  >
+                    {mention.ticker}
+                  </Link>
+                ))}
+              </div>
+            ) : report.code ? (
+              <div className="mt-3">
+                <Link
+                  href={`/reports?ticker=${encodeURIComponent(report.code)}`}
+                  prefetch={false}
+                  className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.05] px-2.5 py-1 text-[11px] font-black tracking-wide text-cyan-100 transition-colors hover:bg-cyan-300/[0.1]"
+                >
+                  {report.code}
+                </Link>
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
+
+      {report.summaryImageUrl ? (
+        <section className="rounded-2xl border border-white/[0.08] bg-black/15 p-2 sm:p-3">
+          <ReportSummaryImage
+            src={report.summaryImageUrl}
+            alt={`Ảnh tóm tắt báo cáo ${report.title}`}
+          />
+        </section>
+      ) : null}
 
       <div className="lg:hidden" role="tablist" aria-label="Nội dung báo cáo">
         <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
