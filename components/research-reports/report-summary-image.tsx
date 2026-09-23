@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { Maximize2, X } from "lucide-react"
 
 export function ReportSummaryImage({
@@ -49,12 +50,12 @@ export function ReportSummaryImage({
         </span>
       </button>
 
-      {open ? (
+      {open ? createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-label={`Ảnh tóm tắt báo cáo: ${title}`}
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-3 sm:p-6"
+          className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-3 sm:p-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setOpen(false)
           }}
@@ -74,7 +75,8 @@ export function ReportSummaryImage({
               className="mx-auto max-h-[88vh] w-auto max-w-full rounded-2xl border border-white/10 bg-[#070b10] object-contain shadow-2xl"
             />
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   )
