@@ -9,12 +9,11 @@ import {
   Factory,
   FileText,
   Landmark,
-  Lightbulb,
   Search,
-  Sparkles,
 } from "lucide-react"
 
 import { LandingLogin } from "@/components/auth/landing-login"
+import { ReportSummaryImage } from "@/components/research-reports/report-summary-image"
 import { TopNav } from "@/components/top-nav"
 import { getServerAuthContext } from "@/modules/auth/server"
 import {
@@ -35,6 +34,7 @@ type SearchParams = {
   category?: string | string[]
   q?: string | string[]
   source?: string | string[]
+  ticker?: string | string[]
   from?: string | string[]
   to?: string | string[]
   page?: string | string[]
@@ -130,6 +130,7 @@ function catalogHref(query: ResearchReportCatalogQuery, patch: Partial<ResearchR
   if (next.category) params.set("category", next.category)
   if (next.search) params.set("q", next.search)
   if (next.source) params.set("source", next.source)
+  if (next.ticker) params.set("ticker", next.ticker)
   if (next.fromDate) params.set("from", next.fromDate)
   if (next.toDate) params.set("to", next.toDate)
   if (next.page > 1) params.set("page", String(next.page))
@@ -215,6 +216,7 @@ export default async function ResearchReportsCatalogPage({
 
           <form method="get" action="/reports" className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.4fr)_minmax(150px,.7fr)_170px_170px_auto]">
             {query.category ? <input type="hidden" name="category" value={query.category} /> : null}
+            {query.ticker ? <input type="hidden" name="ticker" value={query.ticker} /> : null}
             <label className="relative block">
               <span className="sr-only">Tìm theo tiêu đề, nguồn hoặc ngành</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
@@ -256,7 +258,18 @@ export default async function ResearchReportsCatalogPage({
 
         <section aria-live="polite">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500"><span className="font-bold text-slate-300">{catalog.total}</span> báo cáo phù hợp</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-slate-500"><span className="font-bold text-slate-300">{catalog.total}</span> báo cáo phù hợp</p>
+              {query.ticker ? (
+                <Link
+                  href={catalogHref(query, { ticker: "", page: 1 })}
+                  prefetch={false}
+                  className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2.5 py-1 text-[10px] font-bold text-cyan-100"
+                >
+                  {query.ticker} ×
+                </Link>
+              ) : null}
+            </div>
             <p className="text-xs tabular-nums text-slate-500">Trang {query.page}/{catalog.totalPages}</p>
           </div>
 
@@ -269,7 +282,6 @@ export default async function ResearchReportsCatalogPage({
           ) : (
             <div className="grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
               {catalog.items.map((item) => {
-                const status = statusView(item)
                 const recommendation = recommendationView(item)
                 return (
                   <article
@@ -304,31 +316,25 @@ export default async function ResearchReportsCatalogPage({
                         {item.title}
                       </h2>
 
-                      <div className="mt-4 grid grid-cols-2 gap-2.5">
-                        <div className={`h-[98px] min-w-0 rounded-2xl border p-3.5 ${status.className}`}>
-                          <div className="text-[10px] font-black uppercase tracking-[0.16em] opacity-75">TRẠNG THÁI AI</div>
-                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
-                            <Sparkles className="size-4 shrink-0" aria-hidden="true" />
-                            <span className="truncate">{status.label}</span>
+                      <div className="mt-4 pointer-events-auto relative z-20">
+                        {item.summaryImageUrl ? (
+                          <ReportSummaryImage
+                            src={item.summaryImageUrl}
+                            alt={`Ảnh tóm tắt báo cáo ${item.title}`}
+                            compact
+                          />
+                        ) : (
+                          <div className="flex aspect-[3/2] items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-black/15 px-5 text-center">
+                            <div>
+                              <FileText className="mx-auto size-6 text-slate-600" aria-hidden="true" />
+                              <div className="mt-2 text-xs font-bold text-slate-400">
+                                {item.summaryImageStatus === "failed" ? "Chưa tạo được ảnh tóm tắt" : "Ảnh tóm tắt đang được chuẩn bị"}
+                              </div>
+                              <div className="mt-1 text-[11px] text-slate-600">Mở báo cáo để xem nội dung phân tích đầy đủ.</div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="h-[98px] min-w-0 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] p-3.5 text-amber-100">
-                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200/70">KHUYẾN NGHỊ</div>
-                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm font-black sm:text-base">
-                            <Lightbulb className="size-4 shrink-0 text-amber-300" aria-hidden="true" />
-                            <span className="truncate">{recommendation.primary}</span>
-                          </div>
-                          {recommendation.target ? (
-                            <div className="mt-1 truncate pl-6 text-[11px] font-semibold text-amber-200/75">{recommendation.target}</div>
-                          ) : null}
-                        </div>
+                        )}
                       </div>
-
-                      {item.analysisStatus === "ready" ? (
-                        <p className="mt-4 line-clamp-3 text-sm leading-5 text-slate-400">
-                          {descriptionView(item)}
-                        </p>
-                      ) : null}
 
                       <div className="mt-auto pt-5">
                         <div className="border-t border-white/[0.075] pt-4">
@@ -337,7 +343,7 @@ export default async function ResearchReportsCatalogPage({
                               href={`/reports?source=${encodeURIComponent(item.sourceName)}`}
                               prefetch={false}
                               aria-label={`Lọc báo cáo từ ${item.sourceName}`}
-                              className="pointer-events-auto relative z-20 inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.035] px-2.5 py-1.5 text-[11px] font-bold text-slate-300 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.06] hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                              className="pointer-events-auto relative z-20 inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.035] px-2.5 py-1.5 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/25 hover:bg-cyan-300/[0.06] hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
                             >
                               <Building2 className="size-3.5 shrink-0 text-slate-400" aria-hidden="true" />
                               <span className="truncate">{item.sourceName}</span>
@@ -346,7 +352,25 @@ export default async function ResearchReportsCatalogPage({
                               <CalendarDays className="size-3.5 shrink-0 text-slate-400" aria-hidden="true" />
                               {dateLabel(item.publishDate)}
                             </span>
+                            <span className="inline-flex items-center rounded-full border border-amber-300/20 bg-amber-300/[0.06] px-2.5 py-1.5 text-[11px] font-bold text-amber-100">
+                              {recommendation.primary}{recommendation.target ? ` • ${recommendation.target}` : ""}
+                            </span>
                           </div>
+                          {item.tickers.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {item.tickers.map((ticker) => (
+                                <Link
+                                  key={ticker}
+                                  href={catalogHref(query, { ticker, page: 1 })}
+                                  prefetch={false}
+                                  aria-label={`Lọc báo cáo liên quan ${ticker}`}
+                                  className="pointer-events-auto relative z-20 rounded-full border border-cyan-300/20 bg-cyan-300/[0.05] px-2 py-1 text-[10px] font-black tracking-wide text-cyan-100 transition-colors hover:bg-cyan-300/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                                >
+                                  {ticker}
+                                </Link>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
