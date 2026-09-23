@@ -82,6 +82,7 @@ export function buildResearchReportSummaryImageFields(input: {
   const publishDate = text(input.report.publish_date) ?? ""
   const sectorName = text(input.report.sector_name)
   const recommendation = text(input.report.recommendation)
+  const providerCode = text(input.report.code)?.toUpperCase() ?? null
   const executiveSummary = text(input.analysis.executive_summary) ?? ""
   const keyPoints = list(input.analysis.key_points, MAX_POINTS)
   const catalysts = list(input.analysis.catalysts, MAX_POINTS)
@@ -90,6 +91,9 @@ export function buildResearchReportSummaryImageFields(input: {
     .map(recommendationLine)
     .filter((item): item is string => Boolean(item))
     .slice(0, MAX_TICKERS)
+  if (tickerLines.length === 0 && providerCode) {
+    tickerLines.push([providerCode, recommendation].filter(Boolean).join(" — "))
+  }
 
   const services = [
     "TÓM TẮT BÁO CÁO",
