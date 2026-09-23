@@ -271,7 +271,7 @@ export default async function ResearchReportsCatalogPage({
               {catalog.items.map((item) => {
                 const recommendation = recommendationView(item)
                 const summaryImageUrl = item.summaryImageStatus === "ready"
-                  ? `/api/research/reports/${item.id}/summary-image${item.summaryImageGeneratedAt ? `?v=${encodeURIComponent(item.summaryImageGeneratedAt)}` : ""}`
+                  ? `/api/research-reports/${item.id}/summary-image${item.summaryImageGeneratedAt ? `?v=${encodeURIComponent(item.summaryImageGeneratedAt)}` : ""}`
                   : null
                 return (
                   <article
