@@ -65,7 +65,7 @@ test("QEO-270 live latest snapshot accepts only the current or immediately previ
   assert.equal(isRecentFiveMinuteSnapshot("invalid", now), false)
 })
 
-test("QEO-270 latest cache fallback is freshness-gated only while the market is live", () => {
+test("QEO-270 latest cache fallback is freshness-gated while the market is live", () => {
   const serviceSource = readFileSync(new URL("../modules/market/realtime/intraday-5m-service.ts", import.meta.url), "utf8")
   assert.match(serviceSource, /isUsableLatestCachedIntradaySnapshot/)
   assert.match(serviceSource, /if \(!status\.isLiveSession\) return true/)
@@ -73,6 +73,17 @@ test("QEO-270 latest cache fallback is freshness-gated only while the market is 
   assert.equal(
     serviceSource.match(/isUsableLatestCachedIntradaySnapshot\(cachedLatest, symbols, now\)/g)?.length,
     2,
+  )
+})
+
+test("QEO-270 lunch cache must cover the final 11:25 morning mini-chart bar", () => {
+  const serviceSource = readFileSync(new URL("../modules/market/realtime/intraday-5m-service.ts", import.meta.url), "utf8")
+  assert.match(serviceSource, /MORNING_FINAL_BAR_SECONDS = 11 \* 3600 \+ 25 \* 60/)
+  assert.match(serviceSource, /LUNCH_START_SECONDS = 11 \* 3600 \+ 30 \* 60/)
+  assert.match(serviceSource, /AFTERNOON_START_SECONDS = 13 \* 3600/)
+  assert.match(
+    serviceSource,
+    /totalSeconds >= LUNCH_START_SECONDS && totalSeconds < AFTERNOON_START_SECONDS[\s\S]*morningFinalBarAt = sessionTimestampSeconds\(now, MORNING_FINAL_BAR_SECONDS\)[\s\S]*completeMorningRows\.length >= requiredRows/,
   )
 })
 

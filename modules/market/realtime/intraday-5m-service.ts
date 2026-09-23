@@ -11,6 +11,12 @@ import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quot
 export const FETCH_CONCURRENCY = 12
 const INTRADAY_CACHE_VERSION = "market-universe:v11"
 
+const MORNING_FINAL_BAR_SECONDS = 11 * 3600 + 25 * 60
+const LUNCH_START_SECONDS = 11 * 3600 + 30 * 60
+const AFTERNOON_START_SECONDS = 13 * 3600
+const EOD_START_SECONDS = 14 * 3600 + 46 * 60
+const EOD_FINAL_BAR_SECONDS = 14 * 3600 + 45 * 60
+
 export type IntradayRow = {
   symbol: string
   provider: "Yahoo" | null
@@ -86,10 +92,21 @@ export function isIntradaySnapshot(value: unknown, symbols: string[] | readonly 
 export function isUsableCachedIntradaySnapshot(value: unknown, symbols: string[] | readonly string[], now: Date): value is IntradaySnapshot {
   if (!isIntradaySnapshot(value, symbols)) return false
   const { dayOfWeek, totalSeconds } = getVnTimeSeconds(now)
-  if (dayOfWeek < 1 || dayOfWeek > 5 || totalSeconds < 14 * 3600 + 46 * 60) return true
-  const finalBarAt = sessionTimestampSeconds(now, 14 * 3600 + 45 * 60)
+  if (dayOfWeek < 1 || dayOfWeek > 5) return true
+
+  const requiredRows = Math.min(symbols.length * 0.5, 40)
+  if (totalSeconds >= LUNCH_START_SECONDS && totalSeconds < AFTERNOON_START_SECONDS) {
+    const morningFinalBarAt = sessionTimestampSeconds(now, MORNING_FINAL_BAR_SECONDS)
+    const completeMorningRows = value.rows.filter(
+      (row) => isIntradayRow(row) && (row.lastBarAt ?? row.points.at(-1)?.time ?? 0) >= morningFinalBarAt,
+    )
+    return completeMorningRows.length >= requiredRows
+  }
+
+  if (totalSeconds < EOD_START_SECONDS) return true
+  const finalBarAt = sessionTimestampSeconds(now, EOD_FINAL_BAR_SECONDS)
   const finalRows = value.rows.filter((row) => isIntradayRow(row) && (row.lastBarAt ?? row.points.at(-1)?.time ?? 0) >= finalBarAt)
-  return finalRows.length >= Math.min(symbols.length * 0.5, 40)
+  return finalRows.length >= requiredRows
 }
 
 export function isUsableLatestCachedIntradaySnapshot(value: unknown, symbols: string[] | readonly string[], now: Date): value is IntradaySnapshot {
