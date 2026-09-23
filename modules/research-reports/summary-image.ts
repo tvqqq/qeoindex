@@ -131,7 +131,7 @@ export function buildResearchReportSummaryImageFields(input: {
   ].join(" ")
 
   return {
-    location: "Vietnam Equity Research Report",
+    location: (sectorName ?? reportTitle).slice(0, 160),
     headline: reportTitle.slice(0, 160),
     slogan: (sectorName ?? "").slice(0, 140),
     services: services.slice(0, 5000),
