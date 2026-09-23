@@ -2,6 +2,7 @@ import type { ResearchReportCategory } from "./types.ts"
 
 const REPORT_TABLE = "market_research_reports"
 const ANALYSIS_TABLE = "market_research_report_analyses"
+const MENTION_TABLE = "market_research_report_ticker_mentions"
 const MAX_ERROR_CHARS = 500
 const MAX_SEARCH_CHARS = 100
 const MAX_SOURCE_CHARS = 80
@@ -16,6 +17,7 @@ export interface ResearchReportCatalogQuery {
   category: ResearchReportCatalogCategory | null
   search: string
   source: string
+  ticker: string
   fromDate: string | null
   toDate: string | null
   page: number
@@ -32,6 +34,9 @@ export interface ResearchReportCatalogItem {
   recommendation: string | null
   targetPrice: number | null
   code: string | null
+  tickers: string[]
+  summaryImageUrl: string | null
+  summaryImageStatus: string
   ingestionStatus: string
   analysisStatus: string
 }
@@ -124,6 +129,7 @@ export function normalizeResearchReportCatalogQuery(raw: {
   category?: string | string[]
   q?: string | string[]
   source?: string | string[]
+  ticker?: string | string[]
   from?: string | string[]
   to?: string | string[]
   page?: string | string[]
@@ -134,6 +140,8 @@ export function normalizeResearchReportCatalogQuery(raw: {
     : null
   const search = normalizedSearch(first(raw.q))
   const source = normalizedText(first(raw.source), MAX_SOURCE_CHARS)
+  const tickerCandidate = normalizedText(first(raw.ticker), 12).toUpperCase()
+  const ticker = /^[A-Z0-9]{2,12}$/.test(tickerCandidate) ? tickerCandidate : ""
   let fromDate = normalizedIsoDate(first(raw.from))
   let toDate = normalizedIsoDate(first(raw.to))
   if (fromDate && toDate && fromDate > toDate) [fromDate, toDate] = [toDate, fromDate]
@@ -142,6 +150,7 @@ export function normalizeResearchReportCatalogQuery(raw: {
     category,
     search,
     source,
+    ticker,
     fromDate,
     toDate,
     page: normalizedPage(first(raw.page)),
@@ -192,10 +201,46 @@ function toCatalogItem(row: Record<string, unknown>): ResearchReportCatalogItem 
     sectorName: nonEmptyString(row.sector_name),
     recommendation: nonEmptyString(row.recommendation),
     targetPrice: finiteNumber(row.target_price),
-    code: nonEmptyString(row.code),
+    code: nonEmptyString(row.code)?.toUpperCase() ?? null,
+    tickers: [],
+    summaryImageUrl:
+      nonEmptyString(row.summary_image_status) === "ready"
+      && nonEmptyString(row.summary_image_content_hash) === nonEmptyString(row.content_hash)
+        ? nonEmptyString(row.summary_image_url)
+        : null,
+    summaryImageStatus: nonEmptyString(row.summary_image_status) ?? "pending",
     ingestionStatus: nonEmptyString(row.ingestion_status) ?? "discovered",
     analysisStatus: nonEmptyString(row.analysis_status) ?? "pending",
   }
+}
+
+
+async function relatedReportIdsForTicker(
+  client: ResearchReportCatalogClient,
+  ticker: string,
+): Promise<string[]> {
+  if (!ticker) return []
+
+  const mentionResult = await (client.from(MENTION_TABLE) as CatalogQueryBuilder)
+    .select("analysis_id")
+    .eq("ticker", ticker)
+    .limit(500)
+  if (mentionResult.error) throw supabaseError("Research report ticker filter lookup failed", mentionResult.error)
+
+  const analysisIds = Array.from(new Set((mentionResult.data ?? [])
+    .map((row) => nonEmptyString(row.analysis_id))
+    .filter((value): value is string => Boolean(value))))
+  if (analysisIds.length === 0) return []
+
+  const analysisResult = await (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
+    .select("id,report_id")
+    .in("id", analysisIds)
+    .limit(500)
+  if (analysisResult.error) throw supabaseError("Research report ticker analysis lookup failed", analysisResult.error)
+
+  return Array.from(new Set((analysisResult.data ?? [])
+    .map((row) => nonEmptyString(row.report_id))
+    .filter((value): value is string => Boolean(value))))
 }
 
 export async function getResearchReportCatalog(
@@ -204,13 +249,17 @@ export async function getResearchReportCatalog(
 ): Promise<ResearchReportCatalogResult> {
   const query = normalizeResearchReportCatalogQuery(rawQuery)
   const offset = (query.page - 1) * RESEARCH_REPORT_CATALOG_PAGE_SIZE
+  const tickerReportIds = query.ticker ? await relatedReportIdsForTicker(client, query.ticker) : []
 
   let builder = (client.from(REPORT_TABLE) as CatalogQueryBuilder)
     .select(
-      "id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,ingestion_status,analysis_status,content_hash",
+      "id,title,source_name,publish_date,category,sector_name,recommendation,target_price,code,ingestion_status,analysis_status,content_hash,summary_image_status,summary_image_url,summary_image_content_hash",
       { count: "exact" },
     )
 
+  if (query.ticker) {
+    builder = builder.in("id", tickerReportIds.length > 0 ? tickerReportIds : ["00000000-0000-0000-0000-000000000000"])
+  }
   if (query.category) builder = builder.eq("category", query.category)
   if (query.source) builder = builder.eq("source_name", query.source)
   if (query.fromDate) builder = builder.gte("publish_date", query.fromDate)
@@ -251,10 +300,11 @@ export async function getResearchReportCatalog(
     .filter((entry) => entry.item.analysisStatus === "ready" && entry.contentHash)
     .map((entry) => entry.item.id)
   const descriptions = new Map<string, string>()
+  const currentAnalysisIds = new Map<string, string>()
 
   if (analyzedReportIds.length > 0) {
     const analysisResult = await (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
-      .select("report_id,content_hash,executive_summary,processed_at,created_at")
+      .select("id,report_id,content_hash,executive_summary,processed_at,created_at")
       .in("report_id", analyzedReportIds)
       .order("processed_at", { ascending: false })
       .order("created_at", { ascending: false })
@@ -264,17 +314,47 @@ export async function getResearchReportCatalog(
         const reportId = nonEmptyString(row.report_id)
         const contentHash = nonEmptyString(row.content_hash)
         const description = catalogDescription(row.executive_summary)
-        if (!reportId || !contentHash || !description || descriptions.has(reportId)) continue
+        if (!reportId || !contentHash) continue
         if (currentContentHashes.get(reportId) !== contentHash) continue
-        descriptions.set(reportId, description)
+        const analysisId = nonEmptyString(row.id)
+        if (analysisId && !currentAnalysisIds.has(reportId)) currentAnalysisIds.set(reportId, analysisId)
+        if (description && !descriptions.has(reportId)) descriptions.set(reportId, description)
       }
     }
   }
 
-  const items = reportEntries.map(({ item }) => ({
-    ...item,
-    description: descriptions.get(item.id) ?? null,
-  }))
+  const tickersByReport = new Map<string, Set<string>>()
+  const analysisToReport = new Map(Array.from(currentAnalysisIds.entries()).map(([reportId, analysisId]) => [analysisId, reportId]))
+  const analysisIds = Array.from(analysisToReport.keys())
+
+  if (analysisIds.length > 0) {
+    const mentionResult = await (client.from(MENTION_TABLE) as CatalogQueryBuilder)
+      .select("analysis_id,ticker")
+      .in("analysis_id", analysisIds)
+      .order("ticker", { ascending: true })
+
+    if (!mentionResult.error) {
+      for (const row of mentionResult.data ?? []) {
+        const analysisId = nonEmptyString(row.analysis_id)
+        const ticker = nonEmptyString(row.ticker)?.toUpperCase()
+        const reportId = analysisId ? analysisToReport.get(analysisId) : null
+        if (!reportId || !ticker || !/^[A-Z0-9]{2,12}$/.test(ticker)) continue
+        const values = tickersByReport.get(reportId) ?? new Set<string>()
+        values.add(ticker)
+        tickersByReport.set(reportId, values)
+      }
+    }
+  }
+
+  const items = reportEntries.map(({ item }) => {
+    const tickers = tickersByReport.get(item.id) ?? new Set<string>()
+    if (item.code && /^[A-Z0-9]{2,12}$/.test(item.code)) tickers.add(item.code)
+    return {
+      ...item,
+      description: descriptions.get(item.id) ?? null,
+      tickers: Array.from(tickers).slice(0, 8),
+    }
+  })
   const total = Math.max(0, result.count ?? items.length)
   const lastSuccessfulSyncAt = nonEmptyString(syncResult.data?.updated_at)
 
