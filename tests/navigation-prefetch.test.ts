@@ -66,18 +66,36 @@ test("top navigation restores Insights as a styled parent menu with three child 
 
 test("every TopNav destination uses a stable, accessible full-screen navigation loading state", () => {
   const nav = source("components/top-nav.tsx")
+  const loader = source("components/brand-loading-screen.tsx")
   const linkCount = nav.match(/<Link(?=[\s>])/g)?.length ?? 0
   const onNavigateCount = nav.match(/onNavigate=\{\(\) => startTopNavNavigation\(/g)?.length ?? 0
   const noPrefetchCount = nav.match(/prefetch=\{false\}/g)?.length ?? 0
   const headerCloseIndex = nav.lastIndexOf("</header>")
-  const pendingOverlayRenderIndex = nav.indexOf("{pendingHref ? <TopNavNavigationLoading /> : null}")
+  const pendingOverlayRenderIndex = nav.indexOf("{pendingHref ? <TopNavNavigationLoading href={pendingHref} /> : null}")
 
   assert.match(nav, /const \[pendingHref, setPendingHref\] = useState<string \| null>\(null\)/)
-  assert.match(nav, /function TopNavNavigationLoading\(\)[\s\S]*?pointer-events-auto fixed inset-0 z-\[100\]/)
-  assert.match(nav, /role="status"/)
-  assert.match(nav, /BRAND\.name/)
-  assert.match(nav, /motion-reduce:animate-none/)
-  assert.doesNotMatch(nav, /aria-busy="true"/)
+  assert.match(nav, /function TopNavNavigationLoading\(\{ href \}: \{ href: string \}\)/)
+  assert.match(nav, /<BrandLoadingScreen[\s\S]*?pointer-events-auto fixed inset-0 z-\[100\]/)
+  assert.match(nav, /getTopNavigationLoadingCopy\(href\)/)
+  assert.match(loader, /role="status" aria-live="polite" aria-busy="true"/)
+  assert.match(loader, /BRAND\.name/)
+  assert.match(loader, /stockos-mark\.svg/)
+  assert.match(loader, /motion-reduce:animate-none/)
+  assert.equal(loader.includes("blur-"), false, "shared loading screen should not use an expensive blur filter")
+  assert.match(nav, /"\/": \{ page: "Trang chủ", detail:/)
+  assert.match(nav, /"\/board": \{ page: "Bảng điện", detail:/)
+  assert.match(nav, /"\/portfolio": \{ page: "Danh mục", detail:/)
+  assert.match(nav, /"\/admin": \{ page: "Quản trị", detail:/)
+  for (const [label, href] of [
+    ["Tổng quan Insights", "/insights"],
+    ["Phân tích chart Wyckoff", "/insights/wyckoff"],
+    ["Báo cáo Research", "/reports"],
+    ["AI Council", "/insights/ai-council"],
+    ["Nghiên cứu", "/research"],
+  ]) {
+    assert.ok(nav.includes(`label: "${label}",\n    href: "${href}"`), `${href} should have destination-specific loading copy`)
+  }
+  assert.match(nav, /label: `Đang tải \$\{insightPage\.label\}`, detail: insightPage\.description/)
   assert.match(nav, /if \(pathname === href\)/, "same-route clicks should not show the loading screen")
   assert.match(nav, /setTimeout\(clearPendingNavigation, 15_000\)/, "stalled navigations should clear after a bounded timeout")
   assert.match(nav, /addEventListener\("pageshow"/)

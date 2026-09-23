@@ -33,9 +33,13 @@ test("login form prevents repeated submits while Supabase sign-in is in flight",
 
 test("auth gate exposes immediate, accessible progress while the market board refreshes", () => {
   const code = source("components/auth/app-auth-gate.tsx")
+  const loadingScreen = source("components/brand-loading-screen.tsx")
 
   assert.match(code, /label: "Đang thiết lập phiên"/)
   assert.match(code, /label: "Đang tải Bảng điện"/)
-  assert.match(code, /aria-live="polite"/)
-  assert.match(code, /aria-busy="true"/)
+  assert.match(code, /<BrandLoadingScreen label=\{copy\.label\} detail=\{copy\.detail\} \/>/)
+  assert.match(loadingScreen, /stockos-mark\.svg/)
+  assert.match(loadingScreen, /font-ticker text-lg font-extrabold italic tracking-tight/)
+  assert.match(loadingScreen, /animate-pulse[\s\S]*motion-reduce:animate-none/)
+  assert.match(loadingScreen, /aria-live="polite" aria-busy="true"/)
 })
