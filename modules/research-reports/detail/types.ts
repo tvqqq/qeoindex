@@ -41,6 +41,11 @@ export interface ResearchReportDetailViewModel {
   publishDate: string
   category: "macro" | "strategy" | "sector" | "other"
   sectorName: string | null
+  recommendation: string | null
+  targetPrice: number | null
+  code: string | null
+  summaryImageStatus: string
+  summaryImageGeneratedAt: string | null
   originalSourceLink: string | null
   originalPdfUrl: string | null
   parsedPageCount: number
