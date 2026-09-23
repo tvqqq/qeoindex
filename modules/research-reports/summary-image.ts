@@ -1,5 +1,3 @@
-import "server-only"
-
 import { Buffer } from "node:buffer"
 
 const REPORT_TABLE = "market_research_reports"
