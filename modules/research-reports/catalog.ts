@@ -223,7 +223,7 @@ export async function getResearchReportCatalog(
   if (query.ticker) {
     const [mentionResult, directCodeResult] = await Promise.all([
       (client.from(MENTION_TABLE) as CatalogQueryBuilder)
-        .select("report_id")
+        .select("report_id,analysis_id")
         .eq("ticker", query.ticker)
         .limit(2000),
       (client.from(REPORT_TABLE) as CatalogQueryBuilder)
@@ -234,8 +234,56 @@ export async function getResearchReportCatalog(
     if (mentionResult.error) throw supabaseError("Research report ticker filter lookup failed", mentionResult.error)
     if (directCodeResult.error) throw supabaseError("Research report code filter lookup failed", directCodeResult.error)
 
+    const mentionRows = mentionResult.data ?? []
+    const mentionAnalysisIds = [...new Set(
+      mentionRows
+        .map((row) => nonEmptyString(row.analysis_id))
+        .filter((value): value is string => value !== null),
+    )]
+    const mentionReportIds = [...new Set(
+      mentionRows
+        .map((row) => nonEmptyString(row.report_id))
+        .filter((value): value is string => value !== null),
+    )]
+
+    let currentMentionReportIds: string[] = []
+    if (mentionAnalysisIds.length > 0 && mentionReportIds.length > 0) {
+      const [analysisIdentityResult, reportIdentityResult] = await Promise.all([
+        (client.from(ANALYSIS_TABLE) as CatalogQueryBuilder)
+          .select("id,report_id,content_hash")
+          .in("id", mentionAnalysisIds)
+          .limit(2000),
+        (client.from(REPORT_TABLE) as CatalogQueryBuilder)
+          .select("id,content_hash")
+          .in("id", mentionReportIds)
+          .limit(2000),
+      ])
+      if (analysisIdentityResult.error) {
+        throw supabaseError("Research report ticker analysis lookup failed", analysisIdentityResult.error)
+      }
+      if (reportIdentityResult.error) {
+        throw supabaseError("Research report ticker report lookup failed", reportIdentityResult.error)
+      }
+
+      const currentHashes = new Map(
+        (reportIdentityResult.data ?? [])
+          .map((row) => [nonEmptyString(row.id), nonEmptyString(row.content_hash)] as const)
+          .filter((entry): entry is readonly [string, string] => Boolean(entry[0] && entry[1])),
+      )
+      currentMentionReportIds = [...new Set(
+        (analysisIdentityResult.data ?? [])
+          .filter((row) => {
+            const reportId = nonEmptyString(row.report_id)
+            const contentHash = nonEmptyString(row.content_hash)
+            return Boolean(reportId && contentHash && currentHashes.get(reportId) === contentHash)
+          })
+          .map((row) => nonEmptyString(row.report_id))
+          .filter((value): value is string => value !== null),
+      )]
+    }
+
     tickerReportIds = [...new Set([
-      ...(mentionResult.data ?? []).map((row) => nonEmptyString(row.report_id)),
+      ...currentMentionReportIds,
       ...(directCodeResult.data ?? []).map((row) => nonEmptyString(row.id)),
     ].filter((value): value is string => value !== null))]
   }
