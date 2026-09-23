@@ -171,10 +171,10 @@
     {
       "logicalName": "qeo275_research_image_backfill_trigger",
       "repositoryVersion": "20260923181500",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-275 production legacy summary-image backfill dispatch trigger pending exact-head Verify + DB Drift and explicit production promotion",
-      "rationale": "Adds a service-role-only security-definer trigger that reads the existing app URL/cron secret from Supabase Vault and dispatches the bounded machine-authenticated image-only backfill endpoint without exposing Vault values."
+      "productionVersion": "20260923112856",
+      "state": "MAPPED",
+      "evidence": "QEO-275 PR #562 exact-head Verify #4433 + DB Drift #1454; production migration 20260923112856; service-role-only RPC readback and successful machine dispatch request 2076",
+      "rationale": "Supabase production applied the reviewed QEO-275 service-role-only image-backfill dispatcher as version 20260923112856 after PR #562 exact-head gates were green. The function keeps qeoindex_app_url and qeoindex_cron_secret inside Vault, enforces the 1–100 report bound and 8–240 character reason, and dispatched the live machine-authenticated Research Report image-backfill workflow without exposing secrets; repository replay keeps reviewed version 20260923181500."
     }
   ]
 }
