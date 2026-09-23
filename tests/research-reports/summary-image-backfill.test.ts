@@ -157,3 +157,18 @@ test("QEO-275 production backfill is durable, machine authenticated, and image-o
   assert.match(route, /runtime\s*=\s*"nodejs"/)
   assert.match(route, /dynamic\s*=\s*"force-dynamic"/)
 })
+
+
+test("QEO-275 production trigger keeps Vault credentials server-side and dispatch bounded", () => {
+  const migration = source("supabase/migrations/20260923181500_qeo275_research_image_backfill_trigger.sql")
+
+  assert.match(migration, /qeo_trigger_research_report_image_backfill/)
+  assert.match(migration, /p_max_reports integer default 100/)
+  assert.match(migration, /p_max_reports < 1 or p_max_reports > 100/)
+  assert.match(migration, /vault\.decrypted_secrets/)
+  assert.match(migration, /qeoindex_app_url/)
+  assert.match(migration, /qeoindex_cron_secret/)
+  assert.match(migration, /\/api\/research-reports\/images\/backfill/)
+  assert.match(migration, /grant execute[\s\S]*to service_role/i)
+  assert.match(migration, /revoke all[\s\S]*from public, anon, authenticated/i)
+})
