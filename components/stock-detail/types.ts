@@ -10,8 +10,8 @@ import type { InsightsRatingRow } from "@/modules/research/insights/data"
 export interface StockWatchlistItem {
   ticker: string
   companyName: string
-  sector: string
-  marketCapT: number
+  sector?: string
+  marketCapT?: number
   price: number
   change: number
   changePct: number
