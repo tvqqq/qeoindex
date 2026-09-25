@@ -313,7 +313,16 @@ function amSignalData(
   for (let index = 0; index < values.length && index < times.length; index += 1) {
     const value = values[index]
     if (!signals[index] || typeof value !== "number" || !Number.isFinite(value)) continue
-    result.push({ time: times[index], value, color: "rgba(250,204,21,0.96)" })
+    result.push({
+      time: times[index],
+      open: 0,
+      high: value,
+      low: 0,
+      close: value,
+      color: "#fde047",
+      wickColor: "#fde047",
+      borderColor: "#fde047",
+    })
   }
   return result
 }
@@ -1074,10 +1083,15 @@ export function StockTradingViewChart({
             lineStyle: 2,
             title: "DE 0",
           }, 4),
-          amBars: chart.addSeries(runtime.HistogramSeries, {
+          amBars: chart.addSeries(runtime.CandlestickSeries, {
             visible: false,
-            color: "#fde047",
-            base: 0,
+            upColor: "#fde047",
+            downColor: "#fde047",
+            wickUpColor: "#fde047",
+            wickDownColor: "#fde047",
+            borderUpColor: "#fde047",
+            borderDownColor: "#fde047",
+            borderVisible: false,
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 2, minMove: 0.01 },
             priceLineVisible: false,
