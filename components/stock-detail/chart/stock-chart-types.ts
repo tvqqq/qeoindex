@@ -71,6 +71,10 @@ export interface IndicatorConfig {
   showVolumeProfile: boolean
   /** QeoIndex-only 129-bar Ichimoku base line. Optional keeps old persisted payloads source-compatible. */
   showQeoBase129?: boolean
+  /** DE / 弘历背离王 reconstructed momentum-divergence pane. */
+  showDe?: boolean
+  /** AM / Accumulate reconstructed whale-pressure pane. */
+  showAm?: boolean
 }
 
 export type IndicatorStyleKey =
@@ -95,7 +99,7 @@ export type IndicatorStyles = Record<IndicatorStyleKey, IndicatorStyle>
 
 export interface ChartViewSettings {
   indicatorStyles: IndicatorStyles
-  indicatorVisibility: Pick<IndicatorConfig, "showMa" | "showRsi" | "showMacd" | "showIchimoku" | "showBollinger" | "showVolumeProfile" | "showQeoBase129">
+  indicatorVisibility: Pick<IndicatorConfig, "showMa" | "showRsi" | "showMacd" | "showIchimoku" | "showBollinger" | "showVolumeProfile" | "showQeoBase129" | "showDe" | "showAm">
   rsiCollapsed: boolean
   macdCollapsed: boolean
 }
@@ -118,6 +122,8 @@ export const DEFAULT_CHART_VIEW_SETTINGS: ChartViewSettings = {
     showBollinger: false,
     showVolumeProfile: false,
     showQeoBase129: false,
+    showDe: false,
+    showAm: false,
   },
   rsiCollapsed: false,
   macdCollapsed: false,
@@ -131,6 +137,8 @@ export const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
   showBollinger: false,
   showVolumeProfile: false,
   showQeoBase129: false,
+  showDe: false,
+  showAm: false,
 }
 
 export interface VolumeProfileBucket {

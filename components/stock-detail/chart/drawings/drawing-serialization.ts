@@ -104,6 +104,12 @@ export function deserializeUserChartSettings(
         ...(Object.prototype.hasOwnProperty.call(obj.indicators, "showQeoBase129")
           ? { showQeoBase129: Boolean(obj.indicators.showQeoBase129) }
           : {}),
+        ...(Object.prototype.hasOwnProperty.call(obj.indicators, "showDe")
+          ? { showDe: Boolean(obj.indicators.showDe) }
+          : {}),
+        ...(Object.prototype.hasOwnProperty.call(obj.indicators, "showAm")
+          ? { showAm: Boolean(obj.indicators.showAm) }
+          : {}),
       }
     : {
         showMa: false,
@@ -113,6 +119,8 @@ export function deserializeUserChartSettings(
         showBollinger: false,
         showVolumeProfile: false,
         showQeoBase129: false,
+        showDe: false,
+        showAm: false,
       }
 
   if (obj.drawingsSchemaVersion === 2 && Array.isArray(obj.drawings)) {

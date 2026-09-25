@@ -3,7 +3,9 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 import { projectFutureTimes } from "../components/stock-detail/chart/future-timeline.ts"
 import {
+  calculateAmSeries,
   calculateBollingerBands,
+  calculateDeSeries,
   calculateIchimokuSeries,
   calculateMacdSeries,
   calculateRsiSeries,
@@ -81,6 +83,20 @@ test("Technical indicators calculate valid series", () => {
   assert.equal(macd.macd.length, mockBars.length)
   assert.equal(macd.signal.length, mockBars.length)
   assert.equal(macd.histogram.length, mockBars.length)
+
+  const de = calculateDeSeries(mockBars)
+  assert.equal(de.tower.length, mockBars.length)
+  assert.equal(de.ribbon.length, 15)
+  assert.ok(de.ribbon.every((series) => series.length === mockBars.length))
+  assert.ok(typeof de.tower.at(-1) === "number")
+  assert.ok(de.ribbon.every((series) => typeof series.at(-1) === "number"))
+
+  const am = calculateAmSeries(mockBars)
+  assert.equal(am.value.length, mockBars.length)
+  assert.equal(am.signal.length, mockBars.length)
+  assert.equal(am.pressure.length, mockBars.length)
+  assert.ok(typeof am.value.at(-1) === "number")
+  assert.ok(typeof am.signal.at(-1) === "boolean")
 
   const ichi = calculateIchimokuSeries(mockBars)
   assert.equal(ichi.tenkan.length, mockBars.length)

@@ -1,6 +1,6 @@
 export const NATIVE_TIME_AXIS_HEIGHT = 28
 export const PANE_SEPARATOR_HEIGHT = 1
-export const CHART_PANE_COUNT = 4
+export const CHART_PANE_COUNT = 6
 export const COMPACT_VOLUME_PANE_HEIGHT = 64
 export const EXPANDED_SUBPANE_HEIGHT = 92
 export const COLLAPSED_SUBPANE_HEIGHT = 24
@@ -10,6 +10,8 @@ export interface PaneGeometryInput {
   isMaximized: boolean
   rsiCollapsed: boolean
   macdCollapsed: boolean
+  deVisible?: boolean
+  amVisible?: boolean
 }
 
 export interface PaneGeometry {
@@ -17,6 +19,8 @@ export interface PaneGeometry {
   volume: number
   rsi: number
   macd: number
+  de: number
+  am: number
   drawableHeight: number
 }
 
@@ -62,21 +66,29 @@ export function canonicalPaneGeometry(input: PaneGeometryInput): PaneGeometry {
       volume,
       rsi: 0,
       macd: 0,
+      de: 0,
+      am: 0,
       drawableHeight,
     }
   }
 
-  const targetSubpane = Math.max(72, Math.round(drawableHeight * 0.15))
-  const [volume, rsi, macd] = fitToBudget([
+  const extraPaneCount = Number(Boolean(input.deVisible)) + Number(Boolean(input.amVisible))
+  const targetRatio = extraPaneCount === 0 ? 0.15 : extraPaneCount === 1 ? 0.13 : 0.11
+  const targetSubpane = Math.max(extraPaneCount > 0 ? 64 : 72, Math.round(drawableHeight * targetRatio))
+  const [volume, rsi, macd, de, am] = fitToBudget([
     targetSubpane,
     input.rsiCollapsed ? COLLAPSED_SUBPANE_HEIGHT : targetSubpane,
     input.macdCollapsed ? COLLAPSED_SUBPANE_HEIGHT : targetSubpane,
+    input.deVisible ? targetSubpane : 0,
+    input.amVisible ? targetSubpane : 0,
   ], drawableHeight)
   return {
-    main: Math.max(0, drawableHeight - volume - rsi - macd),
+    main: Math.max(0, drawableHeight - volume - rsi - macd - de - am),
     volume,
     rsi,
     macd,
+    de,
+    am,
     drawableHeight,
   }
 }

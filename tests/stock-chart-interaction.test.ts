@@ -210,10 +210,27 @@ test("native panes own volume, permanent maximized RSI/MACD and collapse heights
     rsiCollapsed: true,
     macdCollapsed: true,
   })
-  assert.equal(expanded.main + expanded.volume + expanded.rsi + expanded.macd, drawablePaneBudget(1072))
-  assert.equal(collapsed.main + collapsed.volume + collapsed.rsi + collapsed.macd, drawablePaneBudget(1072))
+  assert.equal(expanded.main + expanded.volume + expanded.rsi + expanded.macd + expanded.de + expanded.am, drawablePaneBudget(1072))
+  assert.equal(collapsed.main + collapsed.volume + collapsed.rsi + collapsed.macd + collapsed.de + collapsed.am, drawablePaneBudget(1072))
+  assert.equal(expanded.de, 0)
+  assert.equal(expanded.am, 0)
   assert.equal(collapsed.rsi, 24)
   assert.equal(collapsed.macd, 24)
+
+  const extended = canonicalPaneGeometry({
+    hostHeight: 1072,
+    isMaximized: true,
+    rsiCollapsed: false,
+    macdCollapsed: false,
+    deVisible: true,
+    amVisible: true,
+  })
+  assert.ok(extended.de > 0)
+  assert.ok(extended.am > 0)
+  assert.equal(
+    extended.main + extended.volume + extended.rsi + extended.macd + extended.de + extended.am,
+    drawablePaneBudget(1072),
+  )
 })
 
 test("chart wheel history and drawing bounds have one explicit owner", () => {
@@ -245,7 +262,7 @@ test("indicator controls cover all persisted overlays with aligned cloud and vol
   const chartCode = source("components/stock-detail/stock-tradingview-chart.tsx")
   const modalCode = source("components/stock-detail/chart/stock-chart-indicator-modal.tsx")
 
-  for (const token of ["showMa", "showIchimoku", "showQeoBase129", "showBollinger", "showVolumeProfile"]) {
+  for (const token of ["showMa", "showIchimoku", "showQeoBase129", "showBollinger", "showVolumeProfile", "showDe", "showAm"]) {
     assert.match(chartCode, new RegExp(token))
     assert.match(modalCode, new RegExp(token))
   }
@@ -254,6 +271,12 @@ test("indicator controls cover all persisted overlays with aligned cloud and vol
   assert.match(chartCode, /Ichimoku Cloud/)
   assert.match(chartCode, /ichimokuSpanA/)
   assert.match(chartCode, /ichimokuSpanB/)
+  assert.match(chartCode, /calculateDeSeries/)
+  assert.match(chartCode, /calculateAmSeries/)
+  assert.match(chartCode, /data-chart-pane-header="de"/)
+  assert.match(chartCode, /data-chart-pane-header="am"/)
+  assert.match(chartCode, /}, 4\)/)
+  assert.match(chartCode, /}, 5\)/)
 })
 
 test("runtime and resize cleanup invalidate stale async chart initialization", () => {

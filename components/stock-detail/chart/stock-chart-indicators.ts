@@ -134,6 +134,209 @@ export function calculateMacdSeries(bars: OhlcvBar[]) {
   return { macd: macdLine, signal: signalLine, histogram }
 }
 
+
+/**
+ * Current-bar linear regression value over a fixed consecutive window.
+ * This matches TradingView ta.linreg(src, length, 0) / TongDaXin FORCAST(src, length)
+ * closely enough for deterministic chart use.
+ */
+export function calculateLinearRegression(
+  values: Array<number | null>,
+  period: number,
+): Array<number | null> {
+  const result: Array<number | null> = Array(values.length).fill(null)
+  if (!Number.isInteger(period) || period <= 1 || values.length < period) return result
+
+  const xMean = (period - 1) / 2
+  let denominator = 0
+  for (let x = 0; x < period; x += 1) denominator += (x - xMean) ** 2
+  if (denominator === 0) return result
+
+  for (let i = period - 1; i < values.length; i += 1) {
+    let sum = 0
+    let valid = true
+    for (let j = 0; j < period; j += 1) {
+      const value = values[i - period + 1 + j]
+      if (value == null || !Number.isFinite(value)) {
+        valid = false
+        break
+      }
+      sum += value
+    }
+    if (!valid) continue
+
+    const yMean = sum / period
+    let numerator = 0
+    for (let j = 0; j < period; j += 1) {
+      numerator += (j - xMean) * ((values[i - period + 1 + j] as number) - yMean)
+    }
+    const slope = numerator / denominator
+    const intercept = yMean - slope * xMean
+    result[i] = intercept + slope * (period - 1)
+  }
+  return result
+}
+
+/**
+ * DE / 弘历背离王 reconstruction.
+ *
+ * Core:
+ *   A1..A5 = FORCAST(EMA(close, 5/8/11/14/17), 6)
+ *   B       = A1 + A2 + A3 + A4 - 4*A5
+ *   TOWERC  = EMA(B, 2)
+ * Ribbon:
+ *   FORCAST(EMA(B, 3..17), 6)
+ */
+export function calculateDeSeries(bars: OhlcvBar[]) {
+  const closes = bars.map((bar) => bar.close)
+  const forecast = (period: number) => calculateLinearRegression(calculateEma(closes, period), 6)
+  const [a1, a2, a3, a4, a5] = [5, 8, 11, 14, 17].map(forecast)
+  const base: Array<number | null> = Array(bars.length).fill(null)
+
+  for (let i = 0; i < bars.length; i += 1) {
+    const values = [a1[i], a2[i], a3[i], a4[i], a5[i]]
+    if (values.some((value) => value == null)) continue
+    base[i] = (values[0] as number)
+      + (values[1] as number)
+      + (values[2] as number)
+      + (values[3] as number)
+      - 4 * (values[4] as number)
+  }
+
+  const tower = calculateEma(base, 2)
+  const ribbon = Array.from({ length: 15 }, (_, offset) => {
+    const period = offset + 3
+    return calculateLinearRegression(calculateEma(base, period), 6)
+  })
+
+  return { base, tower, ribbon }
+}
+
+/**
+ * Recursive XSA smoothing used by the public whale-pump formula family.
+ * After an SMA seed, each point is:
+ *   (src * weight + previous * (length - weight)) / length
+ */
+export function calculateXsa(
+  values: Array<number | null>,
+  length: number,
+  weight = 1,
+): Array<number | null> {
+  const result: Array<number | null> = Array(values.length).fill(null)
+  if (!Number.isInteger(length) || length <= 0 || !Number.isFinite(weight) || weight <= 0 || weight > length) {
+    return result
+  }
+
+  let previous: number | null = null
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i]
+    if (value == null || !Number.isFinite(value)) continue
+
+    if (previous == null) {
+      if (i < length - 1) continue
+      let sum = 0
+      let valid = true
+      for (let j = i - length + 1; j <= i; j += 1) {
+        const candidate = values[j]
+        if (candidate == null || !Number.isFinite(candidate)) {
+          valid = false
+          break
+        }
+        sum += candidate
+      }
+      if (!valid) continue
+      previous = sum / length
+    } else {
+      previous = (value * weight + previous * (length - weight)) / length
+    }
+    result[i] = previous
+  }
+  return result
+}
+
+function rollingExtreme(
+  values: Array<number | null>,
+  period: number,
+  mode: "min" | "max",
+): Array<number | null> {
+  const result: Array<number | null> = Array(values.length).fill(null)
+  if (!Number.isInteger(period) || period <= 0) return result
+
+  for (let i = period - 1; i < values.length; i += 1) {
+    let extreme = mode === "min" ? Infinity : -Infinity
+    let valid = true
+    for (let j = i - period + 1; j <= i; j += 1) {
+      const value = values[j]
+      if (value == null || !Number.isFinite(value)) {
+        valid = false
+        break
+      }
+      extreme = mode === "min" ? Math.min(extreme, value) : Math.max(extreme, value)
+    }
+    if (valid) result[i] = extreme
+  }
+  return result
+}
+
+/**
+ * AM / Accumulate reconstruction from the public xrf/xsa whale-pump family.
+ * The yellow signal intentionally uses the "rising only" variant:
+ *   value > value[1] && value > 0
+ *
+ * This is a price-pressure detector near a 30-bar rolling low. It does not use
+ * volume, order flow, open interest, or any privileged "whale" data.
+ */
+export function calculateAmSeries(bars: OhlcvBar[]) {
+  const n = bars.length
+  const lows = bars.map((bar) => bar.low)
+  const absoluteLowMove: Array<number | null> = Array(n).fill(null)
+  const positiveLowMove: Array<number | null> = Array(n).fill(null)
+
+  for (let i = 1; i < n; i += 1) {
+    const delta = lows[i] - lows[i - 1]
+    absoluteLowMove[i] = Math.abs(delta)
+    positiveLowMove[i] = Math.max(delta, 0)
+  }
+
+  const smoothedAbsolute = calculateXsa(absoluteLowMove, 3, 1)
+  const smoothedPositive = calculateXsa(positiveLowMove, 3, 1)
+  const pressureRatio: Array<number | null> = Array(n).fill(null)
+
+  for (let i = 0; i < n; i += 1) {
+    const numerator = smoothedAbsolute[i]
+    const denominator = smoothedPositive[i]
+    if (numerator == null || denominator == null) continue
+    pressureRatio[i] = denominator === 0 ? 0 : (numerator / denominator) * 100
+  }
+
+  const pressure = calculateEma(
+    pressureRatio.map((value) => value == null ? null : value * 10),
+    3,
+  )
+  const rollingLow30 = rollingExtreme(lows, 30, "min")
+  const maxPressure30 = rollingExtreme(pressure, 30, "max")
+  const impulse: Array<number | null> = Array(n).fill(null)
+
+  for (let i = 0; i < n; i += 1) {
+    if (rollingLow30[i] == null || pressure[i] == null || maxPressure30[i] == null) continue
+    impulse[i] = lows[i] <= (rollingLow30[i] as number)
+      ? ((pressure[i] as number) + 2 * (maxPressure30[i] as number)) / 2
+      : 0
+  }
+
+  const smoothedImpulse = calculateEma(impulse, 3)
+  const value = smoothedImpulse.map((item) => item == null ? null : Math.min(item / 618, 100))
+  const signal = value.map((item, index) => (
+    item != null
+    && item > 0
+    && index > 0
+    && value[index - 1] != null
+    && item > (value[index - 1] as number)
+  ))
+
+  return { value, signal, pressure }
+}
+
 export const ICHIMOKU_DISPLACEMENT = 26
 
 /**

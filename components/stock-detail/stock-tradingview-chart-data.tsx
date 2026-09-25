@@ -114,6 +114,8 @@ function HistoryBoundChart({
       && current.volume === geometry.volume
       && current.rsi === geometry.rsi
       && current.macd === geometry.macd
+      && current.de === geometry.de
+      && current.am === geometry.am
         ? current
         : geometry
     ))
