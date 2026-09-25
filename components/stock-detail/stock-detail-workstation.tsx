@@ -247,8 +247,8 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
           className={cn(
             "grid grid-cols-1 gap-2.5 h-full lg:overflow-hidden items-stretch",
             isChartMaximized
-              ? "lg:grid-cols-[minmax(0,1fr)_250px] xl:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]"
-              : "lg:grid-cols-[288px_minmax(0,1fr)_250px] xl:grid-cols-[318px_minmax(0,1fr)_260px] 2xl:grid-cols-[340px_minmax(0,1fr)_280px]",
+              ? "lg:grid-cols-[minmax(0,1fr)_310px] xl:grid-cols-[minmax(0,1fr)_330px] 2xl:grid-cols-[minmax(0,1fr)_350px]"
+              : "lg:grid-cols-[288px_minmax(0,1fr)_310px] xl:grid-cols-[318px_minmax(0,1fr)_330px] 2xl:grid-cols-[340px_minmax(0,1fr)_350px]",
           )}
         >
           {!isChartMaximized && (
