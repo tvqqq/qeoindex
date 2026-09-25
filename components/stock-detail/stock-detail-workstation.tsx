@@ -32,6 +32,7 @@ function StockDetailSidebarLoading({ ticker }: { ticker: string }) {
   return (
     <div
       data-stock-detail-sidebar-loading
+      data-qeo173-transition-indicator
       role="status"
       aria-live="polite"
       className="w-full space-y-3.5 pb-8"
