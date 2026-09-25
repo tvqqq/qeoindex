@@ -70,10 +70,22 @@ test("QEO-282 Watchlist management mutations remain owner-scoped", () => {
   assert.match(server, /action === "rename-watchlist"/)
   assert.match(server, /watchlistIds/)
   assert.match(server, /\.update\(\{ sort_order: index \}\)/)
-  assert.match(server, /\.update\(\{ name \}\)/)
+  assert.match(server, /\.update\(\{ name, emoji \}\)/)
   assert.match(server, /\.eq\("user_id", auth\.context\.user\.id\)/)
   assert.match(server, /promotedDefaultId/)
   assert.match(server, /\.update\(\{ is_default: true \}\)/)
+})
+
+test("QEO-283 Watchlist emoji metadata is validated and remains backwards compatible", () => {
+  const server = source("modules/portfolio/watchlist/server.ts")
+
+  assert.match(server, /normalizeWatchlistEmoji/)
+  assert.match(server, /Array\.from\(emoji\)\.length > 16/)
+  assert.match(server, /createWatchlist\(auth\.context, body\.name, body\.emoji\)/)
+  assert.match(server, /createWatchlist\(auth\.context, body\?\.name, body\?\.emoji\)/)
+  assert.match(server, /\.insert\(\{[\s\S]*?name,[\s\S]*?emoji,[\s\S]*?is_default:/)
+  assert.match(server, /\.update\(\{ name, emoji \}\)/)
+  assert.match(server, /name,emoji,is_default/)
 })
 
 test("server-rendered app surfaces verify the server session", () => {
