@@ -243,12 +243,14 @@ test("field-level chart hydration keeps a local timeframe while preserving remot
 test("global chart view validates and normalizes without leaking ticker fields", () => {
   const normalized = normalizeChartViewSettings({
     indicatorStyles: { ma: { color: "#ABCDEF", opacity: 2, width: 9, lineStyle: "invalid" } },
-    indicatorVisibility: { showMa: true, showVolumeProfile: true },
+    indicatorVisibility: { showMa: true, showVolumeProfile: true, showDe: true, showAm: true },
     rsiCollapsed: true,
   })
   assert.deepEqual(normalized.indicatorStyles.ma, { color: "#ABCDEF", opacity: 1, width: 4, lineStyle: "solid" })
   assert.equal(normalized.indicatorVisibility.showMa, true)
   assert.equal(normalized.indicatorVisibility.showVolumeProfile, true)
+  assert.equal(normalized.indicatorVisibility.showDe, true)
+  assert.equal(normalized.indicatorVisibility.showAm, true)
   assert.equal(normalized.rsiCollapsed, true)
   assert.equal(normalized.macdCollapsed, false)
   assert.equal(validateChartViewSettings(normalized).valid, true)
