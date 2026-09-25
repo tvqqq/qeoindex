@@ -269,14 +269,82 @@ export async function handleWatchlistPut(request: Request) {
 }
 
 /**
- * PATCH /api/watchlist — persist a complete custom order for an owned watchlist.
- * Body: { watchlistId, tickers: string[] }
+ * PATCH /api/watchlist
+ * - { watchlistId, tickers: string[] }: persist item order inside one watchlist
+ * - { action: "reorder-watchlists", watchlistIds: string[] }: persist user watchlist order
+ * - { action: "rename-watchlist", watchlistId, name }: rename one owned watchlist
  */
 export async function handleWatchlistPatch(request: Request) {
   const auth = await requireApiUser()
   if (!auth.ok) return auth.response
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null
+  const action = String(body?.action ?? "")
+
+  if (action === "reorder-watchlists" || body?.reorderWatchlists === true) {
+    const rawIds = Array.isArray(body?.watchlistIds) ? body.watchlistIds : []
+    if (rawIds.length > MAX_WATCHLISTS) return err("Danh sách watchlist vượt giới hạn.")
+
+    const watchlistIds = rawIds.map((value) => String(value))
+    if (watchlistIds.some((id) => !UUID_RE.test(id))) return err("Danh sách watchlist không hợp lệ.")
+    if (new Set(watchlistIds).size !== watchlistIds.length) return err("Danh sách watchlist bị trùng.")
+
+    try {
+      const { data: existing, error } = await auth.context.supabase
+        .from("watchlists")
+        .select("id")
+        .eq("user_id", auth.context.user.id)
+      if (error) throw error
+
+      const existingIds = (existing ?? []).map((watchlist) => watchlist.id)
+      const existingSet = new Set(existingIds)
+      if (
+        existingSet.size !== watchlistIds.length
+        || watchlistIds.some((id) => !existingSet.has(id))
+      ) {
+        return err("Thứ tự watchlist đã thay đổi. Vui lòng tải lại.")
+      }
+
+      for (let index = 0; index < watchlistIds.length; index += 1) {
+        const { error: updateError } = await auth.context.supabase
+          .from("watchlists")
+          .update({ sort_order: index })
+          .eq("id", watchlistIds[index])
+          .eq("user_id", auth.context.user.id)
+        if (updateError) throw updateError
+      }
+
+      return NextResponse.json({ ok: true, watchlistIds }, { headers: NO_STORE_HEADERS })
+    } catch (error) {
+      return watchlistServerError("reorder-watchlists", error)
+    }
+  }
+
+  if (action === "rename-watchlist" || body?.renameWatchlist === true) {
+    const watchlistId = String(body?.watchlistId ?? body?.watchlist_id ?? "")
+    const name = String(body?.name ?? "").trim()
+
+    if (!UUID_RE.test(watchlistId)) return err("Watchlist ID không hợp lệ.")
+    if (!name || name.length > 80) return err("Tên danh sách không hợp lệ (1-80 ký tự).")
+
+    try {
+      const { data, error } = await auth.context.supabase
+        .from("watchlists")
+        .update({ name })
+        .eq("id", watchlistId)
+        .eq("user_id", auth.context.user.id)
+        .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+        .maybeSingle()
+
+      if (error) throw error
+      if (!data) return err("Danh sách không tồn tại.", 404)
+
+      return NextResponse.json({ ok: true, watchlist: data }, { headers: NO_STORE_HEADERS })
+    } catch (error) {
+      return watchlistServerError("rename-watchlist", error)
+    }
+  }
+
   const watchlistId = String(body?.watchlistId ?? body?.watchlist_id ?? "")
   const rawTickers = Array.isArray(body?.tickers) ? body.tickers : []
 
@@ -349,21 +417,56 @@ export async function handleWatchlistDelete(request: Request) {
   if (deleteWatchlistId) {
     if (!UUID_RE.test(deleteWatchlistId)) return err("Watchlist ID không hợp lệ.")
 
-    const { count } = await auth.context.supabase
-      .from("watchlists")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", auth.context.user.id)
+    try {
+      const { data: ownedWatchlists, error: loadError } = await auth.context.supabase
+        .from("watchlists")
+        .select("id,is_default,sort_order,created_at")
+        .eq("user_id", auth.context.user.id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+      if (loadError) throw loadError
 
-    if ((count ?? 0) <= 1) return err("Không thể xóa danh sách duy nhất.")
+      const existing = ownedWatchlists ?? []
+      const target = existing.find((watchlist) => watchlist.id === deleteWatchlistId)
+      if (!target) return err("Danh sách không tồn tại.", 404)
+      if (existing.length <= 1) return err("Không thể xóa danh sách duy nhất.")
 
-    const { error } = await auth.context.supabase
-      .from("watchlists")
-      .delete()
-      .eq("id", deleteWatchlistId)
-      .eq("user_id", auth.context.user.id)
+      const { error: deleteError } = await auth.context.supabase
+        .from("watchlists")
+        .delete()
+        .eq("id", deleteWatchlistId)
+        .eq("user_id", auth.context.user.id)
+      if (deleteError) throw deleteError
 
-    if (error) return watchlistServerError("delete-watchlist", error)
-    return NextResponse.json({ ok: true, watchlistId: deleteWatchlistId }, { headers: NO_STORE_HEADERS })
+      const remaining = existing.filter((watchlist) => watchlist.id !== deleteWatchlistId)
+      let promotedDefaultId: string | null = null
+
+      if (target.is_default && remaining.length) {
+        promotedDefaultId = remaining[0].id
+        const { error: defaultError } = await auth.context.supabase
+          .from("watchlists")
+          .update({ is_default: true })
+          .eq("id", promotedDefaultId)
+          .eq("user_id", auth.context.user.id)
+        if (defaultError) throw defaultError
+      }
+
+      for (let index = 0; index < remaining.length; index += 1) {
+        const { error: orderError } = await auth.context.supabase
+          .from("watchlists")
+          .update({ sort_order: index })
+          .eq("id", remaining[index].id)
+          .eq("user_id", auth.context.user.id)
+        if (orderError) throw orderError
+      }
+
+      return NextResponse.json(
+        { ok: true, watchlistId: deleteWatchlistId, promotedDefaultId },
+        { headers: NO_STORE_HEADERS },
+      )
+    } catch (error) {
+      return watchlistServerError("delete-watchlist", error)
+    }
   }
 
   try {

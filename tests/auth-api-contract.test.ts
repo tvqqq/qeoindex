@@ -63,6 +63,19 @@ test("QEO-280 watchlist API exposes owned-list selection, create compatibility, 
   assert.match(server, /\.eq\("user_id", auth\.context\.user\.id\)/)
 })
 
+test("QEO-282 Watchlist management mutations remain owner-scoped", () => {
+  const server = source("modules/portfolio/watchlist/server.ts")
+
+  assert.match(server, /action === "reorder-watchlists"/)
+  assert.match(server, /action === "rename-watchlist"/)
+  assert.match(server, /watchlistIds/)
+  assert.match(server, /\.update\(\{ sort_order: index \}\)/)
+  assert.match(server, /\.update\(\{ name \}\)/)
+  assert.match(server, /\.eq\("user_id", auth\.context\.user\.id\)/)
+  assert.match(server, /promotedDefaultId/)
+  assert.match(server, /\.update\(\{ is_default: true \}\)/)
+})
+
 test("server-rendered app surfaces verify the server session", () => {
   assert.match(source("app/page.tsx"), /getServerAuthContext/)
   assert.match(source("app/insights/wyckoff/page.tsx"), /getServerAuthContext/)
