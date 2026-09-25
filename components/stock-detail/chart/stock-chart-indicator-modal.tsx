@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Check, BarChart2, TrendingUp, Layers, Compass, Sparkles, X } from "lucide-react"
+import { Activity, Check, BarChart2, TrendingUp, Layers, Compass, Sparkles, X, Zap } from "lucide-react"
 import { cn } from "@/modules/shared/ui/cn"
 import type { ChartViewSettings, IndicatorConfig, IndicatorStyleKey } from "./stock-chart-types"
 
@@ -41,6 +41,20 @@ export function StockChartIndicatorModal({ config, onChange, viewSettings, onVie
       code: "QEO Base (129)",
       desc: "Ichimoku base line 129 — tín hiệu chu kỳ riêng QeoIndex",
       icon: <Sparkles className="size-3.5 text-pink-400" />,
+    },
+    {
+      key: "showDe",
+      title: "DE — Divergence Expert",
+      code: "DE (弘历背离王)",
+      desc: "Momentum đa EMA + forecast ribbon để quan sát phân kỳ",
+      icon: <Activity className="size-3.5 text-slate-200" />,
+    },
+    {
+      key: "showAm",
+      title: "AM — Accumulate",
+      code: "AM Accumulate",
+      desc: "Cảnh báo áp lực bất thường gần đáy 30 phiên (reconstructed)",
+      icon: <Zap className="size-3.5 text-yellow-300" />,
     },
     {
       key: "showBollinger",
