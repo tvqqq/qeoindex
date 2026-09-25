@@ -136,7 +136,13 @@ export async function handleWatchlistGet(request?: Request) {
     const items = await loadWatchlist(auth.context, watchlist.id)
 
     return NextResponse.json(
-      { ok: true, watchlist, items, watchlists },
+      {
+        ok: true,
+        watchlist,
+        activeWatchlistId: watchlist.id,
+        items,
+        watchlists,
+      },
       { headers: NO_STORE_HEADERS },
     )
   } catch (error) {
