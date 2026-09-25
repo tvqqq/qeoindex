@@ -165,3 +165,33 @@ test("QEO-174 expands the compact mini chart while preserving maximize behavior"
   assert.match(workstation, /setIsChartMaximized/)
   assert.match(workstation, /handleSelectTicker/)
 })
+
+
+test("QEO-279 standardizes Stock Detail analytical charts on the shared ChartCN-style Recharts template", () => {
+  const chartcn = source("components/stock-detail/stock-chartcn.tsx")
+  const tabs = source("components/stock-detail/stock-tabs-panel.tsx")
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const ttai = source("components/insights/ttai-dashboard.tsx")
+  const tradingChart = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const notices = source("THIRD_PARTY_NOTICES.md")
+
+  assert.match(chartcn, /ChartContainer/)
+  assert.match(chartcn, /StockChartCnSparkline/)
+  assert.match(chartcn, /StockChartCnSignedBars/)
+  assert.match(chartcn, /StockChartCnBars/)
+  assert.match(chartcn, /StockChartCnRadar/)
+  assert.match(chartcn, /strokeDasharray="3 5"/)
+  assert.match(chartcn, /radius=\{\[6, 6, 6, 6\]\}/)
+
+  assert.match(trend, /StockChartCnSparkline/)
+  assert.match(tabs, /StockChartCnRadar/)
+  assert.match(tabs, /StockChartCnSignedBars/)
+  assert.match(tabs, /StockChartCnBars/)
+  assert.doesNotMatch(tabs, /function radarPoints/)
+  assert.doesNotMatch(tabs, /<svg viewBox="0 0 280 280"/)
+
+  assert.match(ttai, /strokeDasharray="3 5"/)
+  assert.match(tradingChart, /loadLightweightCharts/)
+  assert.doesNotMatch(tradingChart, /StockChartCn/)
+  assert.match(notices, /ChartCN \/ ShadcnDeck/)
+})
