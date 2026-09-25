@@ -175,6 +175,14 @@
       "state": "MAPPED",
       "evidence": "QEO-275 PR #562 exact-head Verify #4433 + DB Drift #1454; production migration 20260923112856; service-role-only RPC readback and successful machine dispatch request 2076",
       "rationale": "Supabase production applied the reviewed QEO-275 service-role-only image-backfill dispatcher as version 20260923112856 after PR #562 exact-head gates were green. The function keeps qeoindex_app_url and qeoindex_cron_secret inside Vault, enforces the 1–100 report bound and 8–240 character reason, and dispatched the live machine-authenticated Research Report image-backfill workflow without exposing secrets; repository replay keeps reviewed version 20260923181500."
+    },
+    {
+      "logicalName": "qeo283_watchlist_emoji",
+      "repositoryVersion": "20260925134500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-283 PR #571 preproduction schema/API/UI contracts and full Verify",
+      "rationale": "QEO-283 adds one nullable, bounded watchlists.emoji metadata column so the existing authenticated Watchlist feature can persist optional user-selected emoji icons. The migration remains repo-ahead until exact-head Verify/DB replay pass and production promotion/readback is completed."
     }
   ]
 }
