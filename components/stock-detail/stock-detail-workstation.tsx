@@ -28,6 +28,68 @@ interface RenderedChartState {
   timeframe: ChartTimeframe
 }
 
+function StockDetailSidebarLoading({ ticker }: { ticker: string }) {
+  return (
+    <div
+      data-stock-detail-sidebar-loading
+      data-qeo173-transition-indicator
+      role="status"
+      aria-live="polite"
+      className="w-full space-y-3.5 pb-8"
+    >
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13] p-4 sm:p-5">
+        <div className="flex items-center gap-2.5">
+          <span className="size-2 animate-pulse rounded-full bg-cyan-300" />
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.12em] text-cyan-200">Đang tải cổ phiếu</div>
+            <div className="mt-0.5 font-ticker text-lg font-black text-slate-100">{ticker}</div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-center">
+          <div className="relative size-44 rounded-full border-[14px] border-white/[0.06] sm:size-48">
+            <div className="absolute inset-5 animate-pulse rounded-full bg-white/[0.035]" />
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          {Array.from({ length: 2 }, (_, index) => (
+            <div key={index} className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+              <div className="h-2.5 w-16 animate-pulse rounded bg-white/[0.06]" />
+              <div className="mt-2 h-6 w-20 animate-pulse rounded bg-white/[0.08]" />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-3 rounded-xl border border-white/[0.05] bg-black/20 p-3">
+          {Array.from({ length: 5 }, (_, index) => (
+            <div key={index} className="space-y-1.5">
+              <div className="h-2.5 w-20 animate-pulse rounded bg-white/[0.055]" />
+              <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.05]">
+                <div
+                  className="h-full animate-pulse rounded-full bg-cyan-300/10"
+                  style={{ width: `${54 + index * 7}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
+        <div className="border-b border-white/[0.06] bg-[#0a0f16] px-3.5 py-3">
+          <div className="h-3 w-28 animate-pulse rounded bg-white/[0.07]" />
+        </div>
+        <div className="space-y-3 p-3">
+          <div className="h-14 w-[86%] animate-pulse rounded-2xl bg-white/[0.035]" />
+          <div className="ml-auto h-10 w-[72%] animate-pulse rounded-2xl bg-cyan-300/[0.035]" />
+          <div className="h-14 w-[82%] animate-pulse rounded-2xl bg-white/[0.035]" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function StockDetailWorkstation({ data: initialData }: { data: StockDetailData }) {
   const [currentData, setCurrentData] = useState<StockDetailData>(initialData)
   const [activeTicker, setActiveTicker] = useState<string>(initialData.ticker)
@@ -252,8 +314,13 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
           )}
         >
           {!isChartMaximized && (
-            <aside className="w-full lg:h-full lg:overflow-y-auto no-scrollbar">
-              <StockAiSidebar data={currentData} />
+            <aside
+              aria-busy={isTransitioning}
+              className="w-full lg:h-full lg:overflow-y-auto no-scrollbar"
+            >
+              {isTransitioning && pendingTicker
+                ? <StockDetailSidebarLoading ticker={pendingTicker} />
+                : <StockAiSidebar data={currentData} />}
             </aside>
           )}
 
@@ -267,16 +334,6 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
                 : "space-y-2.5 lg:h-full lg:overflow-y-auto pr-1 pb-10",
             )}
           >
-            {isTransitioning && (
-              <div
-                data-qeo173-transition-indicator
-                className="pointer-events-none absolute right-2 top-2 z-50 flex items-center gap-1.5 rounded border border-white/[0.08] bg-[#0b1017]/90 px-2 py-1 font-mono text-[10px] tabular-nums text-slate-400"
-              >
-                <span className="size-1.5 animate-pulse rounded-full bg-cyan-300/80" />
-                Đang tải {pendingTicker}
-              </div>
-            )}
-
             {!isChartMaximized && <StockCompanyHeader data={currentData} />}
 
             <StockTradingViewChartData
@@ -301,6 +358,7 @@ export function StockDetailWorkstation({ data: initialData }: { data: StockDetai
           <aside className="w-full lg:h-full lg:overflow-hidden">
             <StockWatchlistSidebar
               currentTicker={activeTicker}
+              pendingTicker={pendingTicker}
               items={currentData.watchlist}
               onSelectTicker={handleSelectTicker}
               onVisibleTickersChange={handleVisibleWatchlistChange}

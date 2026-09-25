@@ -42,13 +42,15 @@ test("StockIdentity cleans up redundant companyName", () => {
   assert.match(code, /displayCompanyName\.toUpperCase\(\)\.startsWith\(`\$\{normTicker\} ·`\)/)
 })
 
-test("StockDetailWorkstation keeps transition status absolute without creating a middle-column gap", () => {
+test("StockDetailWorkstation scopes ticker transition feedback to the left detail panel without blocking the center", () => {
   const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
 
   assert.match(workstation, /data-qeo173-transition-indicator/)
-  assert.match(workstation, /pointer-events-none absolute right-2 top-2 z-50/)
+  assert.match(workstation, /data-stock-detail-sidebar-loading/)
+  assert.match(workstation, /isTransitioning && pendingTicker/)
+  assert.doesNotMatch(workstation, /pointer-events-none absolute right-2 top-2 z-50/)
   assert.doesNotMatch(workstation, /opacity-35 pointer-events-none/)
 
-  // Header remains in normal document flow directly inside the section.
+  // Header remains in normal document flow directly inside the center section.
   assert.match(workstation, /<StockCompanyHeader data=\{currentData\} \/>/)
 })

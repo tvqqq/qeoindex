@@ -27,6 +27,7 @@ import type { StockWatchlistItem } from "./types"
 
 interface StockWatchlistSidebarProps {
   currentTicker: string
+  pendingTicker?: string | null
   items: StockWatchlistItem[]
   onSelectTicker?: (ticker: string) => void
   onVisibleTickersChange?: (tickers: string[]) => void
@@ -200,6 +201,7 @@ function moveTicker(order: string[], draggedTicker: string, targetTicker: string
 
 export function StockWatchlistSidebar({
   currentTicker,
+  pendingTicker = null,
   items,
   onSelectTicker,
   onVisibleTickersChange,
@@ -942,9 +944,8 @@ export function StockWatchlistSidebar({
             </button>
           </div>
 
-          <div className="mt-2 flex items-center justify-between px-0.5 text-[10px]">
-            <div className="min-w-0 truncate font-semibold text-slate-300">{activeListName}</div>
-            <div className="ml-2 shrink-0 font-mono text-slate-500">
+          <div className="mt-2 flex justify-end px-0.5 text-[10px]">
+            <div className="shrink-0 font-mono text-slate-500">
               {filteredItems.length}{query ? `/${manualItems.length}` : ""} mã
             </div>
           </div>
@@ -969,7 +970,10 @@ export function StockWatchlistSidebar({
             </div>
           ) : (
             filteredItems.map((item) => {
-              const isActive = item.ticker === currentTicker.toUpperCase()
+              const normalizedTicker = item.ticker.toUpperCase()
+              const isActive = normalizedTicker === currentTicker.toUpperCase()
+              const isPending = isTransitioning && normalizedTicker === pendingTicker?.toUpperCase()
+              const isSelected = isActive || isPending
               const isUp = item.changePct > 0
               const isDown = item.changePct < 0
               const tone = isUp ? "text-emerald-400" : isDown ? "text-rose-400" : "text-amber-300"
@@ -996,7 +1000,7 @@ export function StockWatchlistSidebar({
                   }}
                   className={cn(
                     "group grid min-h-[58px] grid-cols-[20px_minmax(0,1fr)_96px] items-center gap-1 border-b border-black/25 px-2 py-1.5 transition-colors",
-                    isActive ? "bg-sky-500/[0.09]" : "bg-[#2e333b] odd:bg-[#2a2f37] hover:bg-[#373c45]",
+                    isSelected ? "bg-sky-500/[0.11]" : "bg-[#2e333b] odd:bg-[#2a2f37] hover:bg-[#373c45]",
                     draggedTicker === item.ticker && "opacity-45",
                   )}
                 >
@@ -1019,13 +1023,18 @@ export function StockWatchlistSidebar({
                     onClick={(event) => handleItemClick(event, item.ticker)}
                     className="min-w-0 py-0.5 text-left"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <strong className={cn("text-sm font-black tracking-wide", isActive ? "text-sky-200" : "text-[#79b8ff]")}>
+                    <div className="flex items-center gap-2">
+                      <strong className={cn("text-[17px] font-black leading-none tracking-wide", isSelected ? "text-sky-200" : "text-[#79b8ff]")}>
                         {item.ticker}
                       </strong>
-                      {isActive && isTransitioning ? <span className="size-1.5 animate-ping rounded-full bg-sky-300" /> : null}
+                      {isPending ? (
+                        <span className="relative flex size-2.5 shrink-0" aria-label={`Đang tải ${item.ticker}`}>
+                          <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-300/70" />
+                          <span className="relative inline-flex size-2.5 rounded-full bg-sky-300" />
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="mt-0.5 truncate text-[10px] font-medium text-slate-300/85" title={item.companyName}>
+                    <div className="mt-1 truncate text-[11px] font-medium leading-tight text-slate-300/85" title={item.companyName}>
                       {item.companyName}
                     </div>
                   </Link>

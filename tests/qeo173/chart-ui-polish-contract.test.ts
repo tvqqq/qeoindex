@@ -13,6 +13,9 @@ test("QEO-173 keeps ticker transitions usable and visually non-disruptive", () =
   assert.doesNotMatch(workstation, /opacity-35 pointer-events-none/)
   assert.doesNotMatch(workstation, /Hội đồng AI đang cập nhật dữ liệu/)
   assert.match(workstation, /data-qeo173-transition-indicator/)
+  assert.match(workstation, /data-stock-detail-sidebar-loading/)
+  assert.match(workstation, /StockDetailSidebarLoading/)
+  assert.doesNotMatch(workstation, /pointer-events-none absolute right-2 top-2 z-50/)
   assert.match(workstation, /currentData\.exchange/)
 })
 
