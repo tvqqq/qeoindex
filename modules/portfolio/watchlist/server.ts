@@ -417,21 +417,56 @@ export async function handleWatchlistDelete(request: Request) {
   if (deleteWatchlistId) {
     if (!UUID_RE.test(deleteWatchlistId)) return err("Watchlist ID không hợp lệ.")
 
-    const { count } = await auth.context.supabase
-      .from("watchlists")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", auth.context.user.id)
+    try {
+      const { data: ownedWatchlists, error: loadError } = await auth.context.supabase
+        .from("watchlists")
+        .select("id,is_default,sort_order,created_at")
+        .eq("user_id", auth.context.user.id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+      if (loadError) throw loadError
 
-    if ((count ?? 0) <= 1) return err("Không thể xóa danh sách duy nhất.")
+      const existing = ownedWatchlists ?? []
+      const target = existing.find((watchlist) => watchlist.id === deleteWatchlistId)
+      if (!target) return err("Danh sách không tồn tại.", 404)
+      if (existing.length <= 1) return err("Không thể xóa danh sách duy nhất.")
 
-    const { error } = await auth.context.supabase
-      .from("watchlists")
-      .delete()
-      .eq("id", deleteWatchlistId)
-      .eq("user_id", auth.context.user.id)
+      const { error: deleteError } = await auth.context.supabase
+        .from("watchlists")
+        .delete()
+        .eq("id", deleteWatchlistId)
+        .eq("user_id", auth.context.user.id)
+      if (deleteError) throw deleteError
 
-    if (error) return watchlistServerError("delete-watchlist", error)
-    return NextResponse.json({ ok: true, watchlistId: deleteWatchlistId }, { headers: NO_STORE_HEADERS })
+      const remaining = existing.filter((watchlist) => watchlist.id !== deleteWatchlistId)
+      let promotedDefaultId: string | null = null
+
+      if (target.is_default && remaining.length) {
+        promotedDefaultId = remaining[0].id
+        const { error: defaultError } = await auth.context.supabase
+          .from("watchlists")
+          .update({ is_default: true })
+          .eq("id", promotedDefaultId)
+          .eq("user_id", auth.context.user.id)
+        if (defaultError) throw defaultError
+      }
+
+      for (let index = 0; index < remaining.length; index += 1) {
+        const { error: orderError } = await auth.context.supabase
+          .from("watchlists")
+          .update({ sort_order: index })
+          .eq("id", remaining[index].id)
+          .eq("user_id", auth.context.user.id)
+        if (orderError) throw orderError
+      }
+
+      return NextResponse.json(
+        { ok: true, watchlistId: deleteWatchlistId, promotedDefaultId },
+        { headers: NO_STORE_HEADERS },
+      )
+    } catch (error) {
+      return watchlistServerError("delete-watchlist", error)
+    }
   }
 
   try {
