@@ -188,7 +188,7 @@ function RsHistoryChart({ history }: { history: DailyHistoryPoint[] }) {
       </div>
       <ChartContainer config={chartConfig} className="mt-4 h-[280px] w-full aspect-auto">
         <AreaChart accessibilityLayer data={data} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
-          <CartesianGrid vertical={false} strokeDasharray="3 3" />
+          <CartesianGrid vertical={false} strokeDasharray="3 5" />
           <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={10} minTickGap={28} tickFormatter={(value) => String(value).slice(5)} />
           <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tickMargin={8} width={30} />
           <ChartTooltip cursor={{ stroke: "rgba(148,163,184,.24)", strokeDasharray: "4 4" }} content={<ChartTooltipContent indicator="line" labelFormatter={(value) => String(value)} />} />
@@ -236,7 +236,7 @@ function ScoreHistoryChart({ title, history, scoreKey, fallbackScore, tone }: {
       {source.length >= 2 ? (
         <ChartContainer config={chartConfig} className="mt-4 h-[250px] w-full aspect-auto">
           <AreaChart accessibilityLayer data={data} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <CartesianGrid vertical={false} strokeDasharray="3 5" />
             <XAxis dataKey="period" tickLine={false} axisLine={false} tickMargin={10} minTickGap={14} />
             <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tickMargin={8} width={30} />
             <ReferenceLine y={50} stroke="rgba(251,191,36,.24)" strokeDasharray="4 4" />

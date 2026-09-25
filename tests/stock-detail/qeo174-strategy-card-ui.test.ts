@@ -37,7 +37,8 @@ test("QEO-177 renders Qeo Composite before the live price and reuses ratingRow d
   assert.match(trend, /QEO COMPOSITE/)
   assert.match(trend, /row\.ratingScore/)
   assert.match(trend, /row\.scoreHistory/)
-  assert.match(trend, /<svg/)
+  assert.match(trend, /StockChartCnSparkline/)
+  assert.doesNotMatch(trend, /<svg/)
 })
 
 test("QEO-178 restores the legacy Stock Detail hero visual skin without restoring CARD STATS", () => {
@@ -53,6 +54,7 @@ test("QEO-178 restores the legacy Stock Detail hero visual skin without restorin
 
 test("QEO-178 Qeo Composite is chart-first and consumes real stock-history composite data", () => {
   const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const chartcn = source("components/stock-detail/stock-chartcn.tsx")
   const historyRoute = source("app/api/insights/stock-history/route.ts")
 
   assert.match(historyRoute, /kfsp_composite_score/)
@@ -60,8 +62,10 @@ test("QEO-178 Qeo Composite is chart-first and consumes real stock-history compo
   assert.match(trend, /\/api\/insights\/stock-history\?ticker=/)
   assert.match(trend, /compositeScore/)
   assert.match(trend, /data-qeo-composite-chart/)
-  assert.match(trend, /polyline/)
-  assert.match(trend, /circle/)
+  assert.match(trend, /StockChartCnSparkline/)
+  assert.match(chartcn, /<LineChart/)
+  assert.match(chartcn, /<ChartTooltip/)
+  assert.match(chartcn, /strokeWidth=\{2\.5\}/)
   assert.match(trend, /Xu hướng Qeo Composite/)
 })
 
@@ -100,15 +104,15 @@ test("QEO-194 shows the last five stock RS values as filled circles without a pe
   )
 })
 
-test("QEO-181 uses five Qeo Composite sessions with interactive point values and no /100 suffix", () => {
+test("QEO-181 uses five Qeo Composite sessions with ChartCN tooltip values and no /100 suffix", () => {
   const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const chartcn = source("components/stock-detail/stock-chartcn.tsx")
 
   assert.match(trend, /const compositeHistory/)
   assert.match(trend, /compositeHistory[\s\S]*?slice\(-5\)/)
-  assert.match(trend, /hoveredCompositeIndex/)
-  assert.match(trend, /onMouseEnter|onPointerEnter/)
-  assert.match(trend, /onFocus/)
-  assert.match(trend, /data-qeo-composite-tooltip/)
+  assert.match(trend, /StockChartCnSparkline/)
+  assert.match(chartcn, /ChartTooltipContent/)
+  assert.match(chartcn, /activeDot/)
   assert.doesNotMatch(trend, /\/100/)
 })
 
@@ -122,14 +126,16 @@ test("QEO-181 makes RS circles larger, filled, and keeps the latest marker", () 
   assert.doesNotMatch(trend, /bg-\[#0a1019\]/)
 })
 
-test("QEO-193 removes RS outer borders and keeps the Qeo tooltip single-line and larger", () => {
+test("QEO-193 removes RS outer borders and delegates Qeo tooltip rendering to the shared chart template", () => {
   const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const chartcn = source("components/stock-detail/stock-chartcn.tsx")
 
   assert.match(trend, /data-current-rs/)
   assert.doesNotMatch(trend, /border-2 border-transparent/)
   assert.doesNotMatch(trend, /border-cyan-100\/90/)
-  assert.match(trend, /data-qeo-composite-tooltip[\s\S]*?whitespace-nowrap/)
-  assert.match(trend, /data-qeo-composite-tooltip[\s\S]*?text-\[11px\]/)
+  assert.match(trend, /StockChartCnSparkline/)
+  assert.match(chartcn, /ChartTooltipContent/)
+  assert.doesNotMatch(trend, /data-qeo-composite-tooltip/)
 })
 
 test("QEO-177 removes the duplicate full Qeo Composite history block from the overview tab", () => {
@@ -158,4 +164,34 @@ test("QEO-174 expands the compact mini chart while preserving maximize behavior"
   assert.match(workstation, /StockWatchlistSidebar/)
   assert.match(workstation, /setIsChartMaximized/)
   assert.match(workstation, /handleSelectTicker/)
+})
+
+
+test("QEO-279 standardizes Stock Detail analytical charts on the shared ChartCN-style Recharts template", () => {
+  const chartcn = source("components/stock-detail/stock-chartcn.tsx")
+  const tabs = source("components/stock-detail/stock-tabs-panel.tsx")
+  const trend = source("components/stock-detail/qeo-composite-trend.tsx")
+  const ttai = source("components/insights/ttai-dashboard.tsx")
+  const tradingChart = source("components/stock-detail/stock-tradingview-chart.tsx")
+  const notices = source("THIRD_PARTY_NOTICES.md")
+
+  assert.match(chartcn, /ChartContainer/)
+  assert.match(chartcn, /StockChartCnSparkline/)
+  assert.match(chartcn, /StockChartCnSignedBars/)
+  assert.match(chartcn, /StockChartCnBars/)
+  assert.match(chartcn, /StockChartCnRadar/)
+  assert.match(chartcn, /strokeDasharray="3 5"/)
+  assert.match(chartcn, /radius=\{\[6, 6, 6, 6\]\}/)
+
+  assert.match(trend, /StockChartCnSparkline/)
+  assert.match(tabs, /StockChartCnRadar/)
+  assert.match(tabs, /StockChartCnSignedBars/)
+  assert.match(tabs, /StockChartCnBars/)
+  assert.doesNotMatch(tabs, /function radarPoints/)
+  assert.doesNotMatch(tabs, /<svg viewBox="0 0 280 280"/)
+
+  assert.match(ttai, /strokeDasharray="3 5"/)
+  assert.match(tradingChart, /loadLightweightCharts/)
+  assert.doesNotMatch(tradingChart, /StockChartCn/)
+  assert.match(notices, /ChartCN \/ ShadcnDeck/)
 })

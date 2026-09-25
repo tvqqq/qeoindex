@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { TrendingDown, TrendingUp } from "lucide-react"
 
+import { StockChartCnSparkline } from "./stock-chartcn"
 import type { InsightsRatingRow } from "@/modules/research/insights/data"
 import { cn } from "@/modules/shared/ui/cn"
 
@@ -43,7 +44,6 @@ export function QeoCompositeTrend({
   className?: string
 }) {
   const [remoteHistory, setRemoteHistory] = useState<CompositeHistoryPoint[] | null>(null)
-  const [hoveredCompositeIndex, setHoveredCompositeIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!row?.ticker) {
@@ -53,7 +53,6 @@ export function QeoCompositeTrend({
 
     const controller = new AbortController()
     setRemoteHistory(null)
-    setHoveredCompositeIndex(null)
 
     fetch(`/api/insights/stock-history?ticker=${encodeURIComponent(row.ticker)}`, {
       signal: controller.signal,
@@ -114,38 +113,12 @@ export function QeoCompositeTrend({
     : null
   const score = latestHistoryScore ?? (row ? normalizeScore(row.ratingScore) : null)
   const delta = score != null && previousHistoryScore != null ? score - previousHistoryScore : null
-
-  const chartWidth = 176
-  const chartHeight = 48
-  const chartPaddingX = 7
-  const chartPaddingY = 7
-  const values = compositeHistory.flatMap((item) => {
-    const value = normalizeScore(item.compositeScore)
-    return value == null ? [] : [value]
-  })
-  const minValue = values.length ? Math.min(...values) : 0
-  const maxValue = values.length ? Math.max(...values) : 100
-  const rawSpread = Math.max(4, maxValue - minValue)
-  const chartMin = Math.max(0, minValue - rawSpread * 0.25)
-  const chartMax = Math.min(100, maxValue + rawSpread * 0.25)
-  const chartRange = Math.max(1, chartMax - chartMin)
-  const chartPoints = compositeHistory.map((item, index) => {
-    const value = normalizeScore(item.compositeScore) ?? chartMin
-    const x = chartPaddingX + (index * (chartWidth - chartPaddingX * 2)) / Math.max(1, compositeHistory.length - 1)
-    const y = chartPaddingY + ((chartMax - value) / chartRange) * (chartHeight - chartPaddingY * 2)
-    return { x, y }
-  })
-  const points = chartPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+  const chartData = compositeHistory.map((item) => ({
+    label: formatSessionDate(item.asOfDate),
+    value: normalizeScore(item.compositeScore),
+  }))
   const firstDate = compositeHistory[0]?.asOfDate?.slice(5) || ""
   const lastDate = compositeHistory[compositeHistory.length - 1]?.asOfDate?.slice(5) || ""
-  const hoveredComposite = hoveredCompositeIndex == null ? null : compositeHistory[hoveredCompositeIndex]
-  const hoveredScore = normalizeScore(hoveredComposite?.compositeScore)
-  const hoveredPoint = hoveredCompositeIndex == null ? null : chartPoints[hoveredCompositeIndex]
-  const tooltipAlignment = hoveredCompositeIndex === 0
-    ? "translate-x-0"
-    : hoveredCompositeIndex === compositeHistory.length - 1
-      ? "-translate-x-full"
-      : "-translate-x-1/2"
 
   return (
     <div
@@ -213,77 +186,14 @@ export function QeoCompositeTrend({
           </div>
 
           {compositeHistory.length >= 2 ? (
-            <div className="relative min-w-0 flex-1">
-              {hoveredComposite && hoveredScore != null && hoveredPoint ? (
-                <div
-                  data-qeo-composite-tooltip
-                  className={cn(
-                    "pointer-events-none absolute top-0 z-10 whitespace-nowrap rounded-md border border-violet-200/20 bg-slate-950/95 px-1.5 py-0.5 font-mono text-[11px] font-black text-violet-100 shadow-lg",
-                    tooltipAlignment,
-                  )}
-                  style={{ left: `${(hoveredPoint.x / chartWidth) * 100}%` }}
-                >
-                  {Math.round(hoveredScore)} · {formatSessionDate(hoveredComposite.asOfDate)}
-                </div>
-              ) : null}
-              <svg
-                data-qeo-composite-chart
-                viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                className="h-12 w-full min-w-[112px]"
-                preserveAspectRatio="none"
-                role="img"
-                aria-label={`Xu hướng Qeo Composite ${row?.ticker || ""}`.trim()}
-              >
-                <line
-                  x1={chartPaddingX}
-                  x2={chartWidth - chartPaddingX}
-                  y1={chartHeight - chartPaddingY}
-                  y2={chartHeight - chartPaddingY}
-                  stroke="rgba(148,163,184,0.12)"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <polyline
-                  points={points.join(" ")}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  className="text-violet-300"
-                  vectorEffect="non-scaling-stroke"
-                />
-                {chartPoints.map((point, index) => {
-                  const isLatest = index === chartPoints.length - 1
-                  const session = compositeHistory[index]
-                  const sessionScore = normalizeScore(session?.compositeScore)
-                  return (
-                    <g key={`${session?.asOfDate}-${index}`}>
-                      <circle
-                        cx={point.x}
-                        cy={point.y}
-                        r={isLatest ? 3.1 : 2.1}
-                        className={isLatest ? "fill-emerald-300" : "fill-violet-200/80"}
-                        pointerEvents="none"
-                      />
-                      <circle
-                        data-qeo-composite-point
-                        cx={point.x}
-                        cy={point.y}
-                        r={8}
-                        fill="transparent"
-                        stroke="transparent"
-                        tabIndex={0}
-                        aria-label={sessionScore == null ? undefined : `Qeo Composite ${formatSessionDate(session.asOfDate)}: ${Math.round(sessionScore)}`}
-                        onMouseEnter={() => setHoveredCompositeIndex(index)}
-                        onMouseLeave={() => setHoveredCompositeIndex(null)}
-                        onFocus={() => setHoveredCompositeIndex(index)}
-                        onBlur={() => setHoveredCompositeIndex(null)}
-                      />
-                    </g>
-                  )
-                })}
-              </svg>
-              <div className="mt-0.5 flex justify-between font-mono text-[8px] text-slate-600">
+            <div data-qeo-composite-chart className="min-w-0 flex-1">
+              <StockChartCnSparkline
+                data={chartData}
+                seriesLabel="Qeo Composite"
+                color="#b6a0f8"
+                formatValue={(value) => Math.round(value).toString()}
+              />
+              <div className="-mt-1 flex justify-between font-mono text-[8px] text-slate-600">
                 <span>{firstDate}</span>
                 <span>{compositeHistory.length} phiên</span>
                 <span>{lastDate}</span>
