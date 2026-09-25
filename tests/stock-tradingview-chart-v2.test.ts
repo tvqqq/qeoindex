@@ -410,6 +410,25 @@ test("QEO-283 unifies Watchlist typography and persists emoji icons across creat
   assert.match(sidebar, /Xem trước/)
 })
 
+test("QEO-284 tightens Watchlist hierarchy and links ticker click feedback to the left detail loading state", () => {
+  const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
+  const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
+
+  assert.match(sidebar, /pendingTicker\?: string \| null/)
+  assert.match(sidebar, /pendingTicker = null/)
+  assert.doesNotMatch(sidebar, /truncate font-semibold text-slate-300">\{activeListName\}/)
+  assert.match(sidebar, /text-\[17px\] font-black leading-none tracking-wide/)
+  assert.match(sidebar, /const isPending = isTransitioning && normalizedTicker === pendingTicker\?\.toUpperCase\(\)/)
+  assert.match(sidebar, /animate-ping rounded-full bg-sky-300\/70/)
+  assert.match(workstation, /function StockDetailSidebarLoading/)
+  assert.match(workstation, /data-stock-detail-sidebar-loading/)
+  assert.match(workstation, /Đang tải cổ phiếu/)
+  assert.match(workstation, /isTransitioning && pendingTicker/)
+  assert.match(workstation, /<StockDetailSidebarLoading ticker=\{pendingTicker\} \/>/)
+  assert.match(workstation, /pendingTicker=\{pendingTicker\}/)
+  assert.doesNotMatch(workstation, /pointer-events-none absolute right-2 top-2 z-50/)
+})
+
 test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
   const blockedTarget = { closest: (selectors: string) => selectors.includes("input") ? {} : null }
   assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)
