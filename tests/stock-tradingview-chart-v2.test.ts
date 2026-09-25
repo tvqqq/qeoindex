@@ -391,6 +391,25 @@ test("QEO-282 adds FireAnt-style Watchlist selector menu and management dialog",
   assert.match(sidebar, /Top 200 · Thị trường là danh sách hệ thống/)
 })
 
+test("QEO-283 unifies Watchlist typography and persists emoji icons across create/manage/selector UI", () => {
+  const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
+
+  assert.match(sidebar, /WATCHLIST_EMOJIS/)
+  assert.match(sidebar, /data-watchlist-emoji-trigger/)
+  assert.match(sidebar, /data-watchlist-emoji-picker/)
+  assert.match(sidebar, /newWatchlistEmoji/)
+  assert.match(sidebar, /renameEmoji/)
+  assert.match(sidebar, /emoji: newWatchlistEmoji/)
+  assert.match(sidebar, /emoji: renameEmoji/)
+  assert.match(sidebar, /activeListEmoji/)
+  assert.match(sidebar, /watchlist\.emoji \?\? <List/)
+  assert.match(sidebar, /data-watchlist-create-dialog/)
+  assert.match(sidebar, /font-ticker text-slate-100/)
+  assert.match(sidebar, /DialogTitle className="text-lg font-black/)
+  assert.match(sidebar, /Icon & tên Watchlist/)
+  assert.match(sidebar, /Xem trước/)
+})
+
 test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
   const blockedTarget = { closest: (selectors: string) => selectors.includes("input") ? {} : null }
   assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)
