@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { StockLogo } from "@/components/stock-logo"
 import { cn } from "@/modules/shared/ui/cn"
 import type { StockWatchlistItem } from "./types"
 
@@ -133,7 +134,10 @@ export function StockWatchlistSidebar({
   const [addTargetId, setAddTargetId] = useState("")
   const [addingTicker, setAddingTicker] = useState(false)
   const [addError, setAddError] = useState("")
+  const [addActiveIndex, setAddActiveIndex] = useState(0)
+  const [addSuggestionsOpen, setAddSuggestionsOpen] = useState(false)
 
+  const addListboxId = React.useId()
   const sortMenuRef = useRef<HTMLDivElement>(null)
   const bootstrappedRef = useRef(false)
 
@@ -141,6 +145,24 @@ export function StockWatchlistSidebar({
     () => new Map(items.map((item) => [item.ticker.toUpperCase(), item] as const)),
     [items],
   )
+
+  const addSuggestions = useMemo(() => {
+    const needle = addTicker.trim().toLocaleLowerCase("vi")
+    return items
+      .filter((item) => {
+        if (!needle) return true
+        return item.ticker.toLocaleLowerCase("vi").includes(needle)
+          || item.companyName.toLocaleLowerCase("vi").includes(needle)
+          || (item.sector || "").toLocaleLowerCase("vi").includes(needle)
+      })
+      .slice(0, 12)
+  }, [addTicker, items])
+
+  const selectedAddStock = useMemo(
+    () => itemByTicker.get(addTicker.trim().toUpperCase()) ?? null,
+    [addTicker, itemByTicker],
+  )
+  const activeAddStock = addSuggestions[Math.min(addActiveIndex, Math.max(addSuggestions.length - 1, 0))] ?? null
 
   useEffect(() => {
     const canonicalTickers = items.map((item) => item.ticker.toUpperCase())
@@ -370,8 +392,27 @@ export function StockWatchlistSidebar({
       : watchlists.find((watchlist) => watchlist.is_default)?.id ?? watchlists[0]?.id ?? ""
     setAddTargetId(preferredTarget)
     setAddTicker(ticker.toUpperCase())
+    setAddActiveIndex(0)
+    setAddSuggestionsOpen(false)
     setAddError("")
     setAddOpen(true)
+  }
+
+  function moveAddActive(delta: number) {
+    if (!addSuggestions.length) return
+    setAddSuggestionsOpen(true)
+    setAddActiveIndex((current) => {
+      const next = current + delta
+      if (next < 0) return addSuggestions.length - 1
+      if (next >= addSuggestions.length) return 0
+      return next
+    })
+  }
+
+  function selectAddStock(ticker: string) {
+    setAddTicker(ticker.toUpperCase())
+    setAddSuggestionsOpen(false)
+    setAddError("")
   }
 
   async function handleCreateWatchlist() {
@@ -401,12 +442,15 @@ export function StockWatchlistSidebar({
     }
   }
 
-  async function handleAddTicker() {
-    const ticker = addTicker.trim().toUpperCase()
-    if (!ticker || !addTargetId) {
-      setAddError("Chọn watchlist và nhập mã cổ phiếu.")
+  async function handleAddTicker(tickerOverride?: string) {
+    const requestedTicker = (tickerOverride ?? addTicker).trim().toUpperCase()
+    const stock = itemByTicker.get(requestedTicker)
+    if (!stock || !addTargetId) {
+      setAddError(stock ? "Chọn watchlist để thêm mã." : "Chọn mã cổ phiếu từ danh sách gợi ý.")
+      setAddSuggestionsOpen(!stock)
       return
     }
+    const ticker = stock.ticker
 
     setAddingTicker(true)
     setAddError("")
@@ -434,6 +478,7 @@ export function StockWatchlistSidebar({
           return [...withoutTicker, payload.item!]
         })
       }
+      setAddSuggestionsOpen(false)
       setAddOpen(false)
     } finally {
       setAddingTicker(false)
@@ -713,8 +758,14 @@ export function StockWatchlistSidebar({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-sm border-white/[0.1] bg-[#20242b] text-slate-100">
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open)
+          if (!open) setAddSuggestionsOpen(false)
+        }}
+      >
+        <DialogContent className="max-w-md overflow-visible border-white/[0.1] bg-[#20242b] text-slate-100">
           <DialogHeader>
             <DialogTitle>Thêm mã vào Watchlist</DialogTitle>
           </DialogHeader>
@@ -734,17 +785,131 @@ export function StockWatchlistSidebar({
             </label>
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold text-slate-400">Mã cổ phiếu</span>
-              <Input
-                autoFocus
-                value={addTicker}
-                onChange={(event) => setAddTicker(event.target.value.toUpperCase())}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && addTicker.trim() && addTargetId) void handleAddTicker()
-                }}
-                placeholder="VD: MSN"
-                maxLength={12}
-                className="border-white/[0.1] bg-[#171b22] font-mono font-bold uppercase"
-              />
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  autoFocus
+                  value={addTicker}
+                  role="combobox"
+                  aria-label="Tìm mã cổ phiếu để thêm vào watchlist"
+                  aria-autocomplete="list"
+                  aria-expanded={addSuggestionsOpen}
+                  aria-controls={addListboxId}
+                  aria-activedescendant={addSuggestionsOpen && activeAddStock ? `${addListboxId}-${activeAddStock.ticker}` : undefined}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onFocus={() => {
+                    setAddSuggestionsOpen(true)
+                    setAddActiveIndex(Math.max(0, addSuggestions.findIndex((item) => item.ticker === selectedAddStock?.ticker)))
+                  }}
+                  onChange={(event) => {
+                    setAddTicker(event.target.value.toUpperCase())
+                    setAddActiveIndex(0)
+                    setAddSuggestionsOpen(true)
+                    setAddError("")
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault()
+                      moveAddActive(1)
+                      return
+                    }
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault()
+                      moveAddActive(-1)
+                      return
+                    }
+                    if (event.key === "Escape") {
+                      setAddSuggestionsOpen(false)
+                      return
+                    }
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      const target = selectedAddStock ?? activeAddStock
+                      if (target && addTargetId) void handleAddTicker(target.ticker)
+                    }
+                  }}
+                  placeholder="Nhập mã hoặc tên công ty…"
+                  maxLength={80}
+                  className="h-11 border-white/[0.1] bg-[#171b22] pl-10 pr-10 text-sm font-semibold"
+                />
+                {addTicker ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddTicker("")
+                      setAddActiveIndex(0)
+                      setAddSuggestionsOpen(true)
+                    }}
+                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition-colors hover:text-slate-200"
+                    aria-label="Xóa mã đang tìm"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                ) : null}
+
+                {addSuggestionsOpen ? (
+                  <div
+                    id={addListboxId}
+                    role="listbox"
+                    aria-label="Top Stocks 200"
+                    data-watchlist-stock-autocomplete
+                    className="absolute left-0 right-0 top-[calc(100%+6px)] z-[80] max-h-72 overflow-y-auto rounded-xl border border-white/[0.1] bg-[#15181d] p-1.5 shadow-[0_20px_54px_-18px_rgba(0,0,0,0.95)]"
+                  >
+                    {addSuggestions.length ? addSuggestions.map((stock, index) => {
+                      const active = index === addActiveIndex
+                      const selected = stock.ticker === selectedAddStock?.ticker
+                      return (
+                        <button
+                          key={stock.ticker}
+                          id={`${addListboxId}-${stock.ticker}`}
+                          role="option"
+                          aria-selected={selected}
+                          type="button"
+                          onMouseEnter={() => setAddActiveIndex(index)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectAddStock(stock.ticker)}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
+                            active ? "bg-white/[0.09]" : "hover:bg-white/[0.05]",
+                          )}
+                        >
+                          <StockLogo symbol={stock.ticker} size={34} className="rounded-lg" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <strong className="font-ticker text-sm font-black text-white">{stock.ticker}</strong>
+                              {selected ? (
+                                <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
+                                  Đã chọn
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-400">
+                              {stock.companyName}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-[10px] font-semibold text-slate-600">
+                            {stock.sector || ""}
+                          </span>
+                        </button>
+                      )
+                    }) : (
+                      <div className="px-3 py-6 text-center text-xs text-slate-500">
+                        Không tìm thấy mã phù hợp.
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              {selectedAddStock ? (
+                <div className="flex items-center gap-2 rounded-lg border border-sky-400/15 bg-sky-400/[0.06] px-2.5 py-2">
+                  <StockLogo symbol={selectedAddStock.ticker} size={28} className="rounded-md" />
+                  <div className="min-w-0">
+                    <div className="font-ticker text-xs font-black text-sky-200">{selectedAddStock.ticker}</div>
+                    <div className="truncate text-[10px] text-slate-400">{selectedAddStock.companyName}</div>
+                  </div>
+                </div>
+              ) : null}
             </label>
             {addError ? <p className="text-xs font-semibold text-rose-400">{addError}</p> : null}
           </div>
@@ -752,9 +917,9 @@ export function StockWatchlistSidebar({
             <Button variant="outline" onClick={() => setAddOpen(false)}>Hủy</Button>
             <Button
               onClick={() => void handleAddTicker()}
-              disabled={addingTicker || !addTicker.trim() || !addTargetId}
+              disabled={addingTicker || !selectedAddStock || !addTargetId}
             >
-              {addingTicker ? "Đang thêm..." : "Thêm mã"}
+              {addingTicker ? "Đang thêm..." : selectedAddStock ? `Thêm ${selectedAddStock.ticker}` : "Chọn mã"}
             </Button>
           </DialogFooter>
         </DialogContent>
