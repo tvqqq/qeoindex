@@ -111,7 +111,7 @@ export const DEFAULT_CHART_VIEW_SETTINGS: ChartViewSettings = {
     ichimoku: { color: "#22c55e", opacity: 0.86, width: 1, lineStyle: "solid" },
     qeoBase129: { color: "#ec4899", opacity: 0.9, width: 2, lineStyle: "solid" },
     volume: { color: "#f59e0b", opacity: 0.86, width: 1, lineStyle: "solid" },
-    rsi: { color: "#a78bfa", opacity: 1, width: 2, lineStyle: "solid" },
+    rsi: { color: "#b6a0f8", opacity: 0.88, width: 2, lineStyle: "solid" },
     macd: { color: "#38bdf8", opacity: 1, width: 2, lineStyle: "solid" },
   },
   indicatorVisibility: {

@@ -40,7 +40,7 @@ export function normalizeChartViewSettings(value: unknown): ChartViewSettings {
   for (const key of STYLE_KEYS) {
     const raw = isRecord(input[key]) ? input[key] : {}
     const fallback = result.indicatorStyles[key]
-    result.indicatorStyles[key] = {
+    const normalizedStyle: IndicatorStyle = {
       color: typeof raw.color === "string" && HEX_COLOR.test(raw.color) ? raw.color : fallback.color,
       opacity: clampNumber(raw.opacity, 0.1, 1, fallback.opacity),
       width: Math.round(clampNumber(raw.width, 1, 4, fallback.width)),
@@ -48,6 +48,12 @@ export function normalizeChartViewSettings(value: unknown): ChartViewSettings {
         ? raw.lineStyle as IndicatorLineStyle
         : fallback.lineStyle,
     }
+    const isLegacyRsiDefault = key === "rsi"
+      && normalizedStyle.color.toLowerCase() === "#a78bfa"
+      && normalizedStyle.opacity === 1
+      && normalizedStyle.width === 2
+      && normalizedStyle.lineStyle === "solid"
+    result.indicatorStyles[key] = isLegacyRsiDefault ? cloneDefaultStyle("rsi") : normalizedStyle
   }
   const rawValue = isRecord(value) ? value : null
   const rawVisibility = isRecord(rawValue?.indicatorVisibility) ? rawValue.indicatorVisibility : {}

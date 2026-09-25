@@ -106,6 +106,7 @@ type ChartSeries = {
   macdHistogram: LightweightSeriesApi
   macdZero: LightweightSeriesApi
   rsiUpper: LightweightSeriesApi
+  rsiMiddle: LightweightSeriesApi
   rsiLower: LightweightSeriesApi
   deTower: LightweightSeriesApi
   deRibbon: LightweightSeriesApi[]
@@ -415,17 +416,8 @@ function AlignedIndicatorCanvas({
       if (rsi70 != null && rsi30 != null) {
         const top = rsiPaneTop + Math.min(rsi70, rsi30)
         const bandHeight = Math.max(1, Math.abs(rsi30 - rsi70))
-        context.fillStyle = "rgba(167,139,250,0.10)"
-        context.fillRect(0, top, width, bandHeight)
-        context.strokeStyle = "rgba(167,139,250,0.42)"
-        context.setLineDash([4, 4])
-        context.beginPath()
-        context.moveTo(0, rsiPaneTop + rsi70)
-        context.lineTo(width, rsiPaneTop + rsi70)
-        context.moveTo(0, rsiPaneTop + rsi30)
-        context.lineTo(width, rsiPaneTop + rsi30)
-        context.stroke()
-        context.setLineDash([])
+        context.fillStyle = "rgba(182,160,248,0.08)"
+        context.fillRect(0, top, Math.max(0, width - priceAxisGutter), bandHeight)
       }
     }
 
@@ -636,6 +628,7 @@ export function StockTradingViewChart({
     qeoBase129: lineData(qeoBase129, barTimes),
     rsi: lineData(rsi, barTimes),
     rsiUpper: constantLineData(70, barTimes),
+    rsiMiddle: constantLineData(50, barTimes),
     rsiLower: constantLineData(30, barTimes),
     macd: lineData(macd?.macd ?? [], barTimes),
     macdSignal: lineData(macd?.signal ?? [], barTimes),
@@ -1011,21 +1004,27 @@ export function StockTradingViewChart({
           ichimokuChikou: addMainLine("#94a3b8"),
           qeoBase129: addMainLine("#ec4899", 2),
           rsi: chart.addSeries(runtime.LineSeries, {
-            ...chartSeriesOptions(false, "#a78bfa", 2),
+            ...chartSeriesOptions(false, "#b6a0f8", 2),
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 2, minMove: 0.01 },
             lastValueVisible: true,
-            priceLineVisible: true,
+            priceLineVisible: false,
             title: "RSI 14",
           }, 2),
           rsiUpper: chart.addSeries(runtime.LineSeries, {
-            ...chartSeriesOptions(false, "#a78bfa", 1),
+            ...chartSeriesOptions(false, "#94a3b8", 1),
             priceScaleId: "right",
             lineStyle: 2,
             title: "RSI 70",
           }, 2),
+          rsiMiddle: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#94a3b8", 1),
+            priceScaleId: "right",
+            lineStyle: 2,
+            title: "RSI 50",
+          }, 2),
           rsiLower: chart.addSeries(runtime.LineSeries, {
-            ...chartSeriesOptions(false, "#a78bfa", 1),
+            ...chartSeriesOptions(false, "#94a3b8", 1),
             priceScaleId: "right",
             lineStyle: 2,
             title: "RSI 30",
@@ -1208,8 +1207,10 @@ export function StockTradingViewChart({
     applyIndicatorStyle(series.ichimokuChikou, styles.ichimoku, effectiveIndicators.showIchimoku)
     applyIndicatorStyle(series.qeoBase129, styles.qeoBase129, Boolean(effectiveIndicators.showQeoBase129))
     applyIndicatorStyle(series.rsi, styles.rsi, isMaximized && effectiveIndicators.showRsi)
-    applyIndicatorStyle(series.rsiUpper, { ...styles.rsi, width: 1, opacity: styles.rsi.opacity * 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showRsi)
-    applyIndicatorStyle(series.rsiLower, { ...styles.rsi, width: 1, opacity: styles.rsi.opacity * 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showRsi)
+    const rsiVisible = isMaximized && effectiveIndicators.showRsi
+    applyIndicatorStyle(series.rsiUpper, { color: "#94a3b8", width: 1, opacity: 0.48, lineStyle: "dashed" }, rsiVisible)
+    applyIndicatorStyle(series.rsiMiddle, { color: "#94a3b8", width: 1, opacity: 0.34, lineStyle: "dashed" }, rsiVisible)
+    applyIndicatorStyle(series.rsiLower, { color: "#94a3b8", width: 1, opacity: 0.48, lineStyle: "dashed" }, rsiVisible)
     applyIndicatorStyle(series.macd, styles.macd, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdSignal, { ...styles.macd, color: "#f97316" }, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdHistogram, styles.macd, isMaximized && effectiveIndicators.showMacd)
@@ -1267,6 +1268,7 @@ export function StockTradingViewChart({
     series.qeoBase129.setData(renderPayload.qeoBase129)
     series.rsi.setData(renderPayload.rsi)
     series.rsiUpper.setData(renderPayload.rsiUpper)
+    series.rsiMiddle.setData(renderPayload.rsiMiddle)
     series.rsiLower.setData(renderPayload.rsiLower)
     series.macd.setData(renderPayload.macd)
     series.macdSignal.setData(renderPayload.macdSignal)
@@ -1603,7 +1605,7 @@ export function StockTradingViewChart({
               {effectiveIndicators.showQeoBase129 && <span className="text-pink-300">QEOBASE {formatMetric(legendValues.qeoBase129)}</span>}
               {effectiveIndicators.showVolumeProfile && <span className="text-amber-300">POC {formatMetric(volumeProfile?.pocPrice ?? null)}</span>}
               {isMaximized && <>
-                <span className="text-violet-300">RSI {formatMetric(legendValues.rsi)}</span>
+                <span className="text-slate-500">RSI 14 <b style={{ color: rgbaFromHex(viewSettings.indicatorStyles.rsi.color, 0.95) }}>{formatMetric(legendValues.rsi)}</b></span>
                 <span className="text-sky-300">MACD {formatMetric(legendValues.macd, 4)}</span>
                 <span className="text-orange-300">SIG {formatMetric(legendValues.macdSignal, 4)}</span>
                 <span className={legendValues.macdHistogram != null && legendValues.macdHistogram >= 0 ? "text-emerald-300" : "text-rose-300"}>HIST {formatMetric(legendValues.macdHistogram, 4)}</span>
