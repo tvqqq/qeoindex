@@ -1170,6 +1170,7 @@ export function StockWatchlistSidebar({
                             if (event.key === "Escape") {
                               setEditingWatchlistId(null)
                               setRenameValue("")
+                              setRenameEmoji(null)
                             }
                           }}
                           maxLength={80}
@@ -1225,7 +1226,7 @@ export function StockWatchlistSidebar({
                           type="button"
                           onClick={() => beginRenameWatchlist(watchlist)}
                           disabled={isBusy}
-                          className="grid size-10 place-items-center rounded bg-blue-500 text-white transition-colors hover:bg-blue-400 disabled:opacity-45"
+                          className="grid size-9 place-items-center rounded-md bg-blue-500 text-white transition-colors hover:bg-blue-400 disabled:opacity-45"
                           aria-label={`Sửa ${watchlist.name}`}
                         >
                           <Pencil className="size-5" />
@@ -1236,7 +1237,7 @@ export function StockWatchlistSidebar({
                         type="button"
                         onClick={() => void handleDeleteWatchlist(watchlist)}
                         disabled={isBusy || watchlists.length <= 1}
-                        className="grid size-10 place-items-center rounded bg-red-500 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-35"
+                        className="grid size-9 place-items-center rounded-md bg-red-500 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-35"
                         aria-label={`Xóa ${watchlist.name}`}
                         title={watchlists.length <= 1 ? "Không thể xóa watchlist duy nhất" : "Xóa watchlist"}
                       >
@@ -1248,7 +1249,7 @@ export function StockWatchlistSidebar({
               })}
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-4 text-xs text-slate-500">
+            <div className="mt-4 flex items-center justify-between gap-4 text-[10px] font-semibold text-slate-500">
               <span>Top 200 · Thị trường là danh sách hệ thống nên không xuất hiện trong phần quản lý.</span>
               <span className="font-mono">{watchlists.length} watchlist</span>
             </div>
@@ -1256,30 +1257,78 @@ export function StockWatchlistSidebar({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-sm border-white/[0.1] bg-[#20242b] text-slate-100">
-          <DialogHeader>
-            <DialogTitle>Tạo Watchlist mới</DialogTitle>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          if (!open) {
+            setCreateError("")
+            setNewWatchlistName("")
+            setNewWatchlistEmoji(null)
+          }
+        }}
+      >
+        <DialogContent
+          data-watchlist-create-dialog
+          className="overflow-visible border-white/[0.16] bg-[#1c2128] p-0 font-ticker text-slate-100 shadow-[0_30px_90px_-28px_rgba(0,0,0,0.95)] sm:max-w-[560px]"
+        >
+          <DialogHeader className="border-b border-white/[0.14] bg-[#2a2f37] px-5 py-3.5 text-left">
+            <DialogTitle className="text-lg font-black tracking-tight text-slate-100">Tạo Watchlist mới</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Input
-              autoFocus
-              value={newWatchlistName}
-              onChange={(event) => setNewWatchlistName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && newWatchlistName.trim()) void handleCreateWatchlist()
-              }}
-              placeholder="VD: Ngân hàng, Theo dõi breakout..."
-              maxLength={80}
-              className="border-white/[0.1] bg-[#171b22]"
-            />
-            {createError ? <p className="text-xs font-semibold text-rose-400">{createError}</p> : null}
+
+          <div className="space-y-4 px-5 py-5">
+            <div>
+              <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Icon & tên Watchlist</div>
+              <div className="flex items-center gap-3">
+                <WatchlistEmojiPicker value={newWatchlistEmoji} onChange={setNewWatchlistEmoji} />
+                <Input
+                  autoFocus
+                  value={newWatchlistName}
+                  onChange={(event) => {
+                    setNewWatchlistName(event.target.value)
+                    setCreateError("")
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && newWatchlistName.trim()) void handleCreateWatchlist()
+                  }}
+                  placeholder="VD: Ngân hàng, Theo dõi breakout..."
+                  maxLength={80}
+                  className="h-12 border-white/[0.12] bg-[#11161c] text-sm font-semibold text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border border-white/[0.08] bg-[#242a32] px-3 py-2.5">
+              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Xem trước</div>
+              <div className="mt-2 flex items-center gap-2.5">
+                <span className="grid size-8 shrink-0 place-items-center rounded-md border border-white/[0.1] bg-[#292f37] text-base text-slate-300">
+                  {newWatchlistEmoji ?? <List className="size-4" />}
+                </span>
+                <span className="min-w-0 truncate text-sm font-black text-slate-100">
+                  {newWatchlistName.trim() || "Tên Watchlist"}
+                </span>
+              </div>
+            </div>
+
+            {createError ? (
+              <p className="rounded border border-rose-400/20 bg-rose-400/[0.08] px-3 py-2 text-xs font-semibold text-rose-300">
+                {createError}
+              </p>
+            ) : null}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Hủy</Button>
+
+          <DialogFooter className="border-t border-white/[0.12] bg-[#252b33] px-5 py-3">
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              className="h-9 border-white/[0.12] bg-[#30363f] text-xs font-bold text-slate-200 hover:bg-[#3a414b] hover:text-white"
+            >
+              Hủy
+            </Button>
             <Button
               onClick={() => void handleCreateWatchlist()}
               disabled={creatingWatchlist || !newWatchlistName.trim()}
+              className="h-9 bg-sky-500 px-4 text-xs font-black text-white hover:bg-sky-400"
             >
               {creatingWatchlist ? "Đang tạo..." : "Tạo Watchlist"}
             </Button>
@@ -1294,7 +1343,7 @@ export function StockWatchlistSidebar({
           if (!open) setAddSuggestionsOpen(false)
         }}
       >
-        <DialogContent className="max-w-md overflow-visible border-white/[0.1] bg-[#20242b] text-slate-100">
+        <DialogContent className="max-w-md overflow-visible border-white/[0.12] bg-[#20242b] font-ticker text-slate-100">
           <DialogHeader>
             <DialogTitle>Thêm mã vào Watchlist</DialogTitle>
           </DialogHeader>
