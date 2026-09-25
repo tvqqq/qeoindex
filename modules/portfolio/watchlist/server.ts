@@ -303,12 +303,20 @@ export async function handleWatchlistPatch(request: Request) {
     }
 
     if (tickers.length) {
-      const payload = tickers.map((ticker, index) => ({
-        watchlist_id: watchlistId,
-        user_id: auth.context.user.id,
-        ticker,
-        sort_order: index,
-      }))
+      const existingByTicker = new Map(existing.map((item) => [item.ticker, item] as const))
+      const payload = tickers.map((ticker, index) => {
+        const item = existingByTicker.get(ticker)!
+        return {
+          watchlist_id: watchlistId,
+          user_id: auth.context.user.id,
+          ticker,
+          sort_order: index,
+          note: item.note,
+          alert_price_above: item.alert_price_above,
+          alert_price_below: item.alert_price_below,
+          tags: item.tags,
+        }
+      })
       const { error } = await auth.context.supabase
         .from("watchlist_items")
         .upsert(payload, { onConflict: "watchlist_id,ticker" })
