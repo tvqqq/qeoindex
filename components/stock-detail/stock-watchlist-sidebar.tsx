@@ -412,7 +412,7 @@ export function StockWatchlistSidebar({
     setAddingTicker(true)
     setAddError("")
     try {
-      const targetCount = addTargetId === activeListId ? userItems.length : 0
+      const targetCount = addTargetId === activeListId ? userItems.length : 10_000
       const response = await fetch("/api/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
