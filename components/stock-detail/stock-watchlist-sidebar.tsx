@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Settings2,
+  SmilePlus,
   Trash2,
   X,
 } from "lucide-react"
@@ -35,6 +36,7 @@ interface StockWatchlistSidebarProps {
 interface WatchlistMeta {
   id: string
   name: string
+  emoji: string | null
   is_default: boolean
   sort_order: number
 }
@@ -64,6 +66,12 @@ const ACTIVE_LIST_KEY = "qeo:stock-watchlist:active:v1"
 const SYSTEM_ORDER_KEY = "qeo:stock-watchlist:top200-order:v1"
 const SORT_KEY_PREFIX = "qeo:stock-watchlist:sort:v1:"
 
+const WATCHLIST_EMOJIS = [
+  "⭐", "👀", "📈", "📉", "💰", "🏦", "🔥", "🚀",
+  "💎", "⚡", "🎯", "🛡️", "🏭", "🛒", "🏠", "🌱",
+  "💻", "🚗", "🧠", "🔍", "🍜", "🧪", "❤️", "🧱",
+]
+
 const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
   { value: "custom", label: "Tùy chọn" },
   { value: "sector-asc", label: "Sắp xếp theo ngành A-Z" },
@@ -77,6 +85,86 @@ const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
   { value: "market-cap-desc", label: "Sắp xếp theo vốn hóa lớn-bé" },
   { value: "market-cap-asc", label: "Sắp xếp theo vốn hóa bé-lớn" },
 ]
+
+function WatchlistEmojiPicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: string | null
+  onChange: (emoji: string | null) => void
+  compact?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    window.addEventListener("pointerdown", close)
+    return () => window.removeEventListener("pointerdown", close)
+  }, [open])
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        data-watchlist-emoji-trigger
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          "grid place-items-center rounded-md border border-white/[0.12] bg-[#292f37] text-slate-200 transition-colors hover:border-sky-300/35 hover:bg-[#343b45]",
+          compact ? "size-10 text-lg" : "size-12 text-xl",
+          open && "border-sky-300/40 bg-[#343b45]",
+        )}
+        title={value ? `Icon: ${value}` : "Chọn Emoji"}
+        aria-label={value ? `Đổi icon ${value}` : "Chọn icon Emoji"}
+        aria-expanded={open}
+      >
+        {value ? <span aria-hidden="true">{value}</span> : <SmilePlus className={compact ? "size-4" : "size-5"} />}
+      </button>
+
+      {open ? (
+        <div
+          data-watchlist-emoji-picker
+          className={cn(
+            "absolute z-[100] grid w-[244px] grid-cols-8 gap-1 rounded-lg border border-white/[0.12] bg-[#171c23] p-2 shadow-[0_20px_55px_-18px_rgba(0,0,0,0.95)]",
+            compact ? "left-0 top-11" : "left-0 top-14",
+          )}
+        >
+          {WATCHLIST_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => {
+                onChange(emoji)
+                setOpen(false)
+              }}
+              className={cn(
+                "grid size-7 place-items-center rounded text-base transition-colors hover:bg-white/[0.09]",
+                value === emoji && "bg-sky-400/15 ring-1 ring-sky-300/40",
+              )}
+              aria-label={`Chọn icon ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null)
+              setOpen(false)
+            }}
+            className="col-span-8 mt-1 rounded border-t border-white/[0.08] px-2 pt-2 text-center text-[10px] font-semibold text-slate-400 transition-colors hover:text-slate-100"
+          >
+            Không dùng icon
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 function formatPrice(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "—"
@@ -130,12 +218,14 @@ export function StockWatchlistSidebar({
   const [draggedWatchlistId, setDraggedWatchlistId] = useState<string | null>(null)
   const [editingWatchlistId, setEditingWatchlistId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const [renameEmoji, setRenameEmoji] = useState<string | null>(null)
   const [managingWatchlistId, setManagingWatchlistId] = useState<string | null>(null)
   const [loadingList, setLoadingList] = useState(false)
   const [draggedTicker, setDraggedTicker] = useState<string | null>(null)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [newWatchlistName, setNewWatchlistName] = useState("")
+  const [newWatchlistEmoji, setNewWatchlistEmoji] = useState<string | null>(null)
   const [creatingWatchlist, setCreatingWatchlist] = useState(false)
   const [createError, setCreateError] = useState("")
 
@@ -360,6 +450,9 @@ export function StockWatchlistSidebar({
   const activeListName = activeListId === SYSTEM_WATCHLIST_ID
     ? "Top 200 · Thị trường"
     : activeWatchlist?.name ?? "Watchlist"
+  const activeListEmoji = activeListId === SYSTEM_WATCHLIST_ID
+    ? "📊"
+    : activeWatchlist?.emoji ?? null
   const canDrag = sortMode === "custom" && !query.trim()
 
   function handleItemClick(event: React.MouseEvent<HTMLAnchorElement>, ticker: string) {
@@ -426,6 +519,7 @@ export function StockWatchlistSidebar({
     setManageOpen(false)
     setCreateError("")
     setNewWatchlistName("")
+    setNewWatchlistEmoji(null)
     setCreateOpen(true)
   }
 
@@ -434,6 +528,7 @@ export function StockWatchlistSidebar({
     setManageError("")
     setEditingWatchlistId(null)
     setRenameValue("")
+    setRenameEmoji(null)
     setManageOpen(true)
   }
 
@@ -474,6 +569,7 @@ export function StockWatchlistSidebar({
   function beginRenameWatchlist(watchlist: WatchlistMeta) {
     setEditingWatchlistId(watchlist.id)
     setRenameValue(watchlist.name)
+    setRenameEmoji(watchlist.emoji)
     setManageError("")
   }
 
@@ -495,6 +591,7 @@ export function StockWatchlistSidebar({
           action: "rename-watchlist",
           watchlistId,
           name,
+          emoji: renameEmoji,
         }),
       })
       const payload = await response.json().catch(() => null) as {
@@ -513,6 +610,7 @@ export function StockWatchlistSidebar({
       )))
       setEditingWatchlistId(null)
       setRenameValue("")
+      setRenameEmoji(null)
     } finally {
       setManagingWatchlistId(null)
     }
@@ -552,6 +650,7 @@ export function StockWatchlistSidebar({
       if (editingWatchlistId === watchlist.id) {
         setEditingWatchlistId(null)
         setRenameValue("")
+        setRenameEmoji(null)
       }
 
       await reloadWatchlists()
@@ -599,7 +698,7 @@ export function StockWatchlistSidebar({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ createNew: true, name }),
+        body: JSON.stringify({ createNew: true, name, emoji: newWatchlistEmoji }),
       })
       const payload = await response.json().catch(() => null) as { ok?: boolean; watchlist?: WatchlistMeta; error?: string } | null
       if (!response.ok || !payload?.ok || !payload.watchlist) {
@@ -608,6 +707,7 @@ export function StockWatchlistSidebar({
       }
       setWatchlists((current) => [...current, payload.watchlist!].sort((left, right) => left.sort_order - right.sort_order))
       setNewWatchlistName("")
+      setNewWatchlistEmoji(null)
       setCreateOpen(false)
       setActiveListId(payload.watchlist.id)
       setUserItems([])
@@ -682,7 +782,12 @@ export function StockWatchlistSidebar({
                 aria-haspopup="menu"
                 aria-expanded={selectorMenuOpen}
               >
-                <span className="truncate">{activeListName}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="grid size-6 shrink-0 place-items-center rounded border border-white/[0.08] bg-white/[0.04] text-sm">
+                    {activeListEmoji ?? <List className="size-3.5 text-slate-400" />}
+                  </span>
+                  <span className="truncate">{activeListName}</span>
+                </span>
                 <ChevronDown className={cn("size-4 shrink-0 text-slate-300 transition-transform", selectorMenuOpen && "rotate-180")} />
               </button>
 
@@ -707,8 +812,8 @@ export function StockWatchlistSidebar({
                       }}
                       className="flex w-full items-center gap-3 rounded px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
                     >
-                      <span className="grid size-7 shrink-0 place-items-center rounded border border-white/[0.12] bg-white/[0.05] text-slate-300">
-                        <List className="size-4" />
+                      <span className="grid size-7 shrink-0 place-items-center rounded border border-white/[0.12] bg-white/[0.05] text-base">
+                        📊
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">Top 200 · Thị trường</span>
                       {activeListId === SYSTEM_WATCHLIST_ID ? <Check className="size-5 shrink-0 text-sky-200" /> : null}
@@ -726,8 +831,8 @@ export function StockWatchlistSidebar({
                         }}
                         className="flex w-full items-center gap-3 rounded px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
                       >
-                        <span className="grid size-7 shrink-0 place-items-center rounded border border-white/[0.12] bg-white/[0.05] text-slate-300">
-                          <List className="size-4" />
+                        <span className="grid size-7 shrink-0 place-items-center rounded border border-white/[0.12] bg-white/[0.05] text-base text-slate-300">
+                          {watchlist.emoji ?? <List className="size-4" />}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-slate-100">{watchlist.name}</span>
@@ -975,6 +1080,7 @@ export function StockWatchlistSidebar({
           if (!open) {
             setEditingWatchlistId(null)
             setRenameValue("")
+            setRenameEmoji(null)
             setDraggedWatchlistId(null)
             setManageError("")
           }
@@ -982,14 +1088,14 @@ export function StockWatchlistSidebar({
       >
         <DialogContent
           data-watchlist-manage-dialog
-          className="max-h-[85vh] overflow-hidden border-white/[0.16] bg-[#1c2128] p-0 text-slate-100 shadow-[0_30px_90px_-28px_rgba(0,0,0,0.95)] sm:max-w-[900px]"
+          className="max-h-[85vh] overflow-hidden border-white/[0.16] bg-[#1c2128] p-0 font-ticker text-slate-100 shadow-[0_30px_90px_-28px_rgba(0,0,0,0.95)] sm:max-w-[900px]"
         >
-          <DialogHeader className="border-b border-white/[0.14] bg-[#30353d] px-6 py-4 text-left">
-            <DialogTitle className="text-2xl font-black tracking-tight text-slate-100">Quản lý watchlist</DialogTitle>
+          <DialogHeader className="border-b border-white/[0.14] bg-[#2a2f37] px-5 py-3.5 text-left">
+            <DialogTitle className="text-lg font-black tracking-tight text-slate-100">Quản lý Watchlist</DialogTitle>
           </DialogHeader>
 
           <div className="min-h-0 overflow-y-auto px-6 pb-6 pt-5">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-sm border border-sky-300/10 bg-[#213956] px-5 py-4 text-sm font-semibold text-sky-300">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-sky-300/10 bg-[#213956] px-4 py-3 text-xs font-semibold text-sky-300">
               <Info className="size-5 shrink-0" />
               <span className="min-w-0 flex-1">Kéo thả để sắp xếp lại thứ tự hiển thị các watchlist.</span>
               <button
@@ -1049,7 +1155,9 @@ export function StockWatchlistSidebar({
                     </button>
 
                     {isEditing ? (
-                      <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <WatchlistEmojiPicker value={renameEmoji} onChange={setRenameEmoji} compact />
+                        <div className="min-w-0 flex-1">
                         <Input
                           autoFocus
                           value={renameValue}
@@ -1065,18 +1173,24 @@ export function StockWatchlistSidebar({
                             }
                           }}
                           maxLength={80}
-                          className="h-11 max-w-lg border-white/[0.14] bg-[#11161c] text-base font-semibold"
+                          className="h-10 max-w-lg border-white/[0.14] bg-[#11161c] text-sm font-semibold"
                         />
                         {watchlist.is_default ? (
                           <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Watchlist mặc định</div>
                         ) : null}
+                        </div>
                       </div>
                     ) : (
-                      <div className="min-w-0">
-                        <div className="truncate text-lg font-semibold text-slate-100">{watchlist.name}</div>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-md border border-white/[0.1] bg-[#292f37] text-lg text-slate-300">
+                          {watchlist.emoji ?? <List className="size-4" />}
+                        </span>
+                        <div className="min-w-0">
+                        <div className="truncate text-sm font-black text-slate-100">{watchlist.name}</div>
                         {watchlist.is_default ? (
                           <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Watchlist mặc định</div>
                         ) : null}
+                        </div>
                       </div>
                     )}
 
@@ -1096,6 +1210,7 @@ export function StockWatchlistSidebar({
                             onClick={() => {
                               setEditingWatchlistId(null)
                               setRenameValue("")
+                              setRenameEmoji(null)
                               setManageError("")
                             }}
                             disabled={isBusy}
