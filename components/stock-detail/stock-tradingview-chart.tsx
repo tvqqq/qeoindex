@@ -32,7 +32,9 @@ import {
 import { canIncrementallyUpdateLatest, fingerprintOhlcvPrefix } from "./chart/chart-render-diff"
 import { chartTimeRangeForBars, shiftVisibleLogicalRange } from "./chart/chart-viewport"
 import {
+  calculateAmSeries,
   calculateBollingerBands,
+  calculateDeSeries,
   calculateIchimokuBaseSeries,
   calculateIchimokuSeries,
   calculateMacdSeries,
@@ -105,6 +107,11 @@ type ChartSeries = {
   macdZero: LightweightSeriesApi
   rsiUpper: LightweightSeriesApi
   rsiLower: LightweightSeriesApi
+  deTower: LightweightSeriesApi
+  deRibbon: LightweightSeriesApi[]
+  deZero: LightweightSeriesApi
+  amBars: LightweightSeriesApi
+  amZero: LightweightSeriesApi
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -270,6 +277,45 @@ function histogramData(
       color: value >= 0 ? `rgba(34,197,94,${alpha})` : `rgba(239,68,68,${alpha})`,
     }]
   })
+}
+
+function deTowerData(values: Array<number | null>, times: number[]): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = []
+  for (let index = 1; index < values.length && index < times.length; index += 1) {
+    const current = values[index]
+    const previous = values[index - 1]
+    if (
+      typeof current !== "number" || !Number.isFinite(current)
+      || typeof previous !== "number" || !Number.isFinite(previous)
+    ) continue
+    const rising = current >= previous
+    const color = rising ? "#22c55e" : "#ff4757"
+    result.push({
+      time: times[index],
+      open: previous,
+      high: Math.max(previous, current),
+      low: Math.min(previous, current),
+      close: current,
+      color,
+      wickColor: color,
+      borderColor: color,
+    })
+  }
+  return result
+}
+
+function amSignalData(
+  values: Array<number | null>,
+  signals: boolean[],
+  times: number[],
+): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = []
+  for (let index = 0; index < values.length && index < times.length; index += 1) {
+    const value = values[index]
+    if (!signals[index] || typeof value !== "number" || !Number.isFinite(value)) continue
+    result.push({ time: times[index], value, color: "rgba(250,204,21,0.96)" })
+  }
+  return result
 }
 
 function chartSeriesOptions(visible: boolean, color: string, lineWidth = 1): Record<string, unknown> {
@@ -506,6 +552,8 @@ export function StockTradingViewChart({
         showBollinger: false,
         showVolumeProfile: false,
         showQeoBase129: false,
+        showDe: false,
+        showAm: false,
       }, [indicators, isMaximized])
 
   const displayBars = useMemo(
@@ -551,6 +599,14 @@ export function StockTradingViewChart({
     () => isMaximized ? calculateMacdSeries(displayBars) : null,
     [displayBars, isMaximized],
   )
+  const de = useMemo(
+    () => isMaximized && effectiveIndicators.showDe ? calculateDeSeries(displayBars) : null,
+    [displayBars, effectiveIndicators.showDe, isMaximized],
+  )
+  const am = useMemo(
+    () => isMaximized && effectiveIndicators.showAm ? calculateAmSeries(displayBars) : null,
+    [displayBars, effectiveIndicators.showAm, isMaximized],
+  )
 
   const renderPayload = useMemo(() => ({
     candle: candleData(displayBars),
@@ -576,10 +632,17 @@ export function StockTradingViewChart({
     macdSignal: lineData(macd?.signal ?? [], barTimes),
     macdHistogram: histogramData(macd?.histogram ?? [], barTimes, viewSettings.indicatorStyles.macd.opacity),
     macdZero: constantLineData(0, barTimes),
+    deTower: deTowerData(de?.tower ?? [], barTimes),
+    deRibbon: (de?.ribbon ?? []).map((series) => lineData(series, barTimes)),
+    deZero: de ? constantLineData(0, barTimes) : [],
+    amBars: amSignalData(am?.value ?? [], am?.signal ?? [], barTimes),
+    amZero: am ? constantLineData(0, barTimes) : [],
   }), [
     allTimes,
+    am,
     barTimes,
     bollinger,
+    de,
     displayBars,
     futureTimes,
     ichimoku,
@@ -666,16 +729,22 @@ export function StockTradingViewChart({
     macd: valueAtTime(macd?.macd ?? [], barTimes, legendTime),
     macdSignal: valueAtTime(macd?.signal ?? [], barTimes, legendTime),
     macdHistogram: valueAtTime(macd?.histogram ?? [], barTimes, legendTime),
+    de: valueAtTime(de?.tower ?? [], barTimes, legendTime),
+    am: valueAtTime(am?.value ?? [], barTimes, legendTime),
   }
   const overlayWidth = dimensions.width || 1000
   const overlayHeight = dimensions.height || (isMaximized ? 640 : 340)
+  const deVisible = Boolean(isMaximized && effectiveIndicators.showDe)
+  const amVisible = Boolean(isMaximized && effectiveIndicators.showAm)
   const paneHeights = useMemo(() => canonicalPaneGeometry({
     hostHeight: overlayHeight,
     isMaximized: Boolean(isMaximized),
     rsiCollapsed: isRsiCollapsed,
     macdCollapsed: isMacdCollapsed,
-  }), [isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
-  const paneGeometryKey = `${overlayHeight}:${isMaximized}:${isRsiCollapsed}:${isMacdCollapsed}`
+    deVisible,
+    amVisible,
+  }), [amVisible, deVisible, isMacdCollapsed, isMaximized, isRsiCollapsed, overlayHeight])
+  const paneGeometryKey = `${overlayHeight}:${isMaximized}:${isRsiCollapsed}:${isMacdCollapsed}:${deVisible}:${amVisible}`
   const effectivePaneHeights = measuredPaneGeometry?.key === paneGeometryKey
     ? measuredPaneGeometry.geometry
     : paneHeights
@@ -979,6 +1048,48 @@ export function StockTradingViewChart({
             lineStyle: 2,
             title: "MACD 0",
           }, 3),
+          deTower: chart.addSeries(runtime.CandlestickSeries, {
+            visible: false,
+            upColor: "#22c55e",
+            downColor: "#ff4757",
+            wickUpColor: "#22c55e",
+            wickDownColor: "#ff4757",
+            borderVisible: false,
+            priceScaleId: "right",
+            priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+            priceLineVisible: false,
+            lastValueVisible: true,
+            title: "DE",
+          }, 4),
+          deRibbon: Array.from({ length: 15 }, () => chart!.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "rgba(248,250,252,0.88)", 1),
+            priceScaleId: "right",
+            lineVisible: false,
+            pointMarkersVisible: true,
+            pointMarkersRadius: 1.35,
+          }, 4)),
+          deZero: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#64748b", 1),
+            priceScaleId: "right",
+            lineStyle: 2,
+            title: "DE 0",
+          }, 4),
+          amBars: chart.addSeries(runtime.HistogramSeries, {
+            visible: false,
+            color: "#fde047",
+            base: 0,
+            priceScaleId: "right",
+            priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+            priceLineVisible: false,
+            lastValueVisible: true,
+            title: "AM",
+          }, 5),
+          amZero: chart.addSeries(runtime.LineSeries, {
+            ...chartSeriesOptions(false, "#64748b", 1),
+            priceScaleId: "right",
+            lineStyle: 2,
+            title: "AM 0",
+          }, 5),
         }
         chartRef.current = chart
         seriesRef.current = series
@@ -1089,6 +1200,11 @@ export function StockTradingViewChart({
     applyIndicatorStyle(series.macdSignal, { ...styles.macd, color: "#f97316" }, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdHistogram, styles.macd, isMaximized && effectiveIndicators.showMacd)
     applyIndicatorStyle(series.macdZero, { ...styles.macd, color: "#64748b", width: 1, opacity: 0.65, lineStyle: "dashed" }, isMaximized && effectiveIndicators.showMacd)
+    series.deTower.applyOptions({ visible: deVisible })
+    for (const ribbonSeries of series.deRibbon) ribbonSeries.applyOptions({ visible: deVisible })
+    series.deZero.applyOptions({ visible: deVisible })
+    series.amBars.applyOptions({ visible: amVisible })
+    series.amZero.applyOptions({ visible: amVisible })
 
     const previousTimeframe = renderedTimeframeRef.current
     const timeframeChanged = previousTimeframe !== timeframe
@@ -1142,6 +1258,13 @@ export function StockTradingViewChart({
     series.macdSignal.setData(renderPayload.macdSignal)
     series.macdHistogram.setData(renderPayload.macdHistogram)
     series.macdZero.setData(renderPayload.macdZero)
+    series.deTower.setData(renderPayload.deTower)
+    for (let index = 0; index < series.deRibbon.length; index += 1) {
+      series.deRibbon[index].setData(renderPayload.deRibbon[index] ?? [])
+    }
+    series.deZero.setData(renderPayload.deZero)
+    series.amBars.setData(renderPayload.amBars)
+    series.amZero.setData(renderPayload.amZero)
     // Apply future whitespace last. On a reused chart instance this keeps the
     // real dataset authoritative before the projection horizon is extended.
     series.futureAxis.setData(renderPayload.futureAxis)
@@ -1192,6 +1315,8 @@ export function StockTradingViewChart({
     panes[1]?.setHeight(paneHeights.volume)
     panes[2]?.setHeight(paneHeights.rsi)
     panes[3]?.setHeight(paneHeights.macd)
+    panes[4]?.setHeight(paneHeights.de)
+    panes[5]?.setHeight(paneHeights.am)
     // Main is applied last so native pane redistribution cannot steal height
     // from the already-budgeted indicator panes.
     panes[0]?.setHeight(paneHeights.main)
@@ -1212,20 +1337,34 @@ export function StockTradingViewChart({
       borderVisible: isMaximized,
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
+    panes[4]?.getRightPriceScale?.().applyOptions({
+      visible: deVisible,
+      ticksVisible: deVisible,
+      borderVisible: deVisible,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+    })
+    panes[5]?.getRightPriceScale?.().applyOptions({
+      visible: amVisible,
+      ticksVisible: amVisible,
+      borderVisible: amVisible,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+    })
 
     const measureNativePanes = () => {
-      const heights = panes.slice(0, 4).map((pane) => pane?.getHeight?.())
+      const heights = panes.slice(0, 6).map((pane) => pane?.getHeight?.())
       if (
-        heights.length !== 4
+        heights.length !== 6
         || heights.some((height) => typeof height !== "number" || !Number.isFinite(height) || height < 0)
       ) return
-      const [main, volume, rsi, macd] = heights as [number, number, number, number]
+      const [main, volume, rsi, macd, de, am] = heights as [number, number, number, number, number, number]
       const geometry = {
         main,
         volume,
         rsi,
         macd,
-        drawableHeight: main + volume + rsi + macd,
+        de,
+        am,
+        drawableHeight: main + volume + rsi + macd + de + am,
       }
       setMeasuredPaneGeometry((current) => (
         current?.key === paneGeometryKey
@@ -1233,6 +1372,8 @@ export function StockTradingViewChart({
         && current.geometry.volume === volume
         && current.geometry.rsi === rsi
         && current.geometry.macd === macd
+        && current.geometry.de === de
+        && current.geometry.am === am
           ? current
           : { key: paneGeometryKey, geometry }
       ))
@@ -1273,6 +1414,8 @@ export function StockTradingViewChart({
         showBollinger: next.showBollinger,
         showVolumeProfile: next.showVolumeProfile,
         showQeoBase129: Boolean(next.showQeoBase129),
+        showDe: Boolean(next.showDe),
+        showAm: Boolean(next.showAm),
       },
     }))
   }, [setIndicators, setViewSettings])
@@ -1386,6 +1529,8 @@ export function StockTradingViewChart({
         data-chart-volume-pane-height={effectivePaneHeights.volume}
         data-chart-rsi-pane-height={effectivePaneHeights.rsi}
         data-chart-macd-pane-height={effectivePaneHeights.macd}
+        data-chart-de-pane-height={effectivePaneHeights.de}
+        data-chart-am-pane-height={effectivePaneHeights.am}
         data-chart-pane-geometry={measuredPaneGeometry?.key === paneGeometryKey ? "native" : "planned"}
         data-chart-latest-candle-x={latestCandleX ?? ""}
         data-chart-drawable-width={drawingWidth}
@@ -1444,6 +1589,8 @@ export function StockTradingViewChart({
                 <span className="text-sky-300">MACD {formatMetric(legendValues.macd, 4)}</span>
                 <span className="text-orange-300">SIG {formatMetric(legendValues.macdSignal, 4)}</span>
                 <span className={legendValues.macdHistogram != null && legendValues.macdHistogram >= 0 ? "text-emerald-300" : "text-rose-300"}>HIST {formatMetric(legendValues.macdHistogram, 4)}</span>
+                {deVisible && <span className="text-slate-200">DE {formatMetric(legendValues.de, 2)}</span>}
+                {amVisible && <span className="text-yellow-300">AM {formatMetric(legendValues.am, 2)}</span>}
               </>}
             </div>
           </div>
@@ -1453,6 +1600,30 @@ export function StockTradingViewChart({
             {runtimeError && <span className="rounded border border-rose-300/20 bg-[#170d12]/95 px-2 py-1 font-mono text-[10px] text-rose-200">{runtimeError}</span>}
           </div>
         </div>
+
+        {deVisible && (
+          <div
+            data-chart-pane-header="de"
+            style={{ top: effectivePaneHeights.main + effectivePaneHeights.volume + effectivePaneHeights.rsi + effectivePaneHeights.macd + 4 }}
+            className="pointer-events-none absolute left-11 z-20 flex h-5 items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+          >
+            <span className="font-semibold text-slate-200">DE</span>
+            <span className="text-slate-300/90">{formatMetric(legendValues.de, 2)}</span>
+            <span className="text-slate-500">弘历背离王</span>
+          </div>
+        )}
+
+        {amVisible && (
+          <div
+            data-chart-pane-header="am"
+            style={{ top: effectivePaneHeights.main + effectivePaneHeights.volume + effectivePaneHeights.rsi + effectivePaneHeights.macd + effectivePaneHeights.de + 5 }}
+            className="pointer-events-none absolute left-11 z-20 flex h-5 items-center gap-2 whitespace-nowrap font-mono text-[10px] tabular-nums"
+          >
+            <span className="font-semibold text-yellow-300">AM</span>
+            <span className="text-yellow-200/85">{formatMetric(legendValues.am, 2)}</span>
+            <span className="text-slate-600">Accumulate · reconstructed</span>
+          </div>
+        )}
 
         {isMaximized && <StockChartDrawingTools
           activeTool={activeTool}
