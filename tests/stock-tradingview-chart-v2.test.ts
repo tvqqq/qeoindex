@@ -26,7 +26,8 @@ import {
   sourceRangeForResolution,
   splitCanonicalSourceRange,
 } from "../modules/market/chart-data/timeframes.ts"
-import { ALL_TIMEFRAMES, QUICK_TIMEFRAMES } from "../components/stock-detail/chart/stock-chart-types.ts"
+import { ALL_TIMEFRAMES, DEFAULT_CHART_VIEW_SETTINGS, QUICK_TIMEFRAMES } from "../components/stock-detail/chart/stock-chart-types.ts"
+import { normalizeChartViewSettings } from "../components/stock-detail/chart/chart-view-settings.ts"
 import {
   adjacentWatchlistTicker,
   shouldIgnoreStockDetailShortcut,
@@ -61,6 +62,24 @@ test("QEO-241 timeframe definitions expose exactly 1D, 1W and 1M", () => {
   assert.deepEqual(QUICK_TIMEFRAMES, ["1D", "1W", "1M"])
   assert.deepEqual(ALL_TIMEFRAMES.map((timeframe) => timeframe.id), ["1D", "1W", "1M"])
 })
+
+test("QEO-278 RSI defaults use the softer TradingView-style palette and migrate the legacy default", () => {
+  assert.deepEqual(DEFAULT_CHART_VIEW_SETTINGS.indicatorStyles.rsi, {
+    color: "#b6a0f8",
+    opacity: 0.88,
+    width: 2,
+    lineStyle: "solid",
+  })
+
+  const migrated = normalizeChartViewSettings({
+    indicatorStyles: {
+      ...DEFAULT_CHART_VIEW_SETTINGS.indicatorStyles,
+      rsi: { color: "#a78bfa", opacity: 1, width: 2, lineStyle: "solid" },
+    },
+  })
+  assert.deepEqual(migrated.indicatorStyles.rsi, DEFAULT_CHART_VIEW_SETTINGS.indicatorStyles.rsi)
+})
+
 
 test("Technical indicators calculate valid series", () => {
   const sma20 = calculateSma(mockBars, 20)
@@ -263,6 +282,9 @@ test("StockTradingViewChart keeps one native chart instance across compact and m
   assert.match(code, /panes\[0\]\?\.setHeight\(paneHeights\.main\)/)
   assert.match(code, /canonicalPaneGeometry/)
   assert.match(code, /effectiveIndicators\.showRsi/)
+  assert.match(code, /rsiMiddle/)
+  assert.match(code, /rgba\(182,160,248,0\.08\)/)
+  assert.match(code, /RSI 14/)
   assert.match(code, /effectiveIndicators\.showMacd/)
   assert.match(code, /effectiveIndicators\.showIchimoku/)
   assert.match(code, /effectiveIndicators\.showBollinger/)
