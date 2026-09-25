@@ -245,13 +245,15 @@ async function getTickerAiCouncilHistory(
 }
 
 function buildWatchlistFallback(scannerData: ScannerData): StockWatchlistItem[] {
-  return scannerData.universe.slice(0, 30).map((item) => {
+  return scannerData.universe.map((item) => {
     const scan = scannerData.latestScans[item.ticker]
     const price = nullableNumber(scan?.price) ?? 0
     const changePct = nullableNumber(scan?.changePct) ?? 0
     return {
       ticker: item.ticker,
       companyName: resolveCleanCompanyName(item.ticker, [item.companyName], item.sector),
+      sector: item.sector,
+      marketCapT: item.marketCapT,
       price,
       change: price * changePct / 100,
       changePct,
@@ -263,7 +265,7 @@ async function getStockDetailWatchlistSnapshot(
   supabase: SupabaseClient,
   scannerData: ScannerData,
 ): Promise<StockWatchlistItem[]> {
-  const targets = scannerData.universe.slice(0, 30)
+  const targets = scannerData.universe
   const tickers = targets.map((item) => item.ticker)
   if (!tickers.length) return []
 
@@ -296,6 +298,8 @@ async function getStockDetailWatchlistSnapshot(
     return {
       ticker: item.ticker,
       companyName: resolveCleanCompanyName(item.ticker, [row?.company_name, item.companyName], item.sector),
+      sector: item.sector,
+      marketCapT: item.marketCapT,
       price,
       change: price * changePct / 100,
       changePct,
@@ -410,6 +414,8 @@ export async function fetchStockDetailData(
     watchlist.unshift({
       ticker: decoded,
       companyName: resolveCleanCompanyName(decoded, [universeItem?.companyName], fa?.sector),
+      sector: universeItem?.sector || fa?.sector || "Khác",
+      marketCapT: universeItem?.marketCapT || 0,
       price,
       change,
       changePct,

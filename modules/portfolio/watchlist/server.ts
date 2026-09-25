@@ -4,11 +4,11 @@ import { NextResponse } from "next/server"
 
 import { requireApiUser, type ServerAuthContext } from "@/modules/auth/server"
 
-
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff" }
 const TICKER_PATTERN = /^[A-Z0-9]{2,12}$/
 const MAX_SORT_ORDER = 10_000
 const MAX_WATCHLISTS = 5
+const MAX_WATCHLIST_ITEMS = 300
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function watchlistServerError(operation: string, error: unknown) {
@@ -66,45 +66,82 @@ async function loadWatchlist(context: ServerAuthContext, watchlistId: string) {
   return items.data ?? []
 }
 
+async function loadOwnedWatchlists(context: ServerAuthContext) {
+  const { data, error } = await context.supabase
+    .from("watchlists")
+    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .eq("user_id", context.user.id)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  if (error) throw error
+  const watchlists = data ?? []
+  let defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default)
+  if (!defaultWatchlist) {
+    defaultWatchlist = await ensureDefaultWatchlist(context)
+    watchlists.push(defaultWatchlist)
+    watchlists.sort((left, right) => left.sort_order - right.sort_order)
+  }
+  return { watchlists, defaultWatchlist }
+}
+
+async function createWatchlist(context: ServerAuthContext, nameInput: unknown) {
+  const name = String(nameInput ?? "").trim()
+  if (!name || name.length > 80) return err("Tên danh sách không hợp lệ (1-80 ký tự).")
+
+  const { count, error: countError } = await context.supabase
+    .from("watchlists")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", context.user.id)
+
+  if (countError) throw countError
+  if ((count ?? 0) >= MAX_WATCHLISTS) {
+    return err(`Tối đa ${MAX_WATCHLISTS} danh sách theo dõi.`)
+  }
+
+  const { data, error } = await context.supabase
+    .from("watchlists")
+    .insert({
+      user_id: context.user.id,
+      name,
+      is_default: false,
+      sort_order: count ?? 0,
+    })
+    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .single()
+
+  if (error || !data) throw error
+  return NextResponse.json({ ok: true, watchlist: data }, { status: 201, headers: NO_STORE_HEADERS })
+}
+
 /**
- * GET /api/watchlist — returns all watchlists + items for the user.
- * Legacy: also returns the default watchlist as `watchlist` + `items` for backward compat.
+ * GET /api/watchlist
+ * - without wid: returns all watchlists + default items (legacy contract)
+ * - with ?wid=<uuid>: returns all watchlists + the requested owned watchlist items
  */
-export async function handleWatchlistGet() {
+export async function handleWatchlistGet(request?: Request) {
   const auth = await requireApiUser()
   if (!auth.ok) return auth.response
 
   try {
-    // Get all watchlists
-    const { data: watchlists, error: wlError } = await auth.context.supabase
-      .from("watchlists")
-      .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
-      .eq("user_id", auth.context.user.id)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true })
+    const { watchlists, defaultWatchlist } = await loadOwnedWatchlists(auth.context)
+    const requestedId = request ? new URL(request.url).searchParams.get("wid") : null
+    const requestedWatchlist = requestedId && UUID_RE.test(requestedId)
+      ? watchlists.find((watchlist) => watchlist.id === requestedId)
+      : null
 
-    if (wlError) throw wlError
+    if (requestedId && !requestedWatchlist) return err("Danh sách không tồn tại.", 404)
 
-    const allWatchlists = watchlists ?? []
-
-    // Ensure at least one default watchlist exists
-    let defaultWatchlist = allWatchlists.find((w) => w.is_default)
-    if (!defaultWatchlist) {
-      defaultWatchlist = await ensureDefaultWatchlist(auth.context)
-      allWatchlists.push(defaultWatchlist)
-    }
-
-    // Load items for the default watchlist (legacy compat)
-    const items = await loadWatchlist(auth.context, defaultWatchlist.id)
+    const watchlist = requestedWatchlist ?? defaultWatchlist
+    const items = await loadWatchlist(auth.context, watchlist.id)
 
     return NextResponse.json(
       {
         ok: true,
-        // Legacy fields (for existing board integration)
-        watchlist: defaultWatchlist,
+        watchlist,
+        activeWatchlistId: watchlist.id,
         items,
-        // New fields
-        watchlists: allWatchlists,
+        watchlists,
       },
       { headers: NO_STORE_HEADERS },
     )
@@ -114,8 +151,9 @@ export async function handleWatchlistGet() {
 }
 
 /**
- * POST /api/watchlist — add ticker to the default watchlist (legacy behavior)
- *                     OR create a new watchlist (when body has `createNew: true`).
+ * POST /api/watchlist
+ * - { createNew: true, name }: create a watchlist
+ * - { ticker, watchlistId? }: add/update a ticker
  */
 export async function handleWatchlistPost(request: Request) {
   const auth = await requireApiUser()
@@ -123,63 +161,38 @@ export async function handleWatchlistPost(request: Request) {
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null
 
-  // Create new watchlist
   if (body?.createNew === true) {
-    const name = String(body?.name ?? "").trim()
-    if (!name || name.length > 80) return err("Tên danh sách không hợp lệ (1-80 ký tự).")
-
-    const { count } = await auth.context.supabase
-      .from("watchlists")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", auth.context.user.id)
-
-    if ((count ?? 0) >= MAX_WATCHLISTS) {
-      return err(`Tối đa ${MAX_WATCHLISTS} danh sách theo dõi.`)
-    }
-
     try {
-      const { data, error } = await auth.context.supabase
-        .from("watchlists")
-        .insert({
-          user_id: auth.context.user.id,
-          name,
-          is_default: false,
-          sort_order: count ?? 0,
-        })
-        .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
-        .single()
-
-      if (error || !data) throw error
-      return NextResponse.json({ ok: true, watchlist: data }, { status: 201, headers: NO_STORE_HEADERS })
+      return await createWatchlist(auth.context, body.name)
     } catch (error) {
       return watchlistServerError("create-watchlist", error)
     }
   }
 
-  // Add ticker to default watchlist (or specified watchlist via watchlistId)
   const ticker = String(body?.ticker ?? "").trim().toUpperCase()
   if (!TICKER_PATTERN.test(ticker)) {
     return NextResponse.json({ ok: false, error: "Ticker không hợp lệ." }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
-  const requestedSortOrder = Number(body?.sortOrder ?? 0)
+  const rawSortOrder = body?.sortOrder ?? body?.sort_order ?? 0
+  const requestedSortOrder = Number(rawSortOrder)
   const sortOrder = Number.isInteger(requestedSortOrder)
     ? Math.max(0, Math.min(MAX_SORT_ORDER, requestedSortOrder))
     : 0
 
-  // Optional extended fields
   const note = body?.note ? String(body.note).slice(0, 2000) : null
-  const alertPriceAbove = body?.alertPriceAbove != null ? Number(body.alertPriceAbove) : null
-  const alertPriceBelow = body?.alertPriceBelow != null ? Number(body.alertPriceBelow) : null
+  const rawAlertAbove = body?.alertPriceAbove ?? body?.alert_price_above
+  const rawAlertBelow = body?.alertPriceBelow ?? body?.alert_price_below
+  const alertPriceAbove = rawAlertAbove != null ? Number(rawAlertAbove) : null
+  const alertPriceBelow = rawAlertBelow != null ? Number(rawAlertBelow) : null
   const tags = Array.isArray(body?.tags)
-    ? (body.tags as unknown[]).map((t) => String(t).slice(0, 50)).slice(0, 10)
+    ? (body.tags as unknown[]).map((tag) => String(tag).slice(0, 50)).slice(0, 10)
     : []
 
-  // Target watchlist: specified or default
-  let watchlistId: string | null = null
-  if (body?.watchlistId && UUID_RE.test(String(body.watchlistId))) {
-    watchlistId = String(body.watchlistId)
-  }
+  const rawWatchlistId = body?.watchlistId ?? body?.watchlist_id
+  const watchlistId = rawWatchlistId && UUID_RE.test(String(rawWatchlistId))
+    ? String(rawWatchlistId)
+    : null
 
   try {
     let targetWatchlist: { id: string }
@@ -194,6 +207,24 @@ export async function handleWatchlistPost(request: Request) {
       targetWatchlist = data
     } else {
       targetWatchlist = await ensureDefaultWatchlist(auth.context)
+    }
+
+    const existingCount = await auth.context.supabase
+      .from("watchlist_items")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", auth.context.user.id)
+      .eq("watchlist_id", targetWatchlist.id)
+
+    if (existingCount.error) throw existingCount.error
+    if ((existingCount.count ?? 0) >= MAX_WATCHLIST_ITEMS) {
+      const existingTicker = await auth.context.supabase
+        .from("watchlist_items")
+        .select("id")
+        .eq("user_id", auth.context.user.id)
+        .eq("watchlist_id", targetWatchlist.id)
+        .eq("ticker", ticker)
+        .maybeSingle()
+      if (!existingTicker.data) return err(`Tối đa ${MAX_WATCHLIST_ITEMS} mã cho mỗi watchlist.`)
     }
 
     const result = await auth.context.supabase
@@ -224,22 +255,100 @@ export async function handleWatchlistPost(request: Request) {
   }
 }
 
+/** PUT is retained for the existing Portfolio Watchlist UI create contract. */
+export async function handleWatchlistPut(request: Request) {
+  const auth = await requireApiUser()
+  if (!auth.ok) return auth.response
+
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null
+  try {
+    return await createWatchlist(auth.context, body?.name)
+  } catch (error) {
+    return watchlistServerError("create-watchlist", error)
+  }
+}
+
 /**
- * DELETE /api/watchlist?ticker=VCB — remove ticker from default (or specified) watchlist.
- * Also supports deleting a whole watchlist: ?watchlistId=xxx
+ * PATCH /api/watchlist — persist a complete custom order for an owned watchlist.
+ * Body: { watchlistId, tickers: string[] }
+ */
+export async function handleWatchlistPatch(request: Request) {
+  const auth = await requireApiUser()
+  if (!auth.ok) return auth.response
+
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null
+  const watchlistId = String(body?.watchlistId ?? body?.watchlist_id ?? "")
+  const rawTickers = Array.isArray(body?.tickers) ? body.tickers : []
+
+  if (!UUID_RE.test(watchlistId)) return err("Watchlist ID không hợp lệ.")
+  if (rawTickers.length > MAX_WATCHLIST_ITEMS) return err("Danh sách sắp xếp vượt giới hạn.")
+
+  const tickers = rawTickers.map((value) => String(value).trim().toUpperCase())
+  if (tickers.some((ticker) => !TICKER_PATTERN.test(ticker))) return err("Danh sách mã không hợp lệ.")
+  if (new Set(tickers).size !== tickers.length) return err("Danh sách mã bị trùng.")
+
+  try {
+    const { data: owned } = await auth.context.supabase
+      .from("watchlists")
+      .select("id")
+      .eq("id", watchlistId)
+      .eq("user_id", auth.context.user.id)
+      .maybeSingle()
+    if (!owned) return err("Danh sách không tồn tại.", 404)
+
+    const existing = await loadWatchlist(auth.context, watchlistId)
+    const existingSet = new Set(existing.map((item) => item.ticker))
+    if (existingSet.size !== tickers.length || tickers.some((ticker) => !existingSet.has(ticker))) {
+      return err("Thứ tự watchlist đã thay đổi. Vui lòng tải lại.")
+    }
+
+    if (tickers.length) {
+      const existingByTicker = new Map(existing.map((item) => [item.ticker, item] as const))
+      const payload = tickers.map((ticker, index) => {
+        const item = existingByTicker.get(ticker)!
+        return {
+          watchlist_id: watchlistId,
+          user_id: auth.context.user.id,
+          ticker,
+          sort_order: index,
+          note: item.note,
+          alert_price_above: item.alert_price_above,
+          alert_price_below: item.alert_price_below,
+          tags: item.tags,
+        }
+      })
+      const { error } = await auth.context.supabase
+        .from("watchlist_items")
+        .upsert(payload, { onConflict: "watchlist_id,ticker" })
+      if (error) throw error
+    }
+
+    return NextResponse.json({ ok: true, watchlistId, tickers }, { headers: NO_STORE_HEADERS })
+  } catch (error) {
+    return watchlistServerError("reorder", error)
+  }
+}
+
+/**
+ * DELETE /api/watchlist
+ * - ?ticker=VCB&wid=<uuid>: remove ticker
+ * - ?id=<item uuid>: remove item by id (Portfolio UI compatibility)
+ * - ?watchlistId=<uuid> or ?wid=<uuid> without ticker/id: delete watchlist
  */
 export async function handleWatchlistDelete(request: Request) {
   const auth = await requireApiUser()
   if (!auth.ok) return auth.response
 
   const searchParams = new URL(request.url).searchParams
-  const watchlistId = searchParams.get("watchlistId")
+  const itemId = searchParams.get("id")
+  const ticker = (searchParams.get("ticker") ?? "").trim().toUpperCase()
+  const explicitWatchlistId = searchParams.get("watchlistId")
+  const wid = searchParams.get("wid")
+  const deleteWatchlistId = explicitWatchlistId ?? (!itemId && !ticker ? wid : null)
 
-  // Delete entire watchlist
-  if (watchlistId) {
-    if (!UUID_RE.test(watchlistId)) return err("Watchlist ID không hợp lệ.")
+  if (deleteWatchlistId) {
+    if (!UUID_RE.test(deleteWatchlistId)) return err("Watchlist ID không hợp lệ.")
 
-    // Prevent deleting the last watchlist
     const { count } = await auth.context.supabase
       .from("watchlists")
       .select("*", { count: "exact", head: true })
@@ -250,35 +359,49 @@ export async function handleWatchlistDelete(request: Request) {
     const { error } = await auth.context.supabase
       .from("watchlists")
       .delete()
-      .eq("id", watchlistId)
+      .eq("id", deleteWatchlistId)
       .eq("user_id", auth.context.user.id)
 
     if (error) return watchlistServerError("delete-watchlist", error)
-    return NextResponse.json({ ok: true, watchlistId }, { headers: NO_STORE_HEADERS })
+    return NextResponse.json({ ok: true, watchlistId: deleteWatchlistId }, { headers: NO_STORE_HEADERS })
   }
-
-  // Remove ticker from watchlist
-  const ticker = (searchParams.get("ticker") ?? "").trim().toUpperCase()
-  if (!TICKER_PATTERN.test(ticker)) {
-    return NextResponse.json({ ok: false, error: "Ticker không hợp lệ." }, { status: 400, headers: NO_STORE_HEADERS })
-  }
-
-  const targetWatchlistId = searchParams.get("wid")
 
   try {
-    let wlId: string
-    if (targetWatchlistId && UUID_RE.test(targetWatchlistId)) {
-      wlId = targetWatchlistId
+    if (itemId) {
+      if (!UUID_RE.test(itemId)) return err("Watchlist item ID không hợp lệ.")
+      const result = await auth.context.supabase
+        .from("watchlist_items")
+        .delete()
+        .eq("id", itemId)
+        .eq("user_id", auth.context.user.id)
+      if (result.error) throw result.error
+      return NextResponse.json({ ok: true, id: itemId }, { headers: NO_STORE_HEADERS })
+    }
+
+    if (!TICKER_PATTERN.test(ticker)) {
+      return NextResponse.json({ ok: false, error: "Ticker không hợp lệ." }, { status: 400, headers: NO_STORE_HEADERS })
+    }
+
+    let watchlistId: string
+    if (wid && UUID_RE.test(wid)) {
+      const { data } = await auth.context.supabase
+        .from("watchlists")
+        .select("id")
+        .eq("id", wid)
+        .eq("user_id", auth.context.user.id)
+        .maybeSingle()
+      if (!data) return err("Danh sách không tồn tại.", 404)
+      watchlistId = data.id
     } else {
-      const wl = await ensureDefaultWatchlist(auth.context)
-      wlId = wl.id
+      const watchlist = await ensureDefaultWatchlist(auth.context)
+      watchlistId = watchlist.id
     }
 
     const result = await auth.context.supabase
       .from("watchlist_items")
       .delete()
       .eq("user_id", auth.context.user.id)
-      .eq("watchlist_id", wlId)
+      .eq("watchlist_id", watchlistId)
       .eq("ticker", ticker)
 
     if (result.error) throw result.error

@@ -304,7 +304,9 @@ test("stock detail workstation pins sidebars and allows center column scrolling 
 
   // Right sidebar is pinned with internal list scroll
   assert.match(workstation, /<aside className="w-full lg:h-full lg:overflow-hidden">/)
-  assert.match(watchlist, /min-h-\[500px\] lg:min-h-0 flex-col overflow-hidden/)
+  assert.match(watchlist, /data-stock-detail-watchlist/)
+  assert.match(watchlist, /min-h-\[500px\]/)
+  assert.match(watchlist, /lg:min-h-0/)
   assert.match(watchlist, /overflow-y-auto/)
 })
 

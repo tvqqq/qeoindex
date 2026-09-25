@@ -326,6 +326,31 @@ test("StockDetailWorkstation binds guarded fullscreen shortcuts to watchlist nav
   assert.match(source("components/stock-detail/stock-watchlist-sidebar.tsx"), /filteredItems\.map\(\(item\) => item\.ticker\)/)
 })
 
+test("QEO-280 Stock Detail watchlist uses the existing watchlist API with FireAnt-style sorting and drag reorder", () => {
+  const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
+  const stockDetailData = source("modules/research/insights/stock-detail-data.ts")
+
+  assert.match(sidebar, /data-stock-detail-watchlist/)
+  assert.match(sidebar, /data-watchlist-selector/)
+  assert.match(sidebar, /Top 200 · Thị trường/)
+  assert.match(sidebar, /Sắp xếp theo ngành A-Z/)
+  assert.match(sidebar, /Sắp xếp theo mã A-Z/)
+  assert.match(sidebar, /Sắp xếp theo giá tăng-giảm/)
+  assert.match(sidebar, /Sắp xếp theo % giá tăng-giảm/)
+  assert.match(sidebar, /Sắp xếp theo vốn hóa lớn-bé/)
+  assert.match(sidebar, /draggable=\{canDrag\}/)
+  assert.match(sidebar, /method: "PATCH"/)
+  assert.match(sidebar, /method: "POST"/)
+  assert.match(sidebar, /createNew: true/)
+  assert.match(sidebar, /window\.localStorage\.setItem\(SYSTEM_ORDER_KEY/)
+  assert.match(sidebar, /onVisibleTickersChange\?\.\(filteredItems\.map\(\(item\) => item\.ticker\)\)/)
+
+  assert.match(stockDetailData, /const targets = scannerData\.universe/)
+  assert.doesNotMatch(stockDetailData, /scannerData\.universe\.slice\(0, 30\)/)
+  assert.match(stockDetailData, /marketCapT: item\.marketCapT/)
+  assert.match(stockDetailData, /sector: item\.sector/)
+})
+
 test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
   const blockedTarget = { closest: (selectors: string) => selectors.includes("input") ? {} : null }
   assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)

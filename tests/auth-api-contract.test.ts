@@ -48,6 +48,21 @@ test("per-user account, watchlist, and insights APIs derive access from server a
   assert.match(wyckoff, /auth\.context\.supabase/)
 })
 
+test("QEO-280 watchlist API exposes owned-list selection, create compatibility, and reorder persistence", () => {
+  const route = source("app/api/watchlist/route.ts")
+  const server = source("modules/portfolio/watchlist/server.ts")
+
+  assert.match(route, /export const PUT = handleWatchlistPut/)
+  assert.match(route, /export const PATCH = handleWatchlistPatch/)
+  assert.match(server, /new URL\(request\.url\)\.searchParams\.get\("wid"\)/)
+  assert.match(server, /activeWatchlistId: watchlist\.id/)
+  assert.match(server, /body\?\.watchlistId \?\? body\?\.watchlist_id/)
+  assert.match(server, /body\?\.sortOrder \?\? body\?\.sort_order/)
+  assert.match(server, /handleWatchlistPatch/)
+  assert.match(server, /Thứ tự watchlist đã thay đổi/)
+  assert.match(server, /\.eq\("user_id", auth\.context\.user\.id\)/)
+})
+
 test("server-rendered app surfaces verify the server session", () => {
   assert.match(source("app/page.tsx"), /getServerAuthContext/)
   assert.match(source("app/insights/wyckoff/page.tsx"), /getServerAuthContext/)
