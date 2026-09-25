@@ -1008,7 +1008,7 @@ export function StockTradingViewChart({
             priceScaleId: "right",
             priceFormat: { type: "price", precision: 2, minMove: 0.01 },
             lastValueVisible: true,
-            priceLineVisible: true,
+            priceLineVisible: false,
             title: "RSI 14",
           }, 2),
           rsiUpper: chart.addSeries(runtime.LineSeries, {
