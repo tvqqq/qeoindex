@@ -1308,7 +1308,9 @@ export function StockTradingViewChart({
     }
     scheduleOverlayPaint()
   }, [
+    amVisible,
     chartReady,
+    deVisible,
     displayBars,
     barFingerprint,
     futureTimes.length,
@@ -1402,7 +1404,9 @@ export function StockTradingViewChart({
     scheduleOverlayPaint()
     return () => window.cancelAnimationFrame(measurementFrame)
   }, [
+    amVisible,
     chartReady,
+    deVisible,
     isMaximized,
     onPaneGeometryChange,
     paneGeometryKey,
