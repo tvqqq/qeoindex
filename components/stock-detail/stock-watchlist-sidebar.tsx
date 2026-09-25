@@ -9,7 +9,6 @@ import {
   GripVertical,
   Info,
   List,
-  ListPlus,
   Pencil,
   Plus,
   Search,
@@ -535,9 +534,12 @@ export function StockWatchlistSidebar({
         return
       }
 
-      const nextWatchlists = watchlists
-        .filter((item) => item.id !== watchlist.id)
-        .map((item, index) => ({ ...item, sort_order: index }))
+      const remaining = watchlists.filter((item) => item.id !== watchlist.id)
+      const nextWatchlists = remaining.map((item, index) => ({
+        ...item,
+        is_default: watchlist.is_default ? index === 0 : item.is_default,
+        sort_order: index,
+      }))
       setWatchlists(nextWatchlists)
 
       if (activeListId === watchlist.id) {
@@ -552,7 +554,7 @@ export function StockWatchlistSidebar({
         setRenameValue("")
       }
 
-      if (nextWatchlists.length) void persistWatchlistOrder(nextWatchlists)
+      await reloadWatchlists()
     } finally {
       setManagingWatchlistId(null)
     }
@@ -764,7 +766,10 @@ export function StockWatchlistSidebar({
               <button
                 data-watchlist-sort-trigger
                 type="button"
-                onClick={() => setSortMenuOpen((open) => !open)}
+                onClick={() => {
+                  setSortMenuOpen((open) => !open)
+                  setSelectorMenuOpen(false)
+                }}
                 className={cn(
                   "grid size-9 place-items-center rounded-sm border border-white/[0.08] bg-[#353a43] text-slate-200 transition-colors hover:bg-[#414750] hover:text-white",
                   sortMenuOpen && "border-sky-400/40 bg-[#414750]",
