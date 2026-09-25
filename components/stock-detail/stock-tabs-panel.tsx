@@ -31,6 +31,12 @@ import {
 import AnimatedProgressBar from "@/components/smoothui/animated-progress-bar"
 import { TtaiDashboard } from "@/components/insights/ttai-dashboard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  StockChartCnBars,
+  StockChartCnRadar,
+  StockChartCnSignedBars,
+  type StockRadarDatum,
+} from "./stock-chartcn"
 import type { StockDetailData } from "./types"
 import { parseLevel } from "./stock-ai-sidebar"
 import type { InsightsRatingRow, KfspMetricValue } from "@/modules/research/insights/data"
@@ -184,14 +190,6 @@ function snapshotModel(snapshot: RatingModelSnapshot) {
   return calculateRatingModel(snapshot)
 }
 
-function radarPoints(dimensions: RatingDimension[], radius: number, center = 140) {
-  return dimensions.map((dimension, index) => {
-    const angle = -Math.PI / 2 + (index * Math.PI * 2) / dimensions.length
-    const length = (radius * dimension.score) / 100
-    return `${(center + Math.cos(angle) * length).toFixed(1)},${(center + Math.sin(angle) * length).toFixed(1)}`
-  }).join(" ")
-}
-
 function RatingRadar({ row }: { row: InsightsRatingRow }) {
   const history = row.scoreHistory?.length ? row.scoreHistory : [row]
   const series = [
@@ -201,10 +199,38 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
   ].flatMap((definition) => {
     const currentDate = new Date(`${row.asOfDate}T00:00:00Z`)
     currentDate.setUTCDate(currentDate.getUTCDate() - definition.days)
-    const snapshot = history.filter((item) => item.asOfDate <= currentDate.toISOString().slice(0, 10)).sort((a, b) => b.asOfDate.localeCompare(a.asOfDate))[0]
+    const snapshot = history
+      .filter((item) => item.asOfDate <= currentDate.toISOString().slice(0, 10))
+      .sort((a, b) => b.asOfDate.localeCompare(a.asOfDate))[0]
     return snapshot ? [{ ...definition, model: snapshotModel(snapshot) }] : []
   })
   const model = calculateRatingModel(row)
+  const radarData: StockRadarDatum[] = model.dimensions.map((dimension) => {
+    const point: StockRadarDatum = {
+      metric: dimension.shortLabel,
+      current: dimension.score,
+    }
+    series.forEach((item, index) => {
+      point[`history${index}`] = item.model.dimensions.find((candidate) => candidate.key === dimension.key)?.score ?? null
+    })
+    return point
+  })
+  const radarSeries = [
+    ...series.map((item, index) => ({
+      key: `history${index}`,
+      label: item.label,
+      color: item.color,
+      strokeDasharray: item.dash,
+      fillOpacity: 0,
+    })),
+    {
+      key: "current",
+      label: "Hiện tại",
+      color: "#a78bfa",
+      fillOpacity: 0.17,
+    },
+  ]
+
   return (
     <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3">
@@ -217,33 +243,26 @@ function RatingRadar({ row }: { row: InsightsRatingRow }) {
             <p className="mt-0.5 text-xs text-muted-2">Heuristic minh bạch từ CANSLIM, 4M, RS, RRG, biến động, RSI, beta.</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold text-muted-2">
-          {series.map((item) => <span key={item.label} className="flex items-center gap-1.5"><i className="h-px w-4" style={{ background: item.color }} />{item.label}</span>)}
-          <span className="flex items-center gap-1.5 text-white"><i className="h-0.5 w-4 bg-violet-300" />Hiện tại</span>
-        </div>
       </div>
-      <div className="mt-3 grid items-center gap-5 md:grid-cols-[280px_1fr]">
-        <svg viewBox="0 0 280 280" className="mx-auto aspect-square w-full max-w-[260px]" role="img" aria-label={`Radar trạng thái ${row.ticker}`}>
-          {[25, 50, 75, 100].map((level) => <polygon key={level} points={radarPoints(model.dimensions.map((item) => ({ ...item, score: level })), 96, 140)} fill="none" stroke="rgba(148,163,184,.13)" />)}
-          {model.dimensions.map((dimension, index) => {
-            const angle = -Math.PI / 2 + (index * Math.PI * 2) / model.dimensions.length
-            const x = 140 + Math.cos(angle) * 118
-            const y = 140 + Math.sin(angle) * 118
-            return (
-              <g key={dimension.key}>
-                <line x1="140" y1="140" x2={140 + Math.cos(angle) * 96} y2={140 + Math.sin(angle) * 96} stroke="rgba(148,163,184,.12)" />
-                <text x={x} y={y} textAnchor="middle" dominantBaseline="middle" fill={DIMENSION_STYLE[dimension.key].color} fontSize="12" fontWeight="800">{dimension.shortLabel} {dimension.score}</text>
-              </g>
-            )
-          })}
-          {series.map((item) => <polygon key={item.label} points={radarPoints(item.model.dimensions, 96, 140)} fill="none" stroke={item.color} strokeWidth="1.5" strokeDasharray={item.dash} opacity=".8" />)}
-          <polygon points={radarPoints(model.dimensions, 96, 140)} fill="rgba(167,139,250,.17)" stroke="#a78bfa" strokeWidth="2.5" />
-        </svg>
+
+      <div className="mt-3 grid items-center gap-5 md:grid-cols-[minmax(320px,0.9fr)_1.1fr]">
+        <StockChartCnRadar
+          data={radarData}
+          series={radarSeries}
+          height={320}
+          className="max-w-[520px]"
+        />
+
         <div className="grid gap-2.5 sm:grid-cols-2">
           {model.dimensions.map((dimension) => {
             const style = DIMENSION_STYLE[dimension.key]
             const Icon = style.icon
-            const deltas = [1, 7, 30].map((days) => historyDelta(dimension.score, history, days, (snapshot) => snapshotModel(snapshot).dimensions.find((item) => item.key === dimension.key)?.score ?? null))
+            const deltas = [1, 7, 30].map((days) => historyDelta(
+              dimension.score,
+              history,
+              days,
+              (snapshot) => snapshotModel(snapshot).dimensions.find((item) => item.key === dimension.key)?.score ?? null,
+            ))
             return (
               <div key={dimension.key} className="rounded-xl border border-white/[0.07] bg-[#0a1422] p-3">
                 <div className="flex items-center gap-2">
@@ -449,13 +468,10 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
     { label: "YTD", value: metricNumber("price_change_ytd_pct") },
     { label: "1Y", value: metricNumber("price_change_1y_pct") },
   ]
-  const performanceScale = Math.max(1, ...performance.map((item) => Math.abs(item.value ?? 0)))
-
   const smaDistance = [10, 20, 50, 100, 200].map((period) => ({
     label: `SMA${period}`,
     value: metricNumber(`price_vs_sma${period}_pct`),
   }))
-  const smaScale = Math.max(1, ...smaDistance.map((item) => Math.abs(item.value ?? 0)))
   const smaAboveCount = smaDistance.filter((item) => (item.value ?? -Infinity) > 0).length
 
   const volumeSeries = [
@@ -464,15 +480,18 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
     { label: "TB 20D", value: metricNumber("average_volume_20d") },
     { label: "TB 50D", value: metricNumber("average_volume_50d") ?? row.volume },
   ]
-  const volumeScale = Math.max(1, ...volumeSeries.map((item) => item.value ?? 0))
-
   const tradedValueSeries = [
     { label: "Hôm nay", value: metricNumber("traded_value_1d_billion") },
     { label: "TB 10D", value: metricNumber("average_traded_value_10d_billion") },
     { label: "TB 20D", value: metricNumber("average_traded_value_20d_billion") },
     { label: "TB 50D", value: metricNumber("average_traded_value_50d_billion") },
   ]
-  const tradedValueScale = Math.max(1, ...tradedValueSeries.map((item) => item.value ?? 0))
+  const financialGrowthSeries = [
+    { label: "Doanh thu", value: metricNumber("net_revenue_growth_pct") },
+    { label: "LN sau thuế", value: metricNumber("net_income_growth_pct") },
+    { label: "EPS", value: metricNumber("eps_ttm_growth_pct") },
+    { label: "BVPS", value: metricNumber("bvps_ttm_growth_pct") },
+  ]
 
   const rowRsi = typeof row.rsi14 === "number" ? row.rsi14 : Number(row.rsi14)
   const rsi = metricNumber("rsi_14") ?? (Number.isFinite(rowRsi) ? rowRsi : null)
@@ -489,29 +508,12 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
   ]
 
   const renderPerformanceBars = () => (
-    <div className="space-y-3">
-      {performance.map((item) => {
-        const value = item.value
-        const width = value == null ? 0 : Math.min(50, (Math.abs(value) / performanceScale) * 50)
-        return (
-          <div key={item.label} className="grid grid-cols-[42px_1fr_74px] items-center gap-3">
-            <span className="text-xs font-extrabold text-muted-2">{item.label}</span>
-            <div className="relative h-2.5 overflow-hidden rounded-full bg-white/[0.05]">
-              <span className="absolute left-1/2 top-0 h-full w-px bg-white/20" />
-              {value != null && (
-                <span
-                  className={cn("absolute top-0 h-full rounded-full", value >= 0 ? "left-1/2 bg-emerald-400" : "right-1/2 bg-rose-400")}
-                  style={{ width: `${width}%` }}
-                />
-              )}
-            </div>
-            <span className={cn("text-right font-mono text-sm font-black", value == null ? "text-muted-2" : value >= 0 ? "text-up" : "text-down")}>
-              {formatPercent(value)}
-            </span>
-          </div>
-        )
-      })}
-    </div>
+    <StockChartCnSignedBars
+      data={performance}
+      seriesLabel="Hiệu suất"
+      height={260}
+      formatValue={formatPercent}
+    />
   )
 
   return (
@@ -828,33 +830,12 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                     <p className="mt-0.5 text-xs text-muted-2">So sánh tốc độ tăng trưởng của các driver chính.</p>
                   </div>
                 </div>
-                <div className="mt-4 space-y-3.5">
-                  {[
-                    { label: "Doanh thu", key: "net_revenue_growth_pct" },
-                    { label: "LN sau thuế", key: "net_income_growth_pct" },
-                    { label: "EPS", key: "eps_ttm_growth_pct" },
-                    { label: "BVPS", key: "bvps_ttm_growth_pct" },
-                  ].map((item) => {
-                    const value = metricNumber(item.key)
-                    const width = value == null ? 0 : Math.min(100, Math.abs(value))
-                    return (
-                      <div key={item.key}>
-                        <div className="mb-1.5 flex items-center justify-between text-xs font-bold">
-                          <span className="text-muted-2">{item.label}</span>
-                          <span className={value == null ? "text-muted-2" : value >= 0 ? "text-up" : "text-down"}>
-                            {value == null ? "—" : formatPercent(value)}
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-white/[0.05]">
-                          <div
-                            className={cn("h-full rounded-full", (value ?? 0) >= 0 ? "bg-emerald-400" : "bg-rose-400")}
-                            style={{ width: `${width}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                <StockChartCnSignedBars
+                  data={financialGrowthSeries}
+                  seriesLabel="Tăng trưởng"
+                  height={220}
+                  formatValue={formatPercent}
+                />
               </div>
 
               <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
@@ -908,28 +889,13 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  {smaDistance.map((item) => {
-                    const width = item.value == null ? 0 : Math.min(50, (Math.abs(item.value) / smaScale) * 50)
-                    return (
-                      <div key={item.label} className="grid grid-cols-[60px_1fr_70px] items-center gap-3">
-                        <span className="text-xs font-extrabold text-muted-2">{item.label}</span>
-                        <div className="relative h-2.5 rounded-full bg-white/[0.05]">
-                          <span className="absolute left-1/2 top-0 h-full w-px bg-white/20" />
-                          {item.value != null && (
-                            <span
-                              className={cn("absolute top-0 h-full rounded-full", item.value >= 0 ? "left-1/2 bg-cyan-400" : "right-1/2 bg-rose-400")}
-                              style={{ width: `${width}%` }}
-                            />
-                          )}
-                        </div>
-                        <span className={cn("text-right font-mono text-xs font-black", item.value == null ? "text-muted-2" : item.value >= 0 ? "text-up" : "text-down")}>
-                          {formatPercent(item.value)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
+                <StockChartCnSignedBars
+                  data={smaDistance}
+                  seriesLabel="Khoảng cách SMA"
+                  positiveColor="#22d3ee"
+                  height={220}
+                  formatValue={formatPercent}
+                />
               </div>
             </div>
 
@@ -1047,22 +1013,13 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  {volumeSeries.map((item) => (
-                    <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3">
-                      <span className="text-xs font-bold text-muted-2">{item.label}</span>
-                      <div className="h-2.5 rounded-full bg-white/[0.05]">
-                        <div
-                          className="h-full rounded-full bg-cyan-400"
-                          style={{ width: `${Math.min(100, ((item.value ?? 0) / volumeScale) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-right font-mono text-xs font-black text-white">
-                        {item.value == null ? "—" : compactVolume(item.value)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <StockChartCnBars
+                  data={volumeSeries}
+                  seriesLabel="Khối lượng"
+                  color="#22d3ee"
+                  height={210}
+                  formatValue={compactVolume}
+                />
               </div>
 
               <div className="rounded-2xl border border-white/[0.07] bg-[#07111f] p-4 sm:p-5 font-ticker">
@@ -1077,22 +1034,13 @@ export function StockTabsPanel({ data }: { data: StockDetailData }) {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  {tradedValueSeries.map((item) => (
-                    <div key={item.label} className="grid grid-cols-[72px_1fr_90px] items-center gap-3">
-                      <span className="text-xs font-bold text-muted-2">{item.label}</span>
-                      <div className="h-2.5 rounded-full bg-white/[0.05]">
-                        <div
-                          className="h-full rounded-full bg-amber-400"
-                          style={{ width: `${Math.min(100, ((item.value ?? 0) / tradedValueScale) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-right font-mono text-xs font-black text-white">
-                        {item.value == null ? "—" : `${formatNumber(item.value)} tỷ`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <StockChartCnBars
+                  data={tradedValueSeries}
+                  seriesLabel="Giá trị giao dịch"
+                  color="#fbbf24"
+                  height={210}
+                  formatValue={(value) => value == null ? "—" : `${formatNumber(value)} tỷ`}
+                />
               </div>
             </div>
 
