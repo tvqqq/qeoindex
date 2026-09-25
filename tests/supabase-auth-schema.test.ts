@@ -66,3 +66,19 @@ test("QEO-22 keeps the API loser path race-safe after a unique-index conflict", 
   assert.match(watchlistServer, /\.eq\("is_default", true\)\s*\.single\(\)/)
   assert.match(watchlistServer, /if \(fallback\.error\) throw inserted\.error \?\? fallback\.error/)
 })
+
+
+test("QEO-283 adds optional watchlist emoji metadata with a bounded database constraint", () => {
+  const migrationsDir = new URL("../supabase/migrations/", import.meta.url)
+  const matches = readdirSync(migrationsDir).filter((name) => name.endsWith("_qeo283_watchlist_emoji.sql"))
+  assert.equal(matches.length, 1, "expected exactly one QEO-283 watchlist emoji migration")
+  const qeo283 = readFileSync(new URL(`../supabase/migrations/${matches[0]}`, import.meta.url), "utf8")
+  const types = readFileSync(new URL("../modules/shared/supabase/database.types.ts", import.meta.url), "utf8")
+
+  assert.match(qeo283, /alter table public\.watchlists[\s\S]*add column if not exists emoji text/i)
+  assert.match(qeo283, /watchlists_emoji_length_check/)
+  assert.match(qeo283, /char_length\(emoji\) between 1 and 16/)
+  assert.match(types, /watchlists: \{[\s\S]*?Row: \{[\s\S]*?emoji: string \| null/)
+  assert.match(types, /Insert: \{[\s\S]*?emoji\?: string \| null/)
+  assert.match(types, /Update: \{[\s\S]*?emoji\?: string \| null/)
+})
