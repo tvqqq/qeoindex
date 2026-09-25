@@ -4,7 +4,6 @@ import Link from "next/link"
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowDownAZ,
-  ArrowUpDown,
   Check,
   ChevronDown,
   GripVertical,
@@ -175,7 +174,7 @@ export function StockWatchlistSidebar({
         setWatchlists(nextWatchlists)
 
         const storedActive = window.localStorage.getItem(ACTIVE_LIST_KEY)
-        if (storedActive === SYSTEM_WATCHLIST_ID || nextWatchlists.some((watchlist) => watchlist.id === storedActive)) {
+        if (storedActive && (storedActive === SYSTEM_WATCHLIST_ID || nextWatchlists.some((watchlist) => watchlist.id === storedActive))) {
           setActiveListId(storedActive)
         }
       })
