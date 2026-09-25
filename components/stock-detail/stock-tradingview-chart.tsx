@@ -417,7 +417,7 @@ function AlignedIndicatorCanvas({
         const top = rsiPaneTop + Math.min(rsi70, rsi30)
         const bandHeight = Math.max(1, Math.abs(rsi30 - rsi70))
         context.fillStyle = "rgba(182,160,248,0.08)"
-        context.fillRect(0, top, width, bandHeight)
+        context.fillRect(0, top, Math.max(0, width - priceAxisGutter), bandHeight)
       }
     }
 
