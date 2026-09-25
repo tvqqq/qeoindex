@@ -23,11 +23,18 @@ function err(msg: string, status = 400) {
   return NextResponse.json({ ok: false, error: msg }, { status, headers: NO_STORE_HEADERS })
 }
 
+function normalizeWatchlistEmoji(value: unknown) {
+  const emoji = String(value ?? "").trim()
+  if (!emoji) return null
+  if (Array.from(emoji).length > 16) return undefined
+  return emoji
+}
+
 async function ensureDefaultWatchlist(context: ServerAuthContext) {
   const userId = context.user.id
   const existing = await context.supabase
     .from("watchlists")
-    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,emoji,is_default,sort_order,created_at,updated_at")
     .eq("user_id", userId)
     .eq("is_default", true)
     .maybeSingle()
@@ -38,14 +45,14 @@ async function ensureDefaultWatchlist(context: ServerAuthContext) {
   const inserted = await context.supabase
     .from("watchlists")
     .insert({ user_id: userId, name: "Theo dõi", is_default: true, sort_order: 0 })
-    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,emoji,is_default,sort_order,created_at,updated_at")
     .single()
 
   if (!inserted.error && inserted.data) return inserted.data
 
   const fallback = await context.supabase
     .from("watchlists")
-    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,emoji,is_default,sort_order,created_at,updated_at")
     .eq("user_id", userId)
     .eq("is_default", true)
     .single()
@@ -69,7 +76,7 @@ async function loadWatchlist(context: ServerAuthContext, watchlistId: string) {
 async function loadOwnedWatchlists(context: ServerAuthContext) {
   const { data, error } = await context.supabase
     .from("watchlists")
-    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,emoji,is_default,sort_order,created_at,updated_at")
     .eq("user_id", context.user.id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true })
@@ -85,9 +92,11 @@ async function loadOwnedWatchlists(context: ServerAuthContext) {
   return { watchlists, defaultWatchlist }
 }
 
-async function createWatchlist(context: ServerAuthContext, nameInput: unknown) {
+async function createWatchlist(context: ServerAuthContext, nameInput: unknown, emojiInput?: unknown) {
   const name = String(nameInput ?? "").trim()
+  const emoji = normalizeWatchlistEmoji(emojiInput)
   if (!name || name.length > 80) return err("Tên danh sách không hợp lệ (1-80 ký tự).")
+  if (emoji === undefined) return err("Icon watchlist không hợp lệ.")
 
   const { count, error: countError } = await context.supabase
     .from("watchlists")
@@ -104,10 +113,11 @@ async function createWatchlist(context: ServerAuthContext, nameInput: unknown) {
     .insert({
       user_id: context.user.id,
       name,
+      emoji,
       is_default: false,
       sort_order: count ?? 0,
     })
-    .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+    .select("id,user_id,name,emoji,is_default,sort_order,created_at,updated_at")
     .single()
 
   if (error || !data) throw error
@@ -152,7 +162,7 @@ export async function handleWatchlistGet(request?: Request) {
 
 /**
  * POST /api/watchlist
- * - { createNew: true, name }: create a watchlist
+ * - { createNew: true, name, emoji? }: create a watchlist
  * - { ticker, watchlistId? }: add/update a ticker
  */
 export async function handleWatchlistPost(request: Request) {
@@ -163,7 +173,7 @@ export async function handleWatchlistPost(request: Request) {
 
   if (body?.createNew === true) {
     try {
-      return await createWatchlist(auth.context, body.name)
+      return await createWatchlist(auth.context, body.name, body.emoji)
     } catch (error) {
       return watchlistServerError("create-watchlist", error)
     }
@@ -262,7 +272,7 @@ export async function handleWatchlistPut(request: Request) {
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null
   try {
-    return await createWatchlist(auth.context, body?.name)
+    return await createWatchlist(auth.context, body?.name, body?.emoji)
   } catch (error) {
     return watchlistServerError("create-watchlist", error)
   }
@@ -272,7 +282,7 @@ export async function handleWatchlistPut(request: Request) {
  * PATCH /api/watchlist
  * - { watchlistId, tickers: string[] }: persist item order inside one watchlist
  * - { action: "reorder-watchlists", watchlistIds: string[] }: persist user watchlist order
- * - { action: "rename-watchlist", watchlistId, name }: rename one owned watchlist
+ * - { action: "rename-watchlist", watchlistId, name, emoji? }: update one owned watchlist
  */
 export async function handleWatchlistPatch(request: Request) {
   const auth = await requireApiUser()
@@ -323,17 +333,19 @@ export async function handleWatchlistPatch(request: Request) {
   if (action === "rename-watchlist" || body?.renameWatchlist === true) {
     const watchlistId = String(body?.watchlistId ?? body?.watchlist_id ?? "")
     const name = String(body?.name ?? "").trim()
+    const emoji = normalizeWatchlistEmoji(body?.emoji)
 
     if (!UUID_RE.test(watchlistId)) return err("Watchlist ID không hợp lệ.")
     if (!name || name.length > 80) return err("Tên danh sách không hợp lệ (1-80 ký tự).")
+    if (emoji === undefined) return err("Icon watchlist không hợp lệ.")
 
     try {
       const { data, error } = await auth.context.supabase
         .from("watchlists")
-        .update({ name })
+        .update({ name, emoji })
         .eq("id", watchlistId)
         .eq("user_id", auth.context.user.id)
-        .select("id,user_id,name,is_default,sort_order,created_at,updated_at")
+        .select("id,user_id,name,emoji,is_default,sort_order,created_at,updated_at")
         .maybeSingle()
 
       if (error) throw error
