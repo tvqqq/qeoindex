@@ -351,6 +351,27 @@ test("QEO-280 Stock Detail watchlist uses the existing watchlist API with FireAn
   assert.match(stockDetailData, /sector: item\.sector/)
 })
 
+test("QEO-281 widens the Watchlist column and reuses the Home-style stock autocomplete pattern", () => {
+  const workstation = source("components/stock-detail/stock-detail-workstation.tsx")
+  const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
+
+  assert.match(workstation, /lg:grid-cols-\[minmax\(0,1fr\)_310px\]/)
+  assert.match(workstation, /xl:grid-cols-\[minmax\(0,1fr\)_330px\]/)
+  assert.match(workstation, /2xl:grid-cols-\[minmax\(0,1fr\)_350px\]/)
+  assert.match(workstation, /lg:grid-cols-\[288px_minmax\(0,1fr\)_310px\]/)
+
+  assert.match(sidebar, /StockLogo/)
+  assert.match(sidebar, /data-watchlist-stock-autocomplete/)
+  assert.match(sidebar, /role="combobox"/)
+  assert.match(sidebar, /aria-autocomplete="list"/)
+  assert.match(sidebar, /event\.key === "ArrowDown"/)
+  assert.match(sidebar, /event\.key === "ArrowUp"/)
+  assert.match(sidebar, /selectedAddStock \?\? activeAddStock/)
+  assert.match(sidebar, /itemByTicker\.get\(requestedTicker\)/)
+  assert.match(sidebar, /Chọn mã cổ phiếu từ danh sách gợi ý/)
+  assert.match(sidebar, /stock\.companyName/)
+})
+
 test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
   const blockedTarget = { closest: (selectors: string) => selectors.includes("input") ? {} : null }
   assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)
