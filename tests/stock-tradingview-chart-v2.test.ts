@@ -372,6 +372,25 @@ test("QEO-281 widens the Watchlist column and reuses the Home-style stock autoco
   assert.match(sidebar, /stock\.companyName/)
 })
 
+test("QEO-282 adds FireAnt-style Watchlist selector menu and management dialog", () => {
+  const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
+
+  assert.match(sidebar, /data-watchlist-selector-menu/)
+  assert.match(sidebar, /Danh sách watchlist/)
+  assert.match(sidebar, /Tạo watchlist mới/)
+  assert.match(sidebar, /Quản lý các watchlist/)
+  assert.match(sidebar, /data-watchlist-manage-dialog/)
+  assert.match(sidebar, /Kéo thả để sắp xếp lại thứ tự hiển thị các watchlist/)
+  assert.match(sidebar, /data-watchlist-manage-row/)
+  assert.match(sidebar, /beginRenameWatchlist/)
+  assert.match(sidebar, /handleRenameWatchlist/)
+  assert.match(sidebar, /handleDeleteWatchlist/)
+  assert.match(sidebar, /handleWatchlistDrop/)
+  assert.match(sidebar, /action: "reorder-watchlists"/)
+  assert.match(sidebar, /action: "rename-watchlist"/)
+  assert.match(sidebar, /Top 200 · Thị trường là danh sách hệ thống/)
+})
+
 test("fullscreen shortcut guards ignore editors and modifier/composition events", () => {
   const blockedTarget = { closest: (selectors: string) => selectors.includes("input") ? {} : null }
   assert.equal(shouldIgnoreStockDetailShortcut({ target: blockedTarget }), true)
