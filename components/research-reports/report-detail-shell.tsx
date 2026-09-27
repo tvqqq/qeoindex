@@ -9,6 +9,7 @@ import type { ResearchReportDetailViewModel } from "@/modules/research-reports"
 import { AnalysisPanel } from "./analysis-panel"
 import { PdfViewer } from "./pdf-viewer"
 import { ReportSummaryImage } from "./report-summary-image"
+import { ReportSummaryImageAdmin } from "./report-summary-image-admin"
 import {
   nextCitationNavigationState,
   type CitationNavigationState,
@@ -52,7 +53,13 @@ function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStat
   }
 }
 
-export function ReportDetailShell({ report }: { report: ResearchReportDetailViewModel }) {
+export function ReportDetailShell({
+  report,
+  canManageSummaryImage = false,
+}: {
+  report: ResearchReportDetailViewModel
+  canManageSummaryImage?: boolean
+}) {
   const router = useRouter()
   const summaryImageUrl = report.summaryImageStatus === "ready"
     ? `/api/research-reports/${report.id}/summary-image${report.summaryImageGeneratedAt ? `?v=${encodeURIComponent(report.summaryImageGeneratedAt)}` : ""}`
@@ -159,13 +166,40 @@ export function ReportDetailShell({ report }: { report: ResearchReportDetailView
         </div>
       </header>
 
-      {summaryImageUrl ? (
+      {summaryImageUrl || report.analysis ? (
         <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 sm:p-4">
-          <ReportSummaryImage
-            src={summaryImageUrl}
-            alt={`Tóm tắt hình ảnh báo cáo ${report.title}`}
-            title={report.title}
-          />
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200/70">AI VISUAL SUMMARY</div>
+              <p className="mt-1 text-xs text-zinc-500">
+                {summaryImageUrl ? "Ảnh tóm tắt được tạo từ AI analysis hiện tại." : "Ảnh AI chưa khả dụng; đang hiển thị tóm tắt text."}
+              </p>
+            </div>
+            {canManageSummaryImage && report.analysis ? (
+              <ReportSummaryImageAdmin reportId={report.id} hasImage={Boolean(summaryImageUrl)} />
+            ) : null}
+          </div>
+
+          {summaryImageUrl ? (
+            <ReportSummaryImage
+              src={summaryImageUrl}
+              alt={`Tóm tắt hình ảnh báo cáo ${report.title}`}
+              title={report.title}
+            />
+          ) : (
+            <div className="rounded-2xl border border-cyan-300/15 bg-[linear-gradient(145deg,rgba(8,25,32,0.7),rgba(5,12,18,0.85))] p-5">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200/70">AI SUMMARY</div>
+              <p className="mt-3 max-w-5xl text-sm leading-6 text-zinc-300">
+                {report.analysis?.executiveSummary || "Phân tích AI hiện tại chưa có executive summary."}
+              </p>
+              {report.summaryImageStatus === "failed" ? (
+                <p className="mt-3 text-[11px] font-semibold text-amber-200/70">
+                  Lần generate ảnh gần nhất chưa thành công. Nội dung phân tích vẫn khả dụng bình thường.
+                </p>
+              ) : null}
+            </div>
+          )}
+
           <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.07] pt-3 text-[11px] text-zinc-500 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="font-bold text-zinc-300">{report.sourceName}</span>

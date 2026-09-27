@@ -1,5 +1,11 @@
 import { Buffer } from "node:buffer"
 
+import {
+  DEFAULT_RESEARCH_REPORT_SUMMARY_IMAGE_SETTINGS,
+  normalizeResearchReportSummaryImageSettings,
+  type ResearchReportSummaryImageSettings,
+} from "./summary-image-settings.ts"
+
 const REPORT_TABLE = "market_research_reports"
 const ANALYSIS_TABLE = "market_research_report_analyses"
 const MENTION_TABLE = "market_research_report_ticker_mentions"
@@ -189,7 +195,7 @@ export function buildResearchReportSummaryImageFields(input: {
     services,
     contact,
     visuals,
-    style: "Premium institutional equity research summary. Landscape A4. Deep navy background, white typography, cyan accents, subtle amber for recommendation and green for positive evidence. Editorial grid, modern sans-serif, clear hierarchy, clean spacing, high readability, detailed report-relevant illustration, minimal decoration.",
+    style: DEFAULT_RESEARCH_REPORT_SUMMARY_IMAGE_SETTINGS.style,
   }
 }
 
@@ -399,6 +405,7 @@ function requestHeaders(cookie?: string): HeadersInit {
 async function submitImageCreator(
   fetchImpl: typeof fetch,
   fields: Record<string, string>,
+  settings: ResearchReportSummaryImageSettings,
   nonce: string,
   cookie?: string,
 ): Promise<GeneratedImage> {
@@ -407,10 +414,10 @@ async function submitImageCreator(
   form.set("wpaiic_nonce", nonce)
   for (const [key, value] of Object.entries(fields)) form.set(key, value)
   form.set("size_choice", "custom")
-  form.set("quality", "auto")
-  form.set("custom_width", "1754")
-  form.set("custom_height", "1240")
-  form.set("model", "gpt-image-2.5-sunburst")
+  form.set("quality", settings.quality)
+  form.set("custom_width", String(settings.width))
+  form.set("custom_height", String(settings.height))
+  form.set("model", settings.model)
 
   const response = await fetchWithTimeout(fetchImpl, IMAGE_CREATOR_URL, {
     method: "POST",
@@ -449,19 +456,20 @@ async function fetchFreshNonceSession(fetchImpl: typeof fetch): Promise<{ nonce:
 async function generateRemoteImage(
   fetchImpl: typeof fetch,
   fields: Record<string, string>,
+  settings: ResearchReportSummaryImageSettings,
 ): Promise<GeneratedImage> {
   const configuredNonce = process.env.RESEARCH_REPORT_IMAGE_NONCE?.trim()
   const initialNonce = configuredNonce || DEFAULT_IMAGE_CREATOR_NONCE
 
   try {
-    return await submitImageCreator(fetchImpl, fields, initialNonce)
+    return await submitImageCreator(fetchImpl, fields, settings, initialNonce)
   } catch (error) {
     const message = sanitizeError(error)
     if (!/security|securify|nonce|csrf|forbidden|http 403/i.test(message)) throw error
 
     const freshSession = await fetchFreshNonceSession(fetchImpl)
     if (!freshSession) throw error
-    return submitImageCreator(fetchImpl, fields, freshSession.nonce, freshSession.cookie)
+    return submitImageCreator(fetchImpl, fields, settings, freshSession.nonce, freshSession.cookie)
   }
 }
 
@@ -479,7 +487,13 @@ async function updateImageState(
 
 export async function generateResearchReportSummaryImage(
   client: ResearchReportSummaryImageClient,
-  input: { reportId: string; analysisId: string; fetchImpl?: typeof fetch },
+  input: {
+    reportId: string
+    analysisId: string
+    fetchImpl?: typeof fetch
+    force?: boolean
+    settings?: Partial<ResearchReportSummaryImageSettings>
+  },
 ): Promise<ResearchReportSummaryImageResult> {
   const fetchImpl = input.fetchImpl ?? fetch
 
@@ -491,14 +505,15 @@ export async function generateResearchReportSummaryImage(
     return { status: "failed", path: null, detail: `Report image metadata lookup failed: ${sanitizeError(reportResult.error?.message)}` }
   }
 
-  if (
-    reportResult.data.summary_image_status === "ready"
+  const currentImagePath = nonEmptyString(reportResult.data.summary_image_path)
+  const hasCurrentReadyImage = reportResult.data.summary_image_status === "ready"
     && reportResult.data.summary_image_analysis_id === input.analysisId
-    && nonEmptyString(reportResult.data.summary_image_path)
-  ) {
+    && Boolean(currentImagePath)
+
+  if (hasCurrentReadyImage && !input.force) {
     return {
       status: "skipped_existing",
-      path: nonEmptyString(reportResult.data.summary_image_path),
+      path: currentImagePath,
       detail: "Summary image already exists for this analysis",
     }
   }
@@ -523,18 +538,37 @@ export async function generateResearchReportSummaryImage(
     ? mentionsResult.data.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
     : []
 
+  let settings: ResearchReportSummaryImageSettings
   try {
-    await updateImageState(client, input.reportId, {
-      summary_image_status: "generating",
-      summary_image_error: null,
-    })
+    settings = normalizeResearchReportSummaryImageSettings(input.settings)
+  } catch (error) {
+    return {
+      status: "failed",
+      path: hasCurrentReadyImage ? currentImagePath : null,
+      detail: sanitizeError(error),
+    }
+  }
+  const preserveExistingImage = Boolean(input.force && hasCurrentReadyImage)
+
+  try {
+    if (!preserveExistingImage) {
+      await updateImageState(client, input.reportId, {
+        summary_image_status: "generating",
+        summary_image_error: null,
+      })
+    }
 
     const fields = buildResearchReportSummaryImageFields({
       report: reportResult.data,
       analysis: analysisResult.data,
       mentions,
     })
-    const image = await generateRemoteImage(fetchImpl, fields)
+    if (settings.visualGuidance) {
+      fields.visuals = `${fields.visuals} Admin visual guidance: ${settings.visualGuidance}`
+    }
+    fields.style = settings.style
+
+    const image = await generateRemoteImage(fetchImpl, fields, settings)
     const objectPath = `${input.reportId}/${input.analysisId}.${image.extension}`
 
     const upload = await client.storage.from(IMAGE_BUCKET).upload(objectPath, image.bytes, {
@@ -556,13 +590,19 @@ export async function generateResearchReportSummaryImage(
   } catch (error) {
     const detail = sanitizeError(error)
     try {
-      await updateImageState(client, input.reportId, {
-        summary_image_status: "failed",
-        summary_image_error: detail,
-      })
+      await updateImageState(client, input.reportId, preserveExistingImage
+        ? { summary_image_error: detail }
+        : {
+            summary_image_status: "failed",
+            summary_image_error: detail,
+          })
     } catch {
       // Keep the original generation failure as the caller-visible detail.
     }
-    return { status: "failed", path: null, detail }
+    return {
+      status: "failed",
+      path: preserveExistingImage ? currentImagePath : null,
+      detail,
+    }
   }
 }

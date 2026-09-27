@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 
 import { ReportDetailShell } from "@/components/research-reports/report-detail-shell"
 import { TopNav } from "@/components/top-nav"
+import { isConfiguredRootUserId } from "@/modules/auth/root"
 import { getServerAuthContext } from "@/modules/auth/server"
 import { getResearchReportDetail } from "@/modules/research-reports"
 
@@ -27,7 +28,7 @@ export default async function ResearchReportDetailPage({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <TopNav />
-      <ReportDetailShell report={result.report} />
+      <ReportDetailShell report={result.report} canManageSummaryImage={isConfiguredRootUserId(auth.user.id)} />
     </div>
   )
 }

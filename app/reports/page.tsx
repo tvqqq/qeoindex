@@ -314,6 +314,16 @@ export default async function ResearchReportsCatalogPage({
                             title={item.title}
                             compact
                           />
+                        ) : item.analysisStatus === "ready" && item.description ? (
+                          <div className="flex aspect-[297/210] flex-col justify-center overflow-hidden rounded-2xl border border-cyan-300/15 bg-[linear-gradient(145deg,rgba(8,25,32,0.7),rgba(5,12,18,0.85))] px-5 py-4 text-left">
+                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200/70">AI SUMMARY</div>
+                            <p className="mt-2 line-clamp-6 text-sm leading-6 text-slate-300">
+                              {item.description}
+                            </p>
+                            <p className="mt-3 text-[10px] font-semibold text-slate-500">
+                              {item.summaryImageStatus === "failed" ? "Ảnh AI chưa tạo được — đang hiển thị tóm tắt text." : "Ảnh AI đang được chuẩn bị — đang hiển thị tóm tắt text."}
+                            </p>
+                          </div>
                         ) : (
                           <div className="flex aspect-[297/210] items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-black/20 px-5 text-center">
                             <div>

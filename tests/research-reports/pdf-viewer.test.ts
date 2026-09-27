@@ -98,7 +98,7 @@ test("Research Reports catalog card uses generated report image, compact footer 
   assert.match(code, /catalogHref\(query, \{ ticker, page: 1 \}\)/)
 })
 
-test("Research Reports catalog keeps current-analysis metadata without rendering description text", () => {
+test("Research Reports catalog uses current-analysis executive summary only as the image fallback", () => {
   const service = source("modules/research-reports/catalog.ts")
   const page = source("app/reports/page.tsx")
 
@@ -107,7 +107,8 @@ test("Research Reports catalog keeps current-analysis metadata without rendering
   assert.match(service, /market_research_report_ticker_mentions/)
   assert.match(service, /executive_summary/)
   assert.doesNotMatch(service, /market_research_report_chunks/)
-  assert.doesNotMatch(page, /item\.description/)
+  assert.match(page, /item\.analysisStatus === "ready" && item\.description/)
+  assert.match(page, /\{item\.description\}/)
 })
 
 test("Research report cards keep equal-height category styling and clickable source filters", () => {
