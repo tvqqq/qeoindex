@@ -460,7 +460,7 @@ async function generateRemoteImage(
     if (!/security|securify|nonce|csrf|forbidden|http 403/i.test(message)) throw error
 
     const freshSession = await fetchFreshNonceSession(fetchImpl)
-    if (!freshSession || freshSession.nonce === initialNonce) throw error
+    if (!freshSession) throw error
     return submitImageCreator(fetchImpl, fields, freshSession.nonce, freshSession.cookie)
   }
 }
