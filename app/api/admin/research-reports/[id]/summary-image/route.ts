@@ -9,6 +9,7 @@ import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
 const NO_STORE = { "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate" }
 
