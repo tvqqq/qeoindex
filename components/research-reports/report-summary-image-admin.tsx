@@ -53,9 +53,19 @@ export function ReportSummaryImageAdmin({
         credentials: "same-origin",
         body: JSON.stringify({ settings }),
       })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
+      const payload = await response.json().catch(() => null) as {
+        error?: string
+        preservedExistingImage?: boolean
+      } | null
       if (!response.ok) {
-        throw new Error(payload?.error || `Không thể tạo ảnh AI (HTTP ${response.status})`)
+        const rawError = payload?.error || `Không thể tạo ảnh AI (HTTP ${response.status})`
+        const providerSecurityFailure = /security check failed|http 403/i.test(rawError)
+        const preserved = payload?.preservedExistingImage
+          ? " Ảnh hiện tại vẫn được giữ nguyên."
+          : ""
+        throw new Error(providerSecurityFailure
+          ? `Dịch vụ tạo ảnh đang từ chối request bảo mật (HTTP 403). Đây là lỗi upstream, không phải do nội dung params bạn vừa chỉnh.${preserved}`
+          : `${rawError}${preserved}`)
       }
       setOpen(false)
       router.refresh()
