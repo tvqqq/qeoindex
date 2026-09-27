@@ -38,10 +38,6 @@ export function buildResearchReportAdminDiagnostic(
     retryBlockedReason = "Phân tích AI đang chạy. Hãy chờ lần xử lý hiện tại hoàn tất."
   } else if (ingestionStatus === "fetching") {
     retryBlockedReason = "PDF đang được tải và xử lý. Hãy chờ lần xử lý hiện tại hoàn tất."
-  } else if (analysisStatus === "needs_ocr" || ingestionStatus === "needs_ocr") {
-    retryBlockedReason = "Báo cáo cần OCR trước khi có thể chạy lại phân tích AI."
-  } else if (analysisStatus === "unsupported" || ingestionStatus === "unsupported") {
-    retryBlockedReason = "Định dạng PDF hiện chưa được pipeline hỗ trợ để phân tích AI."
   } else if (!hasPdfSource) {
     retryBlockedReason = "Báo cáo chưa có PDF HTTPS hợp lệ để chạy lại phân tích."
   }
