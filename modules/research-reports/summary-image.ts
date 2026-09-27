@@ -538,7 +538,16 @@ export async function generateResearchReportSummaryImage(
     ? mentionsResult.data.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
     : []
 
-  const settings = normalizeResearchReportSummaryImageSettings(input.settings)
+  let settings: ResearchReportSummaryImageSettings
+  try {
+    settings = normalizeResearchReportSummaryImageSettings(input.settings)
+  } catch (error) {
+    return {
+      status: "failed",
+      path: hasCurrentReadyImage ? currentImagePath : null,
+      detail: sanitizeError(error),
+    }
+  }
   const preserveExistingImage = Boolean(input.force && hasCurrentReadyImage)
 
   try {
