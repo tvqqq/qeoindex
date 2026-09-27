@@ -6,8 +6,6 @@ import {
   buildResearchReportAdminDiagnostic,
   sanitizeResearchReportAdminError,
 } from "@/modules/research-reports/admin-analysis"
-import { createResearchReportAiBudget } from "@/modules/research-reports/analysis/budget"
-import { processResearchReport } from "@/modules/research-reports/analysis/pipeline"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 
 export const runtime = "nodejs"
@@ -94,41 +92,54 @@ export async function POST(
   }
 
   const pdfUrl = typeof loaded.row.pdf_url === "string" ? loaded.row.pdf_url.trim() : ""
-  const budget = createResearchReportAiBudget({
-    maxRequestAttempts: MAX_AI_REQUEST_ATTEMPTS,
-    maxEstimatedCostUsd: MAX_AI_COST_USD,
-  })
 
-  const result = await processResearchReport(
-    loaded.service as unknown as Parameters<typeof processResearchReport>[0],
-    { id, pdfUrl },
-    { aiBudget: budget },
-  )
+  try {
+    const [{ createResearchReportAiBudget }, { processResearchReport }] = await Promise.all([
+      import("@/modules/research-reports/analysis/budget"),
+      import("@/modules/research-reports/analysis/pipeline"),
+    ])
+    const budget = createResearchReportAiBudget({
+      maxRequestAttempts: MAX_AI_REQUEST_ATTEMPTS,
+      maxEstimatedCostUsd: MAX_AI_COST_USD,
+    })
 
-  if (result.status === "failed") {
+    const result = await processResearchReport(
+      loaded.service as unknown as Parameters<typeof processResearchReport>[0],
+      { id, pdfUrl },
+      { aiBudget: budget },
+    )
+
+    if (result.status === "failed") {
+      return json({
+        ok: false,
+        error: result.detail,
+        status: result.status,
+        budget: budget.snapshot(),
+      }, 502)
+    }
+
+    if (result.status === "needs_ocr" || result.status === "unsupported") {
+      return json({
+        ok: false,
+        error: result.detail,
+        status: result.status,
+        budget: budget.snapshot(),
+      }, 409)
+    }
+
+    return json({
+      ok: true,
+      status: result.status,
+      analysisId: result.analysisId,
+      aiCalled: result.aiCalled,
+      detail: result.detail,
+      budget: budget.snapshot(),
+    })
+  } catch (error) {
     return json({
       ok: false,
-      error: result.detail,
-      status: result.status,
-      budget: budget.snapshot(),
-    }, 502)
+      error: sanitizeResearchReportAdminError(error instanceof Error ? error.message : String(error))
+        || "Research report analysis retry failed",
+    }, 500)
   }
-
-  if (result.status === "needs_ocr" || result.status === "unsupported") {
-    return json({
-      ok: false,
-      error: result.detail,
-      status: result.status,
-      budget: budget.snapshot(),
-    }, 409)
-  }
-
-  return json({
-    ok: true,
-    status: result.status,
-    analysisId: result.analysisId,
-    aiCalled: result.aiCalled,
-    detail: result.detail,
-    budget: budget.snapshot(),
-  })
 }
