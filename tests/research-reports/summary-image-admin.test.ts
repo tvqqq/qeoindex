@@ -79,6 +79,8 @@ test("QEO-286 regenerate API is root-only, same-origin, bounded, and force-regen
 
   assert.match(route, /requireApiRoot/)
   assert.match(route, /validateAdminMutationRequest/)
+  assert.match(route, /maxDuration = 300/)
+  assert.match(route, /private, no-store, no-cache/)
   assert.match(route, /normalizeResearchReportSummaryImageSettings/)
   assert.match(route, /analysisStatus !== "ready"/)
   assert.match(route, /force: true/)
