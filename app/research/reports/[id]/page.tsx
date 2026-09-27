@@ -4,7 +4,7 @@ import { ReportDetailShell } from "@/components/research-reports/report-detail-s
 import { TopNav } from "@/components/top-nav"
 import { isConfiguredRootUserId } from "@/modules/auth/root"
 import { getServerAuthContext } from "@/modules/auth/server"
-import { getResearchReportDetail } from "@/modules/research-reports"
+import { getResearchReportDetail } from "@/modules/research-reports/detail/service"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -28,7 +28,7 @@ export default async function ResearchReportDetailPage({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <TopNav />
-      <ReportDetailShell report={result.report} canManageSummaryImage={isConfiguredRootUserId(auth.user.id)} />
+      <ReportDetailShell report={result.report} canManageReportAi={isConfiguredRootUserId(auth.user.id)} />
     </div>
   )
 }
