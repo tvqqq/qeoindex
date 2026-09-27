@@ -1,15 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import type { ResearchReportDetailViewModel } from "@/modules/research-reports"
 
 import { AnalysisPanel } from "./analysis-panel"
 import { PdfViewer } from "./pdf-viewer"
-import { ReportSummaryImage } from "./report-summary-image"
-import { ReportSummaryImageAdmin } from "./report-summary-image-admin"
 import {
   nextCitationNavigationState,
   type CitationNavigationState,
@@ -35,14 +32,6 @@ function categoryLabel(category: ResearchReportDetailViewModel["category"]): str
   }
 }
 
-function recommendationLabel(report: ResearchReportDetailViewModel): string {
-  const recommendation = report.recommendation?.trim() || "Chưa có khuyến nghị"
-  const target = report.targetPrice !== null
-    ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(report.targetPrice)
-    : null
-  return target ? `${recommendation} • Mục tiêu ${target}` : recommendation
-}
-
 function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStatus"]): string {
   switch (status) {
     case "ready": return "Phân tích sẵn sàng"
@@ -55,10 +44,10 @@ function analysisStatusLabel(status: ResearchReportDetailViewModel["analysisStat
 
 export function ReportDetailShell({
   report,
-  canManageSummaryImage = false,
+  canManageReportAi = false,
 }: {
   report: ResearchReportDetailViewModel
-  canManageSummaryImage?: boolean
+  canManageReportAi?: boolean
 }) {
   const router = useRouter()
   const summaryImageUrl = report.summaryImageStatus === "ready"
@@ -166,66 +155,6 @@ export function ReportDetailShell({
         </div>
       </header>
 
-      {summaryImageUrl || report.analysis ? (
-        <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 sm:p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200/70">AI VISUAL SUMMARY</div>
-              <p className="mt-1 text-xs text-zinc-500">
-                {summaryImageUrl ? "Ảnh tóm tắt được tạo từ AI analysis hiện tại." : "Ảnh AI chưa khả dụng; đang hiển thị tóm tắt text."}
-              </p>
-            </div>
-            {canManageSummaryImage && report.analysis ? (
-              <ReportSummaryImageAdmin reportId={report.id} hasImage={Boolean(summaryImageUrl)} />
-            ) : null}
-          </div>
-
-          {summaryImageUrl ? (
-            <ReportSummaryImage
-              src={summaryImageUrl}
-              alt={`Tóm tắt hình ảnh báo cáo ${report.title}`}
-              title={report.title}
-            />
-          ) : (
-            <div className="rounded-2xl border border-cyan-300/15 bg-[linear-gradient(145deg,rgba(8,25,32,0.7),rgba(5,12,18,0.85))] p-5">
-              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200/70">AI SUMMARY</div>
-              <p className="mt-3 max-w-5xl text-sm leading-6 text-zinc-300">
-                {report.analysis?.executiveSummary || "Phân tích AI hiện tại chưa có executive summary."}
-              </p>
-              {report.summaryImageStatus === "failed" ? (
-                <p className="mt-3 text-[11px] font-semibold text-amber-200/70">
-                  Lần generate ảnh gần nhất chưa thành công. Nội dung phân tích vẫn khả dụng bình thường.
-                </p>
-              ) : null}
-            </div>
-          )}
-
-          <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.07] pt-3 text-[11px] text-zinc-500 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-bold text-zinc-300">{report.sourceName}</span>
-              <span aria-hidden="true">•</span>
-              <time dateTime={report.publishDate}>{formatPublishDate(report.publishDate)}</time>
-              <span aria-hidden="true">•</span>
-              <span className="font-bold text-amber-200/85">{recommendationLabel(report)}</span>
-            </div>
-            {report.analysis?.tickerMentions.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {report.analysis.tickerMentions.map((mention) => (
-                  <Link
-                    key={mention.ticker}
-                    href={`/reports?ticker=${encodeURIComponent(mention.ticker)}`}
-                    prefetch={false}
-                    className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-2.5 py-1 font-black text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-300/[0.12]"
-                  >
-                    {mention.ticker}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
       <div className="lg:hidden" role="tablist" aria-label="Nội dung báo cáo">
         <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
           <button
@@ -311,8 +240,13 @@ export function ReportDetailShell({
             className={`${navigation.activeTab === "analysis" ? "block" : "hidden"} lg:block`}
           >
             <AnalysisPanel
+              reportId={report.id}
+              reportTitle={report.title}
               analysisStatus={report.analysisStatus}
               analysis={report.analysis}
+              summaryImageUrl={summaryImageUrl}
+              summaryImageStatus={report.summaryImageStatus}
+              canManageReportAi={canManageReportAi}
               onNavigateCitation={navigateToCitation}
               expanded={pdfHidden}
             />

@@ -5,9 +5,18 @@ import type {
   ResearchReportDetailStatus,
 } from "@/modules/research-reports/detail/types"
 
+import { ReportAnalysisAdmin } from "./report-analysis-admin"
+import { ReportSummaryImage } from "./report-summary-image"
+import { ReportSummaryImageAdmin } from "./report-summary-image-admin"
 import { TickerMentionCard } from "./ticker-mention-card"
 
-function AnalysisState({ children, expanded }: { children: React.ReactNode; expanded: boolean }) {
+function AnalysisState({
+  children,
+  expanded,
+}: {
+  children: React.ReactNode
+  expanded: boolean
+}) {
   return (
     <div
       className={`rounded-xl border border-white/10 bg-white/[0.03] p-5 text-zinc-300 ${expanded ? "text-base leading-7" : "text-sm"}`}
@@ -15,6 +24,31 @@ function AnalysisState({ children, expanded }: { children: React.ReactNode; expa
     >
       {children}
     </div>
+  )
+}
+
+function UnavailableAnalysisState({
+  message,
+  expanded,
+  reportId,
+  analysisStatus,
+  canManageReportAi,
+}: {
+  message: string
+  expanded: boolean
+  reportId: string
+  analysisStatus: ResearchReportDetailStatus
+  canManageReportAi: boolean
+}) {
+  return (
+    <AnalysisState expanded={expanded}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>{message}</span>
+        {canManageReportAi ? (
+          <ReportAnalysisAdmin reportId={reportId} currentStatus={analysisStatus} />
+        ) : null}
+      </div>
+    </AnalysisState>
   )
 }
 
@@ -46,21 +80,81 @@ function ListSection({ title, items, expanded }: { title: string; items: string[
 }
 
 export function AnalysisPanel({
+  reportId,
+  reportTitle,
   analysisStatus,
   analysis,
+  summaryImageUrl,
+  summaryImageStatus,
+  canManageReportAi = false,
   onNavigateCitation,
   expanded = false,
 }: {
+  reportId: string
+  reportTitle: string
   analysisStatus: ResearchReportDetailStatus
   analysis: ResearchReportDetailAnalysis | null
+  summaryImageUrl: string | null
+  summaryImageStatus: string
+  canManageReportAi?: boolean
   onNavigateCitation: (page: number) => void
   expanded?: boolean
 }) {
-  if (analysisStatus === "pending") return <AnalysisState expanded={expanded}>Đang xử lý phân tích…</AnalysisState>
-  if (analysisStatus === "needs_ocr") return <AnalysisState expanded={expanded}>Báo cáo cần OCR trước khi có thể phân tích.</AnalysisState>
-  if (analysisStatus === "unsupported") return <AnalysisState expanded={expanded}>Định dạng PDF hiện chưa được hỗ trợ để phân tích.</AnalysisState>
-  if (analysisStatus === "failed") return <AnalysisState expanded={expanded}>Phân tích AI hiện chưa khả dụng.</AnalysisState>
-  if (!analysis) return <AnalysisState expanded={expanded}>Chưa có phân tích hiện hành cho phiên bản báo cáo này.</AnalysisState>
+  if (analysisStatus === "pending") {
+    return (
+      <UnavailableAnalysisState
+        message="Đang xử lý phân tích…"
+        expanded={expanded}
+        reportId={reportId}
+        analysisStatus={analysisStatus}
+        canManageReportAi={canManageReportAi}
+      />
+    )
+  }
+  if (analysisStatus === "needs_ocr") {
+    return (
+      <UnavailableAnalysisState
+        message="Báo cáo cần OCR trước khi có thể phân tích."
+        expanded={expanded}
+        reportId={reportId}
+        analysisStatus={analysisStatus}
+        canManageReportAi={canManageReportAi}
+      />
+    )
+  }
+  if (analysisStatus === "unsupported") {
+    return (
+      <UnavailableAnalysisState
+        message="Định dạng PDF hiện chưa được hỗ trợ để phân tích."
+        expanded={expanded}
+        reportId={reportId}
+        analysisStatus={analysisStatus}
+        canManageReportAi={canManageReportAi}
+      />
+    )
+  }
+  if (analysisStatus === "failed") {
+    return (
+      <UnavailableAnalysisState
+        message="Phân tích AI hiện chưa khả dụng."
+        expanded={expanded}
+        reportId={reportId}
+        analysisStatus={analysisStatus}
+        canManageReportAi={canManageReportAi}
+      />
+    )
+  }
+  if (!analysis) {
+    return (
+      <UnavailableAnalysisState
+        message="Chưa có phân tích hiện hành cho phiên bản báo cáo này."
+        expanded={expanded}
+        reportId={reportId}
+        analysisStatus={analysisStatus}
+        canManageReportAi={canManageReportAi}
+      />
+    )
+  }
 
   const {
     executiveSummary,
@@ -74,12 +168,37 @@ export function AnalysisPanel({
 
   return (
     <div className="space-y-6">
-      <section className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className={`${expanded ? "text-lg" : "text-base"} font-semibold text-zinc-100`}>Tóm tắt AI</h2>
-          <span className="text-xs text-zinc-500">Dữ liệu phân tích đã lưu</span>
+      <section className="rounded-2xl border border-cyan-300/15 bg-[linear-gradient(145deg,rgba(8,25,32,0.58),rgba(5,12,18,0.76))] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200/70">AI SUMMARY</div>
+            <h2 className={`mt-1 ${expanded ? "text-lg" : "text-base"} font-semibold text-zinc-100`}>Tóm tắt AI</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-zinc-500">Dữ liệu phân tích đã lưu</span>
+            {canManageReportAi ? (
+              <ReportSummaryImageAdmin reportId={reportId} hasImage={Boolean(summaryImageUrl)} />
+            ) : null}
+          </div>
         </div>
-        <p className={`whitespace-pre-wrap text-zinc-300 ${expanded ? "text-base leading-7" : "text-sm leading-6"}`}>{executiveSummary}</p>
+
+        <p className={`mt-4 whitespace-pre-wrap text-zinc-300 ${expanded ? "text-base leading-7" : "text-sm leading-6"}`}>
+          {executiveSummary}
+        </p>
+
+        {summaryImageUrl ? (
+          <div className="mt-4 border-t border-white/[0.07] pt-4">
+            <ReportSummaryImage
+              src={summaryImageUrl}
+              alt={`Tóm tắt hình ảnh báo cáo ${reportTitle}`}
+              title={reportTitle}
+            />
+          </div>
+        ) : summaryImageStatus === "failed" ? (
+          <p className="mt-4 border-t border-white/[0.07] pt-3 text-[11px] font-semibold text-amber-200/70">
+            Ảnh AI chưa tạo được. Tóm tắt text phía trên vẫn là dữ liệu phân tích hiện hành.
+          </p>
+        ) : null}
       </section>
 
       <div className="space-y-6 rounded-xl border border-white/10 bg-zinc-950/40 p-5">

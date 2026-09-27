@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { validateAdminMutationRequest } from "@/modules/admin/request-security"
 import { requireApiRoot } from "@/modules/auth/root"
-import { getResearchReportDetail } from "@/modules/research-reports"
+import { getResearchReportDetail } from "@/modules/research-reports/detail/service"
 import { generateResearchReportSummaryImage } from "@/modules/research-reports/summary-image"
 import { normalizeResearchReportSummaryImageSettings } from "@/modules/research-reports/summary-image-settings"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
