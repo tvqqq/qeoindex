@@ -10,6 +10,12 @@ import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+const NO_STORE = { "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate" }
+
+function json(body: Record<string, unknown>, status = 200) {
+  return NextResponse.json(body, { status, headers: NO_STORE })
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -19,10 +25,7 @@ export async function POST(
 
   const originValidation = validateAdminMutationRequest(request)
   if (!originValidation.ok) {
-    return NextResponse.json(
-      { ok: false, error: originValidation.error },
-      { status: originValidation.status },
-    )
+    return json({ ok: false, error: originValidation.error }, originValidation.status)
   }
 
   let body: Record<string, unknown>
@@ -32,22 +35,22 @@ export async function POST(
       ? parsed as Record<string, unknown>
       : {}
   } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
+    return json({ ok: false, error: "Invalid JSON body" }, 400)
   }
 
   let settings
   try {
     settings = normalizeResearchReportSummaryImageSettings(body.settings)
   } catch (error) {
-    return NextResponse.json(
+    return json(
       { ok: false, error: error instanceof Error ? error.message : "Invalid image settings" },
-      { status: 400 },
+      400,
     )
   }
 
   const service = getSupabaseServerClient()
   if (!service) {
-    return NextResponse.json({ ok: false, error: "Summary image service unavailable" }, { status: 503 })
+    return json({ ok: false, error: "Summary image service unavailable" }, 503)
   }
 
   const { id } = await params
@@ -56,15 +59,15 @@ export async function POST(
     id,
   )
   if (detail.status === "invalid_id") {
-    return NextResponse.json({ ok: false, error: "Invalid report id" }, { status: 400 })
+    return json({ ok: false, error: "Invalid report id" }, 400)
   }
   if (detail.status === "not_found") {
-    return NextResponse.json({ ok: false, error: "Report not found" }, { status: 404 })
+    return json({ ok: false, error: "Report not found" }, 404)
   }
   if (detail.report.analysisStatus !== "ready" || !detail.report.analysis?.analysisId) {
-    return NextResponse.json(
+    return json(
       { ok: false, error: "Current report analysis is not ready for image generation" },
-      { status: 409 },
+      409,
     )
   }
 
@@ -79,17 +82,17 @@ export async function POST(
   )
 
   if (result.status === "failed") {
-    return NextResponse.json(
+    return json(
       {
         ok: false,
         error: result.detail,
         preservedExistingImage: Boolean(result.path),
       },
-      { status: 502 },
+      502,
     )
   }
 
-  return NextResponse.json({
+  return json({
     ok: true,
     status: result.status,
     regenerated: result.status === "ready",
