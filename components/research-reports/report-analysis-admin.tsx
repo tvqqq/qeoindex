@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { AlertTriangle, RefreshCw, Wrench } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -57,7 +57,7 @@ export function ReportAnalysisAdmin({
   const [diagnostic, setDiagnostic] = useState<AdminDiagnostic | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const loadDiagnostic = async () => {
+  const loadDiagnostic = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -76,12 +76,12 @@ export function ReportAnalysisAdmin({
     } finally {
       setLoading(false)
     }
-  }
+  }, [reportId])
 
   useEffect(() => {
     if (!open) return
     void loadDiagnostic()
-  }, [open, reportId])
+  }, [open, loadDiagnostic])
 
   const retryAnalysis = async () => {
     if (retrying || !diagnostic?.retryable) return
@@ -106,7 +106,6 @@ export function ReportAnalysisAdmin({
       router.refresh()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể phân tích AI lại")
-      await loadDiagnostic().catch(() => undefined)
     } finally {
       setRetrying(false)
     }
