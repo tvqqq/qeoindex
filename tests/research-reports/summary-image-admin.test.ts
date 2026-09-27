@@ -110,7 +110,7 @@ test("QEO-287 regenerate image API stays root-only and avoids the broad Research
   assert.match(generator, /summary_image_error: detail/)
 })
 
-test("QEO-287 admin analysis diagnostic sanitizes errors and blocks deterministic non-retry states", () => {
+test("QEO-287 admin analysis diagnostic sanitizes errors and blocks only active or source-less retries", () => {
   const failed = buildResearchReportAdminDiagnostic({
     analysis_status: "failed",
     analysis_error: "Bearer secret-token OpenAI Responses remained incomplete after bounded retry",
@@ -127,8 +127,8 @@ test("QEO-287 admin analysis diagnostic sanitizes errors and blocks deterministi
     ingestion_status: "needs_ocr",
     pdf_url: "https://cdn.example/report.pdf",
   })
-  assert.equal(needsOcr.retryable, false)
-  assert.match(needsOcr.retryBlockedReason || "", /OCR/)
+  assert.equal(needsOcr.retryable, true)
+  assert.equal(needsOcr.retryBlockedReason, null)
 
   const processing = buildResearchReportAdminDiagnostic({
     analysis_status: "processing",
@@ -137,6 +137,14 @@ test("QEO-287 admin analysis diagnostic sanitizes errors and blocks deterministi
   })
   assert.equal(processing.retryable, false)
   assert.match(processing.retryBlockedReason || "", /đang chạy/i)
+
+  const missingPdf = buildResearchReportAdminDiagnostic({
+    analysis_status: "failed",
+    ingestion_status: "failed",
+    pdf_url: null,
+  })
+  assert.equal(missingPdf.retryable, false)
+  assert.match(missingPdf.retryBlockedReason || "", /PDF HTTPS/i)
 })
 
 test("QEO-287 root admin can inspect and retry unavailable report analysis through the canonical pipeline", () => {
