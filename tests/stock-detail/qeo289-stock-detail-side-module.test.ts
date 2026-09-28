@@ -84,7 +84,7 @@ test("QEO-289 follow-up keeps Stock Detail watchlist compact, market-toned and d
 
   assert.doesNotMatch(sidebar, /ACTIVE_LIST_KEY/)
   assert.match(sidebar, /find\(\(watchlist\) => watchlist\.is_default\)/)
-  assert.match(sidebar, /skipNextUserListLoadRef\\.current = defaultWatchlistId/)
+  assert.match(sidebar, /skipNextUserListLoadRef\.current = defaultWatchlistId/)
   assert.match(sidebar, /data-watchlist-system-section/)
   assert.match(sidebar, /Danh sách hệ thống/)
   assert.match(sidebar, /Top 200 · Thị trường/)
