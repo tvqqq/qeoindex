@@ -61,7 +61,7 @@ export function StockDetailSideModule({
                   aria-selected={selected}
                   onClick={() => selectTab(tab.value)}
                   className={cn(
-                    "flex min-w-0 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-all",
+                    "flex min-w-0 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors",
                     selected
                       ? "border border-cyan-400/25 bg-cyan-400/10 text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.08)]"
                       : "border border-transparent text-slate-500 hover:bg-white/[0.04] hover:text-slate-300",
