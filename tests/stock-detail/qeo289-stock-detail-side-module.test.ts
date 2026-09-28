@@ -15,7 +15,7 @@ test("QEO-289 exposes AI Q&A, Ghi chú and Portfolio as one Stock Detail module"
   assert.match(moduleCode, /label: "Ghi chú"/)
   assert.match(moduleCode, /label: "Portfolio"/)
   assert.match(moduleCode, /useState<StockDetailModuleTab>\("ai"\)/)
-  assert.match(moduleCode, /<StockNotesPanel ticker=\{ticker\}/)
+  assert.match(moduleCode, /<StockNotesPanel key=\{ticker\} ticker=\{ticker\}/)
   assert.match(moduleCode, /<StockPortfolioPanel ticker=\{ticker\} currentPrice=\{currentPrice\}/)
 
   assert.match(sidebarCode, /<StockDetailSideModule/)
