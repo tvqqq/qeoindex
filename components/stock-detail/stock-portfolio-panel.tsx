@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { ExternalLink, LoaderCircle, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
 
@@ -163,13 +164,13 @@ export function StockPortfolioPanel({
           <p className="text-[11px] font-bold text-slate-200">Giao dịch {ticker}</p>
           <p className="mt-0.5 text-[9px] text-slate-500">Dữ liệu từ Portfolio của tài khoản hiện tại.</p>
         </div>
-        <a
+        <Link
           href="/portfolio"
           className="inline-flex shrink-0 items-center gap-1 text-[9px] font-semibold text-cyan-300/75 hover:text-cyan-200"
         >
           Mở Portfolio
           <ExternalLink className="size-2.5" />
-        </a>
+        </Link>
       </div>
 
       {portfolios.length > 1 ? (
