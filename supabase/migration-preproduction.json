@@ -187,10 +187,18 @@
     {
       "logicalName": "qeo289_stock_notes",
       "repositoryVersion": "20260928031000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "QEO-289 PR #576 preproduction source implementation; exact-head GitHub Actions verification pending",
-      "rationale": "QEO-289 adds authenticated private per-user Stock Detail notes keyed by (user_id, ticker), with bounded content, ownership RLS and no service-role browser path. The migration remains repo-ahead until PR #576 exact-head Verify/DB gates pass and production promotion/readback is completed."
+      "productionVersion": "20260928032506",
+      "state": "MAPPED",
+      "evidence": "QEO-289 PR #576 preproduction gates, production migration 20260928032506, live stock_notes schema/RLS/policy readback",
+      "rationale": "Supabase production applied the reviewed QEO-289 private per-user Stock Detail notes table as version 20260928032506. Live readback confirms the five-column table, primary user+ticker ownership model, RLS enabled, four authenticated owner policies and the updated_at trigger; repository replay keeps reviewed version 20260928031000."
+    },
+    {
+      "logicalName": "qeo289_stock_notes_privileges",
+      "repositoryVersion": "20260928033000",
+      "productionVersion": "20260928032619",
+      "state": "MAPPED",
+      "evidence": "QEO-289 production privilege readback after migration 20260928032619",
+      "rationale": "Production readback after the base notes migration exposed default authenticated table privileges beyond CRUD. This follow-up explicitly revokes all anon/authenticated table privileges then grants only SELECT/INSERT/UPDATE/DELETE to authenticated, with RLS still enabled and owner policies unchanged. Supabase assigned production version 20260928032619 while repository replay keeps reviewed version 20260928033000."
     }
   ]
 }
