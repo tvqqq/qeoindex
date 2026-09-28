@@ -5,12 +5,12 @@ import {
   BrainCircuit,
   Gauge,
   Send,
-  Sparkles,
 } from "lucide-react"
 
 import { cn } from "@/modules/shared/ui/cn"
 
 import { boundTickerChatHistory } from "./stock-ai-chat-state"
+import { StockDetailSideModule } from "./stock-detail-side-module"
 import type { StockDetailData } from "./types"
 
 type ChatCitation = {
@@ -274,6 +274,25 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
   const [isTyping, setIsTyping] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const chatBottomRef = useRef<HTMLDivElement>(null)
+  const chatAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    chatAbortRef.current?.abort()
+    chatAbortRef.current = null
+    setMessages([
+      {
+        id: "welcome",
+        sender: "ai",
+        text: `Tôi trả lời câu hỏi về ${ticker} dựa trên bằng chứng QeoIndex hiện có và sẽ hiển thị nguồn khi có thể truy vết.`,
+        timestamp: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+      },
+    ])
+    setInputVal("")
+    setErrorMessage(null)
+    setIsTyping(false)
+  }, [ticker])
+
+  useEffect(() => () => chatAbortRef.current?.abort(), [])
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -303,11 +322,16 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
     setErrorMessage(null)
     setIsTyping(true)
 
+    chatAbortRef.current?.abort()
+    const requestController = new AbortController()
+    chatAbortRef.current = requestController
+
     try {
       const response = await fetch(`/api/insights/${encodeURIComponent(ticker)}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text, history }),
+        signal: requestController.signal,
       })
       const payload = await response.json().catch(() => null) as TickerQaPayload | null
       if (!response.ok || !payload || !payload.ok) {
@@ -332,10 +356,15 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           limitation: result.limitation,
         },
       ])
-    } catch {
-      setErrorMessage("Quick AI Assistant tạm thời chưa khả dụng.")
+    } catch (error) {
+      if ((error as Error)?.name !== "AbortError") {
+        setErrorMessage("Quick AI Assistant tạm thời chưa khả dụng.")
+      }
     } finally {
-      setIsTyping(false)
+      if (chatAbortRef.current === requestController) {
+        chatAbortRef.current = null
+        setIsTyping(false)
+      }
     }
   }
 
@@ -476,19 +505,12 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         </div>
       </div>
 
-      {/* Existing Quick AI Assistant — now grounded by QEO-118 */}
-      <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080d13]">
-        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0a0f16] px-3.5 py-2.5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-3.5 text-cyan-400" />
-            <span className="text-xs font-bold text-slate-200">Quick AI Assistant</span>
-          </div>
-          <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 font-mono text-[9px] text-slate-400">
-            Hỏi đáp: {ticker}
-          </span>
-        </div>
-
-        <div className="h-64 space-y-2.5 overflow-y-auto p-3 text-[11px] leading-relaxed no-scrollbar">
+      <StockDetailSideModule
+        ticker={ticker}
+        currentPrice={data.price}
+        qna={(
+          <>
+            <div className="h-64 space-y-2.5 overflow-y-auto p-3 text-[11px] leading-relaxed no-scrollbar">
           {messages.map((m) => (
             <div
               key={m.id}
@@ -607,33 +629,35 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
           </button>
         </div>
 
-        <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              void handleSend()
-            }}
-            className="relative flex items-center"
-          >
-            <input
-              type="text"
-              value={inputVal}
-              onChange={(event) => setInputVal(event.target.value)}
-              maxLength={2_000}
-              placeholder="Hỏi AI về cổ phiếu..."
-              disabled={isTyping}
-              className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={!inputVal.trim() || isTyping}
-              className="absolute right-1.5 rounded-lg p-1 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-30"
-            >
-              <Send className="size-3.5" />
-            </button>
-          </form>
-        </div>
-      </div>
+            <div className="border-t border-white/[0.06] bg-[#0a0f16] p-2">
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleSend()
+                }}
+                className="relative flex items-center"
+              >
+                <input
+                  type="text"
+                  value={inputVal}
+                  onChange={(event) => setInputVal(event.target.value)}
+                  maxLength={2_000}
+                  placeholder="Hỏi AI về cổ phiếu..."
+                  disabled={isTyping}
+                  className="w-full rounded-xl border border-white/[0.08] bg-[#05080c] py-1.5 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-cyan-400/40 focus:outline-none disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={!inputVal.trim() || isTyping}
+                  className="absolute right-1.5 rounded-lg p-1 text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-30"
+                >
+                  <Send className="size-3.5" />
+                </button>
+              </form>
+            </div>
+          </>
+        )}
+      />
     </div>
   )
 }
