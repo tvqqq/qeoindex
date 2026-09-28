@@ -1,5 +1,3 @@
-"use server"
-
 import { NextResponse } from "next/server"
 
 import { requireApiUser } from "@/modules/auth/server"
