@@ -60,12 +60,16 @@ test("QEO-289 stock notes use authenticated ticker-scoped persistence", () => {
 
 test("QEO-289 Portfolio tab reuses canonical Portfolio transactions and AVCO engine", () => {
   const panelCode = source("components/stock-detail/stock-portfolio-panel.tsx")
+  const transactionsRoute = source("app/api/portfolio/[id]/transactions/route.ts")
 
   assert.match(panelCode, /computePortfolioPositions/)
   assert.match(panelCode, /fetch\("\/api\/portfolio"/)
-  assert.match(panelCode, /\/api\/portfolio\/\$\{encodeURIComponent\(portfolioId\)\}\/transactions/)
+  assert.match(panelCode, /\/api\/portfolio\/\$\{encodeURIComponent\(portfolioId\)\}\/transactions\?ticker=\$\{encodeURIComponent\(ticker\)\}/)
   assert.match(panelCode, /transaction\.ticker\.toUpperCase\(\) === ticker\.toUpperCase\(\)/)
   assert.match(panelCode, /summary\.calcUnrealizedPnl/)
   assert.match(panelCode, /summary\.totalRealizedPnl/)
   assert.doesNotMatch(panelCode, /fake|mock portfolio/i)
+
+  assert.match(transactionsRoute, /searchParams\.get\("ticker"\)/)
+  assert.match(transactionsRoute, /if \(rawTicker\) query = query\.eq\("ticker", rawTicker\)/)
 })
