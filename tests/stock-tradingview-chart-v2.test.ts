@@ -376,7 +376,7 @@ test("QEO-282 adds FireAnt-style Watchlist selector menu and management dialog",
   const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
 
   assert.match(sidebar, /data-watchlist-selector-menu/)
-  assert.match(sidebar, /Danh sách watchlist/)
+  assert.match(sidebar, /Watchlist của tôi/)
   assert.match(sidebar, /Tạo watchlist mới/)
   assert.match(sidebar, /Quản lý các watchlist/)
   assert.match(sidebar, /data-watchlist-manage-dialog/)
@@ -417,7 +417,7 @@ test("QEO-284 tightens Watchlist hierarchy and links ticker click feedback to th
   assert.match(sidebar, /pendingTicker\?: string \| null/)
   assert.match(sidebar, /pendingTicker = null/)
   assert.doesNotMatch(sidebar, /truncate font-semibold text-slate-300">\{activeListName\}/)
-  assert.match(sidebar, /text-\[17px\] font-black leading-none tracking-wide/)
+  assert.match(sidebar, /text-\[14px\] font-black leading-none tracking-wide/)
   assert.match(sidebar, /const isPending = isTransitioning && normalizedTicker === pendingTicker\?\.toUpperCase\(\)/)
   assert.match(sidebar, /animate-ping rounded-full bg-sky-300\/70/)
   assert.match(workstation, /function StockDetailSidebarLoading/)

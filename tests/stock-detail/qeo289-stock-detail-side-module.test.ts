@@ -77,3 +77,26 @@ test("QEO-289 Portfolio tab reuses canonical Portfolio transactions and AVCO eng
   assert.match(transactionsRoute, /searchParams\.get\("ticker"\)/)
   assert.match(transactionsRoute, /if \(rawTicker\) query = query\.eq\("ticker", rawTicker\)/)
 })
+
+
+test("QEO-289 follow-up keeps Stock Detail watchlist compact, market-toned and default-first", () => {
+  const sidebar = source("components/stock-detail/stock-watchlist-sidebar.tsx")
+
+  assert.doesNotMatch(sidebar, /ACTIVE_LIST_KEY/)
+  assert.match(sidebar, /find\(\(watchlist\) => watchlist\.is_default\)/)
+  assert.match(sidebar, /skipNextUserListLoadRef\.current = defaultWatchlistId/)
+  assert.match(sidebar, /data-watchlist-system-section/)
+  assert.match(sidebar, /Danh sách hệ thống/)
+  assert.match(sidebar, /Top 200 · Thị trường/)
+  assert.match(sidebar, /text-\[14px\] font-black leading-none tracking-wide/)
+  assert.match(sidebar, /text-\[10px\] font-medium leading-tight text-slate-400/)
+  assert.match(sidebar, /text-\[15px\] font-black leading-none tabular-nums text-white/)
+  assert.match(sidebar, /marketToneFromChange\(item\.changePct\)/)
+  assert.match(sidebar, /marketTonePill\(tone\)/)
+  assert.match(sidebar, /directionLabel = item\.changePct > 0 \? "▲" : item\.changePct < 0 \? "▼" : "•"/)
+  assert.doesNotMatch(sidebar, /filteredItems\.length.*mã/)
+  assert.ok(
+    sidebar.indexOf("data-watchlist-system-section") > sidebar.indexOf("Quản lý các watchlist"),
+    "Top 200 system section should be below personal watchlist actions",
+  )
+})
