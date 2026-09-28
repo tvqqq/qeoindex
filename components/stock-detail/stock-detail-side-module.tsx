@@ -75,7 +75,7 @@ export function StockDetailSideModule({
 
       <div role="tabpanel">
         {activeTab === "ai" ? qna : null}
-        {activeTab === "notes" ? <StockNotesPanel ticker={ticker} /> : null}
+        {activeTab === "notes" ? <StockNotesPanel key={ticker} ticker={ticker} /> : null}
         {activeTab === "portfolio" ? (
           <StockPortfolioPanel ticker={ticker} currentPrice={currentPrice} />
         ) : null}
