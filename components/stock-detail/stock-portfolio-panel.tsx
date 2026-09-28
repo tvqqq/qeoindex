@@ -166,6 +166,7 @@ export function StockPortfolioPanel({
         </div>
         <Link
           href="/portfolio"
+          prefetch={false}
           className="inline-flex shrink-0 items-center gap-1 text-[9px] font-semibold text-cyan-300/75 hover:text-cyan-200"
         >
           Mở Portfolio
