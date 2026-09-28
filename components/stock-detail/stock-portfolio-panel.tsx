@@ -109,7 +109,7 @@ export function StockPortfolioPanel({
     setError(null)
     setTransactions([])
 
-    void fetch(`/api/portfolio/${encodeURIComponent(portfolioId)}/transactions`, {
+    void fetch(`/api/portfolio/${encodeURIComponent(portfolioId)}/transactions?ticker=${encodeURIComponent(ticker)}`, {
       cache: "no-store",
       credentials: "same-origin",
       signal: controller.signal,
