@@ -30,6 +30,13 @@ export function StockDetailSideModule({
   qna: ReactNode
 }) {
   const [activeTab, setActiveTab] = useState<StockDetailModuleTab>("ai")
+  const [visitedTabs, setVisitedTabs] = useState({ notes: false, portfolio: false })
+
+  function selectTab(tab: StockDetailModuleTab) {
+    setActiveTab(tab)
+    if (tab === "notes") setVisitedTabs((current) => ({ ...current, notes: true }))
+    if (tab === "portfolio") setVisitedTabs((current) => ({ ...current, portfolio: true }))
+  }
 
   return (
     <section
@@ -52,7 +59,7 @@ export function StockDetailSideModule({
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  onClick={() => setActiveTab(tab.value)}
+                  onClick={() => selectTab(tab.value)}
                   className={cn(
                     "flex min-w-0 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-all",
                     selected
@@ -73,13 +80,19 @@ export function StockDetailSideModule({
         </div>
       </div>
 
-      <div role="tabpanel">
-        {activeTab === "ai" ? qna : null}
-        {activeTab === "notes" ? <StockNotesPanel key={ticker} ticker={ticker} /> : null}
-        {activeTab === "portfolio" ? (
-          <StockPortfolioPanel ticker={ticker} currentPrice={currentPrice} />
-        ) : null}
+      <div role="tabpanel" hidden={activeTab !== "ai"}>
+        {qna}
       </div>
+      {visitedTabs.notes ? (
+        <div role="tabpanel" hidden={activeTab !== "notes"}>
+          <StockNotesPanel key={ticker} ticker={ticker} />
+        </div>
+      ) : null}
+      {visitedTabs.portfolio ? (
+        <div role="tabpanel" hidden={activeTab !== "portfolio"}>
+          <StockPortfolioPanel ticker={ticker} currentPrice={currentPrice} />
+        </div>
+      ) : null}
     </section>
   )
 }
