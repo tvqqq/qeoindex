@@ -243,7 +243,7 @@ export function StockWatchlistSidebar({
   const selectorMenuRef = useRef<HTMLDivElement>(null)
   const sortMenuRef = useRef<HTMLDivElement>(null)
   const bootstrappedRef = useRef(false)
-  const loadedUserListRef = useRef<string | null>(null)
+  const skipNextUserListLoadRef = useRef<string | null>(null)
 
   const itemByTicker = useMemo(
     () => new Map(items.map((item) => [item.ticker.toUpperCase(), item] as const)),
@@ -307,7 +307,7 @@ export function StockWatchlistSidebar({
 
         setWatchlists(nextWatchlists)
         if (defaultWatchlistId) {
-          loadedUserListRef.current = defaultWatchlistId
+          skipNextUserListLoadRef.current = defaultWatchlistId
           setUserItems(payload.items ?? [])
           setActiveListId(defaultWatchlistId)
         } else {
@@ -347,7 +347,6 @@ export function StockWatchlistSidebar({
         watchlists?: WatchlistMeta[]
       }
       if (!payload.ok) return
-      loadedUserListRef.current = watchlistId
       setUserItems(payload.items ?? [])
       if (payload.watchlists) setWatchlists(payload.watchlists)
     } finally {
@@ -356,13 +355,12 @@ export function StockWatchlistSidebar({
   }, [])
 
   useEffect(() => {
-    if (
-      activeListId
-      && activeListId !== SYSTEM_WATCHLIST_ID
-      && loadedUserListRef.current !== activeListId
-    ) {
-      void loadUserWatchlist(activeListId)
+    if (!activeListId || activeListId === SYSTEM_WATCHLIST_ID) return
+    if (skipNextUserListLoadRef.current === activeListId) {
+      skipNextUserListLoadRef.current = null
+      return
     }
+    void loadUserWatchlist(activeListId)
   }, [activeListId, loadUserWatchlist])
 
   useEffect(() => {
@@ -665,7 +663,6 @@ export function StockWatchlistSidebar({
 
       if (activeListId === watchlist.id) {
         const nextDefault = nextWatchlists.find((item) => item.is_default) ?? nextWatchlists[0]
-        loadedUserListRef.current = null
         setUserItems([])
         setActiveListId(nextDefault?.id ?? SYSTEM_WATCHLIST_ID)
       }
@@ -734,7 +731,7 @@ export function StockWatchlistSidebar({
       setNewWatchlistName("")
       setNewWatchlistEmoji(null)
       setCreateOpen(false)
-      loadedUserListRef.current = payload.watchlist.id
+      skipNextUserListLoadRef.current = payload.watchlist.id
       setActiveListId(payload.watchlist.id)
       setUserItems([])
     } finally {
