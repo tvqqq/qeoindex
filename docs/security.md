@@ -76,6 +76,7 @@ User-owned tables are protected by RLS and ownership is derived from `auth.uid()
 - `user_features`
 - `watchlists`
 - `watchlist_items`
+- `stock_notes`
 
 `user_features` remains read-only to normal authenticated users so clients cannot self-enable entitlements.
 
@@ -88,6 +89,8 @@ Relevant migrations:
 - `20260821094252_user_auth_rls.sql`
 - `20260821094322_revoke_bootstrap_rpc_execute.sql`
 - `20260821103811_harden_orderbook_rls_and_indexes.sql`
+- `20260928031000_qeo289_stock_notes.sql`
+- `20260928033000_qeo289_stock_notes_privileges.sql`
 
 The 2026-08-21 database audit also added a covering `(watchlist_id, user_id)` index for the composite ownership foreign key.
 

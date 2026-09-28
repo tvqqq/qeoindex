@@ -57,9 +57,9 @@ async function validatedTradeId(
 const SELECT_FIELDS =
   "id,portfolio_id,trade_id,record_origin,legacy_migration_status,ticker,action,quantity,price,fee,fee_rate,transaction_date,note,tags,setup_tags,mistake_tags,target_price_1,target_price_2,target_price_3,stop_loss_1,stop_loss_2,stop_loss_3,created_at,updated_at"
 
-/** GET /api/portfolio/[id]/transactions — list transactions for a portfolio */
+/** GET /api/portfolio/[id]/transactions — list transactions for a portfolio; optional ?ticker= narrows the read */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await requireApiUser()
@@ -69,11 +69,18 @@ export async function GET(
   const portfolioId = validatePortfolioId(id)
   if (!portfolioId) return err("Portfolio ID không hợp lệ.", 400)
 
-  const { data, error } = await auth.context.supabase
+  const rawTicker = new URL(request.url).searchParams.get("ticker")?.trim().toUpperCase() ?? null
+  if (rawTicker && !TICKER_RE.test(rawTicker)) return err("Mã cổ phiếu không hợp lệ.", 400)
+
+  let query = auth.context.supabase
     .from("portfolio_transactions")
     .select(SELECT_FIELDS)
     .eq("user_id", auth.context.user.id)
     .eq("portfolio_id", portfolioId)
+
+  if (rawTicker) query = query.eq("ticker", rawTicker)
+
+  const { data, error } = await query
     .order("transaction_date", { ascending: true })
     .order("created_at", { ascending: true })
 
