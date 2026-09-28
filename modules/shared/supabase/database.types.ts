@@ -3981,6 +3981,30 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_notes: {
+        Row: {
+          content: string
+          created_at: string
+          ticker: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          ticker: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          ticker?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       stock_orderbook_snapshots: {
         Row: {
           ceiling_price: number | null
