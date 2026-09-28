@@ -18,7 +18,7 @@ Supabase Auth user
   -> auth user id
   -> user-scoped Supabase client (anon/publishable key + Bearer JWT)
   -> RLS auth.uid()
-  -> profiles / preferences / features / watchlists
+  -> profiles / preferences / features / watchlists / stock notes
 ```
 
 Never use `getSupabaseServerClient()` / the service-role key for user-owned rows. Service-role access bypasses RLS and is reserved for trusted infrastructure tasks such as canonical market snapshots. The infrastructure client now fails closed if `SUPABASE_SERVICE_ROLE_KEY` is missing; it does not fall back to a public anon key.
@@ -30,6 +30,7 @@ Never use `getSupabaseServerClient()` / the service-role key for user-owned rows
 - `user_features`: read-only feature entitlements for the signed-in user. End users cannot grant themselves features.
 - `watchlists`: user-owned watchlist containers.
 - `watchlist_items`: user-owned tickers. The composite `(watchlist_id, user_id)` foreign key prevents attaching an item to another user's watchlist.
+- `stock_notes`: private per-user notes keyed by `(user_id, ticker)` for Stock Detail.
 
 A trigger on `auth.users` creates defaults for new users, and the auth migration backfilled existing users. The trigger function cannot be invoked by `anon` or `authenticated` through PostgREST RPC.
 
