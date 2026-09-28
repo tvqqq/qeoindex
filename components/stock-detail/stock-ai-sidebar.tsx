@@ -334,6 +334,7 @@ export function StockAiSidebar({ data }: { data: StockDetailData }) {
         signal: requestController.signal,
       })
       const payload = await response.json().catch(() => null) as TickerQaPayload | null
+      if (requestController.signal.aborted || chatAbortRef.current !== requestController) return
       if (!response.ok || !payload || !payload.ok) {
         setErrorMessage(chatErrorMessage(payload && !payload.ok ? payload.code : undefined, response.status))
         return
