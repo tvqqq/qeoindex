@@ -918,6 +918,16 @@
       ]
     },
     {
+      "path": "tests/stock-detail/qeo289-stock-detail-side-module.test.ts",
+      "owner": "ui",
+      "invariant": "QEO-289 preserves one ticker-scoped Stock Detail module with grounded AI Q&A, private notes, and canonical Portfolio state.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/stock-ai-sidebar-ui.test.ts",
       "owner": "ui",
       "invariant": "Preserve the stock detail ai council sidebar layout and presentation contract.",
