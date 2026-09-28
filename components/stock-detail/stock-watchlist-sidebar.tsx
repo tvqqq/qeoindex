@@ -208,7 +208,7 @@ export function StockWatchlistSidebar({
   isTransitioning = false,
 }: StockWatchlistSidebarProps) {
   const [query, setQuery] = useState("")
-  const [activeListId, setActiveListId] = useState(SYSTEM_WATCHLIST_ID)
+  const [activeListId, setActiveListId] = useState("")
   const [watchlists, setWatchlists] = useState<WatchlistMeta[]>([])
   const [userItems, setUserItems] = useState<WatchlistApiItem[]>([])
   const [systemOrder, setSystemOrder] = useState<string[]>(() => items.map((item) => item.ticker))
@@ -222,7 +222,7 @@ export function StockWatchlistSidebar({
   const [renameValue, setRenameValue] = useState("")
   const [renameEmoji, setRenameEmoji] = useState<string | null>(null)
   const [managingWatchlistId, setManagingWatchlistId] = useState<string | null>(null)
-  const [loadingList, setLoadingList] = useState(false)
+  const [loadingList, setLoadingList] = useState(true)
   const [draggedTicker, setDraggedTicker] = useState<string | null>(null)
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -243,6 +243,7 @@ export function StockWatchlistSidebar({
   const selectorMenuRef = useRef<HTMLDivElement>(null)
   const sortMenuRef = useRef<HTMLDivElement>(null)
   const bootstrappedRef = useRef(false)
+  const loadedUserListRef = useRef<string | null>(null)
 
   const itemByTicker = useMemo(
     () => new Map(items.map((item) => [item.ticker.toUpperCase(), item] as const)),
@@ -296,18 +297,25 @@ export function StockWatchlistSidebar({
         }>
       })
       .then((payload) => {
-        if (!payload?.ok) return
+        if (!payload?.ok) {
+          setActiveListId(SYSTEM_WATCHLIST_ID)
+          return
+        }
         const nextWatchlists = payload.watchlists ?? []
         const defaultWatchlist = nextWatchlists.find((watchlist) => watchlist.is_default)
         const defaultWatchlistId = defaultWatchlist?.id ?? payload.activeWatchlistId ?? nextWatchlists[0]?.id
 
         setWatchlists(nextWatchlists)
         if (defaultWatchlistId) {
-          setActiveListId(defaultWatchlistId)
+          loadedUserListRef.current = defaultWatchlistId
           setUserItems(payload.items ?? [])
+          setActiveListId(defaultWatchlistId)
+        } else {
+          setActiveListId(SYSTEM_WATCHLIST_ID)
         }
       })
-      .catch(() => {})
+      .catch(() => setActiveListId(SYSTEM_WATCHLIST_ID))
+      .finally(() => setLoadingList(false))
   }, [items])
 
   const reloadWatchlists = useCallback(async () => {
@@ -339,6 +347,7 @@ export function StockWatchlistSidebar({
         watchlists?: WatchlistMeta[]
       }
       if (!payload.ok) return
+      loadedUserListRef.current = watchlistId
       setUserItems(payload.items ?? [])
       if (payload.watchlists) setWatchlists(payload.watchlists)
     } finally {
@@ -347,10 +356,17 @@ export function StockWatchlistSidebar({
   }, [])
 
   useEffect(() => {
-    if (activeListId !== SYSTEM_WATCHLIST_ID) void loadUserWatchlist(activeListId)
+    if (
+      activeListId
+      && activeListId !== SYSTEM_WATCHLIST_ID
+      && loadedUserListRef.current !== activeListId
+    ) {
+      void loadUserWatchlist(activeListId)
+    }
   }, [activeListId, loadUserWatchlist])
 
   useEffect(() => {
+    if (!activeListId) return
     try {
       const storedSort = window.localStorage.getItem(`${SORT_KEY_PREFIX}${activeListId}`) as SortMode | null
       setSortMode(SORT_OPTIONS.some((option) => option.value === storedSort) ? storedSort! : "custom")
@@ -452,9 +468,11 @@ export function StockWatchlistSidebar({
   }, [filteredItems, onVisibleTickersChange])
 
   const activeWatchlist = watchlists.find((watchlist) => watchlist.id === activeListId)
-  const activeListName = activeListId === SYSTEM_WATCHLIST_ID
-    ? "Top 200 · Thị trường"
-    : activeWatchlist?.name ?? "Watchlist"
+  const activeListName = !activeListId
+    ? "Đang tải watchlist..."
+    : activeListId === SYSTEM_WATCHLIST_ID
+      ? "Top 200 · Thị trường"
+      : activeWatchlist?.name ?? "Watchlist"
   const activeListEmoji = activeListId === SYSTEM_WATCHLIST_ID
     ? "📊"
     : activeWatchlist?.emoji ?? null
@@ -646,8 +664,10 @@ export function StockWatchlistSidebar({
       setWatchlists(nextWatchlists)
 
       if (activeListId === watchlist.id) {
-        setActiveListId(SYSTEM_WATCHLIST_ID)
+        const nextDefault = nextWatchlists.find((item) => item.is_default) ?? nextWatchlists[0]
+        loadedUserListRef.current = null
         setUserItems([])
+        setActiveListId(nextDefault?.id ?? SYSTEM_WATCHLIST_ID)
       }
       if (addTargetId === watchlist.id) {
         setAddTargetId(nextWatchlists.find((item) => item.is_default)?.id ?? nextWatchlists[0]?.id ?? "")
@@ -665,7 +685,7 @@ export function StockWatchlistSidebar({
   }
 
   function openAddTicker(ticker = currentTicker) {
-    const preferredTarget = activeListId !== SYSTEM_WATCHLIST_ID
+    const preferredTarget = activeListId && activeListId !== SYSTEM_WATCHLIST_ID
       ? activeListId
       : watchlists.find((watchlist) => watchlist.is_default)?.id ?? watchlists[0]?.id ?? ""
     setAddTargetId(preferredTarget)
@@ -714,6 +734,7 @@ export function StockWatchlistSidebar({
       setNewWatchlistName("")
       setNewWatchlistEmoji(null)
       setCreateOpen(false)
+      loadedUserListRef.current = payload.watchlist.id
       setActiveListId(payload.watchlist.id)
       setUserItems([])
     } finally {
