@@ -37,6 +37,7 @@ test("QEO-289 stock notes use authenticated ticker-scoped persistence", () => {
   const panelCode = source("components/stock-detail/stock-notes-panel.tsx")
   const routeCode = source("app/api/insights/[ticker]/notes/route.ts")
   const migration = source("supabase/migrations/20260928031000_qeo289_stock_notes.sql")
+  const privilegeMigration = source("supabase/migrations/20260928033000_qeo289_stock_notes_privileges.sql")
   const databaseTypes = source("modules/shared/supabase/database.types.ts")
 
   assert.match(panelCode, /\/api\/insights\/\$\{encodeURIComponent\(ticker\)\}\/notes/)
@@ -55,6 +56,9 @@ test("QEO-289 stock notes use authenticated ticker-scoped persistence", () => {
   assert.match(migration, /create policy stock_notes_insert_own/i)
   assert.match(migration, /create policy stock_notes_update_own/i)
   assert.match(migration, /create policy stock_notes_delete_own/i)
+  assert.match(privilegeMigration, /revoke all on table public\.stock_notes from authenticated/i)
+  assert.match(privilegeMigration, /grant select, insert, update, delete on public\.stock_notes to authenticated/i)
+  assert.doesNotMatch(privilegeMigration, /grant all/i)
   assert.match(databaseTypes, /stock_notes: \{/)
 })
 
