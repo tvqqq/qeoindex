@@ -59,7 +59,7 @@ const SELECT_FIELDS =
 
 /** GET /api/portfolio/[id]/transactions — list transactions for a portfolio */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await requireApiUser()
@@ -69,11 +69,18 @@ export async function GET(
   const portfolioId = validatePortfolioId(id)
   if (!portfolioId) return err("Portfolio ID không hợp lệ.", 400)
 
-  const { data, error } = await auth.context.supabase
+  const rawTicker = new URL(request.url).searchParams.get("ticker")?.trim().toUpperCase() ?? null
+  if (rawTicker && !TICKER_RE.test(rawTicker)) return err("Mã cổ phiếu không hợp lệ.", 400)
+
+  let query = auth.context.supabase
     .from("portfolio_transactions")
     .select(SELECT_FIELDS)
     .eq("user_id", auth.context.user.id)
     .eq("portfolio_id", portfolioId)
+
+  if (rawTicker) query = query.eq("ticker", rawTicker)
+
+  const { data, error } = await query
     .order("transaction_date", { ascending: true })
     .order("created_at", { ascending: true })
 
