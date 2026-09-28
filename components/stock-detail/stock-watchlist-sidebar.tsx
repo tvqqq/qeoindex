@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { StockLogo } from "@/components/stock-logo"
+import { marketToneFromChange, marketTonePill, marketToneText } from "@/modules/market/tone"
 import { cn } from "@/modules/shared/ui/cn"
 import type { StockWatchlistItem } from "./types"
 
@@ -63,7 +64,6 @@ type SortMode =
   | "market-cap-asc"
 
 const SYSTEM_WATCHLIST_ID = "__top200__"
-const ACTIVE_LIST_KEY = "qeo:stock-watchlist:active:v1"
 const SYSTEM_ORDER_KEY = "qeo:stock-watchlist:top200-order:v1"
 const SORT_KEY_PREFIX = "qeo:stock-watchlist:sort:v1:"
 
@@ -290,17 +290,21 @@ export function StockWatchlistSidebar({
         if (!response.ok) return null
         return response.json() as Promise<{
           ok: boolean
+          activeWatchlistId?: string
+          items?: WatchlistApiItem[]
           watchlists?: WatchlistMeta[]
         }>
       })
       .then((payload) => {
         if (!payload?.ok) return
         const nextWatchlists = payload.watchlists ?? []
-        setWatchlists(nextWatchlists)
+        const defaultWatchlist = nextWatchlists.find((watchlist) => watchlist.is_default)
+        const defaultWatchlistId = defaultWatchlist?.id ?? payload.activeWatchlistId ?? nextWatchlists[0]?.id
 
-        const storedActive = window.localStorage.getItem(ACTIVE_LIST_KEY)
-        if (storedActive && (storedActive === SYSTEM_WATCHLIST_ID || nextWatchlists.some((watchlist) => watchlist.id === storedActive))) {
-          setActiveListId(storedActive)
+        setWatchlists(nextWatchlists)
+        if (defaultWatchlistId) {
+          setActiveListId(defaultWatchlistId)
+          setUserItems(payload.items ?? [])
         }
       })
       .catch(() => {})
@@ -348,7 +352,6 @@ export function StockWatchlistSidebar({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(ACTIVE_LIST_KEY, activeListId)
       const storedSort = window.localStorage.getItem(`${SORT_KEY_PREFIX}${activeListId}`) as SortMode | null
       setSortMode(SORT_OPTIONS.some((option) => option.value === storedSort) ? storedSort! : "custom")
     } catch {
@@ -800,27 +803,10 @@ export function StockWatchlistSidebar({
                   className="absolute left-0 top-10 z-[70] w-[min(330px,calc(100vw-32px))] overflow-hidden rounded-md border border-white/[0.12] bg-[#343840] shadow-[0_22px_55px_-16px_rgba(0,0,0,0.95)]"
                 >
                   <div className="px-3 pb-1 pt-3 text-[11px] font-black uppercase tracking-[0.08em] text-slate-400">
-                    Danh sách watchlist
+                    Watchlist của tôi
                   </div>
 
-                  <div className="max-h-[360px] overflow-y-auto px-1.5 pb-2">
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={activeListId === SYSTEM_WATCHLIST_ID}
-                      onClick={() => {
-                        setActiveListId(SYSTEM_WATCHLIST_ID)
-                        setSelectorMenuOpen(false)
-                      }}
-                      className="flex w-full items-center gap-3 rounded px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
-                    >
-                      <span className="grid size-7 shrink-0 place-items-center rounded border border-white/[0.12] bg-white/[0.05] text-base">
-                        📊
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">Top 200 · Thị trường</span>
-                      {activeListId === SYSTEM_WATCHLIST_ID ? <Check className="size-5 shrink-0 text-sky-200" /> : null}
-                    </button>
-
+                  <div className="max-h-[300px] overflow-y-auto px-1.5 pb-2">
                     {watchlists.map((watchlist) => (
                       <button
                         key={watchlist.id}
@@ -839,7 +825,7 @@ export function StockWatchlistSidebar({
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-slate-100">{watchlist.name}</span>
                           {watchlist.is_default ? (
-                            <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-wide text-slate-500">Mặc định</span>
+                            <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-wide text-sky-300/70">Mặc định</span>
                           ) : null}
                         </span>
                         {activeListId === watchlist.id ? <Check className="size-5 shrink-0 text-sky-200" /> : null}
@@ -863,6 +849,28 @@ export function StockWatchlistSidebar({
                     >
                       <Settings2 className="size-5" />
                       Quản lý các watchlist
+                    </button>
+                  </div>
+
+                  <div data-watchlist-system-section className="border-t border-white/[0.12] px-1.5 pb-1.5 pt-2">
+                    <div className="px-1.5 pb-1 text-[9px] font-black uppercase tracking-[0.1em] text-slate-500">
+                      Danh sách hệ thống
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={activeListId === SYSTEM_WATCHLIST_ID}
+                      onClick={() => {
+                        setActiveListId(SYSTEM_WATCHLIST_ID)
+                        setSelectorMenuOpen(false)
+                      }}
+                      className="flex w-full items-center gap-3 rounded px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
+                    >
+                      <span className="grid size-7 shrink-0 place-items-center rounded border border-white/[0.12] bg-white/[0.05] text-base">
+                        📊
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200">Top 200 · Thị trường</span>
+                      {activeListId === SYSTEM_WATCHLIST_ID ? <Check className="size-5 shrink-0 text-sky-200" /> : null}
                     </button>
                   </div>
                 </div>
@@ -944,14 +952,9 @@ export function StockWatchlistSidebar({
             </button>
           </div>
 
-          <div className="mt-2 flex justify-end px-0.5 text-[10px]">
-            <div className="shrink-0 font-mono text-slate-500">
-              {filteredItems.length}{query ? `/${manualItems.length}` : ""} mã
-            </div>
-          </div>
         </div>
 
-        <div className="grid shrink-0 grid-cols-[20px_minmax(0,1fr)_96px] items-center gap-1 border-b border-black/30 bg-[#23272e] px-2 py-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+        <div className="grid shrink-0 grid-cols-[20px_minmax(0,1fr)_112px] items-center gap-1 border-b border-black/30 bg-[#23272e] px-2 py-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span />
           <span>Mã / Công ty</span>
           <span className="text-right">Giá / Thay đổi</span>
@@ -974,9 +977,9 @@ export function StockWatchlistSidebar({
               const isActive = normalizedTicker === currentTicker.toUpperCase()
               const isPending = isTransitioning && normalizedTicker === pendingTicker?.toUpperCase()
               const isSelected = isActive || isPending
-              const isUp = item.changePct > 0
-              const isDown = item.changePct < 0
-              const tone = isUp ? "text-emerald-400" : isDown ? "text-rose-400" : "text-amber-300"
+              const tone = marketToneFromChange(item.changePct)
+              const toneText = marketToneText(tone)
+              const directionLabel = item.changePct > 0 ? "▲" : item.changePct < 0 ? "▼" : "•"
 
               return (
                 <div
@@ -999,7 +1002,7 @@ export function StockWatchlistSidebar({
                     handleDrop(item.ticker)
                   }}
                   className={cn(
-                    "group grid min-h-[58px] grid-cols-[20px_minmax(0,1fr)_96px] items-center gap-1 border-b border-black/25 px-2 py-1.5 transition-colors",
+                    "group grid min-h-[58px] grid-cols-[20px_minmax(0,1fr)_112px] items-center gap-1 border-b border-black/25 px-2 py-1.5 transition-colors",
                     isSelected ? "bg-sky-500/[0.11]" : "bg-[#2e333b] odd:bg-[#2a2f37] hover:bg-[#373c45]",
                     draggedTicker === item.ticker && "opacity-45",
                   )}
@@ -1024,7 +1027,7 @@ export function StockWatchlistSidebar({
                     className="min-w-0 py-0.5 text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <strong className={cn("text-[17px] font-black leading-none tracking-wide", isSelected ? "text-sky-200" : "text-[#79b8ff]")}>
+                      <strong className={cn("text-[14px] font-black leading-none tracking-wide", isSelected ? "text-sky-200" : "text-[#79b8ff]")}>
                         {item.ticker}
                       </strong>
                       {isPending ? (
@@ -1034,7 +1037,7 @@ export function StockWatchlistSidebar({
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-1 truncate text-[11px] font-medium leading-tight text-slate-300/85" title={item.companyName}>
+                    <div className="mt-1 truncate text-[10px] font-medium leading-tight text-slate-400" title={item.companyName}>
                       {item.companyName}
                     </div>
                   </Link>
@@ -1045,11 +1048,16 @@ export function StockWatchlistSidebar({
                     onClick={(event) => handleItemClick(event, item.ticker)}
                     className="min-w-0 py-0.5 text-right"
                   >
-                    <div className="font-mono text-[12px] font-black tabular-nums text-slate-100">
+                    <div className="font-mono text-[15px] font-black leading-none tabular-nums text-white">
                       {formatPrice(item.price)}
                     </div>
-                    <div className={cn("mt-0.5 whitespace-nowrap font-mono text-[10px] font-black tabular-nums", tone)}>
-                      {formatChange(item.change)} / {formatChange(item.changePct)}%
+                    <div className="mt-1 flex items-center justify-end gap-1 whitespace-nowrap font-mono tabular-nums">
+                      <span className={cn("text-[9px] font-bold", toneText)}>
+                        {directionLabel} {formatChange(item.change)}
+                      </span>
+                      <span className={cn("rounded border px-1 py-0.5 text-[9px] font-black leading-none", marketTonePill(tone))}>
+                        {formatChange(item.changePct)}%
+                      </span>
                     </div>
                   </Link>
                 </div>
