@@ -1,7 +1,7 @@
 import { answerResearchReportQaWithOpenAi } from "./openai.ts"
 import {
   boundResearchReportQaEvidence,
-  buildResearchReportQaLexicalQuery,
+  buildResearchReportQaLexicalQueries,
   resolveResearchReportQaEvidenceIdentity,
   retrieveResearchReportQaEvidence,
 } from "./retrieval.ts"
@@ -248,21 +248,35 @@ async function retrieveLexicalAttempt(
   retrieveEvidence: RetrieveEvidence,
   client: ResearchReportQaRetrievalClient,
   identity: ResearchReportQaEvidenceIdentity,
-  lexicalQuery: string,
+  lexicalQueries: readonly string[],
 ): Promise<LexicalAttempt> {
   const startedAt = Date.now()
-  try {
-    return {
-      evidence: boundResearchReportQaEvidence(await retrieveEvidence(client, identity, lexicalQuery)),
-      elapsedMs: measuredMs(startedAt),
-      error: null,
+
+  for (const lexicalQuery of lexicalQueries) {
+    try {
+      const evidence = boundResearchReportQaEvidence(
+        await retrieveEvidence(client, identity, lexicalQuery),
+      )
+      if (evidence.length > 0) {
+        return {
+          evidence,
+          elapsedMs: measuredMs(startedAt),
+          error: null,
+        }
+      }
+    } catch (error) {
+      return {
+        evidence: [],
+        elapsedMs: measuredMs(startedAt),
+        error,
+      }
     }
-  } catch (error) {
-    return {
-      evidence: [],
-      elapsedMs: measuredMs(startedAt),
-      error,
-    }
+  }
+
+  return {
+    evidence: [],
+    elapsedMs: measuredMs(startedAt),
+    error: null,
   }
 }
 
@@ -375,7 +389,8 @@ export async function answerResearchReportQuestion(
     throw new ResearchReportQaError("report_not_ready", 409, "Research report analysis is not ready")
   }
 
-  const lexicalQuery = buildResearchReportQaLexicalQuery(request.question, request.history)
+  const lexicalQueries = buildResearchReportQaLexicalQueries(request.question, request.history)
+  const retrievalQuery = lexicalQueries[0] ?? request.question
   let evidence: ResearchReportQaEvidence[] = []
 
   if (retrievalMode === "lexical" || !retrieveHybridEvidence) {
@@ -383,7 +398,7 @@ export async function answerResearchReportQuestion(
       retrieveEvidence,
       client,
       resolution.identity,
-      lexicalQuery,
+      lexicalQueries,
     )
     if (lexical.error) throwRetrievalFailure(lexical.error)
     evidence = lexical.evidence
@@ -392,7 +407,7 @@ export async function answerResearchReportQuestion(
       retrieveEvidence,
       client,
       resolution.identity,
-      lexicalQuery,
+      lexicalQueries,
     )
     if (lexical.error) throwRetrievalFailure(lexical.error)
 
@@ -400,7 +415,7 @@ export async function answerResearchReportQuestion(
       retrieveHybridEvidence,
       client,
       resolution.identity,
-      lexicalQuery,
+      retrievalQuery,
     )
 
     evidence = lexical.evidence
@@ -416,13 +431,13 @@ export async function answerResearchReportQuestion(
       retrieveHybridEvidence,
       client,
       resolution.identity,
-      lexicalQuery,
+      retrievalQuery,
     )
     const lexical = await retrieveLexicalAttempt(
       retrieveEvidence,
       client,
       resolution.identity,
-      lexicalQuery,
+      lexicalQueries,
     )
 
     const useHybrid = hybrid.status === "ready" && hybrid.evidence.length > 0
