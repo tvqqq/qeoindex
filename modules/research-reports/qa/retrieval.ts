@@ -177,6 +177,7 @@ const RELAXED_QUERY_STOPWORDS = new Set([
   "là",
   "nào",
   "này",
+  "năm",
   "như",
   "nói",
   "ntn",
@@ -189,7 +190,7 @@ const RELAXED_QUERY_STOPWORDS = new Set([
 ])
 const RELAXED_QUERY_MAX_TOKENS = 16
 
-function buildRelaxedResearchReportQaLexicalQuery(value: string): string {
+function buildRelaxedResearchReportQaLexicalQueries(value: string): string[] {
   const tokens = normalizeText(value).match(/[\p{L}\p{N}]+/gu) ?? []
   const terms: string[] = []
   const seen = new Set<string>()
@@ -208,7 +209,11 @@ function buildRelaxedResearchReportQaLexicalQuery(value: string): string {
     if (terms.length >= RELAXED_QUERY_MAX_TOKENS) break
   }
 
-  return terms.length > 1 ? terms.join(" OR ") : ""
+  if (terms.length <= 1) return []
+  return [
+    terms.join(" "),
+    terms.join(" OR "),
+  ]
 }
 
 async function searchResearchReportQaEvidence(
@@ -246,10 +251,14 @@ export async function retrieveResearchReportQaEvidence(
   const strict = await searchResearchReportQaEvidence(client, identity, query)
   if (strict.length > 0) return strict
 
-  const relaxedQuery = buildRelaxedResearchReportQaLexicalQuery(query)
-  if (!relaxedQuery || relaxedQuery === query) return []
+  const relaxedQueries = buildRelaxedResearchReportQaLexicalQueries(query)
+  for (const relaxedQuery of relaxedQueries) {
+    if (relaxedQuery === query) continue
+    const relaxed = await searchResearchReportQaEvidence(client, identity, relaxedQuery)
+    if (relaxed.length > 0) return relaxed
+  }
 
-  return searchResearchReportQaEvidence(client, identity, relaxedQuery)
+  return []
 }
 
 export interface ResearchReportQaRankedChunkRef {
