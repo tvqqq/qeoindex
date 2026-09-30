@@ -100,17 +100,28 @@ export async function resolveResearchReportQaEvidenceIdentity(
   }
 }
 
-export function buildResearchReportQaLexicalQuery(
+export function buildResearchReportQaLexicalQueries(
   question: string,
   history: readonly ResearchReportQaTurn[],
-): string {
+): string[] {
+  const primary = normalizeText(question).slice(0, 4_000)
+  if (!primary) return []
+
   const recentUserTurns = history
     .filter((turn) => turn.role === "user")
     .slice(-3)
     .map((turn) => normalizeText(turn.content))
     .filter(Boolean)
 
-  return normalizeText([...recentUserTurns, normalizeText(question)].join(" ")).slice(0, 4_000)
+  const contextual = normalizeText([primary, ...recentUserTurns].join(" ")).slice(0, 4_000)
+  return contextual && contextual !== primary ? [primary, contextual] : [primary]
+}
+
+export function buildResearchReportQaLexicalQuery(
+  question: string,
+  history: readonly ResearchReportQaTurn[],
+): string {
+  return buildResearchReportQaLexicalQueries(question, history)[0] ?? ""
 }
 
 function parseEvidenceRow(
@@ -156,14 +167,60 @@ function parseEvidenceRow(
   }
 }
 
-export async function retrieveResearchReportQaEvidence(
+const RELAXED_QUERY_STOPWORDS = new Set([
+  "báo",
+  "cáo",
+  "cho",
+  "có",
+  "của",
+  "gì",
+  "là",
+  "nào",
+  "này",
+  "năm",
+  "như",
+  "nói",
+  "ntn",
+  "sao",
+  "sẽ",
+  "thế",
+  "trong",
+  "và",
+  "về",
+])
+const RELAXED_QUERY_MAX_TOKENS = 16
+
+function buildRelaxedResearchReportQaLexicalQueries(value: string): string[] {
+  const tokens = normalizeText(value).match(/[\p{L}\p{N}]+/gu) ?? []
+  const terms: string[] = []
+  const seen = new Set<string>()
+
+  for (const token of tokens) {
+    const normalized = token.toLocaleLowerCase("vi-VN")
+    if (
+      seen.has(normalized)
+      || RELAXED_QUERY_STOPWORDS.has(normalized)
+      || /^\p{L}$/u.test(token)
+    ) {
+      continue
+    }
+    seen.add(normalized)
+    terms.push(token)
+    if (terms.length >= RELAXED_QUERY_MAX_TOKENS) break
+  }
+
+  if (terms.length <= 1) return []
+  return [
+    terms.join(" "),
+    terms.join(" OR "),
+  ]
+}
+
+async function searchResearchReportQaEvidence(
   client: ResearchReportQaRetrievalClient,
   identity: ResearchReportQaEvidenceIdentity,
-  lexicalQuery: string,
+  query: string,
 ): Promise<ResearchReportQaEvidence[]> {
-  const query = normalizeText(lexicalQuery)
-  if (!query) return []
-
   const result = await client.rpc(SEARCH_RPC, {
     p_report_id: identity.reportId,
     p_content_hash: identity.contentHash,
@@ -181,6 +238,27 @@ export async function retrieveResearchReportQaEvidence(
     .map((row) => parseEvidenceRow(row, identity))
     .filter((row): row is ResearchReportQaEvidence => row !== null)
     .slice(0, RESEARCH_REPORT_QA_LIMITS.retrievalChunks)
+}
+
+export async function retrieveResearchReportQaEvidence(
+  client: ResearchReportQaRetrievalClient,
+  identity: ResearchReportQaEvidenceIdentity,
+  lexicalQuery: string,
+): Promise<ResearchReportQaEvidence[]> {
+  const query = normalizeText(lexicalQuery)
+  if (!query) return []
+
+  const strict = await searchResearchReportQaEvidence(client, identity, query)
+  if (strict.length > 0) return strict
+
+  const relaxedQueries = buildRelaxedResearchReportQaLexicalQueries(query)
+  for (const relaxedQuery of relaxedQueries) {
+    if (relaxedQuery === query) continue
+    const relaxed = await searchResearchReportQaEvidence(client, identity, relaxedQuery)
+    if (relaxed.length > 0) return relaxed
+  }
+
+  return []
 }
 
 export interface ResearchReportQaRankedChunkRef {
