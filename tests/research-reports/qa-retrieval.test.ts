@@ -243,7 +243,7 @@ test("QEO-290 lexical retrieval tries the current question before bounded user-h
   assert.equal(buildResearchReportQaLexicalQuery("Còn target price thì sao?", history), queries[0])
 })
 
-test("QEO-290 strict lexical miss retries a bounded relaxed query for conversational Vietnamese", async () => {
+test("QEO-290 strict lexical miss retries filtered meaningful terms for conversational Vietnamese", async () => {
   const page2027ChunkId = "88888888-8888-4888-8888-888888888888"
   const client = fakeRetrievalClient({
     searchRowsByCall: [
@@ -265,16 +265,45 @@ test("QEO-290 strict lexical miss retries a bounded relaxed query for conversati
 
   assert.equal(client.rpcCalls.length, 2)
   assert.equal(client.rpcCalls[0].args.p_query, "VIB năm 2027 sẽ ntn?")
-  assert.match(String(client.rpcCalls[1].args.p_query), /VIB/)
-  assert.match(String(client.rpcCalls[1].args.p_query), /2027/)
-  assert.match(String(client.rpcCalls[1].args.p_query), / OR /)
-  assert.doesNotMatch(String(client.rpcCalls[1].args.p_query), /ntn|sẽ/i)
+  assert.equal(client.rpcCalls[1].args.p_query, "VIB 2027")
   assert.equal(client.rpcCalls[1].args.p_report_id, REPORT_ID)
   assert.equal(client.rpcCalls[1].args.p_content_hash, HASH)
   assert.equal(client.rpcCalls[1].args.p_chunk_version, CHUNK_VERSION)
   assert.equal(rows.length, 1)
   assert.equal(rows[0].chunkId, page2027ChunkId)
   assert.equal(rows[0].page, 9)
+})
+
+test("QEO-290 relaxed retrieval uses bounded OR only after meaningful-term AND still misses", async () => {
+  const semanticChunkId = "99999999-9999-4999-8999-999999999999"
+  const client = fakeRetrievalClient({
+    searchRowsByCall: [
+      [],
+      [],
+      [{
+        id: semanticChunkId,
+        report_id: REPORT_ID,
+        content_hash: HASH,
+        chunk_version: CHUNK_VERSION,
+        page_number: 3,
+        chunk_index: 0,
+        content: "Biên lợi nhuận được kỳ vọng cải thiện nhờ cơ cấu doanh thu thuận lợi hơn.",
+        rank: 0.31,
+      }],
+    ],
+  })
+
+  const rows = await retrieveResearchReportQaEvidence(
+    client,
+    IDENTITY,
+    "Biên lợi nhuận sẽ cải thiện thế nào?",
+  )
+
+  assert.equal(client.rpcCalls.length, 3)
+  assert.equal(client.rpcCalls[1].args.p_query, "Biên lợi nhuận cải thiện")
+  assert.equal(client.rpcCalls[2].args.p_query, "Biên OR lợi OR nhuận OR cải OR thiện")
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].chunkId, semanticChunkId)
 })
 
 test("QEO-82 evidence bounding is deterministic and never exceeds chunk or character budgets", () => {
