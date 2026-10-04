@@ -11,6 +11,8 @@ import {
   CircleAlert,
   Building2,
   Factory,
+  Eye,
+  EyeOff,
   Landmark,
   Layers,
   LayoutGrid,
@@ -107,6 +109,7 @@ const WATCHLIST_KEY = "stockos:watchlist:v1"
 const WATCHLIST_VISIBILITY_KEY = "qeoindex_show_watchlist"
 const BOARD_VIEW_KEY = "qeoindex:market-board-view:v1"
 const MARKET_CONTEXT_VISIBILITY_KEY = "qeoindex:market-context-visible:v1"
+const INDUSTRY_PRICE_VOLUME_VISIBILITY_KEY = "qeoindex:industry-price-volume-visible:v1"
 
 const SECTOR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   bank: Landmark,
@@ -484,10 +487,13 @@ export function LiveMarketBoard({
   const [mode, setMode] = useState<BoardMode>("sector")
   const boardViewStorageKey = `${BOARD_VIEW_KEY}:${userId}`
   const marketContextVisibilityStorageKey = `${MARKET_CONTEXT_VISIBILITY_KEY}:${userId}`
+  const industryPriceVolumeStorageKey = `${INDUSTRY_PRICE_VOLUME_VISIBILITY_KEY}:${userId}`
   const [boardView, setBoardView] = useState<BoardView>("classic")
   const [boardViewHydratedKey, setBoardViewHydratedKey] = useState<string | null>(null)
   const [showMarketContext, setShowMarketContext] = useState(true)
   const [marketContextVisibilityHydratedKey, setMarketContextVisibilityHydratedKey] = useState<string | null>(null)
+  const [showIndustryPriceVolume, setShowIndustryPriceVolume] = useState(true)
+  const [industryPriceVolumeHydratedKey, setIndustryPriceVolumeHydratedKey] = useState<string | null>(null)
   const [showWatchlist, setShowWatchlist] = useState(true)
   const [showWatchlistHydrated, setShowWatchlistHydrated] = useState(false)
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
@@ -523,6 +529,21 @@ export function LiveMarketBoard({
     if (marketContextVisibilityHydratedKey !== marketContextVisibilityStorageKey) return
     try { localStorage.setItem(marketContextVisibilityStorageKey, String(showMarketContext)) } catch { /* current visibility remains usable */ }
   }, [marketContextVisibilityHydratedKey, marketContextVisibilityStorageKey, showMarketContext])
+
+  useEffect(() => {
+    try {
+      setShowIndustryPriceVolume(localStorage.getItem(industryPriceVolumeStorageKey) !== "false")
+    } catch {
+      setShowIndustryPriceVolume(true)
+    } finally {
+      setIndustryPriceVolumeHydratedKey(industryPriceVolumeStorageKey)
+    }
+  }, [industryPriceVolumeStorageKey])
+
+  useEffect(() => {
+    if (industryPriceVolumeHydratedKey !== industryPriceVolumeStorageKey) return
+    try { localStorage.setItem(industryPriceVolumeStorageKey, String(showIndustryPriceVolume)) } catch { /* current visibility remains usable */ }
+  }, [industryPriceVolumeHydratedKey, industryPriceVolumeStorageKey, showIndustryPriceVolume])
 
   useEffect(() => {
     try {
@@ -1526,6 +1547,27 @@ export function LiveMarketBoard({
             <span>{showMarketContext ? "Ẩn chỉ số" : "Hiện chỉ số"}</span>
             {showMarketContext ? <ChevronUp className="h-3.5 w-3.5 text-brand" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-2" />}
           </label>
+
+          {boardView === "industry" ? (
+            <label
+              className={`flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition-colors ${showIndustryPriceVolume ? "border-white/[0.10] bg-[#0b0f14] text-muted-2 hover:text-foreground" : "border-brand/35 bg-brand/[0.08] text-foreground"} ${industryPriceVolumeHydratedKey !== industryPriceVolumeStorageKey ? "cursor-wait opacity-60" : ""}`}
+              title={showIndustryPriceVolume ? "Ẩn cột Giá và KL để xem được nhiều ngành hơn" : "Hiện lại cột Giá và KL"}
+            >
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={!showIndustryPriceVolume}
+                disabled={industryPriceVolumeHydratedKey !== industryPriceVolumeStorageKey}
+                onChange={(event) => setShowIndustryPriceVolume(!event.target.checked)}
+                aria-controls="market-board-view-panel"
+              />
+              <span className={`flex h-4 w-4 items-center justify-center rounded border ${!showIndustryPriceVolume ? "border-brand/60 bg-brand/[0.16] text-brand" : "border-white/20 bg-white/[0.03] text-transparent"}`}>
+                <Check className="h-3 w-3" />
+              </span>
+              <span>{showIndustryPriceVolume ? "Ẩn Giá/KL" : "Hiện Giá/KL"}</span>
+              {showIndustryPriceVolume ? <EyeOff className="h-3.5 w-3.5 text-muted-2" /> : <Eye className="h-3.5 w-3.5 text-brand" />}
+            </label>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1612,6 +1654,7 @@ export function LiveMarketBoard({
             userId={userId}
             canonicalSymbols={canonicalSymbols}
             vn30Membership={vn30Membership}
+            showPriceVolume={showIndustryPriceVolume}
           />
         ) : mode === "sector" ? (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" data-market-board-classic-grid>
