@@ -38,7 +38,7 @@ test("compact priceboard keeps fixed anchors, packs industries into lanes, and e
   assert.match(priceboardSource, /industryLanes\.map\(\(lane, laneIndex\)/)
   assert.match(priceboardSource, /lane\.industries\.map\(\(industry\)/)
   assert.match(priceboardSource, /data-market-board-industry-lane/)
-  assert.match(priceboardSource, /hover:border-white\/25/)
+  assert.match(priceboardSource, /hover:border-white\/35/)
   assert.match(priceboardSource, /hover:brightness-110/)
   assert.doesNotMatch(priceboardSource, /transition-all/)
   assert.match(priceboardSource, /data-market-board-screenshot-rail/)
