@@ -154,7 +154,7 @@ test("SmoothUI entrance visibly staggers indexes and selected board columns only
   assert.match(boardTransitionSource, /useAnimate/)
   assert.match(boardTransitionSource, /useReducedMotion/)
   assert.match(boardTransitionSource, /stagger\(0\.065/)
-  assert.match(boardTransitionSource, /INDEX_CARD_SELECTOR = ":scope > div > div:first-child > div"/)
+  assert.match(boardTransitionSource, /MARKET_CONTEXT_CARD_SELECTOR = "\\[data-market-context-card\\]"/)
   assert.match(boardTransitionSource, /PRICEBOARD_COLUMN_SELECTOR = "\[data-market-board-sector-column\], \[data-market-board-industry-column\]"/)
   assert.match(boardTransitionSource, /translate3d\(0, -28px, 0\) scale\(0\.965\)/)
   assert.match(boardTransitionSource, /translate3d\(0, 48px, 0\) scale\(0\.975\)/)
