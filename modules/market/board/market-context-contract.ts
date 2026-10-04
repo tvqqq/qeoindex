@@ -1,4 +1,4 @@
-export const MARKET_CONTEXT_INDEX_SYMBOLS = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"] as const
+export const MARKET_CONTEXT_INDEX_SYMBOLS = ["VNINDEX", "VN30"] as const
 
 export type MarketContextIndexSymbol = (typeof MARKET_CONTEXT_INDEX_SYMBOLS)[number]
 
