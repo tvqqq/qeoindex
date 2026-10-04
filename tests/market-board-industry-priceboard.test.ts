@@ -6,6 +6,7 @@ import {
   defaultIndustryColumnOrder,
   industryLabelForStock,
   industryPriceboardBackground,
+  industryPriceboardChangeIntensity,
   industryPriceboardTone,
   moveIndustryColumn,
   moveIndustryColumnBy,
@@ -104,14 +105,38 @@ test("sorting ranks valid live quotes by gain first and averages only finite val
   assert.equal(averagePriceboardChange([stock("BAD")], { BAD: { price: -1, changePercent: 50 } }), null)
 })
 
-test("row tones scale with percent and only use actual provider ceiling/floor metadata", () => {
+test("row tones scale monotonically with percent and only use actual provider ceiling/floor metadata", () => {
   assert.equal(industryPriceboardTone({ price: 10, changePercent: 7 }), "up")
   assert.equal(industryPriceboardTone({ price: 10, changePercent: 0 }), "unchanged")
   assert.equal(industryPriceboardTone({ price: 10, changePercent: null }), "unavailable")
   assert.equal(industryPriceboardTone({ price: 10, changePercent: 3, reference: 9, ceiling: 10 }), "ceiling")
   assert.equal(industryPriceboardTone({ price: 10, changePercent: -3, reference: 11, floor: 10 }), "floor")
   assert.equal(industryPriceboardTone({ price: 10, changePercent: 3, reference: 10, ceiling: 10 }), "up")
+
+  const quiet = industryPriceboardChangeIntensity(0.2)
+  const medium = industryPriceboardChangeIntensity(2.5)
+  const strong = industryPriceboardChangeIntensity(6)
+  assert.ok(quiet < medium)
+  assert.ok(medium < strong)
+  assert.equal(industryPriceboardChangeIntensity(7), industryPriceboardChangeIntensity(15))
+  assert.equal(industryPriceboardChangeIntensity(3), industryPriceboardChangeIntensity(-3))
+  assert.ok(quiet >= 0.12)
+  assert.ok(strong <= 0.6)
+
   assert.notEqual(industryPriceboardBackground({ price: 10, changePercent: 4 }), industryPriceboardBackground({ price: 10, changePercent: 0.2 }))
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: 3, reference: 9, ceiling: 10 }), "rgba(176, 124, 255, 0.48)")
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: -3, reference: 11, floor: 10 }), "rgba(34, 184, 207, 0.48)")
+})
+
+test("industry board reuses Insights sector icons and increases compact-board typography", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.match(source, /import \{ getSectorIcon \} from "@\/components\/stock-identity"/)
+  assert.match(source, /const IndustryIcon = getSectorIcon\(industry\)/)
+  assert.match(source, /<IndustryIcon className="h-3\.5 w-3\.5"/)
+  assert.match(source, /h-\[25px\][\s\S]*?text-\[12px\]/)
+  assert.match(source, /text-\[12px\] font-bold text-foreground/)
+  assert.match(source, /text-\[10px\] font-medium text-muted-2/)
+  assert.match(source, /w-\[232px\] min-w-\[232px\] max-w-\[232px\]/)
 })
 
 test("DNSE membership parser requires exactly 30 unique valid symbols and uses provider time", () => {

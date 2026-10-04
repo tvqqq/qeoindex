@@ -209,15 +209,23 @@ export function industryPriceboardTone(quote?: IndustryPriceboardQuote | null): 
   return "unchanged"
 }
 
+export function industryPriceboardChangeIntensity(changePercent: number) {
+  if (!Number.isFinite(changePercent)) return 0
+  const magnitude = Math.abs(changePercent)
+  // Keep small moves quiet, then increase perceptual emphasis steadily.
+  // 7% covers the common HOSE daily limit while larger HNX/UPCOM moves cap safely.
+  const normalized = Math.min(1, magnitude / 7)
+  return 0.12 + normalized * 0.48
+}
+
 export function industryPriceboardBackground(quote?: IndustryPriceboardQuote | null) {
   const tone = industryPriceboardTone(quote)
-  if (tone === "ceiling") return "rgba(176, 124, 255, 0.42)"
-  if (tone === "floor") return "rgba(34, 184, 207, 0.42)"
+  if (tone === "ceiling") return "rgba(176, 124, 255, 0.48)"
+  if (tone === "floor") return "rgba(34, 184, 207, 0.48)"
   if (tone === "unavailable") return "rgba(255, 255, 255, 0.035)"
-  if (tone === "unchanged") return "rgba(226, 185, 59, 0.14)"
+  if (tone === "unchanged") return "rgba(226, 185, 59, 0.13)"
 
-  const magnitude = Math.abs(quote?.changePercent ?? 0)
-  const alpha = 0.42 + Math.min(8, magnitude) * 0.025
+  const alpha = industryPriceboardChangeIntensity(quote?.changePercent ?? 0)
   return tone === "up"
     ? `rgba(34, 201, 138, ${alpha.toFixed(3)})`
     : `rgba(255, 71, 87, ${alpha.toFixed(3)})`

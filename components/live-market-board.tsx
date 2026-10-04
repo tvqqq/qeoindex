@@ -6,6 +6,7 @@ import {
   Camera,
   ChartNoAxesCombined,
   Check,
+  ChevronDown,
   ChevronUp,
   CircleAlert,
   Building2,
@@ -105,6 +106,7 @@ const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "
 const WATCHLIST_KEY = "stockos:watchlist:v1"
 const WATCHLIST_VISIBILITY_KEY = "qeoindex_show_watchlist"
 const BOARD_VIEW_KEY = "qeoindex:market-board-view:v1"
+const MARKET_CONTEXT_VISIBILITY_KEY = "qeoindex:market-context-visible:v1"
 
 const SECTOR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   bank: Landmark,
@@ -481,8 +483,11 @@ export function LiveMarketBoard({
   const [query, setQuery] = useState("")
   const [mode, setMode] = useState<BoardMode>("sector")
   const boardViewStorageKey = `${BOARD_VIEW_KEY}:${userId}`
+  const marketContextVisibilityStorageKey = `${MARKET_CONTEXT_VISIBILITY_KEY}:${userId}`
   const [boardView, setBoardView] = useState<BoardView>("classic")
   const [boardViewHydratedKey, setBoardViewHydratedKey] = useState<string | null>(null)
+  const [showMarketContext, setShowMarketContext] = useState(true)
+  const [marketContextVisibilityHydratedKey, setMarketContextVisibilityHydratedKey] = useState<string | null>(null)
   const [showWatchlist, setShowWatchlist] = useState(true)
   const [showWatchlistHydrated, setShowWatchlistHydrated] = useState(false)
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
@@ -503,6 +508,21 @@ export function LiveMarketBoard({
     if (boardViewHydratedKey !== boardViewStorageKey) return
     try { localStorage.setItem(boardViewStorageKey, boardView) } catch { /* current view remains usable */ }
   }, [boardView, boardViewHydratedKey, boardViewStorageKey])
+
+  useEffect(() => {
+    try {
+      setShowMarketContext(localStorage.getItem(marketContextVisibilityStorageKey) !== "false")
+    } catch {
+      setShowMarketContext(true)
+    } finally {
+      setMarketContextVisibilityHydratedKey(marketContextVisibilityStorageKey)
+    }
+  }, [marketContextVisibilityStorageKey])
+
+  useEffect(() => {
+    if (marketContextVisibilityHydratedKey !== marketContextVisibilityStorageKey) return
+    try { localStorage.setItem(marketContextVisibilityStorageKey, String(showMarketContext)) } catch { /* current visibility remains usable */ }
+  }, [marketContextVisibilityHydratedKey, marketContextVisibilityStorageKey, showMarketContext])
 
   useEffect(() => {
     try {
@@ -1439,50 +1459,73 @@ export function LiveMarketBoard({
 
   return (
     <div ref={boardContainerRef} className="relative flex h-full min-h-0 flex-col bg-background">
-      <MarketContextStrip
-        indexQuotes={indexQuotes}
-        stockQuotes={displayQuotes as Record<string, LiveStockQuote | undefined>}
-        canonicalUniverse={fullCanonicalUniverse}
-        onOpenIndexChart={openIndexChart}
-      />
+      <div id="market-board-context-panel" hidden={!showMarketContext}>
+        <MarketContextStrip
+          indexQuotes={indexQuotes}
+          stockQuotes={displayQuotes as Record<string, LiveStockQuote | undefined>}
+          canonicalUniverse={fullCanonicalUniverse}
+          onOpenIndexChart={openIndexChart}
+        />
+      </div>
       <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#090d12] px-3 py-1.5">
-        <div role="tablist" aria-label="Kiểu bảng giá" className="flex items-center rounded-xl border border-white/[0.10] bg-[#0b0f14] p-0.5">
-          {(["classic", "industry"] as const).map((view) => {
-            const isSelected = boardView === view
-            const label = view === "classic" ? "Bảng điện" : "Bảng ngành"
-            const targetId = `market-board-view-${view}-tab`
-            const ViewIcon = view === "classic" ? Table2 : PanelsTopLeft
-            return (
-              <button
-                key={view}
-                id={targetId}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                aria-controls="market-board-view-panel"
-                tabIndex={isSelected ? 0 : -1}
-                disabled={boardViewHydratedKey !== boardViewStorageKey}
-                onClick={() => setBoardView(view)}
-                onKeyDown={(event) => {
-                  let nextView: BoardView | null = null
-                  if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = view === "classic" ? "industry" : "classic"
-                  else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = view === "industry" ? "classic" : "industry"
-                  else if (event.key === "Home") nextView = "classic"
-                  else if (event.key === "End") nextView = "industry"
-                  if (!nextView) return
-                  event.preventDefault()
-                  setBoardView(nextView)
-                  document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
-                }}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
-              >
-                <ViewIcon className={`h-3.5 w-3.5 ${isSelected ? "text-brand" : "text-muted-2"}`} />
-                <span>{label}</span>
-              </button>
-            )
-          })}
+        <div className="flex items-center gap-2">
+          <div role="tablist" aria-label="Kiểu bảng giá" className="flex items-center rounded-xl border border-white/[0.10] bg-[#0b0f14] p-0.5">
+            {(["classic", "industry"] as const).map((view) => {
+              const isSelected = boardView === view
+              const label = view === "classic" ? "Bảng điện" : "Bảng ngành"
+              const targetId = `market-board-view-${view}-tab`
+              const ViewIcon = view === "classic" ? Table2 : PanelsTopLeft
+              return (
+                <button
+                  key={view}
+                  id={targetId}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  aria-controls="market-board-view-panel"
+                  tabIndex={isSelected ? 0 : -1}
+                  disabled={boardViewHydratedKey !== boardViewStorageKey}
+                  onClick={() => setBoardView(view)}
+                  onKeyDown={(event) => {
+                    let nextView: BoardView | null = null
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = view === "classic" ? "industry" : "classic"
+                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = view === "industry" ? "classic" : "industry"
+                    else if (event.key === "Home") nextView = "classic"
+                    else if (event.key === "End") nextView = "industry"
+                    if (!nextView) return
+                    event.preventDefault()
+                    setBoardView(nextView)
+                    document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
+                  }}
+                  className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
+                >
+                  <ViewIcon className={`h-3.5 w-3.5 ${isSelected ? "text-brand" : "text-muted-2"}`} />
+                  <span>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <label
+            className={`flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition-colors ${showMarketContext ? "border-brand/35 bg-brand/[0.08] text-foreground" : "border-white/[0.10] bg-[#0b0f14] text-muted-2 hover:text-foreground"} ${marketContextVisibilityHydratedKey !== marketContextVisibilityStorageKey ? "cursor-wait opacity-60" : ""}`}
+            title={showMarketContext ? "Ẩn các chỉ số thị trường để mở rộng bảng bên dưới" : "Hiện lại các chỉ số thị trường"}
+          >
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={showMarketContext}
+              disabled={marketContextVisibilityHydratedKey !== marketContextVisibilityStorageKey}
+              onChange={(event) => setShowMarketContext(event.target.checked)}
+              aria-controls="market-board-context-panel"
+            />
+            <span className={`flex h-4 w-4 items-center justify-center rounded border ${showMarketContext ? "border-brand/60 bg-brand/[0.16] text-brand" : "border-white/20 bg-white/[0.03] text-transparent"}`}>
+              <Check className="h-3 w-3" />
+            </span>
+            <span>{showMarketContext ? "Ẩn chỉ số" : "Hiện chỉ số"}</span>
+            {showMarketContext ? <ChevronUp className="h-3.5 w-3.5 text-brand" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-2" />}
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
