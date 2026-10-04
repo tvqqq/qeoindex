@@ -355,6 +355,15 @@
       ]
     },
     {
+      "path": "tests/finhay-live-adapter.test.ts",
+      "owner": "market",
+      "invariant": "Preserve Finhay runtime MCP argument contracts and normalized index quote shape.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/insights-metric-semantics.test.ts",
       "owner": "ui",
       "invariant": "Preserve the current insights metric semantics contract.",
@@ -510,16 +519,6 @@
       "bucket": "canonical",
       "suites": [
         "fast"
-      ]
-    },
-    {
-      "path": "tests/qeo-149-prune-concurrency.test.ts",
-      "owner": "market",
-      "invariant": "QEO-149 preserves exact HOT content and correction-safe writer/prune serialization.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "db"
       ]
     },
     {
@@ -743,6 +742,26 @@
       ]
     },
     {
+      "path": "tests/portfolio/qeo165-boundaries.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-165 revamp components remain presentation-only and never create their own data-source boundary.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/portfolio/qeo165-command-center-ui.test.ts",
+      "owner": "portfolio",
+      "invariant": "QEO-165 keeps the Portfolio Command Center presentation primitives explicit, factual, and source-faithful.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
       "path": "tests/qeo-106-yahoo-adjusted-basis.test.ts",
       "owner": "market",
       "invariant": "Yahoo Daily fallback and persisted repairs must use one adjusted canonical price basis.",
@@ -773,6 +792,45 @@
       "path": "tests/qeo-124-vhm-golden.test.ts",
       "owner": "market",
       "invariant": "QEO-124 VHM canonical event lineage reproduces the 13-17/10/2025 adjusted weekly H/L through the QEO-93 Daily-to-weekly aggregation contract without moving session identities.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
+      "path": "tests/qeo-149-prune-concurrency.test.ts",
+      "owner": "market",
+      "invariant": "QEO-149 preserves exact HOT content and correction-safe writer/prune serialization.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "db"
+      ]
+    },
+    {
+      "path": "tests/qeo186-contributor-producer.test.ts",
+      "owner": "market",
+      "invariant": "QEO-186 persists full-feed KFSP return inputs and derives fail-closed Qeo VNINDEX contributor estimates for Market Insights.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/qeo197-upcloud-eod-worker.test.ts",
+      "owner": "eod",
+      "invariant": "QEO-197 keeps one canonical EOD graph while UpCloud owns the hardened 15:01 ICT systemd schedule and legacy Supabase EOD remains rollback-only.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "eod"
+      ]
+    },
+    {
+      "path": "tests/qeo201-beszel-upcloud.test.ts",
+      "owner": "tooling",
+      "invariant": "QEO-201 keeps Beszel version-pinned, private-only, Unix-socket connected, Docker-write-isolated, and bounded on the UpCloud host.",
       "bucket": "canonical",
       "suites": [
         "fast"
@@ -936,16 +994,6 @@
       ]
     },
     {
-      "path": "tests/stock-detail/qeo289-stock-detail-side-module.test.ts",
-      "owner": "ui",
-      "invariant": "QEO-289 preserves one ticker-scoped Stock Detail module with grounded AI Q&A, private notes, and canonical Portfolio state.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "ui-contracts"
-      ]
-    },
-    {
       "path": "tests/stock-ai-sidebar-ui.test.ts",
       "owner": "ui",
       "invariant": "Preserve the stock detail ai council sidebar layout and presentation contract.",
@@ -959,6 +1007,16 @@
       "path": "tests/stock-chart-interaction.test.ts",
       "owner": "ui",
       "invariant": "Preserve TradingView chart scroll, zoom out, object selection, and object tree management contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast",
+        "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/stock-detail/qeo289-stock-detail-side-module.test.ts",
+      "owner": "ui",
+      "invariant": "QEO-289 preserves one ticker-scoped Stock Detail module with grounded AI Q&A, private notes, and canonical Portfolio state.",
       "bucket": "canonical",
       "suites": [
         "fast",
@@ -1049,6 +1107,15 @@
       "suites": [
         "fast",
         "ui-contracts"
+      ]
+    },
+    {
+      "path": "tests/upcloud-restic-contract.test.ts",
+      "owner": "tooling",
+      "invariant": "QEO-202 keeps UpCloud Restic backup and restore artifacts encrypted, allowlisted, disabled-first, and fail-closed.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
       ]
     },
     {
@@ -1177,64 +1244,6 @@
       "path": "tests/wyckoff-v2-staging.test.ts",
       "owner": "wyckoff",
       "invariant": "Preserve the current wyckoff v2 staging contract.",
-      "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
-    },
-    {
-      "path": "tests/portfolio/qeo165-command-center-ui.test.ts",
-      "owner": "portfolio",
-      "invariant": "QEO-165 keeps the Portfolio Command Center presentation primitives explicit, factual, and source-faithful.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "ui-contracts"
-      ]
-    },
-    {
-      "path": "tests/portfolio/qeo165-boundaries.test.ts",
-      "owner": "portfolio",
-      "invariant": "QEO-165 revamp components remain presentation-only and never create their own data-source boundary.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "ui-contracts"
-      ]
-    },
-    {
-      "path": "tests/qeo197-upcloud-eod-worker.test.ts",
-      "owner": "eod",
-      "invariant": "QEO-197 keeps one canonical EOD graph while UpCloud owns the hardened 15:01 ICT systemd schedule and legacy Supabase EOD remains rollback-only.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "eod"
-      ]
-    },
-    {
-      "path": "tests/qeo201-beszel-upcloud.test.ts",
-      "owner": "tooling",
-      "invariant": "QEO-201 keeps Beszel version-pinned, private-only, Unix-socket connected, Docker-write-isolated, and bounded on the UpCloud host.",
-      "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
-    },
-    {
-      "path": "tests/qeo186-contributor-producer.test.ts",
-      "owner": "market",
-      "invariant": "QEO-186 persists full-feed KFSP return inputs and derives fail-closed Qeo VNINDEX contributor estimates for Market Insights.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "ui-contracts"
-      ]
-    },
-    {
-      "path": "tests/upcloud-restic-contract.test.ts",
-      "owner": "tooling",
-      "invariant": "QEO-202 keeps UpCloud Restic backup and restore artifacts encrypted, allowlisted, disabled-first, and fail-closed.",
       "bucket": "canonical",
       "suites": [
         "fast"
