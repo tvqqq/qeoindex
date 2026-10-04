@@ -674,124 +674,90 @@ export function MarketContextStrip({
   const impact = bootstrap?.impact
 
   return (
-    <div
-      className="grid shrink-0 grid-cols-1 gap-2 border-b border-white/[0.08] bg-[#06080a] px-2 py-2 md:grid-cols-2 xl:grid-cols-12"
-      data-market-context-strip
-      title={contextErrors || undefined}
-    >
-      <IndexContextCard
-        label="VNINDEX"
-        quote={indexQuotes.VNINDEX}
-        series={bootstrap?.indexes.VNINDEX}
-        onOpen={onOpenIndexChart}
-      />
+    <div className="space-y-2 border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" data-market-context-index-row>
+        <IndexContextCard
+          label="VNINDEX"
+          quote={indexQuotes.VNINDEX}
+          series={bootstrap?.indexes.VNINDEX}
+          onOpen={onOpenIndexChart}
+        />
 
-      <ContextCard
-        title="Thanh khoản HOSE"
-        icon={<WalletCards className="h-3.5 w-3.5" />}
-        accent="platinum"
-        className="xl:col-span-2"
-        titleHint={hasFinhayLiquidity
-          ? "Finhay VNINDEX trading_value: GTGD HOSE 1D, đơn vị VND đã xác minh. Chưa có aligned intraday history của phiên trước."
-          : "Index realtime fallback. Chưa có aligned intraday GTGD history của phiên trước."}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-mono text-[18px] font-bold leading-none text-zinc-100">{formatVndValue(liquidityValue)}</div>
-            <div className="mt-1 text-[9px] font-medium text-zinc-500">vs phiên trước: <span className="text-zinc-400">—</span></div>
+        <ContextCard
+          title="Thanh khoản HOSE"
+          icon={<WalletCards className="h-3.5 w-3.5" />}
+          titleHint={hasFinhayLiquidity
+            ? "Finhay VNINDEX trading_value · VND. Không có history GTGD phiên trước theo phút."
+            : "Index realtime fallback. Chưa có history GTGD phiên trước theo phút."}
+          headerRight={<span className="font-ticker text-[13px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}
+        >
+          <div className="flex items-center justify-between gap-2 font-ticker text-[9px] text-zinc-500">
+            <span>Giá trị khớp lệnh lũy kế</span>
+            <span>vs phiên trước: <strong className="text-zinc-400">—</strong></span>
           </div>
-          <div className="text-right text-[8px] leading-relaxed text-zinc-600">
-            <div>{hasFinhayLiquidity ? "Finhay full HOSE" : "Index realtime fallback"}</div>
-            <div>{contextSessionDate || "—"}</div>
+          <div className="mt-auto h-[45px] w-full overflow-hidden">
+            {liquidityData.length >= 2 ? (
+              <ContextLineChart values={liquidityData} color={PLATINUM} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">Đang tích lũy realtime</div>
+            )}
           </div>
-        </div>
-        <div className="mt-2 h-[58px] w-full overflow-hidden rounded-lg">
-          {liquidityData.length >= 2 ? (
-            <ContextLineChart values={liquidityData} color={PLATINUM} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[9px] text-zinc-600">Đang tích lũy realtime từ lúc mở bảng</div>
-          )}
-        </div>
-        <div className="mt-1 text-[8px] leading-tight text-zinc-600">
-          VND verified · history phiên trước chưa verified
-        </div>
-      </ContextCard>
+          <div className="mt-0.5 truncate text-[9px] text-zinc-500">
+            {hasFinhayLiquidity ? "Finhay HOSE" : "Index realtime"} · history phiên trước chưa verified
+          </div>
+        </ContextCard>
 
-      <IndexContextCard
-        label="VN30"
-        quote={indexQuotes.VN30}
-        series={bootstrap?.indexes.VN30}
-      />
+        <IndexContextCard label="VN30" quote={indexQuotes.VN30} series={bootstrap?.indexes.VN30} />
+        <IndexContextCard label="HNX" quote={indexQuotes.HNXINDEX} series={bootstrap?.indexes.HNXINDEX} />
+        <IndexContextCard label="UPCOM" quote={indexQuotes.UPCOMINDEX} series={bootstrap?.indexes.UPCOMINDEX} />
 
-      <ContextCard
-        title="Mua bán nước ngoài"
-        icon={<Globe2 className="h-3.5 w-3.5" />}
-        accent="purple"
-        className="xl:col-span-2"
-        titleHint={hasFinhayForeign
-          ? "Finhay VNINDEX foreign trading: tổng mua/bán trên toàn universe HOSE."
-          : finhayForeignState === "UNAVAILABLE"
-            ? "Finhay full-HOSE unavailable; đang dùng foreign buy/sell của canonical Top 200 làm partial fallback."
-            : "Đang kiểm tra Finhay full-HOSE foreign flow; canonical Top 200 là fallback."}
-      >
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <div className="text-[8px] uppercase tracking-wide text-zinc-600">Mua</div>
-            <div className="font-mono text-[11px] font-bold text-emerald-300">
-              {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignBuy : undefined)}
-            </div>
+        <ContextCard
+          title="Mua bán nước ngoài"
+          icon={<Globe2 className="h-3.5 w-3.5" />}
+          accent="purple"
+          titleHint={hasFinhayForeign
+            ? "Finhay full VNINDEX/HOSE foreign buy/sell, sampled during current session."
+            : finhayForeignState === "UNAVAILABLE"
+              ? "Finhay unavailable. Canonical Top 200 partial fallback."
+              : "Waiting for Finhay; Top 200 partial fallback."}
+          headerRight={<span className={`font-ticker text-[12px] font-extrabold tabular-nums ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(displayedForeignNet)}</span>}
+        >
+          <div className="flex items-center justify-between gap-2 font-ticker text-[10px] tabular-nums">
+            <span className="min-w-0 truncate text-emerald-300">Mua {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignBuy : undefined)}</span>
+            <span className="min-w-0 truncate text-right text-red-300">Bán {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignSell : undefined)}</span>
           </div>
-          <div>
-            <div className="text-[8px] uppercase tracking-wide text-zinc-600">Bán</div>
-            <div className="font-mono text-[11px] font-bold text-red-300">
-              {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignSell : undefined)}
-            </div>
-          </div>
-          <div>
-            <div className="text-[8px] uppercase tracking-wide text-zinc-600">Ròng</div>
-            <div className={`font-mono text-[11px] font-bold ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>
-              {formatSignedVndValue(displayedForeignNet)}
-            </div>
-          </div>
-        </div>
-        <div className="mt-2 overflow-hidden rounded-lg"><DualLineChart points={foreignPoints} /></div>
-        <div className="mt-1 flex items-center justify-between gap-2 text-[8px] text-zinc-600">
-          <span>
-            {hasFinhayForeign
+          <div className="mt-auto overflow-hidden rounded-lg"><DualLineChart points={foreignPoints} /></div>
+          <div className="mt-0.5 flex items-center justify-between gap-1 text-[9px] text-zinc-500">
+            <span className="truncate">{hasFinhayForeign
               ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã`
-              : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}
-          </span>
-          <span>{hasFinhayForeign ? finhayForeign?.sessionDate : formatAsOf(displayedForeignAsOf)}</span>
-        </div>
-      </ContextCard>
-
-      <ContextCard
-        title="Tác động VNINDEX"
-        icon={<Scale className="h-3.5 w-3.5" />}
-        accent="green"
-        className="xl:col-span-4"
-        titleHint={impact?.source}
-      >
-        {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-          <>
-            <ImpactChart impact={impact} />
-            <div className="mt-1 flex items-center justify-between gap-3 border-t border-white/[0.05] pt-1 text-[8px] text-zinc-600">
-              <span>
-                Tổng các mã hiển thị:{" "}
-                <strong className={impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}>
-                  {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm
-                </strong>
-              </span>
-              <span>{formatAsOf(impact.asOf)}</span>
-            </div>
-          </>
-        ) : (
-          <div className="flex h-[78px] items-center justify-center gap-2 text-[10px] text-zinc-600">
-            <Activity className="h-3.5 w-3.5" />
-            Chưa có provider contribution snapshot
+              : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}</span>
+            <span className="shrink-0">{hasFinhayForeign ? finhayForeign?.sessionDate : formatAsOf(displayedForeignAsOf)}</span>
           </div>
-        )}
-      </ContextCard>
+        </ContextCard>
+      </div>
+
+      <div data-market-context-impact-row>
+        <ContextCard
+          title="Tác động VNINDEX"
+          icon={<Scale className="h-4 w-4" />}
+          accent="green"
+          titleHint={impact?.source}
+          headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
+            ? <span className="font-ticker text-[11px] text-zinc-400">Tổng các mã hiển thị: <strong className={`text-[15px] font-extrabold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
+            : null}
+        >
+          {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
+            <>
+              <ImpactChart impact={impact} />
+              <div className="mt-2 text-right font-ticker text-[9px] text-zinc-500">{formatAsOf(impact.asOf)} · DNSE basketInfluence · Top mã hiển thị</div>
+            </>
+          ) : (
+            <div className="flex min-h-[66px] items-center justify-center gap-2 text-[11px] text-zinc-500">
+              <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
+            </div>
+          )}
+        </ContextCard>
+      </div>
     </div>
   )
 }
