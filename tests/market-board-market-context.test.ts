@@ -10,6 +10,8 @@ const serverSource = readFileSync(new URL("../modules/market/board/market-contex
 const contractSource = readFileSync(new URL("../modules/market/board/market-context-contract.ts", import.meta.url), "utf8")
 const providerSource = readFileSync(new URL("../modules/market/providers/tradingview/index.ts", import.meta.url), "utf8")
 const routeSource = readFileSync(new URL("../app/api/market/board-context/route.ts", import.meta.url), "utf8")
+const finhayProviderSource = readFileSync(new URL("../modules/market/providers/finhay/live.ts", import.meta.url), "utf8")
+const finhayRouteSource = readFileSync(new URL("../app/api/finhay/market-context/route.ts", import.meta.url), "utf8")
 
 test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and totals only displayed bars", () => {
   const baseSeconds = Math.floor(Date.parse("2026-10-02T07:00:00.000Z") / 1000)
@@ -75,4 +77,20 @@ test("market context API is authenticated, cached, and refreshes faster during t
   assert.match(routeSource, /readThroughUiCache/)
   assert.match(routeSource, /session\.isLiveSession \? 10/)
   assert.match(routeSource, /shouldCache: hasUsableContext/)
+})
+
+
+test("foreign flow upgrades to Finhay full-HOSE data when OAuth is available and otherwise stays explicit Top-200 partial", () => {
+  assert.match(finhayProviderSource, /getFinhayIndexForeignTrading/)
+  assert.match(finhayProviderSource, /get_index_foreign_trading/)
+  assert.match(finhayProviderSource, /constituent_count/)
+  assert.match(finhayRouteSource, /requireApiFeature\("finhay_live"\)/)
+  assert.match(finhayRouteSource, /getActiveFinhayAccessToken/)
+  assert.match(finhayRouteSource, /getFinhayIndexForeignTrading\(accessToken, "VNINDEX"\)/)
+  assert.match(stripSource, /\/api\/finhay\/market-context/)
+  assert.match(stripSource, /Finhay full HOSE/)
+  assert.match(stripSource, /Top 200 partial/)
+  assert.match(stripSource, /foreignSeriesSource = hasFinhayForeign \? "finhay-vnindex" : "top200-partial"/)
+  assert.match(stripSource, /if \(hasFinhayForeign\) return/)
+  assert.match(stripSource, /finhayForeign\.sessionDate === contextSessionDate/)
 })
