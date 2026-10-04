@@ -9,6 +9,7 @@ function source(path: string) {
 const FEATURE_ROUTES: Array<[string, string]> = [
   ["app/api/market/intraday/route.ts", "market_board"],
   ["app/api/market/indexes/route.ts", "market_board"],
+  ["app/api/market/board-context/route.ts", "market_board"],
   ["app/api/market/index-candles/route.ts", "market_board"],
   ["app/api/market/session/route.ts", "market_board"],
   ["app/api/market/put-through/route.ts", "market_board"],
