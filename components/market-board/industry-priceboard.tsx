@@ -12,6 +12,7 @@ import {
   industryPriceboardBackground,
   moveIndustryColumn,
   moveIndustryColumnBy,
+  normalizeSavedIndustryOrder,
   packIndustryLanes,
   reconcileIndustryColumnOrder,
   sortIndustryStocksByPerformance,
@@ -156,29 +157,118 @@ export function IndustryPriceboard({
   const defaultOrder = useMemo(() => defaultIndustryColumnOrder(industries), [industries])
   const storageKey = `${INDUSTRY_ORDER_KEY}:${userId}`
   const [industryOrder, setIndustryOrder] = useState<string[]>(defaultOrder)
+  const orderRef = useRef(industryOrder)
   const [hydratedIdentity, setHydratedIdentity] = useState<string | null>(null)
+  const [syncState, setSyncState] = useState<"loading" | "saved" | "saving" | "error" | "offline">("loading")
   const orderIdentity = `${storageKey}:${industries.join("\u001f")}`
+  const activeIdentityRef = useRef(orderIdentity)
+  activeIdentityRef.current = orderIdentity
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const latestSaveRef = useRef(0)
+
+  const saveRemoteOrder = useCallback((order: readonly string[], identity: string) => {
+    const sequence = ++latestSaveRef.current
+    const snapshot = [...order]
+    setSyncState("saving")
+    saveQueueRef.current = saveQueueRef.current.catch(() => {}).then(async () => {
+      if (activeIdentityRef.current !== identity) return
+      try {
+        // Serialize rapid drag / keyboard writes so an older request cannot win last.
+        let response: Response | undefined
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          response = await fetch("/api/me/market-board-industry-order", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            cache: "no-store",
+            keepalive: true,
+            body: JSON.stringify({ order: snapshot }),
+          })
+          if (response.status !== 409) break
+        }
+        if (!response?.ok) throw new Error("Unable to save industry order")
+        if (activeIdentityRef.current === identity && latestSaveRef.current === sequence) {
+          setSyncState("saved")
+        }
+      } catch {
+        if (activeIdentityRef.current === identity && latestSaveRef.current === sequence) {
+          setSyncState("error")
+        }
+      }
+    })
+  }, [])
 
   useEffect(() => {
-    let saved: unknown = null
+    let active = true
+    let cachedRaw: unknown = null
     try {
       const raw = localStorage.getItem(storageKey)
-      if (raw) saved = JSON.parse(raw)
-    } catch {
-      saved = null
+      if (raw) cachedRaw = JSON.parse(raw)
+    } catch { /* remote preferences remain authoritative */ }
+
+    const cachedOrder = reconcileIndustryColumnOrder(cachedRaw, industries)
+    orderRef.current = cachedOrder
+    setIndustryOrder(cachedOrder)
+    setHydratedIdentity(null)
+    setSyncState("loading")
+
+    const hydrate = async () => {
+      let remoteLoaded = false
+      let remoteOrder: string[] | null = null
+      try {
+        const response = await fetch("/api/me/market-board-industry-order", {
+          cache: "no-store",
+          credentials: "same-origin",
+        })
+        if (!response.ok) throw new Error("Industry order unavailable")
+        const data: unknown = await response.json()
+        if (!data || typeof data !== "object" || !("ok" in data) || data.ok !== true) {
+          throw new Error("Invalid industry order response")
+        }
+        remoteLoaded = true
+        remoteOrder = normalizeSavedIndustryOrder("order" in data ? data.order : null)
+      } catch { /* retain the user-scoped local cache when offline */ }
+
+      if (!active || activeIdentityRef.current !== orderIdentity) return
+      if (remoteLoaded && remoteOrder !== null) {
+        // A remote preference always wins over stale local storage on another device.
+        const reconciled = reconcileIndustryColumnOrder(remoteOrder, industries)
+        orderRef.current = reconciled
+        setIndustryOrder(reconciled)
+      }
+      setHydratedIdentity(orderIdentity)
+      setSyncState(remoteLoaded ? "saved" : "offline")
+
+      // Migrate a legacy customized local order once, only when no server value exists.
+      // Default cache entries must never overwrite another device's preference.
+      const validCache = normalizeSavedIndustryOrder(cachedRaw)
+      const customized = validCache !== null && cachedOrder.some((label, index) => label !== defaultOrder[index])
+      if (remoteLoaded && remoteOrder === null && customized) {
+        saveRemoteOrder(cachedOrder, orderIdentity)
+      }
     }
-    setIndustryOrder(reconcileIndustryColumnOrder(saved, industries))
-    setHydratedIdentity(orderIdentity)
-  }, [industries, orderIdentity, storageKey])
+    void hydrate()
+    return () => { active = false }
+  }, [defaultOrder, industries, orderIdentity, saveRemoteOrder, storageKey])
 
   useEffect(() => {
     if (hydratedIdentity !== orderIdentity) return
     try {
       localStorage.setItem(storageKey, JSON.stringify(reconcileIndustryColumnOrder(industryOrder, industries)))
     } catch {
-      // The current in-memory order stays usable when local storage is unavailable.
+      // Keep the in-memory order usable even if local storage is unavailable.
     }
   }, [hydratedIdentity, industryOrder, industries, orderIdentity, storageKey])
+
+  const commitIndustryOrder = useCallback((move: (current: readonly string[]) => string[]) => {
+    if (hydratedIdentity !== orderIdentity) return
+    const current = orderRef.current
+    const next = reconcileIndustryColumnOrder(move(current), industries)
+    if (next.length === current.length && next.every((value, index) => value === current[index])) return
+    orderRef.current = next
+    setIndustryOrder(next)
+    saveRemoteOrder(next, orderIdentity)
+  }, [hydratedIdentity, industries, orderIdentity, saveRemoteOrder])
 
   useEffect(() => {
     const updateHover = (x: number, y: number) => {
@@ -241,7 +331,7 @@ export function IndustryPriceboard({
       const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-industry-column]")
       const destination = target?.dataset.industryColumn
       if (destination) {
-        setIndustryOrder((previous) => moveIndustryColumn(previous, drag.source, destination))
+        commitIndustryOrder((previous) => moveIndustryColumn(previous, drag.source, destination))
       }
       dragRef.current = null
       lastHoverRef.current = null
@@ -280,7 +370,7 @@ export function IndustryPriceboard({
       window.removeEventListener("keydown", keyDown)
       cancelAutoScroll()
     }
-  }, [])
+  }, [commitIndustryOrder])
 
   const normalizedWatchQuery = watchQuery.trim().toUpperCase()
   const watchCandidates = useMemo(() => {
@@ -323,19 +413,19 @@ export function IndustryPriceboard({
   const columnWidth = showPriceVolume ? FULL_COLUMN_WIDTH : COMPACT_COLUMN_WIDTH
 
   const reorderByKeyboard = useCallback((industry: string, offset: -1 | 1) => {
-    setIndustryOrder((previous) => moveIndustryColumnBy(previous, industry, offset))
-  }, [])
+    commitIndustryOrder((previous) => moveIndustryColumnBy(previous, industry, offset))
+  }, [commitIndustryOrder])
 
   const beginDrag = useCallback((event: ReactPointerEvent<HTMLElement>, industry: string) => {
-    if (event.button !== 0) return
+    if (event.button !== 0 || hydratedIdentity !== orderIdentity) return
     event.preventDefault()
     dragRef.current = { pointerId: event.pointerId, source: industry, x: event.clientX, y: event.clientY }
     lastHoverRef.current = industry
     setDraggingColumn(industry)
     setHoveredColumn(industry)
-  }, [])
+  }, [hydratedIdentity, orderIdentity])
 
-  const resetOrder = useCallback(() => setIndustryOrder(defaultOrder), [defaultOrder])
+  const resetOrder = useCallback(() => commitIndustryOrder(() => defaultOrder), [commitIndustryOrder, defaultOrder])
 
   return (
     <div className="min-w-0" data-market-board-priceboard>
@@ -449,10 +539,10 @@ export function IndustryPriceboard({
                           reorderByKeyboard(industry, 1)
                         } else if (event.key === "Home") {
                           event.preventDefault()
-                          setIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous[0] ?? industry))
+                          commitIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous[0] ?? industry))
                         } else if (event.key === "End") {
                           event.preventDefault()
-                          setIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous.at(-1) ?? industry))
+                          commitIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous.at(-1) ?? industry))
                         }
                       }}
                       className="flex h-6 w-4 shrink-0 touch-none items-center justify-center text-brand focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
@@ -476,7 +566,14 @@ export function IndustryPriceboard({
 
       <div className="flex items-center justify-end gap-2 pb-1 pr-8">
         <span className="text-[10px] text-muted-2">Kéo biểu tượng ⋮⋮ hoặc dùng phím mũi tên để sắp xếp ngành</span>
-        <button type="button" onClick={resetOrder} className="flex h-7 items-center gap-1 rounded border border-white/[0.12] px-2 text-[10px] text-muted-2 transition-colors hover:border-brand/50 hover:text-foreground">
+        {syncState === "saving" || syncState === "loading" ? <span className="text-[10px] text-muted-2">Đang đồng bộ…</span> : null}
+        {syncState === "offline" ? <span className="text-[10px] text-amber-300">Dùng thứ tự lưu trên máy</span> : null}
+        {syncState === "error" ? (
+          <button type="button" onClick={() => saveRemoteOrder(orderRef.current, orderIdentity)} className="text-[10px] text-amber-300 underline underline-offset-2">
+            Chưa đồng bộ · Thử lại
+          </button>
+        ) : null}
+        <button type="button" onClick={resetOrder} disabled={hydratedIdentity !== orderIdentity} className="flex h-7 items-center gap-1 rounded border border-white/[0.12] px-2 text-[10px] text-muted-2 transition-colors hover:border-brand/50 hover:text-foreground disabled:opacity-50">
           <RotateCcw className="h-2.5 w-2.5" /> Đặt lại thứ tự
         </button>
       </div>
