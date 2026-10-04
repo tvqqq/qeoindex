@@ -189,6 +189,15 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
   assert.doesNotMatch(source, /transition-all/)
 })
 
+test("Theo dõi keeps all four fields even when other lanes hide Giá/KL", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.match(source, /className=\{\`\$\{FULL_COLUMN_WIDTH\}[^]*?data-industry-column="watchlist"/)
+  assert.match(source, /<TableLabels showPriceVolume \/>[\s\S]*?<StockRows stocks=\{watchlistStocks\}[^>]*showPriceVolume \/>/)
+  assert.match(source, /data-industry-column="vn30"[^]*?<TableLabels showPriceVolume=\{showPriceVolume\}/)
+  assert.match(source, /<StockRows stocks=\{stocks\}[^>]*showPriceVolume=\{showPriceVolume\}/)
+  assert.match(source, /className="truncate font-ticker font-bold tracking-tight[^"]*group-hover:font-extrabold/)
+})
+
 test("compact Price/KL mode hides those columns and narrows every industry lane", () => {
   const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
   assert.match(source, /const FULL_COLUMN_WIDTH = "w-\[232px\] min-w-\[232px\] max-w-\[232px\]"/)
