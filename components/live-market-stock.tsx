@@ -17,6 +17,7 @@ export interface LiveBoardStock {
   ticker: string
   rank: number
   sector: string
+  kfspSector?: string | null
   marketCapT: number
   lastClose?: number | null
   lastCloseDate?: string

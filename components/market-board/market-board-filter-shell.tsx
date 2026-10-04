@@ -17,6 +17,7 @@ import {
   type IndexQuote,
 } from "@/components/live-market-board"
 import type { LiveStockQuote } from "@/components/live-market-stock"
+import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { MARKET_SESSION_RESET_EVENT } from "@/modules/market/realtime/session-ui"
 import {
@@ -134,6 +135,7 @@ export function MarketBoardFilterShell({
   isSessionOpen,
   userId,
   universeRunId,
+  vn30Membership = null,
 }: {
   universe: FilterBoardUniverseStock[]
   initialQuotes: BoardSeedQuotes
@@ -141,6 +143,7 @@ export function MarketBoardFilterShell({
   isSessionOpen?: boolean
   userId: string
   universeRunId: string
+  vn30Membership?: Vn30Membership | null
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const ignoreModeCaptureRef = useRef(false)
@@ -436,9 +439,12 @@ export function MarketBoardFilterShell({
       <LiveMarketBoard
         key={boardKey}
         universe={activeUniverse}
+        canonicalUniverse={universe}
         initialQuotes={quoteSeed}
         initialHistories={historySeed}
         isSessionOpen={isSessionOpen}
+        userId={userId}
+        vn30Membership={vn30Membership}
       />
 
       {filterActive && filteredTickers.length === 0 ? (

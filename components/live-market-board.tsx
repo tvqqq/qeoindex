@@ -4,13 +4,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   BarChart3,
-  Building2,
   Camera,
   ChartNoAxesCombined,
   Check,
   ChevronUp,
   CircleAlert,
   Coins,
+  Building2,
   Factory,
   Globe2,
   Landmark,
@@ -21,17 +21,19 @@ import {
   Search,
   ShoppingBag,
   Star,
-  TrendingDown,
   TrendingUp,
   Volume2,
   VolumeX,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
-import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
 import { marketToneFromChange, marketToneText } from "@/modules/market/tone"
+import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
+import { IndustryPriceboard } from "@/components/market-board/industry-priceboard"
+import { industryLabelForStock } from "@/modules/market/board/industry-priceboard"
+import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { isTradingSessionOpen, isLunchBreak } from "@/modules/market/realtime/session-countdown"
 import {
@@ -65,6 +67,7 @@ export type IndexQuote = {
   updatedAt: string
 }
 type BoardMode = "sector" | "movers"
+type BoardView = "classic" | "industry"
 
 const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
 const BOARD_TRADED_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -139,6 +142,8 @@ const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30"
 const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
 const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
 const WATCHLIST_KEY = "stockos:watchlist:v1"
+const WATCHLIST_VISIBILITY_KEY = "qeoindex_show_watchlist"
+const BOARD_VIEW_KEY = "qeoindex:market-board-view:v1"
 
 const SECTOR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   bank: Landmark,
@@ -150,21 +155,21 @@ const SECTOR_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
 }
 
 const SECTOR_BORDER_ACCENTS: Record<string, string> = {
-  bank: "border-t-cyan-400 shadow-[0_-1px_12px_rgba(34,184,207,0.25)]",
-  securities: "border-t-purple-400 shadow-[0_-1px_12px_rgba(168,85,247,0.25)]",
-  consumer: "border-t-rose-400 shadow-[0_-1px_12px_rgba(244,63,94,0.25)]",
-  "real-estate": "border-t-amber-400 shadow-[0_-1px_12px_rgba(245,158,11,0.25)]",
-  "industrial-tech": "border-t-emerald-400 shadow-[0_-1px_12px_rgba(16,185,129,0.25)]",
-  other: "border-t-indigo-400 shadow-[0_-1px_12px_rgba(99,102,241,0.25)]",
+  bank: "border-t-cyan-400",
+  securities: "border-t-purple-400",
+  consumer: "border-t-rose-400",
+  "real-estate": "border-t-amber-400",
+  "industrial-tech": "border-t-emerald-400",
+  other: "border-t-indigo-400",
 }
 
 const SECTOR_ICON_BADGES: Record<string, string> = {
-  bank: "bg-cyan-500/20 text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,184,207,0.35)]",
-  securities: "bg-purple-500/20 text-purple-300 border-purple-400/40 shadow-[0_0_10px_rgba(168,85,247,0.35)]",
-  consumer: "bg-rose-500/20 text-rose-300 border-rose-400/40 shadow-[0_0_10px_rgba(244,63,94,0.35)]",
-  "real-estate": "bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-[0_0_10px_rgba(245,158,11,0.35)]",
-  "industrial-tech": "bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-[0_0_10px_rgba(16,185,129,0.35)]",
-  other: "bg-indigo-500/20 text-indigo-300 border-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,0.35)]",
+  bank: "bg-cyan-500/10 text-cyan-300 border-cyan-400/30",
+  securities: "bg-purple-500/10 text-purple-300 border-purple-400/30",
+  consumer: "bg-rose-500/10 text-rose-300 border-rose-400/30",
+  "real-estate": "bg-amber-500/10 text-amber-300 border-amber-400/30",
+  "industrial-tech": "bg-emerald-500/10 text-emerald-300 border-emerald-400/30",
+  other: "bg-indigo-500/10 text-indigo-300 border-indigo-400/30",
 }
 
 function numeric(value: unknown) {
@@ -201,13 +206,13 @@ function normalizeIndexName(value: unknown) {
 function compareByPerformance(a: BoardUniverseStock, b: BoardUniverseStock, quotes: Record<string, LiveStockQuote | IndexQuote>) {
   const aq = quotes[a.ticker] as LiveStockQuote | undefined
   const bq = quotes[b.ticker] as LiveStockQuote | undefined
-  if (aq && bq) {
-    if (bq.changePercent !== aq.changePercent) return bq.changePercent - aq.changePercent
-    if (bq.volume && aq.volume && bq.volume !== aq.volume) return bq.volume - aq.volume
-    return a.rank - b.rank
-  }
-  if (aq) return -1
-  if (bq) return 1
+  const aValid = Boolean(aq && Number.isFinite(aq.price) && aq.price > 0 && Number.isFinite(aq.changePercent))
+  const bValid = Boolean(bq && Number.isFinite(bq.price) && bq.price > 0 && Number.isFinite(bq.changePercent))
+  if (aValid !== bValid) return aValid ? -1 : 1
+  if (aValid && bValid && aq && bq && aq.changePercent !== bq.changePercent) return bq.changePercent - aq.changePercent
+  if (aq && bq && aq.volume && bq.volume && bq.volume !== aq.volume) return bq.volume - aq.volume
+  if (aq && !bq) return -1
+  if (bq && !aq) return 1
   return a.rank - b.rank
 }
 
@@ -230,12 +235,12 @@ const WatchlistSection = memo(function WatchlistSection({
 }) {
   if (watchedStocks.length === 0) return null
   return (
-    <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#141008]/85 p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+    <div className="mb-3 rounded-2xl border border-amber-500/25 bg-[#0b0f14] p-2.5">
       <div className="mb-2 flex items-center justify-between px-1">
         <div className="flex items-center gap-1.5">
           <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">Danh sách theo dõi</span>
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]">{watchedStocks.length}</span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">{watchedStocks.length}</span>
         </div>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
@@ -249,7 +254,7 @@ const WatchlistSection = memo(function WatchlistSection({
               onOpen={() => onOpen(stock.ticker)}
               isWatched
               isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
-              onToggleWatch={(e) => { e.stopPropagation(); onToggleWatch(stock.ticker) }}
+              onToggleWatch={(event) => { event.stopPropagation(); onToggleWatch(stock.ticker) }}
             />
           </div>
         ))}
@@ -266,12 +271,11 @@ const IndexStrip = memo(function IndexStrip({
   onOpenChart: () => void
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 p-2 border-b border-white/[0.07] bg-[#080c10]/80 backdrop-blur-2xl sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 bg-[#06080a] px-2 pb-1 pt-2 sm:grid-cols-4">
       {INDEXES.map((symbol) => {
         const quote = quotes[symbol] as IndexQuote | undefined
         const tone = marketToneFromChange(quote?.changePercent)
         const text = quote ? marketToneText(tone) : "text-muted-2"
-        const isUp = (quote?.changePercent ?? 0) >= 0
         const isChartTrigger = symbol === "VNINDEX"
 
         return (
@@ -287,91 +291,25 @@ const IndexStrip = memo(function IndexStrip({
                 onOpenChart()
               }
             } : undefined}
-            className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ${
-              isChartTrigger ? "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/55" : ""
-            } ${
-              tone === "up"
-                ? "border-emerald-500/25 bg-[#081510]/60 shadow-[0_8px_24px_-6px_rgba(34,201,138,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-emerald-500/40 hover:bg-[#0b1d16]/75"
-                : tone === "down"
-                  ? "border-rose-500/25 bg-[#160a0c]/60 shadow-[0_8px_24px_-6px_rgba(255,71,87,0.15),inset_0_1px_0_0_rgba(255,255,255,0.08)] hover:border-rose-500/40 hover:bg-[#200e11]/75"
-                  : "border-white/[0.08] bg-white/[0.025] shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.07)] hover:border-white/[0.14] hover:bg-white/[0.045]"
-            }`}
+            className={`flex min-h-[66px] min-w-0 flex-col justify-center rounded-[18px] border border-white/[0.10] bg-[#0b0f14] px-3 py-2 ${isChartTrigger ? "cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-brand/60" : ""}`}
           >
-            <svg
-              className={`absolute -right-2 -bottom-2 h-16 w-32 pointer-events-none transition-opacity duration-500 ${
-                isUp ? "text-emerald-500/15 group-hover:text-emerald-500/25" : "text-rose-500/15 group-hover:text-rose-500/25"
-              }`}
-              viewBox="0 0 120 50"
-              fill="none"
-              aria-hidden="true"
-            >
-              <defs>
-                <linearGradient id={`idx-grad-${symbol}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.7" />
-                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {isUp ? (
-                <>
-                  <path d="M0,45 C20,42 40,48 60,30 C80,12 100,20 120,5 L120,50 L0,50 Z" fill={`url(#idx-grad-${symbol})`} />
-                  <path d="M0,45 C20,42 40,48 60,30 C80,12 100,20 120,5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-                </>
-              ) : (
-                <>
-                  <path d="M0,8 C20,12 40,5 60,25 C80,45 100,35 120,48 L120,50 L0,50 Z" fill={`url(#idx-grad-${symbol})`} />
-                  <path d="M0,8 C20,12 40,5 60,25 C80,45 100,35 120,48" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-                </>
-              )}
-            </svg>
-
-            <div className="relative z-10 flex items-center gap-2.5 min-w-0">
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)] transition-transform duration-300 group-hover:scale-105 ${
-                  tone === "up"
-                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-400"
-                    : tone === "down"
-                      ? "border-rose-500/35 bg-rose-500/15 text-rose-400"
-                      : "border-amber-500/35 bg-amber-500/15 text-amber-400"
-                }`}
-              >
-                {tone === "up" ? (
-                  <TrendingUp className="h-4 w-4 drop-shadow-[0_0_6px_rgba(34,201,138,0.5)]" />
-                ) : tone === "down" ? (
-                  <TrendingDown className="h-4 w-4 drop-shadow-[0_0_6px_rgba(255,71,87,0.5)]" />
-                ) : (
-                  <Activity className="h-4 w-4 drop-shadow-[0_0_6px_rgba(226,185,59,0.5)]" />
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold tracking-wider text-foreground/90 uppercase font-sans">
-                    {INDEX_LABELS[symbol]}
-                  </span>
-                  {isChartTrigger ? (
-                    <span className="rounded border border-cyan-400/20 bg-cyan-400/8 px-1 py-px font-mono text-[8px] font-bold text-cyan-300">1m</span>
-                  ) : null}
-                  {quote?.volume && (
-                    <span className="hidden xl:inline-block font-mono text-[9.5px] font-medium text-muted-2">
-                      · {formatCompactVolume(quote.volume)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={`text-[15px] font-extrabold font-mono tracking-tight ${text}`}>
-                    {formatBoardPrice(quote?.value)}
-                  </span>
-                  {quote?.change !== undefined && (
-                    <span className={`text-[11px] font-mono font-bold ${text}`}>
-                      {quote.change > 0 ? "+" : ""}{quote.change.toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              </div>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="truncate text-[11px] font-semibold tracking-wide text-muted-2">{INDEX_LABELS[symbol]}</span>
+              <span className={`shrink-0 font-mono text-[11px] font-bold tabular-nums ${text}`}>
+                {typeof quote?.changePercent === "number" && Number.isFinite(quote.changePercent)
+                  ? `${quote.changePercent > 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`
+                  : "—"}
+              </span>
             </div>
-
-            <div className="relative z-10 shrink-0">
-              {quote ? <MarketChangePill value={quote.changePercent} tone={tone} /> : null}
+            <div className="mt-1 flex min-w-0 items-baseline justify-between gap-2">
+              <span className={`truncate font-mono text-[18px] font-bold tabular-nums ${text}`}>{formatBoardPrice(quote?.value)}</span>
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-2">
+                {quote?.change !== undefined && Number.isFinite(quote.change) ? `${quote.change > 0 ? "+" : ""}${quote.change.toFixed(2)}` : "—"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2 font-sans text-[9px] text-muted-2">
+              <span>{typeof quote?.advances === "number" ? `▲ ${quote.advances}` : ""}{typeof quote?.declines === "number" ? `   ▼ ${quote.declines}` : ""}</span>
+              <span className="truncate text-right">{quote?.volume ? formatCompactVolume(quote.volume) : ""}</span>
             </div>
           </div>
         )
@@ -589,14 +527,20 @@ function extractInitialRefs(quotes?: Record<string, LiveStockQuote | IndexQuote>
 
 export function LiveMarketBoard({
   universe,
+  canonicalUniverse,
   initialQuotes,
   initialHistories,
   isSessionOpen,
+  userId = "anonymous",
+  vn30Membership = null,
 }: {
   universe: BoardUniverseStock[]
+  canonicalUniverse?: BoardUniverseStock[]
   initialQuotes?: Record<string, LiveStockQuote | IndexQuote>
   initialHistories?: Record<string, IntradayPoint[]>
   isSessionOpen?: boolean
+  userId?: string
+  vn30Membership?: Vn30Membership | null
 }) {
   const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
   const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
@@ -611,7 +555,7 @@ export function LiveMarketBoard({
           price: stock.lastClose,
           reference: stock.lastClose,
           change: 0,
-          changePercent: 0,
+          changePercent: Number.NaN,
           volume: 0,
           updatedAt: stock.lastCloseDate || new Date().toISOString(),
         }
@@ -630,25 +574,44 @@ export function LiveMarketBoard({
   const [showSessionOpenAlert, setShowSessionOpenAlert] = useState(false)
   const [query, setQuery] = useState("")
   const [mode, setMode] = useState<BoardMode>("sector")
+  const boardViewStorageKey = `${BOARD_VIEW_KEY}:${userId}`
+  const [boardView, setBoardView] = useState<BoardView>("classic")
+  const [boardViewHydratedKey, setBoardViewHydratedKey] = useState<string | null>(null)
+  const [showWatchlist, setShowWatchlist] = useState(true)
+  const [showWatchlistHydrated, setShowWatchlistHydrated] = useState(false)
   const [priceHistory, setPriceHistory] = useState<Record<string, IntradayPoint[]>>(() => initialHistories ? { ...initialHistories } : {})
   const [whaleAlerts, setWhaleAlerts] = useState<Record<string, boolean>>({})
-  const [showWatchlist, setShowWatchlist] = useState<boolean>(() => {
-    try {
-      return typeof window !== "undefined" ? localStorage.getItem("qeoindex_show_watchlist") !== "false" : true
-    } catch {
-      return true
-    }
-  })
 
-  const toggleShowWatchlist = useCallback(() => {
-    setShowWatchlist((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem("qeoindex_show_watchlist", String(next))
-      } catch {}
-      return next
-    })
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(boardViewStorageKey)
+      setBoardView(stored === "industry" ? "industry" : "classic")
+    } catch {
+      setBoardView("classic")
+    } finally {
+      setBoardViewHydratedKey(boardViewStorageKey)
+    }
+  }, [boardViewStorageKey])
+
+  useEffect(() => {
+    if (boardViewHydratedKey !== boardViewStorageKey) return
+    try { localStorage.setItem(boardViewStorageKey, boardView) } catch { /* current view remains usable */ }
+  }, [boardView, boardViewHydratedKey, boardViewStorageKey])
+
+  useEffect(() => {
+    try {
+      setShowWatchlist(localStorage.getItem(WATCHLIST_VISIBILITY_KEY) !== "false")
+    } catch {
+      setShowWatchlist(true)
+    } finally {
+      setShowWatchlistHydrated(true)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!showWatchlistHydrated) return
+    try { localStorage.setItem(WATCHLIST_VISIBILITY_KEY, String(showWatchlist)) } catch { /* current view remains usable */ }
+  }, [showWatchlist, showWatchlistHydrated])
 
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(() => {
     try {
@@ -874,6 +837,11 @@ export function LiveMarketBoard({
     }
   }, [soundEnabled])
 
+  const toggleShowWatchlist = useCallback(() => {
+    if (!showWatchlistHydrated) return
+    setShowWatchlist((previous) => !previous)
+  }, [showWatchlistHydrated])
+
   const triggerWhaleAlert = useCallback((ticker: string) => {
     setWhaleAlerts((prev) => ({ ...prev, [ticker]: true }))
     if (whaleTimeouts.current[ticker]) {
@@ -889,24 +857,38 @@ export function LiveMarketBoard({
     }, 1500)
   }, [])
 
-  const [watchlist, setWatchlist] = useState<Set<string>>(() => {
+  const [watchlist, setWatchlist] = useState<Set<string>>(() => new Set<string>())
+  const [watchlistHydrated, setWatchlistHydrated] = useState(false)
+
+  useEffect(() => {
     try {
-      const stored = typeof window !== "undefined" ? localStorage.getItem(WATCHLIST_KEY) : null
-      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set<string>()
+      const stored = localStorage.getItem(WATCHLIST_KEY)
+      const parsed: unknown = stored ? JSON.parse(stored) : []
+      const validSymbols = Array.isArray(parsed)
+        ? parsed.filter((symbol): symbol is string => typeof symbol === "string" && /^[A-Z0-9]{1,12}$/.test(symbol))
+        : []
+      setWatchlist(new Set(validSymbols))
     } catch {
-      return new Set<string>()
+      setWatchlist(new Set())
+    } finally {
+      setWatchlistHydrated(true)
     }
-  })
+  }, [])
+
+  useEffect(() => {
+    if (!watchlistHydrated) return
+    try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])) } catch { /* ignore */ }
+  }, [watchlist, watchlistHydrated])
 
   const toggleWatch = useCallback((ticker: string) => {
+    if (!watchlistHydrated) return
     setWatchlist((prev) => {
-      const next = new Set(prev)
-      if (next.has(ticker)) next.delete(ticker)
-      else next.add(ticker)
-      try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...next])) } catch { /* ignore */ }
-      return next
+      const updated = new Set(prev)
+      if (updated.has(ticker)) updated.delete(ticker)
+      else updated.add(ticker)
+      return updated
     })
-  }, [])
+  }, [watchlistHydrated])
 
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
@@ -1429,14 +1411,14 @@ export function LiveMarketBoard({
       const price = history.at(-1)?.close ?? stock.lastClose
       if (!price || price <= 0) continue
       const priorNotionClose = stock.lastCloseDate && stock.lastCloseDate < currentSessionDay ? stock.lastClose : null
-      const reference = priorNotionClose ?? price
+      const reference = priorNotionClose ?? undefined
       if (!next) next = { ...quotes }
       next[stock.ticker] = {
         symbol: stock.ticker,
         price,
         reference,
-        change: price - reference,
-        changePercent: reference > 0 ? ((price - reference) / reference) * 100 : 0,
+        change: reference && reference > 0 ? price - reference : undefined,
+        changePercent: reference && reference > 0 ? ((price - reference) / reference) * 100 : Number.NaN,
         updatedAt: stock.lastCloseDate ?? new Date().toISOString(),
       }
     }
@@ -1452,40 +1434,37 @@ export function LiveMarketBoard({
     return out
   }, [priceHistory, marketUiPhase])
 
+  const boardUniverse = universe
+  const fullCanonicalUniverse = canonicalUniverse ?? universe
+  const canonicalIndustries = useMemo(
+    () => [...new Set(fullCanonicalUniverse.map(industryLabelForStock))],
+    [fullCanonicalUniverse],
+  )
+  const canonicalSymbols = useMemo(() => fullCanonicalUniverse.map((stock) => stock.ticker), [fullCanonicalUniverse])
+  const filtered = useMemo(() => boardUniverse.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery))), [boardUniverse, normalizedQuery])
+  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, orderingQuotes)), [orderingQuotes, filtered])
   const watchedStocks = useMemo(() => {
     if (watchlist.size === 0) return []
-    return universe.filter((s) => watchlist.has(s.ticker))
+    return universe.filter((stock) => watchlist.has(stock.ticker))
   }, [universe, watchlist])
-
   const watchedQuotes = useMemo(() => {
     if (watchedStocks.length === 0) return {}
-    const out: Record<string, LiveStockQuote | IndexQuote | undefined> = {}
-    for (const s of watchedStocks) {
-      out[s.ticker] = displayQuotes[s.ticker]
-    }
-    return out
-  }, [watchedStocks, displayQuotes])
-
-  const filtered = useMemo(() => universe.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery))), [universe, normalizedQuery])
-  const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, orderingQuotes)), [orderingQuotes, filtered])
+    const visible: Record<string, LiveStockQuote | IndexQuote | undefined> = {}
+    for (const stock of watchedStocks) visible[stock.ticker] = displayQuotes[stock.ticker]
+    return visible
+  }, [displayQuotes, watchedStocks])
   const grouped = useMemo(() => BOARD_SECTOR_GROUPS.map((group) => {
     const stocks = filtered
       .filter((stock) => group.sectors.some((sector) => sector === stock.sector))
       .sort((a, b) => compareByPerformance(a, b, orderingQuotes))
     const sectorQuotes = stocks
       .map((stock) => orderingQuotes[stock.ticker] as LiveStockQuote | undefined)
-      .filter(Boolean) as LiveStockQuote[]
-    const avg = sectorQuotes.length
+      .filter((quote): quote is LiveStockQuote => Boolean(quote && Number.isFinite(quote.changePercent)))
+    const average = sectorQuotes.length
       ? sectorQuotes.reduce((sum, quote) => sum + quote.changePercent, 0) / sectorQuotes.length
       : undefined
-    const avgTone = marketToneFromChange(avg)
-    return {
-      ...group,
-      stocks,
-      avg,
-      avgTone,
-    }
-  }), [orderingQuotes, filtered])
+    return { ...group, stocks, avg: average, avgTone: marketToneFromChange(average) }
+  }), [filtered, orderingQuotes])
 
   const { liveCount, pricedCount, historyCount, advances, declines } = useMemo(() => {
     let live = 0
@@ -1517,9 +1496,9 @@ export function LiveMarketBoard({
       const rawPrice = q?.price || ref
       const price = rawPrice ? (rawPrice > 1000 ? rawPrice / 1000 : rawPrice) : undefined
       const rawCeil = q?.ceiling
-      const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : (ref ? Math.round(ref * 1.07 * 100) / 100 : undefined)
+      const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : undefined
       const rawFloor = q?.floor
-      const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : (ref ? Math.round(ref * 0.93 * 100) / 100 : undefined)
+      const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : undefined
       openOrderBook(`board:${ticker}`, ticker, {
         sector: s?.sector,
         price,
@@ -1586,10 +1565,10 @@ export function LiveMarketBoard({
       <IndexStrip quotes={indexQuotes} onOpenChart={openIndexChart} />
       <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.07] bg-[#090d12]/85 backdrop-blur-2xl px-3.5 py-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.35)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#090d12] px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+          <div className="flex items-center gap-2 rounded-full border border-white/[0.10] bg-[#0b0f14] px-3 py-1">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-brand/30 bg-brand/10 text-brand">
               <Coins className="h-3 w-3" />
             </div>
             <div className="flex items-center gap-1.5 font-mono text-xs">
@@ -1621,8 +1600,8 @@ export function LiveMarketBoard({
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+          <div className="hidden items-center gap-2 rounded-full border border-white/[0.10] bg-[#0b0f14] px-3 py-1 md:flex">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-cyan-300">
               <BarChart3 className="h-3 w-3" />
             </div>
             <div className="flex items-center gap-2 font-mono text-xs">
@@ -1639,8 +1618,8 @@ export function LiveMarketBoard({
             </div>
           </div>
 
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]">
+          <div className="hidden items-center gap-2 rounded-full border border-white/[0.10] bg-[#0b0f14] px-3 py-1 lg:flex">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-ceiling/30 bg-ceiling-dim text-ceiling">
               <Globe2 className="h-3 w-3" />
             </div>
             <div className="flex items-center gap-1.5 font-mono text-xs">
@@ -1661,39 +1640,55 @@ export function LiveMarketBoard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Watchlist Toggle Button: nằm ngang với thanh search bar để không tốn 1 row mới */}
-          <button
-            type="button"
-            onClick={toggleShowWatchlist}
-            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all select-none ${
-              showWatchlist && watchedStocks.length > 0
-                ? "border-amber-500/50 bg-amber-500/15 text-amber-300 font-bold shadow-[0_0_12px_rgba(245,158,11,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)]"
-                : showWatchlist
-                  ? "border-white/[0.12] bg-white/[0.05] text-slate-300 hover:text-amber-300 hover:border-amber-500/30"
-                  : "border-white/[0.08] bg-white/[0.02] text-muted-2 hover:text-foreground hover:border-white/20"
-            }`}
-            title={showWatchlist ? "Ẩn danh sách theo dõi" : "Hiện danh sách theo dõi"}
-          >
-            <Star
-              className={`h-3.5 w-3.5 transition-transform ${
-                showWatchlist && watchedStocks.length > 0
-                  ? "fill-amber-400 text-amber-400 scale-110"
-                  : "text-slate-400"
-              }`}
-            />
-            <span className="hidden sm:inline">Theo dõi</span>
-            {watchedStocks.length > 0 ? (
-              <span
-                className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                  showWatchlist
-                    ? "bg-amber-400 text-black font-black"
-                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                }`}
-              >
-                {watchedStocks.length}
-              </span>
-            ) : null}
-          </button>
+          {boardView === "classic" ? (
+            <button
+              type="button"
+              disabled={!showWatchlistHydrated}
+              aria-pressed={showWatchlist}
+              onClick={toggleShowWatchlist}
+              className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors disabled:cursor-wait ${showWatchlist ? "border-amber-400/35 bg-amber-400/10 text-amber-300" : "border-white/[0.10] bg-[#0b0f14] text-muted-2 hover:text-foreground"}`}
+              title={showWatchlist ? "Ẩn danh sách theo dõi" : "Hiện danh sách theo dõi"}
+            >
+              <Star className={`h-3.5 w-3.5 ${showWatchlist ? "fill-amber-400 text-amber-400" : "text-muted-2"}`} />
+              <span>Theo dõi</span>
+              {watchlist.size > 0 ? <span className="rounded-full bg-white/[0.08] px-1.5 text-[10px] font-bold">{watchlist.size}</span> : null}
+            </button>
+          ) : null}
+
+          <div role="tablist" aria-label="Kiểu bảng giá" className="flex items-center rounded-full border border-white/[0.10] bg-[#0b0f14] p-0.5">
+            {(["classic", "industry"] as const).map((view) => {
+              const isSelected = boardView === view
+              const label = view === "classic" ? "Bảng điện" : "Bảng ngành"
+              const targetId = `market-board-view-${view}-tab`
+              return (
+                <button
+                  key={view}
+                  id={targetId}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  aria-controls="market-board-view-panel"
+                  tabIndex={isSelected ? 0 : -1}
+                  disabled={boardViewHydratedKey !== boardViewStorageKey}
+                  onClick={() => setBoardView(view)}
+                  onKeyDown={(event) => {
+                    let nextView: BoardView | null = null
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = view === "classic" ? "industry" : "classic"
+                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = view === "industry" ? "classic" : "industry"
+                    else if (event.key === "Home") nextView = "classic"
+                    else if (event.key === "End") nextView = "industry"
+                    if (!nextView) return
+                    event.preventDefault()
+                    setBoardView(nextView)
+                    document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
+                  }}
+                  className={`flex h-7 items-center rounded-full px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/10 text-white" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
 
           <div className="relative min-w-[140px] sm:w-[180px]">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
@@ -1701,16 +1696,16 @@ export function LiveMarketBoard({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Tìm mã CP..."
-              className="h-8 w-full rounded-full border border-white/[0.08] bg-white/[0.03] pl-9 pr-3 text-xs text-foreground placeholder:text-muted outline-none focus:border-brand/60 focus:bg-white/[0.06] transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+              className="h-8 w-full rounded-full border border-white/[0.10] bg-[#0b0f14] pl-9 pr-3 text-xs text-foreground placeholder:text-muted outline-none transition-colors focus:border-brand/60"
             />
           </div>
 
-          <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+          <div className="flex items-center rounded-full border border-white/[0.10] bg-[#0b0f14] p-0.5">
             <button
               onClick={() => setMode("sector")}
-              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${
                 mode === "sector"
-                  ? "bg-white/[0.1] text-white font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)] border border-white/[0.12]"
+                  ? "border border-white/[0.12] bg-white/[0.08] font-semibold text-white"
                   : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
               }`}
             >
@@ -1719,9 +1714,9 @@ export function LiveMarketBoard({
             </button>
             <button
               onClick={() => setMode("movers")}
-              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${
                 mode === "movers"
-                  ? "bg-white/[0.1] text-white font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_0_rgba(255,255,255,0.15)] border border-white/[0.12]"
+                  ? "border border-white/[0.12] bg-white/[0.08] font-semibold text-white"
                   : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
               }`}
             >
@@ -1733,14 +1728,21 @@ export function LiveMarketBoard({
       </div>
 
       {streamState !== "LIVE" && streamError ? (
-        <div className="flex items-center gap-2 border-b border-ref/30 bg-ref/5 px-3.5 py-1.5 text-xs text-ref backdrop-blur-md">
+        <div className="flex items-center gap-2 border-b border-ref/30 bg-[#0b0f14] px-3.5 py-1.5 text-xs text-ref">
           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-ref" />
           <span>{streamError}</span>
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto p-2.5">
-        {showWatchlist && watchedStocks.length > 0 && (
+      <div
+        id="market-board-view-panel"
+        role="tabpanel"
+        aria-labelledby={boardView === "classic" ? "market-board-view-classic-tab" : "market-board-view-industry-tab"}
+        tabIndex={0}
+        className="min-h-0 flex-1 overflow-auto bg-[#06080a] px-2 py-2"
+        data-market-board-screenshot-scroll
+      >
+        {boardView === "classic" && showWatchlist && watchedStocks.length > 0 ? (
           <WatchlistSection
             watchedStocks={watchedStocks}
             quotes={watchedQuotes}
@@ -1750,61 +1752,56 @@ export function LiveMarketBoard({
             onOpen={openBook}
             showCharts={marketUiPhase !== "ATO"}
           />
-        )}
-        {mode === "sector" ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        ) : null}
+
+        {mode === "sector" && boardView === "industry" ? (
+          <IndustryPriceboard
+            universe={fullCanonicalUniverse}
+            visibleUniverse={filtered}
+            canonicalIndustries={canonicalIndustries}
+            displayQuotes={displayQuotes as Record<string, LiveStockQuote | undefined>}
+            orderingQuotes={orderingQuotes}
+            watchedSymbols={watchlist}
+            onToggleWatch={toggleWatch}
+            onOpen={openBook}
+            userId={userId}
+            canonicalSymbols={canonicalSymbols}
+            vn30Membership={vn30Membership}
+          />
+        ) : mode === "sector" ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" data-market-board-classic-grid>
             {grouped.map(({ key, label, stocks, avg, avgTone }) => {
               const SectorIcon = SECTOR_ICONS[key] ?? Layers
               return (
                 <section
                   key={key}
-                  className={`flex min-w-0 flex-col rounded-2xl border border-white/[0.08] border-t-2 bg-[#0b0f14] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition-colors hover:border-white/[0.14] ${SECTOR_BORDER_ACCENTS[key] ?? "border-t-emerald-400"}`}
+                  data-market-board-sector-column
+                  className={`flex min-w-0 flex-col rounded-2xl border border-white/[0.08] border-t-2 bg-[#0b0f14] transition-colors hover:border-white/[0.14] ${SECTOR_BORDER_ACCENTS[key] ?? "border-t-emerald-400"}`}
                 >
                   <header className="relative flex h-[72px] shrink-0 items-center justify-between gap-2.5 overflow-hidden border-b border-white/[0.07] bg-white/[0.025] px-3.5 py-2 select-none">
-                    {/* Left: Icon matching border-top color + Tên ngành (Wrap xuống hàng nếu dài) */}
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 shadow-sm ${
-                          SECTOR_ICON_BADGES[key] ?? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
-                        }`}
-                      >
-                        <SectorIcon className="h-4 w-4 drop-shadow-sm" />
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${SECTOR_ICON_BADGES[key] ?? "bg-emerald-500/10 text-emerald-300 border-emerald-400/30"}`}>
+                        <SectorIcon className="h-4 w-4" />
                       </div>
-                      <h2
-                        className="font-ticker font-extrabold italic text-xs sm:text-sm lg:text-[13px] xl:text-[13.5px] 2xl:text-[14.5px] tracking-tight bg-gradient-to-br from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent drop-shadow-[0_0_12px_rgba(34,211,238,0.25)] leading-tight line-clamp-2 min-w-0 select-none"
-                        title={label}
-                      >
+                      <h2 className="min-w-0 select-none line-clamp-2 font-ticker text-xs font-extrabold tracking-tight text-foreground sm:text-sm" title={label}>
                         {label}
                       </h2>
                     </div>
-
-                    {/* Right: Chỉ có % tăng giảm (SemiBold 600 Italic) */}
-                    <div className="shrink-0 flex items-center justify-end pl-1">
-                      {typeof avg === "number" ? (
+                    <div className="shrink-0 pl-1 text-right">
+                      {typeof avg === "number" && Number.isFinite(avg) ? (
                         <span
-                          className={`font-ticker font-semibold italic text-lg sm:text-xl md:text-2xl leading-none tracking-tight ${
-                            avgTone === "ceiling"
-                              ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.4)]"
-                              : avgTone === "floor"
-                                ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,184,207,0.4)]"
-                                : avgTone === "up"
-                                  ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.4)]"
-                                  : avgTone === "down"
-                                    ? "text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.4)]"
-                                    : "text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]"
+                          className={`font-ticker text-lg font-semibold leading-none tracking-tight sm:text-xl md:text-2xl ${
+                            avgTone === "ceiling" ? "text-ceiling" : avgTone === "floor" ? "text-floor" : avgTone === "up" ? "text-up" : avgTone === "down" ? "text-down" : "text-ref"
                           }`}
                           title="Biến động trung bình ngành"
                         >
                           {avg > 0 ? "+" : ""}{avg.toFixed(1)}%
                         </span>
-                      ) : (
-                        <span className="font-mono text-base font-bold text-muted-2">—</span>
-                      )}
+                      ) : <span className="font-mono text-base font-bold text-muted-2">—</span>}
                     </div>
                   </header>
-                <div className="space-y-1.5 p-1.5">
-                  {stocks.length ? (
-                    stocks.map((stock) => (
+                  <div className="space-y-1.5 p-1.5">
+                    {stocks.length ? stocks.map((stock) => (
                       <LiveStockRow
                         key={stock.ticker}
                         stock={stock}
@@ -1814,18 +1811,13 @@ export function LiveMarketBoard({
                         onOpen={() => openBook(stock.ticker)}
                         isWatched={watchlist.has(stock.ticker)}
                         isWhaleActive={Boolean(whaleAlerts[stock.ticker])}
-                        onToggleWatch={(e) => {
-                          e.stopPropagation()
-                          toggleWatch(stock.ticker)
-                        }}
+                        onToggleWatch={(event) => { event.stopPropagation(); toggleWatch(stock.ticker) }}
                       />
-                    ))
-                  ) : (
-                    <div className="px-2 py-5 text-center text-[10px] text-muted">Không có mã phù hợp bộ lọc</div>
-                  )}
-                </div>
-              </section>
-            )})}
+                    )) : <div className="py-4 text-center text-xs text-muted-2">Chưa có cổ phiếu</div>}
+                  </div>
+                </section>
+              )
+            })}
           </div>
         ) : (
           <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

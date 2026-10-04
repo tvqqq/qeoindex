@@ -18,12 +18,13 @@ import { miniChartPointsForDisplay } from "@/modules/market/realtime/session-ui"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { getEodForeignRoom } from "@/modules/eod/shares"
+import { getVn30Membership } from "@/modules/market/board/vn30-membership"
 import styles from "../market-board-performance.module.css"
 
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v8"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v9"
 
 type InitialBoardData = {
   universe: FilterBoardUniverseStock[]
@@ -105,8 +106,8 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
         symbol: stock.ticker,
         price: latestPrice,
         reference: ref,
-        ceiling: live?.ceiling ?? snap?.ceiling_price ?? Math.round(ref * 1.07 * 100) / 100,
-        floor: live?.floor ?? snap?.floor_price ?? Math.round(ref * 0.93 * 100) / 100,
+        ceiling: live?.ceiling ?? snap?.ceiling_price ?? undefined,
+        floor: live?.floor ?? snap?.floor_price ?? undefined,
         change,
         changePercent,
         volume: live?.volume || snap?.total_volume || 0,
@@ -136,15 +137,18 @@ export default async function BoardPage() {
   const ttlSeconds = session.isLiveSession ? 4 : Math.min(session.ttlSeconds, 3600)
   const cacheKey = `ssr:${canonical.runId}:${vietnamDateKey(now)}:${session.cacheBucketKey}`
 
-  const { universe, initialQuotes, initialHistories } = await readThroughUiCache({
-    namespace: BOARD_SSR_CACHE_NAMESPACE,
-    key: cacheKey,
-    tag: "board-ssr",
-    name: "QeoIndex Board SSR Initial Data",
-    ttlSeconds,
-    validate: isInitialBoardData,
-    load: () => loadInitialBoardDataCanonical(now, canonical),
-  })
+  const [{ universe, initialQuotes, initialHistories }, vn30Membership] = await Promise.all([
+    readThroughUiCache({
+      namespace: BOARD_SSR_CACHE_NAMESPACE,
+      key: cacheKey,
+      tag: "board-ssr",
+      name: "QeoIndex Board SSR Initial Data",
+      ttlSeconds,
+      validate: isInitialBoardData,
+      load: () => loadInitialBoardDataCanonical(now, canonical),
+    }),
+    getVn30Membership(),
+  ])
 
   return (
     <OrderBookProvider>
@@ -160,6 +164,7 @@ export default async function BoardPage() {
               isSessionOpen={isSessionOpen}
               userId={auth.user.id}
               universeRunId={canonical.runId}
+              vn30Membership={vn30Membership}
             />
           </MarketBoardTransition>
         </main>

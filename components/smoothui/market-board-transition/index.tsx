@@ -12,13 +12,13 @@ export type MarketBoardTransitionProps = {
 const EASE_OUT = [0.23, 1, 0.32, 1] as const
 const INDEX_CARD_SELECTOR = ":scope > div > div:first-child > div"
 const FILTER_SHELL_INDEX_CARD_SELECTOR = `${INDEX_CARD_SELECTOR}:first-child > div`
-const SECTOR_PANEL_SELECTOR = "section"
+const PRICEBOARD_COLUMN_SELECTOR = "[data-market-board-sector-column], [data-market-board-industry-column]"
 
 /**
  * Load-only SmoothUI entrance for the market board.
  *
- * The animation is intentionally coarse-grained: four index cards and six
- * sector panels animate once after hydration, then Motion is idle while DNSE
+ * The animation is intentionally coarse-grained: four index cards and the
+ * selected board columns animate once after hydration, then Motion is idle while DNSE
  * realtime updates continue. No ticker row, number, sparkline, or quote update
  * participates in the animation path.
  *
@@ -51,7 +51,7 @@ export default function MarketBoardTransition({ children, className = "" }: Mark
     )
 
     void animate(
-      SECTOR_PANEL_SELECTOR,
+      PRICEBOARD_COLUMN_SELECTOR,
       {
         opacity: [0, 1],
         transform: ["translate3d(0, 48px, 0) scale(0.975)", "translate3d(0, 0, 0) scale(1)"],

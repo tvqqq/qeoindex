@@ -41,8 +41,10 @@ export async function fetchLiveBatchQuotes(symbols: string[] | readonly string[]
       const ref = item.r ? Number(item.r) : null
       const rawPrice = item.lastPrice ? Number(item.lastPrice) : null
       const price = rawPrice && rawPrice > 0 ? rawPrice : ref
-      const ceiling = item.c ? Number(item.c) : (ref ? Math.round(ref * 1.07 * 100) / 100 : null)
-      const floor = item.f ? Number(item.f) : (ref ? Math.round(ref * 0.93 * 100) / 100 : null)
+      const rawCeiling = item.c == null ? Number.NaN : Number(item.c)
+      const rawFloor = item.f == null ? Number.NaN : Number(item.f)
+      const ceiling = Number.isFinite(rawCeiling) && rawCeiling > 0 ? rawCeiling : null
+      const floor = Number.isFinite(rawFloor) && rawFloor > 0 ? rawFloor : null
       const change = price != null && ref != null ? Math.round((price - ref) * 100) / 100 : 0
       const changePercent = ref && ref > 0 && price != null ? Math.round(((price - ref) / ref) * 10000) / 100 : 0
       const volume = item.lot ? Number(item.lot) * 10 : 0

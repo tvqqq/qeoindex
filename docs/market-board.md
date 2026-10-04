@@ -1,14 +1,15 @@
 # Market board data and performance model
 
-Last updated: 2026-09-03
+Last updated: 2026-10-04
 
 ## Server bootstrap
 
-The authenticated `/` page verifies the Supabase server session before loading board data. The server then assembles one initial board model from three bounded sources in parallel:
+The authenticated `/board` page verifies the Supabase server session before loading board data. The server then assembles one initial board model from bounded sources in parallel:
 
 - Supabase orderbook snapshots for persisted reference/session/orderbook data.
 - Broker batch quotes for current quote fields.
 - The shared 5-minute intraday snapshot cache for mini-chart history.
+- DNSE's current VN30 basket-membership endpoint, validated as exactly 30 unique symbols and cached for six hours. Provider time is retained as `asOf`; failed fetches/cache reads leave membership unavailable and do not fail board SSR.
 
 The SSR model is cached through the QeoIndex UI cache with a short session-aware TTL. This lets the first render contain usable prices and chart history before the browser WebSocket becomes live. The cache namespace is versioned so a release that changes intraday completeness semantics can invalidate stale board payloads immediately.
 
@@ -16,18 +17,18 @@ When SSR already provides usable multi-point history for at least 95% of the can
 
 ## Filter CP
 
-`Filter CP` is injected beside the existing `Tất cả` and `Top movers` controls without duplicating the market-board realtime store. It filters only the current canonical board universe (currently capped at Top 200).
+`Filter CP` is injected beside the existing `Tất cả` and `Top movers` controls without duplicating the market-board realtime store. It filters only the current canonical board universe (currently capped at Top 200). The filter editor may group raw sector labels into its six selection buckets, while the priceboard renders every distinct raw `kfspSector` label as its own industry column.
 
 Supported criteria:
 
 - exchange: HOSE / HNX / UPCOM, multi-select;
 - minimum stock price in VND;
 - minimum canonical 50-session average volume (`averageVolume50d`) in shares per session;
-- raw canonical/KFSP sector labels grouped into the same six columns as the market board.
+- raw canonical/KFSP sector labels selected through the filter editor's six selection buckets.
 
 Board quotes are normalized internally in thousands of VND (for example `66.1` means `66,100 VND`). The filter helper converts those values to VND before applying the user-entered price threshold. Liquidity does **not** use the current-session matched volume: the threshold is evaluated from the canonical universe's `averageVolume50d`, so the same filter remains stable regardless of what time the user opens the board.
 
-The KFSP sector editor follows `BOARD_SECTOR_GROUPS` in board order: `Ngân hàng`, `Chứng khoán`, `Bán lẻ`, `Bất động sản`, `Công nghiệp`, `Còn lại`. Each raw KFSP sector is assigned with `boardSectorGroupForSector`. All available sectors are selected by default. Bank and securities sectors are mandatory and cannot be unchecked; every other non-empty board column must retain at least one selected raw sector. Saved criteria that violate these invariants are treated as invalid and the editor falls back to defaults.
+The KFSP sector editor follows `BOARD_SECTOR_GROUPS` in board order: `Ngân hàng`, `Chứng khoán`, `Bán lẻ`, `Bất động sản`, `Công nghiệp`, `Còn lại`. Each raw KFSP sector is assigned with `boardSectorGroupForSector`. All available sectors are selected by default. Bank and securities are mandatory; every other non-empty selection bucket must retain at least one selected raw sector. These six buckets belong only to the editor and do not combine the raw industry columns displayed by the priceboard. Saved criteria that violate the editor invariants are treated as invalid and the editor falls back to defaults.
 
 Criteria persist per authenticated user at `user_preferences.settings.marketBoard.stockFilter`. The dedicated `/api/me/market-board-filter` route validates the payload and server-merges only the stock-filter key so unrelated preference settings survive the write. The existing `minVolumeShares` JSON key remains backward compatible, but its product meaning is now minimum 50-session average volume rather than current-session volume.
 
@@ -41,7 +42,7 @@ The resolved ticker list is cached in browser local storage under a per-user nam
 
 Ticker membership is frozen for that valid daily cache entry. Quotes for the selected tickers remain realtime. Opening the editor and pressing `Áp dụng` recomputes membership from a fresh price snapshot while the KLTB 50-session criterion comes from the already-loaded canonical universe. If an already-filtered tab remains open across a Vietnam trading-day rollover, the market-session reset event invalidates that in-memory daily membership and re-resolves Filter CP once from a fresh quote snapshot before remounting the filtered board.
 
-The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoard`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. Market-index channels remain present independently.
+The filter shell deliberately passes only the filtered universe to the existing `LiveMarketBoard`. The board therefore derives its existing DNSE `symbolList` from only those tickers, so stock channels (`tick`, `top_price`, `ohlc`, `foreign`) stop receiving off-filter symbols while Filter CP is active. The full canonical universe is passed separately for industry identities and watch-search suggestions; market-index channels remain present independently. VN30 coverage is measured against the full canonical symbol set so filtering does not change membership data.
 
 Returning to `Tất cả` or `Top movers` is guarded by `/api/market/quotes`: broker batch quotes and one bounded canonical snapshot query run in parallel, and the transition is rejected if any requested symbol still lacks a valid quote. After a successful reconcile the shell remounts the board with the full canonical universe and clears the history seed, forcing the existing intraday bootstrap instead of treating off-filter history as fresh.
 
@@ -67,9 +68,9 @@ Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/m
 - DNSE WebSocket messages are queued and flushed on `requestAnimationFrame` instead of creating one React update per raw socket callback.
 - Live quote/history writes go into detached ref-backed stores. A socket tick replaces only the affected symbol entry rather than cloning the full quote map.
 - Visible quote state is committed to React at most every 250ms (`MARKET_UI_COMMIT_MS`), approximately 4Hz.
-- Sector and Top Movers ordering use a separate quote snapshot refreshed at most once per second (`MARKET_ORDERING_REFRESH_MS`). Price paint therefore does not force ranking/group sorting on every React commit.
+- VN30 and each raw industry column sort from a separate quote snapshot refreshed at most once per second (`MARKET_ORDERING_REFRESH_MS`). Price paint therefore does not force ranking/column sorting on every React commit.
 - History updates replace only the affected ticker inside the ref-backed store and clone the outer history map at the next bounded UI commit.
-- `LiveStockRow` and `LiveMoverCard` are memoized and only redraw when their visible quote/history/watch state changes.
+- Compact priceboard rows and `LiveMoverCard` are memoized and only redraw when their visible quote/watch state changes. The compact rail has no mini charts; Top movers and the orderbook retain their existing history display.
 - Mini-chart SVGs use the pre-regression pipeline: raw 5-minute history is hydrated without a second client-side time filter, while the current live price remains a fallback endpoint for symbols whose history provider is late. The ATO visibility gate remains separate and hides the entire chart until 09:15.
 - Chart history stays bounded to the most recent display points.
 
@@ -84,7 +85,7 @@ The 2026-08-21 performance audit identified GPU compositing as a likely contribu
 - Dense rows use `contain: layout style` to reduce unnecessary layout propagation without using `content-visibility`.
 - Drop-shadow filters inside stock rows are suppressed on the performance surface.
 
-Do **not** reintroduce `content-visibility` or naive row virtualization without redesigning the screenshot flow. QeoIndex captures the complete board DOM for screenshots; earlier visibility-based rendering shortcuts can omit off-screen sectors from the exported image.
+Do **not** reintroduce `content-visibility` or naive row virtualization without redesigning the screenshot flow. QeoIndex captures the complete board DOM for screenshots; earlier visibility-based rendering shortcuts can omit off-screen industries from the exported image. Screenshot capture uses an isolated off-screen clone of the board, expands the horizontal industry rail and tallest column, and removes the clone in `finally`; it does not move the user's visible scroll position or saved column order.
 
 ## Price/reference rules
 
@@ -108,12 +109,19 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 
 ## Layout contract
 
-- Six sector groups render in a responsive 1 / 2 / 3 / 6 column grid.
-- Sector headers keep a fixed 72px height.
+- `Bảng điện` is the default view on server render and for new users. It retains the original six grouped sector columns, 72px headers, per-ticker mini charts, and optional watchlist row.
+- `Bảng ngành` is a separate explicit view in the same `LiveMarketBoard` instance. The selected view is stored per user after client hydration; switching views leaves the quote/history stores, subscriptions, orderbook handlers, and filter scope mounted once.
+- `Tất cả` and `Top movers` remain independent board modes. Search and Filter CP continue to scope the active ticker universe while either view is selected.
+- The industry view uses a horizontally scrollable rail with fixed first columns `Theo dõi` and `VN30`, followed by every distinct raw KFSP industry label (falling back to the canonical sector label only when KFSP is blank). It does not combine industries into the filter editor's six groups.
+- Industry columns can be dragged from anywhere on the header with pointer input or reordered from the keyboard with the focused handle and arrow keys. Per-user order is stored in local storage; newly discovered labels are appended, removed labels are dropped, and the two left anchors remain fixed. Reset restores securities, real estate, banks, then the remaining raw labels alphabetically.
+- Industry columns have compact headers and quote tables with `Mã`, `Giá`, `+/- %`, and `KL`. Rows sort valid current quotes first and then by percent change descending. They do not draw mini charts; the existing classic and Top movers rows keep their chart behavior.
+- Industry row backgrounds use percent direction and bounded magnitude intensity. Ceiling/floor colors require actual provider limit prices matching the current price; no percentage-derived price limits are inferred. Missing or invalid quote values stay unavailable instead of being shown as zero.
+- VN30 members come from DNSE's live basket-influence response rather than a hardcoded list. If membership is unavailable, the column stays in its anchored position and shows an unavailable state. Partial canonical coverage is shown explicitly; complete membership adds only source/time metadata to the header title so the quote rows stay aligned.
+- The top index strip keeps its real index quote fields in separate rounded navy cards using QeoIndex green/purple accents. It does not draw synthetic fixed trend lines when no index history series is available.
 - Strong gainers use a static border highlight; permanent pulse animation is avoided.
-- The watchlist is a horizontal section above the sector grid and remains compatible with full-board screenshots.
+- In `Bảng ngành`, the first `Theo dõi` column is always visible in the rail. It reads persisted symbols after hydration to keep the server and first client render consistent, and lets users search the canonical board universe to add symbols.
 - Filter CP reuses the same row/card components and does not introduce a second quote/history state store.
-- Filter CP's KFSP sector editor mirrors the same six board columns and enforces mandatory/minimum-one selection rules locally.
+- Filter CP's KFSP sector editor keeps its six selection buckets and enforces mandatory/minimum-one selection rules locally; those editor buckets do not combine the raw industry columns in the priceboard.
 
 ## Current performance status
 
@@ -121,7 +129,7 @@ The structural state-machine optimization is now implemented in the focused `per
 
 1. ref-backed quote/history stores avoid full-map clones for each socket tick;
 2. React quote snapshots are bounded to ~4Hz instead of ~10Hz;
-3. ranking and sector average snapshots refresh at ~1Hz;
+3. ranking plus classic sector/industry-column average snapshots refresh at ~1Hz;
 4. redundant first-mount intraday bootstrap is skipped when SSR history coverage is sufficient;
 5. Filter CP narrows DNSE stock subscriptions to only its resolved ticker set.
 
@@ -132,6 +140,7 @@ If production is still hot after this change, profile before adding more throttl
 ## Regression coverage
 
 - `pnpm test:board-contract` covers layout, reference-price semantics, WebSocket buffering, 250ms quote commits, 1s ordering snapshots, SSR history reuse, low-composite rendering, and sparkline memo behavior.
+- `tests/market-board-industry-priceboard.test.ts` covers raw industry labels/order reconciliation, fixed anchors and reorder operations, finite-quote sorting/averages, sign/intensity/official-limit colors, DNSE VN30 membership validation/cache bounds, and filtered realtime scope.
 - `tests/market-board-stock-filter-api.test.ts` covers authenticated persistence, settings merge, canonical symbol bounds, batch reconcile, and bounded snapshot fallback.
 - `tests/market-board-stock-filter-ui.test.ts` covers portal placement, modal controls, daily cache identity, filtered WS scoping, fresh-quote gating, and full-board reconcile/remount behavior.
 - `tests/market-board-filter-avg50-regression.test.ts` locks KLTB 50-session liquidity semantics, six-column KFSP grouping, bank/securities mandatory selection, and minimum-one-per-column behavior.

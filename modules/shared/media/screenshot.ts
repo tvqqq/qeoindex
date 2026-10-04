@@ -127,6 +127,98 @@ async function drawNavbarWatermark(
   ctx.restore()
 }
 
+function createExpandedBoardClone(element: HTMLElement) {
+  const clone = element.cloneNode(true) as HTMLElement
+  const originalScroll = element.querySelector<HTMLElement>("[data-market-board-screenshot-scroll]")
+  const originalRail = element.querySelector<HTMLElement>("[data-market-board-screenshot-rail]")
+  const cloneScroll = clone.querySelector<HTMLElement>("[data-market-board-screenshot-scroll]")
+  const cloneRail = clone.querySelector<HTMLElement>("[data-market-board-screenshot-rail]")
+  const wrapper = document.createElement("div")
+  wrapper.setAttribute("aria-hidden", "true")
+  wrapper.inert = true
+  const originalWidth = Math.ceil(element.getBoundingClientRect().width)
+  const originalHeight = Math.ceil(element.getBoundingClientRect().height)
+  let expandedWidth = originalWidth
+  let expandedScrollHeight = originalScroll ? Math.ceil(originalScroll.scrollHeight) : 0
+  let columnHeight = 0
+
+  if (originalScroll) {
+    const scrollStyle = getComputedStyle(originalScroll)
+    const horizontalPadding = Number.parseFloat(scrollStyle.paddingLeft) + Number.parseFloat(scrollStyle.paddingRight)
+    if (originalRail && cloneRail) {
+      expandedWidth = Math.ceil(Math.max(originalWidth, originalRail.scrollWidth + horizontalPadding))
+      columnHeight = Math.max(
+        0,
+        ...Array.from(originalRail.querySelectorAll<HTMLElement>("[data-market-board-industry-column]"))
+          .map((column) => Math.ceil(Math.max(column.scrollHeight, column.getBoundingClientRect().height))),
+      )
+      expandedScrollHeight = Math.ceil(Math.max(expandedScrollHeight, columnHeight + Number.parseFloat(scrollStyle.paddingTop) + Number.parseFloat(scrollStyle.paddingBottom)))
+    } else {
+      expandedWidth = Math.ceil(Math.max(originalWidth, originalScroll.scrollWidth))
+    }
+  }
+
+  const boardHeight = originalScroll
+    ? Math.ceil(originalHeight + expandedScrollHeight - originalScroll.clientHeight)
+    : originalHeight
+
+  wrapper.style.position = "fixed"
+  wrapper.style.left = "-100000px"
+  wrapper.style.top = "0"
+  wrapper.style.zIndex = "-1"
+  wrapper.style.width = `${expandedWidth}px`
+  wrapper.style.height = `${boardHeight}px`
+  wrapper.style.overflow = "visible"
+  clone.style.position = "relative"
+  clone.style.left = "0"
+  clone.style.top = "0"
+  clone.style.zIndex = "auto"
+  clone.style.pointerEvents = "none"
+  clone.style.width = `${expandedWidth}px`
+  clone.style.height = `${boardHeight}px`
+  clone.style.minHeight = "0"
+  clone.style.maxWidth = "none"
+  clone.style.overflow = "visible"
+
+  if (cloneScroll) {
+    cloneScroll.style.flex = "none"
+    cloneScroll.style.width = `${expandedWidth}px`
+    cloneScroll.style.height = `${expandedScrollHeight}px`
+    cloneScroll.style.minHeight = "0"
+    cloneScroll.style.maxHeight = "none"
+    cloneScroll.style.overflow = "visible"
+  }
+
+  if (cloneRail && originalScroll) {
+    const scrollStyle = getComputedStyle(originalScroll)
+    const horizontalPadding = Number.parseFloat(scrollStyle.paddingLeft) + Number.parseFloat(scrollStyle.paddingRight)
+    cloneRail.style.width = `${Math.max(0, expandedWidth - horizontalPadding)}px`
+    cloneRail.style.minWidth = cloneRail.style.width
+    cloneRail.style.height = `${columnHeight}px`
+    cloneRail.style.minHeight = "0"
+    cloneRail.style.overflow = "visible"
+  }
+
+  const originalFields = element.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select")
+  const cloneFields = clone.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select")
+  originalFields.forEach((field, index) => {
+    const cloneField = cloneFields[index]
+    if (!cloneField) return
+    if (field instanceof HTMLInputElement && cloneField instanceof HTMLInputElement) {
+      cloneField.value = field.value
+      cloneField.checked = field.checked
+    } else if (field instanceof HTMLTextAreaElement && cloneField instanceof HTMLTextAreaElement) {
+      cloneField.value = field.value
+    } else if (field instanceof HTMLSelectElement && cloneField instanceof HTMLSelectElement) {
+      cloneField.value = field.value
+    }
+  })
+
+  wrapper.appendChild(clone)
+  document.body.appendChild(wrapper)
+  return { clone, cleanup: () => wrapper.remove() }
+}
+
 export async function captureMarketBoardScreenshot(
   element: HTMLElement,
   options?: {
@@ -135,18 +227,24 @@ export async function captureMarketBoardScreenshot(
 ): Promise<Blob | null> {
   const pixelRatio = options?.pixelRatio ?? 2
 
-  // 1. Capture DOM to raw canvas
-  const boardCanvas = await toCanvas(element, {
-    pixelRatio,
-    backgroundColor: "#06080a",
-    cacheBust: true,
-    filter: (node) => {
-      if (node instanceof HTMLElement && node.dataset.screenshotExclude === "true") {
-        return false
-      }
-      return true
-    },
-  })
+  // 1. Capture an isolated clone with the horizontal and vertical rails expanded.
+  const { clone: captureRoot, cleanup } = createExpandedBoardClone(element)
+  let boardCanvas: HTMLCanvasElement
+  try {
+    boardCanvas = await toCanvas(captureRoot, {
+      pixelRatio,
+      backgroundColor: "#10110c",
+      cacheBust: true,
+      filter: (node) => {
+        if (node instanceof HTMLElement && node.dataset.screenshotExclude === "true") {
+          return false
+        }
+        return true
+      },
+    })
+  } finally {
+    cleanup()
+  }
 
   // 2. Setup high-res framed composition canvas
   const scale = boardCanvas.width / 1600

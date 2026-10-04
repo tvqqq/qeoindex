@@ -450,6 +450,15 @@
       ]
     },
     {
+      "path": "tests/market-board-industry-priceboard.test.ts",
+      "owner": "market",
+      "invariant": "Preserve compact industry priceboard ordering, quote tone, VN30 membership, and hydration contracts.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-board-stock-filter-api.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market board stock filter api contract.",
