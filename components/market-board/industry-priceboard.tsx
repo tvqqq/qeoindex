@@ -96,7 +96,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
         className={`grid min-w-0 flex-1 items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[minmax(46px,1fr)_58px]"}`}
       >
-        <span className="truncate font-semibold tracking-[0.01em] transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
+        <span className="truncate font-ticker font-bold tracking-tight transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
         {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
         <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
@@ -436,7 +436,7 @@ export function IndustryPriceboard({
         className="flex min-h-[calc(100vh-250px)] min-w-0 items-start gap-[9px] overflow-x-auto overflow-y-visible pb-3 pr-8 [scrollbar-color:#34414b_#0b0f14] [scrollbar-width:thin]"
         data-market-board-screenshot-rail
       >
-        <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="watchlist" data-market-board-industry-column>
+        <section className={`${FULL_COLUMN_WIDTH} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="watchlist" data-market-board-industry-column>
           <ColumnHeader label="Theo dõi" count={watchlistStocks.length} average={averagePriceboardChange(watchlistStocks, orderingQuotes)} accent="watch" />
           <div className="border-b border-white/[0.06] p-1.5">
             <div className="relative flex h-7 items-center gap-1 rounded-full border border-white/[0.10] bg-[#090d12] px-2">
@@ -479,8 +479,8 @@ export function IndustryPriceboard({
               ) : null}
             </div>
           </div>
-          <TableLabels showPriceVolume={showPriceVolume} />
-          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
+          <TableLabels showPriceVolume />
+          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume />
         </section>
 
         <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="vn30" data-market-board-industry-column>
