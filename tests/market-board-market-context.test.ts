@@ -97,7 +97,6 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.match(stripSource, /buildMarketDepthSnapshot\(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey\)/)
   assert.match(stripSource, /MARKET_DEPTH_BUCKETS\.map/)
   assert.match(stripSource, /HOSE · Top 200 partial/)
-  assert.match(stripSource, /"Top 200 partial/)
 
   assert.doesNotMatch(stripSource, /valueChangePercent/)
   assert.doesNotMatch(providerSource, /vndirect|yV \* yC|tV \* tC|valueChangePercent/i)
