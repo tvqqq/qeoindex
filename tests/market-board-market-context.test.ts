@@ -25,11 +25,12 @@ test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and 
       time: { seconds: baseSeconds + 20 + index, nanos: 0 },
     })),
     { symbol: "OMIT", time: { seconds: baseSeconds + 60, nanos: 0 } },
+    { symbol: "NULL", basketInfluence: null, time: { seconds: baseSeconds + 61, nanos: 0 } },
   ]
 
   const parsed = parseVnindexImpactPayload(rows)
   assert.ok(parsed)
-  assert.equal(parsed.providerRows, 21)
+  assert.equal(parsed.providerRows, 22)
   assert.equal(parsed.finiteRows, 20)
   assert.equal(parsed.positive.length, 8)
   assert.equal(parsed.negative.length, 8)
@@ -37,6 +38,8 @@ test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and 
   assert.equal(parsed.negative[0]?.symbol, "N00")
   assert.equal(parsed.positive.some((entry) => entry.symbol === "OMIT"), false)
   assert.equal(parsed.negative.some((entry) => entry.symbol === "OMIT"), false)
+  assert.equal(parsed.positive.some((entry) => entry.symbol === "NULL"), false)
+  assert.equal(parsed.negative.some((entry) => entry.symbol === "NULL"), false)
 
   const displayed = [...parsed.positive, ...parsed.negative].reduce((sum, entry) => sum + entry.contribution, 0)
   assert.ok(Math.abs(parsed.displayedNetTotal - displayed) < 1e-9)
@@ -62,6 +65,7 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.match(stripSource, /Top 200 partial/)
   assert.match(stripSource, /Tổng các mã hiển thị/)
   assert.match(stripSource, /points\.length < 2/)
+  assert.match(stripSource, /vietnamDateKey\(quote\.updatedAt\) !== series\.sessionDate/)
   assert.doesNotMatch(stripSource, /valueChangePercent/)
   assert.doesNotMatch(providerSource, /vndirect|yV \* yC|tV \* tC|valueChangePercent/i)
 })
