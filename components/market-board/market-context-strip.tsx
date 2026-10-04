@@ -353,7 +353,8 @@ function IndexContextCard({
 }) {
   const color = marketColor(quote?.changePercent)
   const data = appendLiveIndexValue(series, quote)
-  const hasHistory = Boolean(series?.points.length)
+  const quoteDate = quote?.updatedAt ? vietnamDateKey(quote.updatedAt) : null
+  const hasHistory = Boolean(series?.points.length && (!quoteDate || series?.sessionDate === quoteDate))
   const reference = indexReference(quote)
   const indexValue = quote && finite(quote.value)
     ? quote.value
@@ -425,16 +426,17 @@ function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   )
 }
 
-function LivePulse({ active }: { active: boolean }) {
-  return active ? (
-    <span className="inline-flex items-center gap-1 text-emerald-300" title="Nguồn vừa cập nhật trong phiên">
+function LivePulse({ active, sessionOpen }: { active: boolean; sessionOpen: boolean }) {
+  if (active) return (
+    <span className="inline-flex items-center gap-1 text-emerald-300" title="Nguồn có timestamp mới trong phiên">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
       LIVE
     </span>
-  ) : null
+  )
+  return sessionOpen ? <span className="text-amber-300" title="Timestamp nguồn chưa đủ mới">Chậm</span> : null
 }
 
-function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boolean }) {
+function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean }) {
   const entries = orderedImpactBars(impact)
   const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.15
   const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
@@ -492,7 +494,7 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
         </div>
       </div>
       <p className="mt-0.5 flex items-center justify-end gap-2 truncate font-ticker text-[8px] text-zinc-500">
-        <LivePulse active={live} />
+        <LivePulse active={live} sessionOpen={sessionOpen} />
         <span>DNSE basketInfluence · {formatAsOf(impact.asOf)}</span>
       </p>
     </div>
@@ -503,10 +505,12 @@ function MarketDepthCard({
   snapshot,
   sessionDate,
   live,
+  sessionOpen,
 }: {
   snapshot: MarketDepthSnapshot
   sessionDate: string
   live: boolean
+  sessionOpen: boolean
 }) {
   const maxCount = Math.max(1, ...snapshot.bins)
   const canShow = Boolean(sessionDate && snapshot.total > 0 && snapshot.covered > 0)
@@ -704,9 +708,12 @@ export function MarketContextStrip({
     }
   }, [])
 
-  const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate
-    ?? vietnamDateKey(indexQuotes.VNINDEX?.updatedAt ?? "")
-    ?? ""
+  const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.updatedAt ?? "")
+  const chartSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
+  // At 09:00 the minute chart may still reflect yesterday; use newer live index session.
+  const contextSessionDate = quoteSessionDate && quoteSessionDate > chartSessionDate
+    ? quoteSessionDate
+    : chartSessionDate || quoteSessionDate || ""
   const marketDepth = useMemo(
     () => buildMarketDepthSnapshot(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey),
     [canonicalUniverse, contextSessionDate, stockQuotes],
@@ -810,6 +817,18 @@ export function MarketContextStrip({
   const liquidityData = liquidityPoints.map((point) => point.value)
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
   const impact = bootstrap?.impact
+  const sessionOpen = observedAtMs > 0 && getMarketSessionStatus(new Date(observedAtMs)).isLiveSession
+  const isFresh = (asOf: string | null | undefined) => {
+    const sourceMs = Date.parse(asOf ?? "")
+    return sessionOpen
+      && contextSessionDate !== ""
+      && Number.isFinite(sourceMs)
+      && sourceMs <= observedAtMs + 5_000
+      && observedAtMs - sourceMs <= 120_000
+      && vietnamDateKey(asOf ?? "") === contextSessionDate
+  }
+  const impactLive = !loadError && isFresh(impact?.asOf)
+  const depthLive = isFresh(marketDepth.asOf)
 
   return (
     <div className="space-y-2 border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
@@ -887,7 +906,7 @@ export function MarketContextStrip({
               : null}
           >
             {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-              <ImpactChart impact={impact} />
+              <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} />
             ) : (
               <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 font-ticker text-[10px] text-zinc-500">
                 <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
@@ -896,7 +915,7 @@ export function MarketContextStrip({
           </ContextCard>
         </div>
         <div className="min-w-0" data-market-context-depth-card>
-          <MarketDepthCard snapshot={marketDepth} sessionDate={contextSessionDate} />
+          <MarketDepthCard snapshot={marketDepth} sessionDate={contextSessionDate} live={depthLive} sessionOpen={sessionOpen} />
         </div>
       </div>
     </div>
