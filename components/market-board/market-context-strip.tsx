@@ -249,8 +249,11 @@ function ContextLineChart({
     path += ` C ${midX.toFixed(1)},${y0.toFixed(1)} ${midX.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`
   }
   const last = coords.at(-1)!
-  const referenceY = hasReference ? Math.max(pad, Math.min(height - pad, y(reference))) : null
-  const shouldSplit = splitAtReference && referenceY !== null
+  const referenceValue = hasReference ? reference : undefined
+  const referenceY = referenceValue !== undefined ? Math.max(pad, Math.min(height - pad, y(referenceValue))) : null
+  const splitReferenceY = referenceY ?? 0
+  const shouldSplit = splitAtReference && referenceValue !== undefined && referenceY !== null
+  const lastValue = points.at(-1)!
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" aria-hidden="true" shapeRendering="optimizeSpeed">
@@ -261,8 +264,8 @@ function ContextLineChart({
         </linearGradient>
         {shouldSplit ? (
           <>
-            <clipPath id={`context-above-${uid}`}><rect x="0" y="0" width={width} height={referenceY!} /></clipPath>
-            <clipPath id={`context-below-${uid}`}><rect x="0" y={referenceY!} width={width} height={Math.max(0, height - referenceY!)} /></clipPath>
+            <clipPath id={`context-above-${uid}`}><rect x="0" y="0" width={width} height={splitReferenceY} /></clipPath>
+            <clipPath id={`context-below-${uid}`}><rect x="0" y={splitReferenceY} width={width} height={Math.max(0, height - splitReferenceY)} /></clipPath>
           </>
         ) : null}
       </defs>
@@ -282,7 +285,7 @@ function ContextLineChart({
       {referenceY !== null ? (
         <line x1="0" x2={width} y1={referenceY} y2={referenceY} stroke="rgba(226,232,240,0.48)" strokeWidth="1" strokeDasharray="3 3" />
       ) : null}
-      <circle cx={last[0]} cy={last[1]} r="2.2" fill={shouldSplit && points.at(-1)! < reference! ? RED : shouldSplit && points.at(-1)! > reference! ? GREEN : color} />
+      <circle cx={last[0]} cy={last[1]} r="2.2" fill={shouldSplit && referenceValue !== undefined && lastValue < referenceValue ? RED : shouldSplit && referenceValue !== undefined && lastValue > referenceValue ? GREEN : color} />
     </svg>
   )
 }
