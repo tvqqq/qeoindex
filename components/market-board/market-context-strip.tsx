@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { Activity, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 
-import { Sparkline } from "@/components/sparkline"
 import type {
   MarketBoardContextBootstrap,
   MarketContextIndexSeries,
@@ -148,6 +147,43 @@ function formatAsOf(value?: string | null) {
   }).format(new Date(timestamp))
 }
 
+function ContextLineChart({
+  values,
+  color,
+  width,
+  height,
+}: {
+  values: number[]
+  color: string
+  width: number
+  height: number
+}) {
+  const valid = values.filter((value) => Number.isFinite(value) && value >= 0)
+  if (valid.length < 2) return null
+
+  const maxPoints = 80
+  const step = Math.max(1, Math.ceil(valid.length / maxPoints))
+  const points = valid.length <= maxPoints
+    ? valid
+    : valid.filter((_, index) => index % step === 0 || index === valid.length - 1)
+  const min = Math.min(...points)
+  const max = Math.max(...points)
+  const range = max - min || Math.max(Math.abs(max) * 0.0025, 1)
+  const pad = 2
+  const x = (index: number) => pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2)
+  const y = (value: number) => height - pad - ((value - min) / range) * (height - pad * 2)
+  const path = points.map((value, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(value).toFixed(1)}`).join(" ")
+  const lastIndex = points.length - 1
+  const last = points[lastIndex]
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" aria-hidden="true" shapeRendering="optimizeSpeed">
+      <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(lastIndex)} cy={y(last)} r="2.2" fill={color} />
+    </svg>
+  )
+}
+
 function ContextCard({
   title,
   icon,
@@ -211,7 +247,7 @@ function IndexContextCard({
         </div>
         <div className="flex h-[48px] w-[132px] items-center justify-end">
           {hasHistory ? (
-            <Sparkline data={data} color={color} width={132} height={42} strokeWidth={1.8} showDot fill={false} />
+            <ContextLineChart values={data} color={color} width={132} height={42} />
           ) : (
             <span className="text-right text-[9px] leading-tight text-zinc-600">Chưa có lịch sử 1m</span>
           )}
@@ -428,7 +464,7 @@ export function MarketContextStrip({
           </div>
           <div className="flex h-[46px] w-[116px] items-center justify-end">
             {liquidityData.length >= 2 ? (
-              <Sparkline data={liquidityData} color={PLATINUM} width={116} height={42} strokeWidth={1.7} showDot fill={false} />
+              <ContextLineChart values={liquidityData} color={PLATINUM} width={116} height={42} />
             ) : (
               <span className="text-right text-[9px] leading-tight text-zinc-600">Realtime từ<br />lúc mở bảng</span>
             )}
