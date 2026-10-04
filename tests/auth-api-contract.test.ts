@@ -16,6 +16,7 @@ const FEATURE_ROUTES: Array<[string, string]> = [
   ["app/api/market/stream-auth/route.ts", "market_board"],
   ["app/api/finhay/status/route.ts", "finhay_live"],
   ["app/api/finhay/quote/route.ts", "finhay_live"],
+  ["app/api/finhay/market-context/route.ts", "finhay_live"],
   ["app/api/finhay/auth/start/route.ts", "finhay_live"],
   ["app/api/finhay/auth/callback/route.ts", "finhay_live"],
   ["app/api/finhay/auth/disconnect/route.ts", "finhay_live"],
