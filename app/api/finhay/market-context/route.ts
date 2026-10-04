@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { requireApiFeature } from "@/modules/auth/server"
-import { getFinhayIndexForeignTrading } from "@/modules/market/providers/finhay/live"
+import { getFinhayIndexMarketContext } from "@/modules/market/providers/finhay/live"
 import { getActiveFinhayAccessToken } from "@/modules/market/providers/finhay/session"
 
 export const runtime = "nodejs"
@@ -27,12 +27,13 @@ export async function GET() {
 
   try {
     const sampledAt = new Date().toISOString()
-    const foreign = await getFinhayIndexForeignTrading(accessToken, "VNINDEX")
+    const { foreign, liquidity } = await getFinhayIndexMarketContext(accessToken, "VNINDEX")
     return NextResponse.json({
       ok: true,
       provider: "Finhay MCP",
       sampledAt,
       foreign,
+      liquidity,
     }, { headers: NO_STORE_HEADERS })
   } catch (error) {
     return NextResponse.json({
