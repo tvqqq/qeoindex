@@ -61,7 +61,6 @@ export type IndexQuote = {
   changePercent: number
   volume?: number
   valueTraded?: number
-  valueChangePercent?: number
   advances?: number
   declines?: number
   unchanged?: number
@@ -1489,11 +1488,11 @@ export function LiveMarketBoard({
   const vnindexDec = vnindexQuote?.declines ?? declines
   const vnindexUnc = vnindexQuote?.unchanged ?? Math.max(0, universe.length - advances - declines)
 
-  const indexQuotes = useMemo(() => ({
-    VNINDEX: quotes.VNINDEX,
-    VN30: quotes.VN30,
-    HNXINDEX: quotes.HNXINDEX,
-    UPCOMINDEX: quotes.UPCOMINDEX,
+  const indexQuotes = useMemo<Record<string, IndexQuote | undefined>>(() => ({
+    VNINDEX: quotes.VNINDEX as IndexQuote | undefined,
+    VN30: quotes.VN30 as IndexQuote | undefined,
+    HNXINDEX: quotes.HNXINDEX as IndexQuote | undefined,
+    UPCOMINDEX: quotes.UPCOMINDEX as IndexQuote | undefined,
   }), [quotes.VNINDEX, quotes.VN30, quotes.HNXINDEX, quotes.UPCOMINDEX])
 
   return (
