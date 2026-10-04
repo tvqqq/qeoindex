@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
-import { parseVnindexImpactPayload } from "../modules/market/board/market-context-contract.ts"
+import { orderedImpactBars, parseVnindexImpactPayload } from "../modules/market/board/market-context-contract.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 const stripSource = readFileSync(new URL("../components/market-board/market-context-strip.tsx", import.meta.url), "utf8")
@@ -50,6 +50,25 @@ test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and 
   assert.match(parsed.source, /basket-influence/)
 })
 
+test("impact chart keeps strongest gain at left and strongest negative at far right", () => {
+  const parsed = parseVnindexImpactPayload([
+    { symbol: "VIC", basketInfluence: 4.76 },
+    { symbol: "MWG", basketInfluence: 0.24 },
+    { symbol: "LPB", basketInfluence: -2.47 },
+    { symbol: "VHM", basketInfluence: -0.63 },
+    { symbol: "MBB", basketInfluence: -1.16 },
+  ])
+  assert.ok(parsed)
+  const originalNegative = parsed.negative.map((entry) => entry.symbol)
+  const entries = orderedImpactBars(parsed)
+  assert.deepEqual(entries.map((entry) => entry.symbol), ["VIC", "MWG", "VHM", "MBB", "LPB"])
+  assert.deepEqual(parsed.negative.map((entry) => entry.symbol), originalNegative)
+  assert.equal(
+    entries.reduce((sum, entry) => sum + entry.contribution, 0).toFixed(3),
+    parsed.displayedNetTotal.toFixed(3),
+  )
+})
+
 test("market context bootstrap uses actual index candles and provider contribution endpoint", () => {
   assert.match(serverSource, /chart-api\/v2\/ohlcs/)
   assert.match(serverSource, /\$\{baseUrl\}\/index/)
@@ -71,7 +90,7 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.match(stripSource, /VND verified/)
   assert.match(stripSource, /liquiditySeriesSource = hasFinhayLiquidity \? "finhay-vnindex" : "index-quote"/)
   assert.match(stripSource, /Top 200 partial/)
-  assert.match(stripSource, /Top mã hiển thị/)
+  assert.match(stripSource, /Top mã:/)
   assert.match(stripSource, /points\.length < 2/)
   assert.match(stripSource, /vietnamDateKey\(quote\.updatedAt\) !== series\.sessionDate/)
   assert.match(stripSource, /liquidityData\.length >= 2/)
@@ -96,10 +115,31 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.match(stripSource, /data-market-context-depth-card/)
   assert.match(stripSource, /buildMarketDepthSnapshot\(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey\)/)
   assert.match(stripSource, /MARKET_DEPTH_BUCKETS\.map/)
-  assert.match(stripSource, /HOSE · Top 200 partial/)
+  assert.match(stripSource, /Top 200 partial · Có giá/)
 
   assert.doesNotMatch(stripSource, /valueChangePercent/)
   assert.doesNotMatch(providerSource, /vndirect|yV \* yC|tV \* tC|valueChangePercent/i)
+})
+
+test("compact 60/40 cards track live provider timestamps without faking realtime or changing past data", () => {
+  assert.match(stripSource, /xl:h-\\[144px\\]/)
+  assert.match(stripSource, /h-\\[55px\\]/)
+  assert.match(stripSource, /min-h-\\[75px\\]/)
+  assert.match(stripSource, /orderedImpactBars\\(impact\\)/)
+  assert.match(stripSource, /motion-safe:transition-\\[top,height\\]/)
+  assert.match(stripSource, /motion-safe:transition-\\[height,opacity\\]/)
+  assert.match(stripSource, /motion-safe:animate-pulse/)
+  assert.match(stripSource, /sessionOpen &&/)
+  assert.match(stripSource, /observedAtMs - sourceMs <= 120_000/)
+  assert.match(stripSource, /12_000 : 60_000/)
+  assert.match(stripSource, /if \\(disposed \\|\\| inFlight \\|\\| document\\.visibilityState === "hidden"\\) return/)
+  assert.match(stripSource, /document\\.addEventListener\\("visibilitychange"/)
+  assert.match(stripSource, /window\\.addEventListener\\("focus"/)
+  assert.match(stripSource, /vietnamDateKey\\(previous\\.generatedAt\\) === vietnamDateKey\\(data\\.generatedAt\\)/)
+  assert.match(stripSource, /quoteSessionDate > chartSessionDate/)
+  assert.match(stripSource, /Chậm/)
+  assert.match(stripSource, /LIVE/)
+  assert.doesNotMatch(stripSource, /setInterval\\(\\(\\) => void load\\(\\), 30_000\\)/)
 })
 
 test("market context API is authenticated, cached, and refreshes faster during the live session", () => {
