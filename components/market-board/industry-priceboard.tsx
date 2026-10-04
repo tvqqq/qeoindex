@@ -34,12 +34,14 @@ type IndustryPriceboardProps = {
   userId: string
   canonicalSymbols: readonly string[]
   vn30Membership: Vn30Membership | null
+  showPriceVolume?: boolean
 }
 
 const INDUSTRY_ORDER_KEY = "qeoindex:market-board-industry-order:v1"
 const PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
-const COLUMN_WIDTH = "w-[232px] min-w-[232px] max-w-[232px]"
+const FULL_COLUMN_WIDTH = "w-[232px] min-w-[232px] max-w-[232px]"
+const COMPACT_COLUMN_WIDTH = "w-[164px] min-w-[164px] max-w-[164px]"
 
 function formatPrice(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
@@ -68,9 +70,10 @@ type CompactStockRowProps = {
   watched: boolean
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
+  showPriceVolume: boolean
 }
 
-const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen }: CompactStockRowProps) {
+const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen, showPriceVolume }: CompactStockRowProps) {
   const change = quoteIsValid(quote) ? quote.changePercent : null
   return (
     <div
@@ -90,29 +93,30 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         type="button"
         onClick={() => onOpen(stock.ticker)}
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
-        className="grid min-w-0 flex-1 grid-cols-[minmax(34px,1fr)_56px_54px_39px] items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+        className={`grid min-w-0 flex-1 items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[minmax(46px,1fr)_58px]"}`}
       >
         <span className="truncate font-semibold tracking-[0.01em] transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
-        <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span>
+        {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
         <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
         </span>
-        <span className="truncate text-right text-[10px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span>
+        {showPriceVolume ? <span className="truncate text-right text-[10px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span> : null}
       </button>
     </div>
   )
-}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch)
+}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch && previous.showPriceVolume === next.showPriceVolume)
 
-function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen }: {
+function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen, showPriceVolume }: {
   stocks: readonly IndustryPriceboardStock[]
   displayQuotes: Readonly<Record<string, BoardQuote>>
   watchedSymbols: ReadonlySet<string>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
+  showPriceVolume: boolean
 }) {
   if (stocks.length === 0) return <div className="px-2 py-4 text-center text-[11px] text-muted-2">Chưa có mã phù hợp</div>
   return <div className="space-y-[4px] p-1">{stocks.map((stock) => (
-    <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} />
+    <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} showPriceVolume={showPriceVolume} />
   ))}</div>
 }
 
@@ -128,6 +132,7 @@ export function IndustryPriceboard({
   userId,
   canonicalSymbols,
   vn30Membership,
+  showPriceVolume = true,
 }: IndustryPriceboardProps) {
   const railRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; source: string; x: number; y: number } | null>(null)
@@ -315,6 +320,8 @@ export function IndustryPriceboard({
     [industryOrder, industryStocks],
   )
 
+  const columnWidth = showPriceVolume ? FULL_COLUMN_WIDTH : COMPACT_COLUMN_WIDTH
+
   const reorderByKeyboard = useCallback((industry: string, offset: -1 | 1) => {
     setIndustryOrder((previous) => moveIndustryColumnBy(previous, industry, offset))
   }, [])
@@ -334,10 +341,10 @@ export function IndustryPriceboard({
     <div className="min-w-0" data-market-board-priceboard>
       <div
         ref={railRef}
-        className="flex min-h-[calc(100vh-250px)] min-w-0 items-start gap-[9px] overflow-x-auto overflow-y-visible pb-3 pr-1 [scrollbar-color:#34414b_#0b0f14] [scrollbar-width:thin]"
+        className="flex min-h-[calc(100vh-250px)] min-w-0 items-start gap-[9px] overflow-x-auto overflow-y-visible pb-3 pr-8 [scrollbar-color:#34414b_#0b0f14] [scrollbar-width:thin]"
         data-market-board-screenshot-rail
       >
-        <section className={`${COLUMN_WIDTH} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="watchlist" data-market-board-industry-column>
+        <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="watchlist" data-market-board-industry-column>
           <ColumnHeader label="Theo dõi" count={watchlistStocks.length} average={averagePriceboardChange(watchlistStocks, orderingQuotes)} accent="watch" />
           <div className="border-b border-white/[0.06] p-1.5">
             <div className="relative flex h-7 items-center gap-1 rounded-full border border-white/[0.10] bg-[#090d12] px-2">
@@ -380,11 +387,11 @@ export function IndustryPriceboard({
               ) : null}
             </div>
           </div>
-          <TableLabels />
-          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} />
+          <TableLabels showPriceVolume={showPriceVolume} />
+          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
         </section>
 
-        <section className={`${COLUMN_WIDTH} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="vn30" data-market-board-industry-column>
+        <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="vn30" data-market-board-industry-column>
           <ColumnHeader
             label="VN30"
             count={vn30Stocks.length}
@@ -397,9 +404,9 @@ export function IndustryPriceboard({
               Phủ {matchedMembershipCount}/{vn30Membership.symbols.length} mã trong danh sách hiện tại
             </div>
           ) : null}
-          <TableLabels />
+          <TableLabels showPriceVolume={showPriceVolume} />
           {vn30Membership ? (
-            <StockRows stocks={vn30Stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} />
+            <StockRows stocks={vn30Stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
           ) : (
             <div className="px-2 py-4 text-center text-[11px] text-muted-2">Không có dữ liệu VN30</div>
           )}
@@ -408,7 +415,7 @@ export function IndustryPriceboard({
         {industryLanes.map((lane, laneIndex) => (
           <div
             key={`industry-lane-${laneIndex}`}
-            className={`${COLUMN_WIDTH} flex shrink-0 flex-col gap-[9px]`}
+            className={`${columnWidth} flex shrink-0 flex-col gap-[9px]`}
             data-market-board-industry-lane
           >
             {lane.industries.map((industry) => {
@@ -458,8 +465,8 @@ export function IndustryPriceboard({
                       {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
                     </span>
                   </header>
-                  <TableLabels />
-                  <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} />
+                  <TableLabels showPriceVolume={showPriceVolume} />
+                  <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
                 </section>
               )
             })}
@@ -467,7 +474,7 @@ export function IndustryPriceboard({
         ))}
       </div>
 
-      <div className="flex items-center justify-end gap-2 pb-1 pr-1">
+      <div className="flex items-center justify-end gap-2 pb-1 pr-8">
         <span className="text-[10px] text-muted-2">Kéo biểu tượng ⋮⋮ hoặc dùng phím mũi tên để sắp xếp ngành</span>
         <button type="button" onClick={resetOrder} className="flex h-7 items-center gap-1 rounded border border-white/[0.12] px-2 text-[10px] text-muted-2 transition-colors hover:border-brand/50 hover:text-foreground">
           <RotateCcw className="h-2.5 w-2.5" /> Đặt lại thứ tự
@@ -498,14 +505,14 @@ function ColumnHeader({ label, count, average, accent, title }: { label: string;
   )
 }
 
-function TableLabels() {
+function TableLabels({ showPriceVolume }: { showPriceVolume: boolean }) {
   return (
-    <div className="grid h-[22px] grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px] items-center gap-1 border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2">
+    <div className={`grid h-[22px] items-center gap-1 border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[14px_minmax(46px,1fr)_58px]"}`}>
       <span />
       <span>Mã</span>
-      <span className="text-right">Giá</span>
+      {showPriceVolume ? <span className="text-right">Giá</span> : null}
       <span className="text-right">+/-%</span>
-      <span className="text-right">KL</span>
+      {showPriceVolume ? <span className="text-right">KL</span> : null}
     </div>
   )
 }

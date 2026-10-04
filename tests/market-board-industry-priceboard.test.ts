@@ -150,6 +150,18 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
   assert.doesNotMatch(source, /transition-all/)
 })
 
+test("compact Price/KL mode hides those columns and narrows every industry lane", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.match(source, /const FULL_COLUMN_WIDTH = "w-\[232px\] min-w-\[232px\] max-w-\[232px\]"/)
+  assert.match(source, /const COMPACT_COLUMN_WIDTH = "w-\[164px\] min-w-\[164px\] max-w-\[164px\]"/)
+  assert.match(source, /const columnWidth = showPriceVolume \? FULL_COLUMN_WIDTH : COMPACT_COLUMN_WIDTH/)
+  assert.match(source, /showPriceVolume \? "grid-cols-\[minmax\(34px,1fr\)_56px_54px_39px\]" : "grid-cols-\[minmax\(46px,1fr\)_58px\]"/)
+  assert.match(source, /showPriceVolume \? <span className="truncate text-right text-\[11px\] tabular-nums">\{formatPrice\(quote\?\.price\)\}<\/span> : null/)
+  assert.match(source, /showPriceVolume \? <span className="truncate text-right text-\[10px\] tabular-nums text-white\/55">\{formatVolume\(quote\?\.volume\)\}<\/span> : null/)
+  assert.match(source, /previous\.showPriceVolume === next\.showPriceVolume/)
+  assert.match(source, /pr-8 \[scrollbar-color:/)
+})
+
 test("DNSE membership parser requires exactly 30 unique valid symbols and uses provider time", () => {
   const fetchedAt = new Date("2026-10-04T06:00:00.000Z")
   const seconds = Math.floor(Date.parse("2026-10-04T05:59:30.000Z") / 1000)

@@ -80,6 +80,18 @@ test("market context can be collapsed beside Bảng ngành without unmounting it
   assert.match(boardSource, /<ChevronDown/)
 })
 
+test("Bảng ngành exposes a persisted Price/KL compact-mode toggle beside market-context visibility", () => {
+  assert.match(boardSource, /const INDUSTRY_PRICE_VOLUME_VISIBILITY_KEY = "qeoindex:industry-price-volume-visible:v1"/)
+  assert.match(boardSource, /const industryPriceVolumeStorageKey = `\$\{INDUSTRY_PRICE_VOLUME_VISIBILITY_KEY\}:\$\{userId\}`/)
+  assert.match(boardSource, /localStorage\.getItem\(industryPriceVolumeStorageKey\) !== "false"/)
+  assert.match(boardSource, /localStorage\.setItem\(industryPriceVolumeStorageKey, String\(showIndustryPriceVolume\)\)/)
+  assert.match(boardSource, /boardView === "industry" \? \([\s\S]*?Ẩn Giá\/KL[\s\S]*?Hiện Giá\/KL/)
+  assert.match(boardSource, /<EyeOff/)
+  assert.match(boardSource, /<Eye /)
+  assert.match(boardSource, /<IndustryPriceboard[\s\S]*?showPriceVolume=\{showIndustryPriceVolume\}/)
+  assert.match(priceboardSource, /pr-8 \[scrollbar-color:/)
+})
+
 test("board screenshots expand the cloned industry rail without changing visible scroll state", () => {
   assert.match(screenshotSource, /createExpandedBoardClone/)
   assert.match(screenshotSource, /originalRail\.scrollWidth/)
