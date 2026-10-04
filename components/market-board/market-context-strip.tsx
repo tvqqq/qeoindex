@@ -4,11 +4,11 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
+import { orderedImpactBars } from "@/modules/market/board/market-context-contract"
 import type {
   MarketBoardContextBootstrap,
   MarketContextIndexSeries,
   MarketImpactSnapshot,
-  orderedImpactBars,
 } from "@/modules/market/board/market-context-contract"
 import { buildMarketDepthSnapshot, MARKET_DEPTH_BUCKETS, type MarketDepthSnapshot } from "@/modules/market/board/market-depth"
 
@@ -562,7 +562,7 @@ function MarketDepthCard({
           </div>
           <p className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-1 font-ticker text-[8px] leading-none text-zinc-500" title="Chỉ cổ phiếu HOSE thuộc Top 200, có giá khớp hợp lệ của phiên hiện tại">
             <span className="truncate">Top 200 partial · Có giá {snapshot.covered}/{snapshot.total} · Thiếu {snapshot.missing}</span>
-            <span className="inline-flex shrink-0 items-center gap-1"><LivePulse active={live} />{formatAsOf(snapshot.asOf)}</span>
+            <span className="inline-flex shrink-0 items-center gap-1"><LivePulse active={live} sessionOpen={sessionOpen} />{formatAsOf(snapshot.asOf)}</span>
           </p>
         </>
       ) : (
