@@ -60,12 +60,21 @@ type FinhayForeignSnapshot = {
   sourceUpdatedAt?: string
 }
 
+type FinhayLiquiditySnapshot = {
+  symbol: string
+  value: number
+  volume?: number
+  constituentCount?: number
+  sourceUpdatedAt: string
+}
+
 type FinhayMarketContextResponse = {
   ok?: boolean
   state?: string
   provider?: string
   sampledAt?: string
   foreign?: FinhayForeignSnapshot
+  liquidity?: FinhayLiquiditySnapshot
 }
 
 
@@ -378,6 +387,7 @@ export function MarketContextStrip({
   const [bootstrap, setBootstrap] = useState<MarketContextApiResponse | null>(null)
   const [loadError, setLoadError] = useState("")
   const [finhayForeign, setFinhayForeign] = useState<(FinhayForeignSnapshot & { sampledAt: string }) | null>(null)
+  const [finhayLiquidity, setFinhayLiquidity] = useState<FinhayLiquiditySnapshot | null>(null)
   const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
   const [liquidityPoints, setLiquidityPoints] = useState<MetricPoint[]>([])
   const [foreignPoints, setForeignPoints] = useState<ForeignMetricPoint[]>([])
@@ -414,7 +424,7 @@ export function MarketContextStrip({
     let stopped = false
     let timer: ReturnType<typeof setInterval> | null = null
 
-    const loadFinhayForeign = async () => {
+    const loadFinhayContext = async () => {
       if (stopped) return
       try {
         const response = await fetch("/api/finhay/market-context", {
@@ -430,23 +440,36 @@ export function MarketContextStrip({
         const data = await response.json() as FinhayMarketContextResponse
         if (disposed) return
         const foreign = data.foreign
+        const liquidity = data.liquidity
         const buy = foreign?.buy?.value
         const sell = foreign?.sell?.value
         const sampledAt = data.sampledAt ?? ""
-        if (!response.ok || !data.ok || !foreign || !sampledAt || !finite(buy) || !finite(sell)) {
+        const liquidityValue = liquidity?.value
+        if (
+          !response.ok
+          || !data.ok
+          || !foreign
+          || !liquidity
+          || !sampledAt
+          || !finite(buy)
+          || !finite(sell)
+          || !finite(liquidityValue)
+          || !Number.isFinite(Date.parse(liquidity.sourceUpdatedAt))
+        ) {
           setFinhayForeignState("UNAVAILABLE")
           return
         }
 
         setFinhayForeign({ ...foreign, sampledAt })
+        setFinhayLiquidity(liquidity)
         setFinhayForeignState("AVAILABLE")
       } catch {
         if (!disposed) setFinhayForeignState("UNAVAILABLE")
       }
     }
 
-    void loadFinhayForeign()
-    timer = setInterval(() => void loadFinhayForeign(), 30_000)
+    void loadFinhayContext()
+    timer = setInterval(() => void loadFinhayContext(), 30_000)
     return () => {
       disposed = true
       if (timer) clearInterval(timer)
@@ -455,12 +478,22 @@ export function MarketContextStrip({
 
   const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
   const vnindexQuote = indexQuotes.VNINDEX
-  const liquidityValue = vnindexQuote?.valueTraded
-  const liquidityUpdatedAt = vnindexQuote?.updatedAt ?? ""
+  const fallbackLiquidityValue = vnindexQuote?.valueTraded
+  const fallbackLiquidityUpdatedAt = vnindexQuote?.updatedAt ?? ""
+  const hasFinhayLiquidity = Boolean(
+    finhayLiquidity
+    && contextSessionDate
+    && vietnamDateKey(finhayLiquidity.sourceUpdatedAt) === contextSessionDate
+    && finite(finhayLiquidity.value)
+    && finhayLiquidity.value >= 0,
+  )
+  const liquiditySeriesSource = hasFinhayLiquidity ? "finhay-vnindex" : "index-quote"
+  const liquidityValue = hasFinhayLiquidity ? finhayLiquidity?.value : fallbackLiquidityValue
+  const liquidityUpdatedAt = hasFinhayLiquidity ? finhayLiquidity?.sourceUpdatedAt ?? "" : fallbackLiquidityUpdatedAt
 
   useEffect(() => {
     setLiquidityPoints([])
-  }, [contextSessionDate])
+  }, [contextSessionDate, liquiditySeriesSource])
 
   useEffect(() => {
     if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate) return
@@ -550,7 +583,9 @@ export function MarketContextStrip({
         icon={<WalletCards className="h-3.5 w-3.5" />}
         accent="platinum"
         className="w-[255px]"
-        titleHint="GTGD HOSE tích lũy thực tế. Chưa có nguồn lịch sử intraday GTGD chuẩn để so aligned timestamp với phiên trước."
+        titleHint={hasFinhayLiquidity
+          ? "Finhay VNINDEX trading_value: GTGD HOSE 1D, đơn vị VND đã xác minh. Chưa có aligned intraday history của phiên trước."
+          : "Index realtime fallback. Chưa có aligned intraday GTGD history của phiên trước."}
       >
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -565,7 +600,9 @@ export function MarketContextStrip({
             )}
           </div>
         </div>
-        <div className="mt-1 text-[9px] leading-tight text-zinc-600">GTGD thực tế · phiên {contextSessionDate || "—"} · history phiên trước chưa verified</div>
+        <div className="mt-1 text-[9px] leading-tight text-zinc-600">
+          {hasFinhayLiquidity ? "Finhay full HOSE · VND verified" : "Index realtime fallback"} · phiên {contextSessionDate || "—"} · history phiên trước chưa verified
+        </div>
       </ContextCard>
 
       <IndexContextCard
