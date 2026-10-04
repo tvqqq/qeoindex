@@ -305,7 +305,14 @@ function unwrapToolResult(payload: any) {
   return result
 }
 
-export async function callFinhayTool(accessToken: string, name: string, args: Record<string, unknown>) {
+export type FinhayToolCall = {
+  name: string
+  args: Record<string, unknown>
+}
+
+export async function callFinhayTools(accessToken: string, calls: FinhayToolCall[]) {
+  if (!calls.length) return []
+
   const initialized = await mcpPost(accessToken, {
     jsonrpc: "2.0",
     id: 1,
@@ -319,13 +326,24 @@ export async function callFinhayTool(accessToken: string, name: string, args: Re
 
   const sessionId = initialized.sessionId
   await mcpPost(accessToken, { jsonrpc: "2.0", method: "notifications/initialized", params: {} }, sessionId)
-  const called = await mcpPost(accessToken, {
-    jsonrpc: "2.0",
-    id: 2,
-    method: "tools/call",
-    params: { name, arguments: args },
-  }, sessionId)
-  return unwrapToolResult(called.payload)
+
+  const results: unknown[] = []
+  for (let index = 0; index < calls.length; index += 1) {
+    const call = calls[index]
+    const called = await mcpPost(accessToken, {
+      jsonrpc: "2.0",
+      id: index + 2,
+      method: "tools/call",
+      params: { name: call.name, arguments: call.args },
+    }, sessionId)
+    results.push(unwrapToolResult(called.payload))
+  }
+  return results
+}
+
+export async function callFinhayTool(accessToken: string, name: string, args: Record<string, unknown>) {
+  const [result] = await callFinhayTools(accessToken, [{ name, args }])
+  return result
 }
 
 function asNumber(value: unknown, fallback = 0) {
