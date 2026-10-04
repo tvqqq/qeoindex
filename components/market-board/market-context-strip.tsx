@@ -297,6 +297,7 @@ function ContextCard({
   children,
   className = "",
   titleHint,
+  headerRight,
 }: {
   title: string
   icon: ReactNode
@@ -304,24 +305,28 @@ function ContextCard({
   children: ReactNode
   className?: string
   titleHint?: string
+  headerRight?: ReactNode
 }) {
   const accentClass = accent === "green"
-    ? "border-emerald-400/25"
+    ? "border-emerald-400/20"
     : accent === "purple"
-      ? "border-purple-400/30"
-      : "border-zinc-300/15"
+      ? "border-purple-400/20"
+      : "border-white/[0.10]"
 
   return (
     <section
-      className={`min-h-[142px] min-w-0 rounded-2xl border bg-[#0b0f14] px-3 py-2.5 ${accentClass} ${className}`}
+      className={`flex min-h-[128px] min-w-0 flex-col overflow-hidden rounded-[22px] border bg-[#111511] font-ticker ${accentClass} ${className}`}
       title={titleHint}
       data-market-context-card
     >
-      <header className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-        <span className="text-zinc-300">{icon}</span>
-        <span>{title}</span>
+      <header className="flex min-h-[31px] items-center gap-1.5 border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
+        <span className="shrink-0 text-emerald-400">{icon}</span>
+        <span className="min-w-0 shrink-0 truncate">{title}</span>
+        {headerRight ? <span className="ml-auto min-w-0 text-right">{headerRight}</span> : null}
       </header>
-      {children}
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-1.5">
+        {children}
+      </div>
     </section>
   )
 }
@@ -342,41 +347,41 @@ function IndexContextCard({
   const hasHistory = Boolean(series?.points.length)
   const reference = indexReference(quote)
   const hasBreadth = finite(quote?.advances) || finite(quote?.declines) || finite(quote?.unchanged)
+  const indexValue = quote && finite(quote.value)
+    ? quote.value
+    : series?.points.at(-1)?.value
+  const change = quote?.change
+  const headerRight = (
+    <span className="flex items-center justify-end gap-1.5 font-ticker tabular-nums" style={{ color }}>
+      {finite(change) ? <span className="hidden text-[11px] sm:inline">{change > 0 ? "+" : ""}{INDEX_FORMATTER.format(change)}</span> : null}
+      <span className="text-[12px] font-extrabold">{formatChange(quote?.changePercent)}</span>
+    </span>
+  )
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-mono text-[19px] font-bold leading-none text-zinc-100">
-            {quote && finite(quote.value) ? INDEX_FORMATTER.format(quote.value) : series?.points.at(-1) ? INDEX_FORMATTER.format(series.points.at(-1)!.value) : "—"}
-          </div>
-          <div className="mt-1 font-mono text-[11px] font-semibold" style={{ color }}>
-            {formatChange(quote?.changePercent)}
-          </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate font-ticker text-[16px] font-extrabold tabular-nums" style={{ color }}>
+          {finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}
         </div>
-        <div className="text-right font-mono text-[9px] leading-relaxed text-zinc-500">
-          <div>KL <span className="font-semibold text-zinc-300">{formatCompactVolume(quote?.volume)}</span></div>
-          <div>GT <span className="font-semibold text-zinc-300">{formatVndValue(quote?.valueTraded)}</span></div>
-        </div>
+        {hasBreadth ? (
+          <div className="flex shrink-0 items-center gap-1.5 font-ticker text-[9px] font-bold tabular-nums sm:gap-2.5">
+            <span className="text-emerald-400">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
+            <span className="text-amber-400">● {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
+            <span className="text-red-400">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
+          </div>
+        ) : null}
       </div>
-
-      {hasBreadth ? (
-        <div className="mt-1 flex items-center gap-2 font-mono text-[9px] font-semibold">
-          <span className="text-emerald-300">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
-          <span className="text-amber-300">■ {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
-          <span className="text-red-300">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
-        </div>
-      ) : null}
-
-      <div className="mt-1.5 h-[58px] w-full overflow-hidden rounded-lg">
+      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-1 font-ticker text-[9px] tabular-nums text-zinc-500">
+        <span>KL <strong className="font-semibold text-zinc-300">{formatCompactVolume(quote?.volume)}</strong></span>
+        <span>GT <strong className="font-semibold text-zinc-300">{formatVndValue(quote?.valueTraded)}</strong></span>
+      </div>
+      <div className="mt-auto h-[45px] w-full overflow-hidden">
         {hasHistory ? (
           <ContextLineChart values={data} color={color} reference={reference} splitAtReference />
         ) : (
-          <div className="flex h-full items-center justify-center text-[9px] text-zinc-600">Chưa có lịch sử 1m</div>
+          <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">Chưa có dữ liệu 1m</div>
         )}
-      </div>
-      <div className="mt-1 truncate text-[8px] text-zinc-600">
-        {series ? `1m · ${series.sessionDate} · ${formatAsOf(quote?.updatedAt ?? series.asOf)}` : "Index history unavailable"}
       </div>
     </>
   )
@@ -385,15 +390,15 @@ function IndexContextCard({
     <ContextCard
       title={label}
       icon={<Landmark className="h-3.5 w-3.5" />}
-      accent={label === "VNINDEX" ? "green" : "purple"}
-      className="xl:col-span-2"
-      titleHint={series?.source}
+      accent={label === "VNINDEX" ? "green" : "platinum"}
+      titleHint={series?.source ?? "Chưa xác minh được lịch sử 1m"}
+      headerRight={headerRight}
     >
       {onOpen ? (
         <button
           type="button"
           onClick={onOpen}
-          className="w-full rounded-lg text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+          className="flex w-full flex-1 flex-col text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
           aria-label="Mở biểu đồ VN-INDEX"
         >
           {body}
@@ -402,7 +407,6 @@ function IndexContextCard({
     </ContextCard>
   )
 }
-
 function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   const width = 320
   const height = 58
@@ -427,19 +431,18 @@ function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   )
 }
 
-function ImpactSide({ entry, maxAbs, positive }: { entry?: MarketImpactEntry; maxAbs: number; positive: boolean }) {
-  if (!entry) return <div className="h-3.5" />
+function ImpactSide({ entry, maxAbs, positive }: { entry: MarketImpactEntry; maxAbs: number; positive: boolean }) {
   const width = maxAbs > 0 ? Math.max(3, Math.min(100, (Math.abs(entry.contribution) / maxAbs) * 100)) : 0
   return (
-    <div className={`grid grid-cols-[34px_minmax(0,1fr)_45px] items-center gap-1 text-[8px] ${positive ? "" : "text-right"}`}>
-      <span className={`font-mono font-bold ${positive ? "text-emerald-300" : "text-red-300"}`}>{entry.symbol}</span>
-      <div className="flex h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+    <div className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)_48px] items-center gap-2 font-ticker text-[11px] tabular-nums">
+      <span className={`truncate font-extrabold ${positive ? "text-emerald-300" : "text-red-300"}`}>{entry.symbol}</span>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
         <span
-          className={`h-full rounded-full ${positive ? "bg-emerald-400/80" : "ml-auto bg-red-400/80"}`}
+          className={`h-full rounded-full ${positive ? "bg-emerald-400/90" : "ml-auto bg-red-400/90"}`}
           style={{ width: `${width}%` }}
         />
       </div>
-      <span className="font-mono tabular-nums text-zinc-400">
+      <span className="text-right font-bold text-zinc-300">
         {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
       </span>
     </div>
@@ -447,10 +450,6 @@ function ImpactSide({ entry, maxAbs, positive }: { entry?: MarketImpactEntry; ma
 }
 
 function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
-  const pairs = Array.from({ length: 8 }, (_, index) => ({
-    negative: impact.negative[index],
-    positive: impact.positive[index],
-  }))
   const maxAbs = Math.max(
     0,
     ...impact.negative.map((entry) => Math.abs(entry.contribution)),
@@ -458,19 +457,26 @@ function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
   )
 
   return (
-    <>
-      <div className="mb-1 grid grid-cols-2 gap-3 text-[8px] font-semibold uppercase tracking-wide text-zinc-600">
-        <span>Giảm điểm</span><span>Tăng điểm</span>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7">
+      <div className="min-w-0">
+        <div className="mb-2 flex items-center justify-between border-b border-red-400/15 pb-1 font-ticker text-[11px] font-bold text-red-300">
+          <span>▼ Kéo giảm VNINDEX</span>
+          <span className="tabular-nums">{impact.displayedNegativeTotal.toFixed(2)} điểm</span>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-4">
+          {impact.negative.map((entry) => <ImpactSide key={entry.symbol} entry={entry} maxAbs={maxAbs} positive={false} />)}
+        </div>
       </div>
-      <div className="space-y-[1px]">
-        {pairs.map((pair, index) => (
-          <div key={index} className="grid grid-cols-2 gap-3">
-            <ImpactSide entry={pair.negative} maxAbs={maxAbs} positive={false} />
-            <ImpactSide entry={pair.positive} maxAbs={maxAbs} positive />
-          </div>
-        ))}
+      <div className="min-w-0">
+        <div className="mb-2 flex items-center justify-between border-b border-emerald-400/15 pb-1 font-ticker text-[11px] font-bold text-emerald-300">
+          <span>▲ Kéo tăng VNINDEX</span>
+          <span className="tabular-nums">+{impact.displayedPositiveTotal.toFixed(2)} điểm</span>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-4">
+          {impact.positive.map((entry) => <ImpactSide key={entry.symbol} entry={entry} maxAbs={maxAbs} positive />)}
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
