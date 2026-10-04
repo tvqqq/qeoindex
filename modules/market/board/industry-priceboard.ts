@@ -69,6 +69,48 @@ export function reconcileIndustryColumnOrder(saved: unknown, industries: readonl
   return retained
 }
 
+export const INDUSTRY_ORDER_MAX_ITEMS = 120
+export const INDUSTRY_ORDER_MAX_LABEL_LENGTH = 96
+
+export function normalizeSavedIndustryOrder(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > INDUSTRY_ORDER_MAX_ITEMS) return null
+  const result: string[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== "string") return null
+    const label = item.trim()
+    if (!label || label.length > INDUSTRY_ORDER_MAX_LABEL_LENGTH || seen.has(label)) return null
+    seen.add(label)
+    result.push(label)
+  }
+  return result
+}
+
+function settingsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+export function readIndustryOrderFromSettings(settings: unknown): string[] | null {
+  const board = settingsRecord(settingsRecord(settings).marketBoard)
+  return normalizeSavedIndustryOrder(board.industryOrder)
+}
+
+export function mergeIndustryOrderIntoSettings(
+  settings: unknown,
+  order: readonly string[],
+): Record<string, unknown> {
+  const current = settingsRecord(settings)
+  return {
+    ...current,
+    marketBoard: {
+      ...settingsRecord(current.marketBoard),
+      industryOrder: [...order],
+    },
+  }
+}
+
 export function moveIndustryColumn(order: readonly string[], source: string, target: string) {
   const from = order.indexOf(source)
   const to = order.indexOf(target)
