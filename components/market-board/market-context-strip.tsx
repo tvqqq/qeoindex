@@ -2,11 +2,13 @@
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
 import type {
   MarketBoardContextBootstrap,
   MarketContextIndexSeries,
   MarketImpactSnapshot,
+  orderedImpactBars,
 } from "@/modules/market/board/market-context-contract"
 import { buildMarketDepthSnapshot, MARKET_DEPTH_BUCKETS, type MarketDepthSnapshot } from "@/modules/market/board/market-depth"
 
@@ -422,109 +424,75 @@ function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   )
 }
 
-function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
-  const entries = [...impact.positive, ...impact.negative]
-  const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.2
-  const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.2
-  const plotTop = 26
-  const plotHeight = 166
-  const plotBottom = plotTop + plotHeight
-  const zeroY = plotTop + plotHeight * (maxUp / (maxUp + maxDown))
-  const left = 10
-  const plotWidth = 850
-  const step = plotWidth / Math.max(1, entries.length)
-  const barWidth = Math.min(34, step * 0.66)
+function LivePulse({ active }: { active: boolean }) {
+  return active ? (
+    <span className="inline-flex items-center gap-1 text-emerald-300" title="Nguồn vừa cập nhật trong phiên">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
+      LIVE
+    </span>
+  ) : null
+}
+
+function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boolean }) {
+  const entries = orderedImpactBars(impact)
+  const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.15
+  const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
+  const totalRange = maxUp + maxDown
+  const zeroPct = (100 * maxUp) / totalRange
   const positiveTotal = Math.max(0, impact.displayedPositiveTotal)
   const negativeTotal = Math.max(0, -impact.displayedNegativeTotal)
   const sumAbs = positiveTotal + negativeTotal
-
-  const valueY = (value: number) => plotTop + (maxUp - value) / (maxUp + maxDown) * plotHeight
+  const columns = { gridTemplateColumns: `repeat(${entries.length},minmax(0,1fr))` }
   return (
     <div className="min-w-0">
       <div className="overflow-x-auto [scrollbar-color:#34414b_#111511] [scrollbar-width:thin]">
-        <svg
-          viewBox="0 0 870 224"
-          className="min-w-[620px] w-full"
-          role="img"
-          aria-label="Tác động VNINDEX: cột xanh trên trục 0 là mã kéo tăng, cột đỏ dưới trục 0 là mã kéo giảm; mỗi cột là số điểm basketInfluence thực tế"
-        >
-          <title>Tác động VNINDEX theo từng cổ phiếu (điểm)</title>
-          {entries.map((entry, index) => (
-            <rect
-              key={`stripe-${entry.symbol}`}
-              x={left + index * step}
-              y={plotTop}
-              width={step}
-              height={plotHeight}
-              fill={index % 2 === 0 ? "#ffffff" : "#94a3b8"}
-              fillOpacity={index % 2 === 0 ? 0.017 : 0.035}
-            />
-          ))}
-          {[-maxDown, -maxDown / 2, 0, maxUp / 2, maxUp].map((tick, index) => {
-            const y = valueY(tick)
-            return (
-              <line
-                key={index}
-                x1={left}
-                y1={y}
-                x2={left + plotWidth}
-                y2={y}
-                stroke={tick === 0 ? "#9ca3af" : "#6b7280"}
-                strokeOpacity={tick === 0 ? 0.8 : 0.3}
-                strokeWidth={tick === 0 ? 1.4 : 1}
-              />
-            )
-          })}
-          {entries.map((entry, index) => {
-            const value = entry.contribution
-            const endY = valueY(value)
-            const x = left + index * step + (step - barWidth) / 2
-            const positive = value > 0
-            const top = positive ? endY : zeroY
-            const height = Math.max(1, Math.abs(endY - zeroY))
-            const numberY = positive ? Math.max(plotTop - 4, top - 7) : zeroY - 6
-            return (
-              <g key={entry.symbol}>
-                <title>{`${entry.symbol}: ${value > 0 ? "+" : ""}${value.toFixed(2)} điểm`}</title>
-                <rect
-                  x={x}
-                  y={top}
-                  width={barWidth}
-                  height={height}
-                  rx={2}
-                  fill={positive ? "#28b6a6" : "#ef4e53"}
-                />
-                <text
-                  x={x + barWidth / 2}
-                  y={numberY}
-                  fontSize={13}
-                  fontWeight={800}
-                  textAnchor="middle"
-                  fill="#e5e7eb"
-                  paintOrder="stroke"
-                  stroke="#111511"
-                  strokeWidth={3}
-                >
-                  {value > 0 ? "+" : ""}{value.toFixed(2)}
-                </text>
-                <text x={x + barWidth / 2} y={plotBottom + 17} fontSize={13} fontWeight={700} textAnchor="middle" fill="#bac1c8">
-                  {entry.symbol}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
+        <div className="min-w-[570px]">
+          <div
+            className="relative grid h-[55px] border-b-0"
+            style={columns}
+            role="img"
+            aria-label="Tác động VNINDEX: cột xanh kéo tăng ở trái, cột đỏ kéo giảm ở phải; mã âm mạnh nhất đứng ngoài cùng bên phải, chung trục 0"
+          >
+            <div className="pointer-events-none absolute inset-x-0 z-10 border-t border-zinc-400/70" style={{ top: `${zeroPct}%` }} />
+            {entries.map((entry, index) => {
+              const yPct = 100 * (maxUp - entry.contribution) / totalRange
+              const barTop = Math.min(yPct, zeroPct)
+              const barHeight = Math.abs(zeroPct - yPct)
+              return (
+                <div key={entry.symbol} className={`relative min-w-0 ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}>
+                  <div
+                    className={`absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
+                    style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
+                  />
+                  <span
+                    className="absolute inset-x-0 z-20 truncate text-center font-ticker text-[9px] font-bold tabular-nums text-zinc-200"
+                    style={{ top: `calc(${entry.contribution > 0 ? barTop : zeroPct}% - 12px)` }}
+                    title={`${entry.symbol}: ${entry.contribution.toFixed(2)} điểm`}
+                  >
+                    {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="grid" style={columns}>
+            {entries.map((entry) => (
+              <span key={entry.symbol} className="truncate pt-0.5 text-center font-ticker text-[9px] font-semibold text-zinc-300">{entry.symbol}</span>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="mt-1 flex h-9 overflow-hidden rounded-lg font-ticker text-[14px] font-extrabold tabular-nums text-white" aria-label="Tổng điểm kéo tăng và kéo giảm của các mã hiển thị">
-        <div className="flex items-center justify-center bg-[#269f91]" style={{ width: `${sumAbs > 0 ? 100 * positiveTotal / sumAbs : 50}%` }}>
+      <div className="mt-1 flex h-[15px] overflow-hidden rounded font-ticker text-[10px] font-extrabold tabular-nums text-white" aria-label="Tổng điểm kéo tăng và kéo giảm của các mã hiển thị">
+        <div className="flex items-center justify-center bg-[#269f91] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * positiveTotal / sumAbs : 50}%` }}>
           +{positiveTotal.toFixed(2)}
         </div>
-        <div className="flex items-center justify-center bg-[#ed5056]" style={{ width: `${sumAbs > 0 ? 100 * negativeTotal / sumAbs : 50}%` }}>
+        <div className="flex items-center justify-center bg-[#ed5056] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * negativeTotal / sumAbs : 50}%` }}>
           −{negativeTotal.toFixed(2)}
         </div>
       </div>
-      <p className="mt-1 text-right font-ticker text-[10px] text-zinc-500">
-        Top {impact.positive.length} kéo tăng / {impact.negative.length} kéo giảm · DNSE basketInfluence · {formatAsOf(impact.asOf)}
+      <p className="mt-0.5 flex items-center justify-end gap-2 truncate font-ticker text-[8px] text-zinc-500">
+        <LivePulse active={live} />
+        <span>DNSE basketInfluence · {formatAsOf(impact.asOf)}</span>
       </p>
     </div>
   )
