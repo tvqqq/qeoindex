@@ -615,7 +615,9 @@ export function MarketContextStrip({
         setBootstrap((previous) => ({
           ...data,
           impact: data.impact ?? (
-            previous && vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)
+            previous
+              && vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)
+              && vietnamDateKey(previous.impact?.asOf ?? "") === vietnamDateKey(data.generatedAt)
               ? previous.impact
               : null
           ),
