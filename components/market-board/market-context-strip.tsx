@@ -27,6 +27,7 @@ type MarketContextIndexQuote = {
 type MarketContextStockQuote = {
   symbol: string
   price?: number
+  volume?: number
   changePercent?: number
   foreignBuyValue?: number
   foreignSellValue?: number
