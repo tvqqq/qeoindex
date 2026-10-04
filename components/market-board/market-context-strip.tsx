@@ -62,9 +62,21 @@ const INDEX_FORMATTER = new Intl.NumberFormat("vi-VN", {
   maximumFractionDigits: 2,
 })
 const VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
+const VIETNAM_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
 
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value)
+}
+
+function vietnamDateKey(updatedAt: string) {
+  const timestamp = Date.parse(updatedAt)
+  if (!Number.isFinite(timestamp)) return null
+  return VIETNAM_DATE_FORMATTER.format(new Date(timestamp))
 }
 
 function minuteBucket(updatedAt: string) {
@@ -99,7 +111,8 @@ function upsertForeignMetricPoint(current: ForeignMetricPoint[], updatedAt: stri
 
 function appendLiveIndexValue(series: MarketContextIndexSeries | undefined, quote: MarketContextIndexQuote | undefined) {
   const values = series?.points.map((point) => point.value) ?? []
-  if (!values.length || !quote || !finite(quote.value) || quote.value <= 0) return values
+  if (!values.length || !series || !quote || !finite(quote.value) || quote.value <= 0) return values
+  if (vietnamDateKey(quote.updatedAt) !== series.sessionDate) return values
   if (Math.abs(values.at(-1)! - quote.value) < 1e-6) return values
   return [...values, quote.value]
 }
@@ -339,13 +352,21 @@ export function MarketContextStrip({
     }
   }, [])
 
+  const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
   const vnindexQuote = indexQuotes.VNINDEX
   const liquidityValue = vnindexQuote?.valueTraded
   const liquidityUpdatedAt = vnindexQuote?.updatedAt ?? ""
+
   useEffect(() => {
-    if (!liquidityUpdatedAt || !finite(liquidityValue) || liquidityValue < 0) return
+    setLiquidityPoints([])
+    setForeignPoints([])
+  }, [contextSessionDate])
+
+  useEffect(() => {
+    if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate) return
+    if (!finite(liquidityValue) || liquidityValue < 0) return
     setLiquidityPoints((current) => upsertMetricPoint(current, liquidityUpdatedAt, liquidityValue))
-  }, [liquidityUpdatedAt, liquidityValue])
+  }, [contextSessionDate, liquidityUpdatedAt, liquidityValue])
 
   const foreignSnapshot = useMemo(() => {
     let buy = 0
@@ -366,14 +387,15 @@ export function MarketContextStrip({
   }, [canonicalUniverse, stockQuotes])
 
   useEffect(() => {
-    if (foreignSnapshot.covered === 0 || !foreignSnapshot.asOf) return
+    if (foreignSnapshot.covered === 0 || !foreignSnapshot.asOf || !contextSessionDate) return
+    if (vietnamDateKey(foreignSnapshot.asOf) !== contextSessionDate) return
     setForeignPoints((current) => upsertForeignMetricPoint(
       current,
       foreignSnapshot.asOf,
       foreignSnapshot.buy,
       foreignSnapshot.sell,
     ))
-  }, [foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell])
+  }, [contextSessionDate, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell])
 
   const liquidityData = liquidityPoints.map((point) => point.value)
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
@@ -412,7 +434,7 @@ export function MarketContextStrip({
             )}
           </div>
         </div>
-        <div className="mt-1 text-[9px] leading-tight text-zinc-600">GTGD thực tế · history phiên trước chưa verified</div>
+        <div className="mt-1 text-[9px] leading-tight text-zinc-600">GTGD thực tế · phiên {contextSessionDate || "—"} · history phiên trước chưa verified</div>
       </ContextCard>
 
       <IndexContextCard
