@@ -77,7 +77,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
   const change = quoteIsValid(quote) ? quote.changePercent : null
   return (
     <div
-      className="board-stock-row group flex h-[25px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/35 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
+      className="board-stock-row group flex h-[25px] items-center gap-0.5 rounded-full border border-white/[0.07] pl-1 pr-2.5 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/35 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
       style={{ backgroundColor: industryPriceboardBackground(quote) }}
     >
       <button
@@ -93,7 +93,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         type="button"
         onClick={() => onOpen(stock.ticker)}
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
-        className={`grid min-w-0 flex-1 items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[minmax(46px,1fr)_58px]"}`}
+        className={`grid min-w-0 flex-1 items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(30px,1fr)_50px_48px_34px]" : "grid-cols-[minmax(46px,1fr)_58px]"}`}
       >
         <span className="truncate font-semibold tracking-[0.01em] transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
         {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
@@ -507,7 +507,7 @@ function ColumnHeader({ label, count, average, accent, title }: { label: string;
 
 function TableLabels({ showPriceVolume }: { showPriceVolume: boolean }) {
   return (
-    <div className={`grid h-[22px] items-center gap-1 border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[14px_minmax(46px,1fr)_58px]"}`}>
+    <div className={`grid h-[22px] items-center gap-1 border-b border-white/[0.07] pl-1.5 pr-4 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_minmax(30px,1fr)_50px_48px_34px]" : "grid-cols-[14px_minmax(46px,1fr)_58px]"}`}>
       <span />
       <span>Mã</span>
       {showPriceVolume ? <span className="text-right">Giá</span> : null}
