@@ -454,11 +454,11 @@ export function MarketContextStrip({
           <div className="space-y-1">
             <div>
               <div className="text-[8px] uppercase tracking-wide text-zinc-600">Mua</div>
-              <div className="font-mono text-[11px] font-bold text-emerald-300">{formatVndValue(foreignSnapshot.buy)}</div>
+              <div className="font-mono text-[11px] font-bold text-emerald-300">{formatVndValue(foreignSnapshot.covered > 0 ? foreignSnapshot.buy : undefined)}</div>
             </div>
             <div>
               <div className="text-[8px] uppercase tracking-wide text-zinc-600">Bán</div>
-              <div className="font-mono text-[11px] font-bold text-purple-300">{formatVndValue(foreignSnapshot.sell)}</div>
+              <div className="font-mono text-[11px] font-bold text-purple-300">{formatVndValue(foreignSnapshot.covered > 0 ? foreignSnapshot.sell : undefined)}</div>
             </div>
           </div>
           <DualLineChart points={foreignPoints} />
