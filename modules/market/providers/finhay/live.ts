@@ -51,6 +51,21 @@ export interface FinhayIndexQuote {
   updatedAt: string
 }
 
+export interface FinhayMarketFlowValue {
+  volume?: number
+  value?: number
+}
+
+export interface FinhayIndexForeignTrading {
+  symbol: string
+  sessionDate: string
+  buy: FinhayMarketFlowValue
+  sell: FinhayMarketFlowValue
+  net: FinhayMarketFlowValue
+  constituentCount?: number
+  sourceUpdatedAt?: string
+}
+
 function bearerResourceMetadata(header: string | null) {
   if (!header) return ""
   const match = header.match(/resource_metadata="([^"]+)"/i)
@@ -339,6 +354,41 @@ export async function getFinhayIndexQuote(accessToken: string, symbol: string): 
     change: typeof payload?.change === "number" ? payload.change : undefined,
     changePercent: asNumber(payload?.change_percent ?? payload?.changePercent),
     updatedAt: String(payload?.updated_at ?? payload?.updatedAt ?? new Date().toISOString()),
+  }
+}
+
+function optionalFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function marketFlowValue(value: unknown): FinhayMarketFlowValue {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const record = value as Record<string, unknown>
+  return {
+    volume: optionalFiniteNumber(record.volume),
+    value: optionalFiniteNumber(record.value),
+  }
+}
+
+export async function getFinhayIndexForeignTrading(
+  accessToken: string,
+  symbol = "VNINDEX",
+): Promise<FinhayIndexForeignTrading> {
+  const raw: any = await callFinhayTool(accessToken, "get_index_foreign_trading", { symbol })
+  const sessionDate = String(raw?.date ?? "")
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    throw new Error("Finhay index foreign trading did not include a valid session date")
+  }
+
+  const normalizedSymbol = String(raw?.index ?? raw?.symbol ?? symbol).trim().toUpperCase()
+  return {
+    symbol: normalizedSymbol,
+    sessionDate,
+    buy: marketFlowValue(raw?.buy?.total),
+    sell: marketFlowValue(raw?.sell?.total),
+    net: marketFlowValue(raw?.net?.total),
+    constituentCount: optionalFiniteNumber(raw?.constituent_count),
+    sourceUpdatedAt: typeof raw?.updated_at === "string" && raw.updated_at ? raw.updated_at : undefined,
   }
 }
 
