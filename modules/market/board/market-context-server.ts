@@ -96,7 +96,7 @@ export async function fetchVnindexImpactSnapshot(): Promise<MarketImpactSnapshot
 }
 
 export async function loadMarketBoardContext(now = new Date()): Promise<MarketBoardContextBootstrap> {
-  const indexSymbols = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"] as const
+  const indexSymbols = ["VNINDEX", "VN30"] as const
   const [indexResults, impactResults] = await Promise.all([
     Promise.allSettled(indexSymbols.map((symbol) => fetchMarketContextIndexSeries(symbol, now))),
     Promise.allSettled([fetchVnindexImpactSnapshot()]),
