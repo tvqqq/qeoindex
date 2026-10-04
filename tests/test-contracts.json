@@ -459,6 +459,15 @@
       ]
     },
     {
+      "path": "tests/market-board-industry-order-api.test.ts",
+      "owner": "market",
+      "invariant": "Preserve authenticated cross-device industry ordering persistence and legacy local-cache migration.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-board-industry-priceboard.test.ts",
       "owner": "market",
       "invariant": "Preserve compact industry priceboard ordering, quote tone, VN30 membership, and hydration contracts.",

@@ -69,6 +69,48 @@ export function reconcileIndustryColumnOrder(saved: unknown, industries: readonl
   return retained
 }
 
+export const INDUSTRY_ORDER_MAX_ITEMS = 120
+export const INDUSTRY_ORDER_MAX_LABEL_LENGTH = 96
+
+export function normalizeSavedIndustryOrder(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > INDUSTRY_ORDER_MAX_ITEMS) return null
+  const result: string[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== "string") return null
+    const label = item.trim()
+    if (!label || label.length > INDUSTRY_ORDER_MAX_LABEL_LENGTH || seen.has(label)) return null
+    seen.add(label)
+    result.push(label)
+  }
+  return result
+}
+
+function settingsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+export function readIndustryOrderFromSettings(settings: unknown): string[] | null {
+  const board = settingsRecord(settingsRecord(settings).marketBoard)
+  return normalizeSavedIndustryOrder(board.industryOrder)
+}
+
+export function mergeIndustryOrderIntoSettings(
+  settings: unknown,
+  order: readonly string[],
+): Record<string, unknown> {
+  const current = settingsRecord(settings)
+  return {
+    ...current,
+    marketBoard: {
+      ...settingsRecord(current.marketBoard),
+      industryOrder: [...order],
+    },
+  }
+}
+
 export function moveIndustryColumn(order: readonly string[], source: string, target: string) {
   const from = order.indexOf(source)
   const to = order.indexOf(target)
@@ -212,10 +254,10 @@ export function industryPriceboardTone(quote?: IndustryPriceboardQuote | null): 
 export function industryPriceboardChangeIntensity(changePercent: number) {
   if (!Number.isFinite(changePercent)) return 0
   const magnitude = Math.abs(changePercent)
-  // Keep small moves quiet, then increase perceptual emphasis steadily.
-  // 7% covers the common HOSE daily limit while larger HNX/UPCOM moves cap safely.
-  const normalized = Math.min(1, magnitude / 7)
-  return 0.12 + normalized * 0.48
+  // Within ±1% use a quiet neutral ramp; 0% stays closest to the board surface.
+  if (magnitude <= 1) return 0.018 + magnitude * 0.062
+  // Beyond 1% reveal the directional tone, capped at 7% for HOSE/HNX/UPCOM.
+  return 0.12 + Math.min(1, (magnitude - 1) / 6) * 0.48
 }
 
 export function industryPriceboardBackground(quote?: IndustryPriceboardQuote | null) {
@@ -223,9 +265,12 @@ export function industryPriceboardBackground(quote?: IndustryPriceboardQuote | n
   if (tone === "ceiling") return "rgba(176, 124, 255, 0.48)"
   if (tone === "floor") return "rgba(34, 184, 207, 0.48)"
   if (tone === "unavailable") return "rgba(255, 255, 255, 0.035)"
-  if (tone === "unchanged") return "rgba(226, 185, 59, 0.13)"
 
-  const alpha = industryPriceboardChangeIntensity(quote?.changePercent ?? 0)
+  const change = quote?.changePercent ?? 0
+  const alpha = industryPriceboardChangeIntensity(change)
+  if (tone === "unchanged" || Math.abs(change) <= 1) {
+    return `rgba(255, 255, 255, ${alpha.toFixed(3)})`
+  }
   return tone === "up"
     ? `rgba(34, 201, 138, ${alpha.toFixed(3)})`
     : `rgba(255, 71, 87, ${alpha.toFixed(3)})`
