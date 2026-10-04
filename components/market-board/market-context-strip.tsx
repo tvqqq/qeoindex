@@ -383,6 +383,7 @@ function IndexContextCard({
       title={label}
       icon={<Landmark className="h-3.5 w-3.5" />}
       accent={label === "VNINDEX" ? "green" : "platinum"}
+      className="xl:h-[144px]"
       titleHint={series?.source ?? "Chưa xác minh được lịch sử 1m"}
       headerRight={headerRight}
       titleValue={<span className="font-ticker text-[14px] font-extrabold tabular-nums" style={{ color }}>{finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}</span>}
@@ -515,7 +516,7 @@ function MarketDepthCard({
       title="Độ sâu thị trường"
       icon={<BarChart3 className="h-3.5 w-3.5" />}
       accent="green"
-      className="h-full xl:h-[140px]"
+      className="h-full xl:h-[144px]"
       headerRight={<span className="font-ticker text-[9px] font-medium text-zinc-400">HOSE · Top 200: <strong className="font-ticker text-[13px] font-extrabold tabular-nums text-white">{snapshot.total}</strong></span>}
       titleHint="Phân bố realtime theo % thay đổi của các mã HOSE trong Top 200. Không phải toàn bộ HOSE."
     >
@@ -786,6 +787,7 @@ export function MarketContextStrip({
 
         <ContextCard
           title="Thanh khoản HOSE"
+          className="xl:h-[144px]"
           icon={<WalletCards className="h-3.5 w-3.5" />}
           titleHint={hasFinhayLiquidity
             ? "Finhay VNINDEX trading_value · VND verified. Không có history GTGD phiên trước theo phút."
@@ -812,6 +814,7 @@ export function MarketContextStrip({
 
         <ContextCard
           title="Mua bán nước ngoài"
+          className="xl:h-[144px]"
           icon={<Globe2 className="h-3.5 w-3.5" />}
           accent="purple"
           titleHint={hasFinhayForeign
@@ -841,16 +844,16 @@ export function MarketContextStrip({
             title="Tác động VNINDEX"
             icon={<Scale className="h-4 w-4" />}
             accent="green"
-            className="h-full"
+            className="h-full xl:h-[144px]"
             titleHint={impact?.source}
             headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
-              ? <span className="font-ticker text-[11px] text-zinc-400">Top mã hiển thị: <strong className={`text-[15px] font-extrabold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
+              ? <span className="font-ticker text-[9px] text-zinc-400">Top mã: <strong className={`text-[11px] font-bold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
               : null}
           >
             {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
               <ImpactChart impact={impact} />
             ) : (
-              <div className="flex min-h-[285px] items-center justify-center gap-2 text-[11px] text-zinc-500">
+              <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 font-ticker text-[10px] text-zinc-500">
                 <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
               </div>
             )}
