@@ -94,7 +94,7 @@ export type IndustryPriceboardLane = {
   units: number
 }
 
-export const INDUSTRY_PRICEBOARD_LANE_MAX_UNITS = 18
+export const INDUSTRY_PRICEBOARD_LANE_MAX_UNITS = 26
 
 export function industryPriceboardCardUnits(stockCount: number) {
   const normalizedCount = Number.isFinite(stockCount) ? Math.max(0, Math.floor(stockCount)) : 0
