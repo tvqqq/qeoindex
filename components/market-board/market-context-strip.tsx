@@ -84,7 +84,6 @@ type FinhayMarketContextResponse = {
 
 const MAX_LIVE_POINTS = 120
 const GREEN = "#22c98a"
-const PURPLE = "#a855f7"
 const PLATINUM = "#d4d4d8"
 const RED = "#ff4757"
 
