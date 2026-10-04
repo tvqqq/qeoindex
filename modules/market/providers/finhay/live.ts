@@ -371,9 +371,8 @@ export async function getFinhayStockQuote(accessToken: string, symbol: string): 
   }
 }
 
-export async function getFinhayIndexQuote(accessToken: string, symbol: string): Promise<FinhayIndexQuote> {
-  const raw: any = await callFinhayTool(accessToken, "get_index_quote", { index: [symbol] })
-  const payload = Array.isArray(raw) ? raw[0] : Array.isArray(raw?.data) ? raw.data[0] : raw
+export function normalizeFinhayIndexQuote(raw: unknown, symbol: string): FinhayIndexQuote {
+  const payload: any = Array.isArray(raw) ? raw[0] : Array.isArray((raw as any)?.data) ? (raw as any).data[0] : raw
   return {
     symbol: String(payload?.symbol ?? payload?.index ?? symbol).toUpperCase(),
     value: asNumber(payload?.value ?? payload?.price ?? payload?.index_value),
@@ -381,6 +380,11 @@ export async function getFinhayIndexQuote(accessToken: string, symbol: string): 
     changePercent: asNumber(payload?.change_percent ?? payload?.changePercent),
     updatedAt: String(payload?.updated_at ?? payload?.updatedAt ?? new Date().toISOString()),
   }
+}
+
+export async function getFinhayIndexQuote(accessToken: string, symbol: string): Promise<FinhayIndexQuote> {
+  const raw = await callFinhayTool(accessToken, "get_index_quote", { symbol })
+  return normalizeFinhayIndexQuote(raw, symbol)
 }
 
 function optionalFiniteNumber(value: unknown) {
