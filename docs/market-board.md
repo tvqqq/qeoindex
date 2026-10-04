@@ -63,6 +63,18 @@ The provider path tries the DNSE 5-minute chart endpoint first and falls back to
 
 Vercel runtime audit on 2026-08-21 found three 20-second timeouts across `/api/market/index-candles` and `/api/market/intraday`. The cache-first and SSR-history-reuse changes directly target the intraday portion of that failure mode.
 
+## Market context strip
+
+The top strip is now a five-part market-context surface using the QeoIndex green / purple / platinum visual language:
+
+- **VNINDEX**: latest-session real 1-minute index closes from DNSE public chart history, with the existing live VNINDEX quote appended as the transient endpoint.
+- **Thanh khoản HOSE**: actual cumulative traded value from the VNINDEX market-index quote. The mini chart contains only real values observed since the current board tab opened. The previous-session comparison stays unavailable until an authoritative intraday traded-value history source can provide aligned timestamps; QeoIndex must not estimate this as volume × close.
+- **VN30**: latest-session real 1-minute `VN30` index closes from the DNSE public index chart endpoint. This is the cash index, not VN30F1M and not an average of constituents.
+- **Mua bán nước ngoài**: cumulative buy/sell value aggregated over the canonical Top 200 quote snapshot and its live updates. The card labels this as **Top 200 partial scope**; it must not be presented as total HOSE foreign flow. Its intraday mini chart starts when the board tab opens because a verified full-session historical bootstrap is not yet available.
+- **Tác động VNINDEX**: provider-supplied `basketInfluence` values from DNSE's VNINDEX basket-influence endpoint. The compact FireAnt-style signed bars render up to eight positive and eight negative contributors. `Tổng các mã hiển thị` sums only those displayed finite provider contributions; omitted fields are not treated as zero and the canonical Top 200 is never substituted for the provider's full-index scope.
+
+`/api/market/board-context` is authenticated by the `market_board` feature gate, uses a short session-aware read-through cache, and returns partial results when one source is unavailable. VNINDEX/VN30 histories and the impact snapshot retain source/as-of metadata. The browser refreshes this bootstrap every 30 seconds while the centralized realtime quote stream continues to feed live endpoints; no extra provider WebSocket or parallel full quote store is created.
+
 ## Browser realtime path
 
 - DNSE WebSocket messages are queued and flushed on `requestAnimationFrame` instead of creating one React update per raw socket callback.
@@ -117,7 +129,7 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 - Industry columns have compact headers and quote tables with `Mã`, `Giá`, `+/- %`, and `KL`. Rows sort valid current quotes first and then by percent change descending. They do not draw mini charts; the existing classic and Top movers rows keep their chart behavior.
 - Industry row backgrounds use percent direction and bounded magnitude intensity. Ceiling/floor colors require actual provider limit prices matching the current price; no percentage-derived price limits are inferred. Missing or invalid quote values stay unavailable instead of being shown as zero.
 - VN30 members come from DNSE's live basket-influence response rather than a hardcoded list. If membership is unavailable, the column stays in its anchored position and shows an unavailable state. Partial canonical coverage is shown explicitly; complete membership adds only source/time metadata to the header title so the quote rows stay aligned.
-- The top index strip keeps its real index quote fields in separate rounded navy cards using QeoIndex green/purple accents. It does not draw synthetic fixed trend lines when no index history series is available.
+- The top market-context strip keeps VNINDEX, HOSE liquidity, VN30, foreign flow, and VNINDEX impact in separate rounded dark cards using QeoIndex green/purple/platinum accents. A mini chart is rendered only after enough real points exist; unavailable history remains an explicit text state rather than a synthetic path.
 - Strong gainers use a static border highlight; permanent pulse animation is avoided.
 - In `Bảng ngành`, the first `Theo dõi` column is always visible in the rail. It reads persisted symbols after hydration to keep the server and first client render consistent, and lets users search the canonical board universe to add symbols.
 - Filter CP reuses the same row/card components and does not introduce a second quote/history state store.
@@ -141,6 +153,7 @@ If production is still hot after this change, profile before adding more throttl
 
 - `pnpm test:board-contract` covers layout, reference-price semantics, WebSocket buffering, 250ms quote commits, 1s ordering snapshots, SSR history reuse, low-composite rendering, and sparkline memo behavior.
 - `tests/market-board-industry-priceboard.test.ts` covers raw industry labels/order reconciliation, fixed anchors and reorder operations, finite-quote sorting/averages, sign/intensity/official-limit colors, DNSE VN30 membership validation/cache bounds, and filtered realtime scope.
+- `tests/market-board-market-context.test.ts` locks verified VNINDEX/VN30 candle sources, provider `basketInfluence` normalization, displayed-only impact totals, authenticated caching, and explicit partial-state disclosure for liquidity/foreign history.
 - `tests/market-board-stock-filter-api.test.ts` covers authenticated persistence, settings merge, canonical symbol bounds, batch reconcile, and bounded snapshot fallback.
 - `tests/market-board-stock-filter-ui.test.ts` covers portal placement, modal controls, daily cache identity, filtered WS scoping, fresh-quote gating, and full-board reconcile/remount behavior.
 - `tests/market-board-filter-avg50-regression.test.ts` locks KLTB 50-session liquidity semantics, six-column KFSP grouping, bank/securities mandatory selection, and minimum-one-per-column behavior.
