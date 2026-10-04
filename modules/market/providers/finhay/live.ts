@@ -51,6 +51,29 @@ export interface FinhayIndexQuote {
   updatedAt: string
 }
 
+export interface FinhayMarketFlowValue {
+  volume?: number
+  value?: number
+}
+
+export interface FinhayIndexForeignTrading {
+  symbol: string
+  sessionDate: string
+  buy: FinhayMarketFlowValue
+  sell: FinhayMarketFlowValue
+  net: FinhayMarketFlowValue
+  constituentCount?: number
+  sourceUpdatedAt?: string
+}
+
+export interface FinhayIndexLiquidity {
+  symbol: string
+  value: number
+  volume?: number
+  constituentCount?: number
+  sourceUpdatedAt: string
+}
+
 function bearerResourceMetadata(header: string | null) {
   if (!header) return ""
   const match = header.match(/resource_metadata="([^"]+)"/i)
@@ -282,7 +305,14 @@ function unwrapToolResult(payload: any) {
   return result
 }
 
-export async function callFinhayTool(accessToken: string, name: string, args: Record<string, unknown>) {
+export type FinhayToolCall = {
+  name: string
+  args: Record<string, unknown>
+}
+
+export async function callFinhayTools(accessToken: string, calls: FinhayToolCall[]) {
+  if (!calls.length) return []
+
   const initialized = await mcpPost(accessToken, {
     jsonrpc: "2.0",
     id: 1,
@@ -296,13 +326,24 @@ export async function callFinhayTool(accessToken: string, name: string, args: Re
 
   const sessionId = initialized.sessionId
   await mcpPost(accessToken, { jsonrpc: "2.0", method: "notifications/initialized", params: {} }, sessionId)
-  const called = await mcpPost(accessToken, {
-    jsonrpc: "2.0",
-    id: 2,
-    method: "tools/call",
-    params: { name, arguments: args },
-  }, sessionId)
-  return unwrapToolResult(called.payload)
+
+  const results: unknown[] = []
+  for (let index = 0; index < calls.length; index += 1) {
+    const call = calls[index]
+    const called = await mcpPost(accessToken, {
+      jsonrpc: "2.0",
+      id: index + 2,
+      method: "tools/call",
+      params: { name: call.name, arguments: call.args },
+    }, sessionId)
+    results.push(unwrapToolResult(called.payload))
+  }
+  return results
+}
+
+export async function callFinhayTool(accessToken: string, name: string, args: Record<string, unknown>) {
+  const [result] = await callFinhayTools(accessToken, [{ name, args }])
+  return result
 }
 
 function asNumber(value: unknown, fallback = 0) {
@@ -330,15 +371,105 @@ export async function getFinhayStockQuote(accessToken: string, symbol: string): 
   }
 }
 
-export async function getFinhayIndexQuote(accessToken: string, symbol: string): Promise<FinhayIndexQuote> {
-  const raw: any = await callFinhayTool(accessToken, "get_index_quote", { index: [symbol] })
-  const payload = Array.isArray(raw) ? raw[0] : Array.isArray(raw?.data) ? raw.data[0] : raw
+export function normalizeFinhayIndexQuote(raw: unknown, symbol: string): FinhayIndexQuote {
+  const payload: any = Array.isArray(raw) ? raw[0] : Array.isArray((raw as any)?.data) ? (raw as any).data[0] : raw
   return {
     symbol: String(payload?.symbol ?? payload?.index ?? symbol).toUpperCase(),
     value: asNumber(payload?.value ?? payload?.price ?? payload?.index_value),
     change: typeof payload?.change === "number" ? payload.change : undefined,
     changePercent: asNumber(payload?.change_percent ?? payload?.changePercent),
     updatedAt: String(payload?.updated_at ?? payload?.updatedAt ?? new Date().toISOString()),
+  }
+}
+
+export async function getFinhayIndexQuote(accessToken: string, symbol: string): Promise<FinhayIndexQuote> {
+  const raw = await callFinhayTool(accessToken, "get_index_quote", { symbol })
+  return normalizeFinhayIndexQuote(raw, symbol)
+}
+
+function optionalFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function marketFlowValue(value: unknown): FinhayMarketFlowValue {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const record = value as Record<string, unknown>
+  return {
+    volume: optionalFiniteNumber(record.volume),
+    value: optionalFiniteNumber(record.value),
+  }
+}
+
+function normalizeFinhayIndexForeignTrading(raw: any, symbol: string): FinhayIndexForeignTrading {
+  const sessionDate = String(raw?.date ?? "")
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    throw new Error("Finhay index foreign trading did not include a valid session date")
+  }
+
+  const normalizedSymbol = String(raw?.index ?? raw?.symbol ?? symbol).trim().toUpperCase()
+  return {
+    symbol: normalizedSymbol,
+    sessionDate,
+    buy: marketFlowValue(raw?.buy?.total),
+    sell: marketFlowValue(raw?.sell?.total),
+    net: marketFlowValue(raw?.net?.total),
+    constituentCount: optionalFiniteNumber(raw?.constituent_count),
+    sourceUpdatedAt: typeof raw?.updated_at === "string" && raw.updated_at ? raw.updated_at : undefined,
+  }
+}
+
+function normalizeFinhayIndexLiquidity(raw: any, symbol: string): FinhayIndexLiquidity {
+  const items = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw?.data) ? raw.data : []
+  const normalizedSymbol = symbol.trim().toUpperCase()
+  const row = items.find((item: any) => String(item?.index ?? item?.symbol ?? "").trim().toUpperCase() === normalizedSymbol)
+  const value = optionalFiniteNumber(row?.trading_value)
+  const sourceUpdatedAt = typeof raw?.updated_at === "string" ? raw.updated_at : ""
+
+  if (value === undefined || value < 0 || !sourceUpdatedAt || !Number.isFinite(Date.parse(sourceUpdatedAt))) {
+    throw new Error("Finhay index liquidity did not include verified trading_value/as-of data")
+  }
+
+  return {
+    symbol: normalizedSymbol,
+    value,
+    volume: optionalFiniteNumber(row?.volume),
+    constituentCount: optionalFiniteNumber(row?.constituent_count),
+    sourceUpdatedAt,
+  }
+}
+
+const FINHAY_INDEX_LIQUIDITY_ARGS = {
+  exchange: "HOSE",
+  window: "1D",
+  fields: "index,volume,trading_value,constituent_count",
+  page: 1,
+  page_size: 50,
+} as const
+
+export async function getFinhayIndexForeignTrading(
+  accessToken: string,
+  symbol = "VNINDEX",
+): Promise<FinhayIndexForeignTrading> {
+  const raw = await callFinhayTool(accessToken, "get_index_foreign_trading", { symbol })
+  return normalizeFinhayIndexForeignTrading(raw, symbol)
+}
+
+export async function getFinhayIndexLiquidity(
+  accessToken: string,
+  symbol = "VNINDEX",
+): Promise<FinhayIndexLiquidity> {
+  const raw = await callFinhayTool(accessToken, "list_indices", FINHAY_INDEX_LIQUIDITY_ARGS)
+  return normalizeFinhayIndexLiquidity(raw, symbol)
+}
+
+export async function getFinhayIndexMarketContext(accessToken: string, symbol = "VNINDEX") {
+  const [foreignRaw, liquidityRaw] = await callFinhayTools(accessToken, [
+    { name: "get_index_foreign_trading", args: { symbol } },
+    { name: "list_indices", args: FINHAY_INDEX_LIQUIDITY_ARGS },
+  ])
+  return {
+    foreign: normalizeFinhayIndexForeignTrading(foreignRaw, symbol),
+    liquidity: normalizeFinhayIndexLiquidity(liquidityRaw, symbol),
   }
 }
 
