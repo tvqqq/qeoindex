@@ -674,7 +674,7 @@ export function MarketContextStrip({
 
   return (
     <div className="space-y-2 border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" data-market-context-index-row>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4" data-market-context-index-row>
         <IndexContextCard
           label="VNINDEX"
           quote={indexQuotes.VNINDEX}
@@ -707,8 +707,6 @@ export function MarketContextStrip({
         </ContextCard>
 
         <IndexContextCard label="VN30" quote={indexQuotes.VN30} series={bootstrap?.indexes.VN30} />
-        <IndexContextCard label="HNX" quote={indexQuotes.HNXINDEX} series={bootstrap?.indexes.HNXINDEX} />
-        <IndexContextCard label="UPCOM" quote={indexQuotes.UPCOMINDEX} series={bootstrap?.indexes.UPCOMINDEX} />
 
         <ContextCard
           title="Mua bán nước ngoài"
