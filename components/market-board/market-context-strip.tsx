@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { Activity, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 
 import { Sparkline } from "@/components/sparkline"
@@ -144,9 +144,9 @@ function ContextCard({
   titleHint,
 }: {
   title: string
-  icon: React.ReactNode
+  icon: ReactNode
   accent?: "green" | "purple" | "platinum"
-  children: React.ReactNode
+  children: ReactNode
   className?: string
   titleHint?: string
 }) {
@@ -341,10 +341,11 @@ export function MarketContextStrip({
 
   const vnindexQuote = indexQuotes.VNINDEX
   const liquidityValue = vnindexQuote?.valueTraded
+  const liquidityUpdatedAt = vnindexQuote?.updatedAt ?? ""
   useEffect(() => {
-    if (!vnindexQuote || !finite(liquidityValue) || liquidityValue < 0) return
-    setLiquidityPoints((current) => upsertMetricPoint(current, vnindexQuote.updatedAt, liquidityValue))
-  }, [liquidityValue, vnindexQuote?.updatedAt])
+    if (!liquidityUpdatedAt || !finite(liquidityValue) || liquidityValue < 0) return
+    setLiquidityPoints((current) => upsertMetricPoint(current, liquidityUpdatedAt, liquidityValue))
+  }, [liquidityUpdatedAt, liquidityValue])
 
   const foreignSnapshot = useMemo(() => {
     let buy = 0
