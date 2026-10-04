@@ -463,10 +463,6 @@ export function MarketContextStrip({
   }, [contextSessionDate])
 
   useEffect(() => {
-    setForeignPoints([])
-  }, [contextSessionDate, foreignSeriesSource])
-
-  useEffect(() => {
     if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate) return
     if (!finite(liquidityValue) || liquidityValue < 0) return
     setLiquidityPoints((current) => upsertMetricPoint(current, liquidityUpdatedAt, liquidityValue))
@@ -506,6 +502,10 @@ export function MarketContextStrip({
   const displayedForeignAsOf = hasFinhayForeign
     ? finhayForeign?.sourceUpdatedAt
     : foreignSnapshot.asOf
+
+  useEffect(() => {
+    setForeignPoints([])
+  }, [contextSessionDate, foreignSeriesSource])
 
   useEffect(() => {
     if (hasFinhayForeign) return
