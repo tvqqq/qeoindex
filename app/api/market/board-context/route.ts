@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { requireApiFeature } from "@/modules/auth/server"
 import {
   isMarketBoardContextBootstrap,
+  MARKET_CONTEXT_INDEX_SYMBOLS,
   type MarketBoardContextBootstrap,
 } from "@/modules/market/board/market-context-contract"
 import { loadMarketBoardContext } from "@/modules/market/board/market-context-server"
@@ -29,7 +30,7 @@ function vietnamDateKey(now: Date) {
 }
 
 function hasUsableContext(data: MarketBoardContextBootstrap) {
-  return Boolean(data.indexes.VNINDEX || data.indexes.VN30 || data.impact)
+  return Boolean(data.impact || MARKET_CONTEXT_INDEX_SYMBOLS.some((symbol) => data.indexes[symbol]))
 }
 
 export async function GET() {
