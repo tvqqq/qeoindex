@@ -5,7 +5,6 @@ export type MarketIndexQuote = {
   changePercent: number
   volume?: number
   valueTraded?: number
-  valueChangePercent?: number
   advances?: number
   declines?: number
   unchanged?: number
