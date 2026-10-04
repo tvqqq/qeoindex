@@ -45,7 +45,7 @@ const VPS_INDEX_MAP: Record<string, string> = {
 }
 
 export async function fetchTradingViewIndexes() {
-  const [tvResult, vpsResult, vndResult] = await Promise.allSettled([
+  const [tvResult, vpsResult] = await Promise.allSettled([
     fetch("https://scanner.tradingview.com/vietnam/scan", {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "StockOS/1.0 market-board" },
@@ -67,34 +67,11 @@ export async function fetchTradingViewIndexes() {
       cache: "no-store",
       signal: AbortSignal.timeout(5_000),
     }).then(async (r) => (r.ok ? r.json() : null)).catch(() => null),
-    fetch("https://dchart-api.vndirect.com.vn/dchart/history?resolution=D&symbol=VNINDEX&from=" + Math.floor(Date.now() / 1000 - 86400 * 10) + "&to=" + Math.floor(Date.now() / 1000), {
-      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    }).then(async (r) => (r.ok ? r.json() : null)).catch(() => null),
   ])
 
   let quotes: Record<string, MarketIndexQuote> = {}
   if (tvResult.status === "fulfilled" && tvResult.value) {
     quotes = parseTradingViewIndexes(tvResult.value)
-  }
-
-  // Calculate value change % vs yesterday from VNDirect daily history
-  let vnindexValueChangePercent: number | undefined
-  const vndData = vndResult.status === "fulfilled" ? vndResult.value : null
-  if (vndData?.t && Array.isArray(vndData.t) && vndData.t.length >= 2) {
-    const vArr = vndData.v as number[]
-    const cArr = vndData.c as number[]
-    const n = vArr.length
-    const yV = vArr[n - 2]
-    const yC = cArr[n - 2]
-    const tV = vArr[n - 1]
-    const tC = cArr[n - 1]
-    if (yV > 0 && yC > 0 && tV > 0 && tC > 0) {
-      const yesterdayEstimatedVal = yV * yC
-      const todayEstimatedVal = tV * tC
-      vnindexValueChangePercent = Number((((todayEstimatedVal - yesterdayEstimatedVal) / yesterdayEstimatedVal) * 100).toFixed(1))
-    }
   }
 
   // Enrich with official VPS index volume & value & breadth (in million VND)
@@ -127,9 +104,6 @@ export async function fetchTradingViewIndexes() {
         if (advances !== undefined) quotes[symbol].advances = advances
         if (declines !== undefined) quotes[symbol].declines = declines
         if (unchanged !== undefined) quotes[symbol].unchanged = unchanged
-        if (symbol === "VNINDEX" && vnindexValueChangePercent !== undefined) {
-          quotes[symbol].valueChangePercent = vnindexValueChangePercent
-        }
       } else if (Number.isFinite(cIndex) && cIndex > 0) {
         const change = Number.isFinite(oIndex) && oIndex > 0 ? cIndex - oIndex : 0
         const changePercent = Number.isFinite(oIndex) && oIndex > 0 ? (change / oIndex) * 100 : 0
@@ -140,7 +114,6 @@ export async function fetchTradingViewIndexes() {
           changePercent,
           volume: Number.isFinite(vol) && vol > 0 ? vol : undefined,
           valueTraded: Number.isFinite(val) && val > 0 ? val * 1_000_000 : undefined,
-          valueChangePercent: symbol === "VNINDEX" ? vnindexValueChangePercent : undefined,
           advances,
           declines,
           unchanged,
@@ -148,10 +121,6 @@ export async function fetchTradingViewIndexes() {
         }
       }
     }
-  }
-
-  if (quotes.VNINDEX && vnindexValueChangePercent !== undefined && quotes.VNINDEX.valueChangePercent === undefined) {
-    quotes.VNINDEX.valueChangePercent = vnindexValueChangePercent
   }
 
   if (!quotes.VNINDEX || !quotes.VN30) throw new Error("TradingView index scan omitted VNINDEX or VN30")
