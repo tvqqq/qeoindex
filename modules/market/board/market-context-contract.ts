@@ -54,21 +54,28 @@ function rowsFromImpactPayload(payload: unknown): unknown[] {
   return []
 }
 
+function isoFromEpochMilliseconds(milliseconds: number) {
+  const date = new Date(milliseconds)
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null
+}
+
 function providerTimestamp(value: unknown): string | null {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return new Date((value > 10_000_000_000 ? value : value * 1000)).toISOString()
+    return isoFromEpochMilliseconds(value > 10_000_000_000 ? value : value * 1000)
   }
   if (!isRecord(value)) return null
   const seconds = Number(value.seconds ?? value.Seconds)
   const nanos = Number(value.nanos ?? value.Nanos ?? 0)
   if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(nanos)) return null
-  return new Date((seconds + nanos / 1_000_000_000) * 1000).toISOString()
+  return isoFromEpochMilliseconds((seconds + nanos / 1_000_000_000) * 1000)
 }
 
 function parseImpactEntry(row: unknown): MarketImpactEntry | null {
   if (!isRecord(row)) return null
   const symbol = String(row.symbol ?? "").trim().toUpperCase()
-  const contribution = Number(row.basketInfluence)
+  const rawContribution = row.basketInfluence
+  if (rawContribution === null || rawContribution === undefined || rawContribution === "") return null
+  const contribution = Number(rawContribution)
   if (!/^[A-Z0-9]{2,12}$/.test(symbol) || !Number.isFinite(contribution)) return null
   return {
     symbol,
