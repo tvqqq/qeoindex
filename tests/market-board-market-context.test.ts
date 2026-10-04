@@ -53,11 +53,8 @@ test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and 
 test("market context bootstrap uses actual index candles and provider contribution endpoint", () => {
   assert.match(serverSource, /chart-api\/v2\/ohlcs/)
   assert.match(serverSource, /\$\{baseUrl\}\/index/)
-  assert.match(serverSource, /fetchMarketContextIndexSeries\("VNINDEX"/)
-  assert.match(serverSource, /fetchMarketContextIndexSeries\("VN30"/)
-  assert.match(serverSource, /"HNXINDEX"/)
-  assert.match(serverSource, /"UPCOMINDEX"/)
-  assert.match(serverSource, /fetchMarketContextIndexSeries\(symbol, now\)/)
+  assert.match(serverSource, /"VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"/)
+  assert.match(serverSource, /indexSymbols\.map\(\(symbol\) => fetchMarketContextIndexSeries\(symbol, now\)\)/)
   assert.match(contractSource, /"HNXINDEX", "UPCOMINDEX"/)
   assert.match(serverSource, /basket-influence\?type=VNINDEX/)
   assert.match(contractSource, /basketInfluence/)
