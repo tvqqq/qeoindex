@@ -14,6 +14,7 @@ export const MARKET_DEPTH_BUCKETS = [
 
 export type MarketDepthQuote = {
   price?: number | null
+  volume?: number | null
   changePercent?: number | null
   updatedAt?: string | null
 }
@@ -79,6 +80,11 @@ export function buildMarketDepthSnapshot(
       || typeof quote.price !== "number"
       || !Number.isFinite(quote.price)
       || quote.price <= 0
+      // Broker SSR may substitute the reference price for an untraded ticker.
+      // Require actual matched volume before counting it as a priced stock.
+      || typeof quote.volume !== "number"
+      || !Number.isFinite(quote.volume)
+      || quote.volume <= 0
       || typeof pct !== "number"
       || !Number.isFinite(pct)
       || !updatedAt
