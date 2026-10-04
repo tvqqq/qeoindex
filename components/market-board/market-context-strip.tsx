@@ -2,7 +2,9 @@
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
+import { orderedImpactBars } from "@/modules/market/board/market-context-contract"
 import type {
   MarketBoardContextBootstrap,
   MarketContextIndexSeries,
@@ -351,7 +353,8 @@ function IndexContextCard({
 }) {
   const color = marketColor(quote?.changePercent)
   const data = appendLiveIndexValue(series, quote)
-  const hasHistory = Boolean(series?.points.length)
+  const quoteDate = quote?.updatedAt ? vietnamDateKey(quote.updatedAt) : null
+  const hasHistory = Boolean(series?.points.length && (!quoteDate || series?.sessionDate === quoteDate))
   const reference = indexReference(quote)
   const indexValue = quote && finite(quote.value)
     ? quote.value
@@ -381,6 +384,7 @@ function IndexContextCard({
       title={label}
       icon={<Landmark className="h-3.5 w-3.5" />}
       accent={label === "VNINDEX" ? "green" : "platinum"}
+      className="xl:h-[144px]"
       titleHint={series?.source ?? "Chưa xác minh được lịch sử 1m"}
       headerRight={headerRight}
       titleValue={<span className="font-ticker text-[14px] font-extrabold tabular-nums" style={{ color }}>{finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}</span>}
@@ -422,109 +426,76 @@ function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   )
 }
 
-function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
-  const entries = [...impact.positive, ...impact.negative]
-  const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.2
-  const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.2
-  const plotTop = 26
-  const plotHeight = 166
-  const plotBottom = plotTop + plotHeight
-  const zeroY = plotTop + plotHeight * (maxUp / (maxUp + maxDown))
-  const left = 10
-  const plotWidth = 850
-  const step = plotWidth / Math.max(1, entries.length)
-  const barWidth = Math.min(34, step * 0.66)
+function LivePulse({ active, sessionOpen }: { active: boolean; sessionOpen: boolean }) {
+  if (active) return (
+    <span className="inline-flex items-center gap-1 text-emerald-300" title="Nguồn có timestamp mới trong phiên">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
+      LIVE
+    </span>
+  )
+  return sessionOpen ? <span className="text-amber-300" title="Timestamp nguồn chưa đủ mới">Chậm</span> : null
+}
+
+function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean }) {
+  const entries = orderedImpactBars(impact)
+  const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.15
+  const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
+  const totalRange = maxUp + maxDown
+  const zeroPct = (100 * maxUp) / totalRange
   const positiveTotal = Math.max(0, impact.displayedPositiveTotal)
   const negativeTotal = Math.max(0, -impact.displayedNegativeTotal)
   const sumAbs = positiveTotal + negativeTotal
-
-  const valueY = (value: number) => plotTop + (maxUp - value) / (maxUp + maxDown) * plotHeight
+  const columns = { gridTemplateColumns: `repeat(${entries.length},minmax(0,1fr))` }
   return (
     <div className="min-w-0">
       <div className="overflow-x-auto [scrollbar-color:#34414b_#111511] [scrollbar-width:thin]">
-        <svg
-          viewBox="0 0 870 224"
-          className="min-w-[620px] w-full"
-          role="img"
-          aria-label="Tác động VNINDEX: cột xanh trên trục 0 là mã kéo tăng, cột đỏ dưới trục 0 là mã kéo giảm; mỗi cột là số điểm basketInfluence thực tế"
-        >
-          <title>Tác động VNINDEX theo từng cổ phiếu (điểm)</title>
-          {entries.map((entry, index) => (
-            <rect
-              key={`stripe-${entry.symbol}`}
-              x={left + index * step}
-              y={plotTop}
-              width={step}
-              height={plotHeight}
-              fill={index % 2 === 0 ? "#ffffff" : "#94a3b8"}
-              fillOpacity={index % 2 === 0 ? 0.017 : 0.035}
-            />
-          ))}
-          {[-maxDown, -maxDown / 2, 0, maxUp / 2, maxUp].map((tick, index) => {
-            const y = valueY(tick)
-            return (
-              <line
-                key={index}
-                x1={left}
-                y1={y}
-                x2={left + plotWidth}
-                y2={y}
-                stroke={tick === 0 ? "#9ca3af" : "#6b7280"}
-                strokeOpacity={tick === 0 ? 0.8 : 0.3}
-                strokeWidth={tick === 0 ? 1.4 : 1}
-              />
-            )
-          })}
-          {entries.map((entry, index) => {
-            const value = entry.contribution
-            const endY = valueY(value)
-            const x = left + index * step + (step - barWidth) / 2
-            const positive = value > 0
-            const top = positive ? endY : zeroY
-            const height = Math.max(1, Math.abs(endY - zeroY))
-            const numberY = positive ? Math.max(plotTop - 4, top - 7) : zeroY - 6
-            return (
-              <g key={entry.symbol}>
-                <title>{`${entry.symbol}: ${value > 0 ? "+" : ""}${value.toFixed(2)} điểm`}</title>
-                <rect
-                  x={x}
-                  y={top}
-                  width={barWidth}
-                  height={height}
-                  rx={2}
-                  fill={positive ? "#28b6a6" : "#ef4e53"}
-                />
-                <text
-                  x={x + barWidth / 2}
-                  y={numberY}
-                  fontSize={13}
-                  fontWeight={800}
-                  textAnchor="middle"
-                  fill="#e5e7eb"
-                  paintOrder="stroke"
-                  stroke="#111511"
-                  strokeWidth={3}
-                >
-                  {value > 0 ? "+" : ""}{value.toFixed(2)}
-                </text>
-                <text x={x + barWidth / 2} y={plotBottom + 17} fontSize={13} fontWeight={700} textAnchor="middle" fill="#bac1c8">
-                  {entry.symbol}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
+        <div className="min-w-[570px]">
+          <div
+            className="relative grid h-[55px] border-b-0"
+            style={columns}
+            role="img"
+            aria-label="Tác động VNINDEX: cột xanh kéo tăng ở trái, cột đỏ kéo giảm ở phải; mã âm mạnh nhất đứng ngoài cùng bên phải, chung trục 0"
+          >
+            <div className="pointer-events-none absolute inset-x-0 z-10 border-t border-zinc-400/70" style={{ top: `${zeroPct}%` }} />
+            {entries.map((entry, index) => {
+              const yPct = 100 * (maxUp - entry.contribution) / totalRange
+              const barTop = Math.min(yPct, zeroPct)
+              const barHeight = Math.abs(zeroPct - yPct)
+              return (
+                <div key={entry.symbol} className={`relative min-w-0 ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}>
+                  <div
+                    className={`absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
+                    style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
+                  />
+                  <span
+                    className="absolute inset-x-0 z-20 truncate text-center font-ticker text-[9px] font-bold tabular-nums text-zinc-200"
+                    style={{ top: `${Math.max(0, (entry.contribution > 0 ? barTop : zeroPct) * 0.55 - 12)}px` }}
+                    title={`${entry.symbol}: ${entry.contribution.toFixed(2)} điểm`}
+                  >
+                    {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="grid" style={columns}>
+            {entries.map((entry) => (
+              <span key={entry.symbol} className="truncate pt-0.5 text-center font-ticker text-[9px] font-semibold text-zinc-300">{entry.symbol}</span>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="mt-1 flex h-9 overflow-hidden rounded-lg font-ticker text-[14px] font-extrabold tabular-nums text-white" aria-label="Tổng điểm kéo tăng và kéo giảm của các mã hiển thị">
-        <div className="flex items-center justify-center bg-[#269f91]" style={{ width: `${sumAbs > 0 ? 100 * positiveTotal / sumAbs : 50}%` }}>
+      <div className="mt-1 flex h-[15px] overflow-hidden rounded font-ticker text-[10px] font-extrabold tabular-nums text-white" aria-label="Tổng điểm kéo tăng và kéo giảm của các mã hiển thị">
+        <div className="flex items-center justify-center bg-[#269f91] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * positiveTotal / sumAbs : 50}%` }}>
           +{positiveTotal.toFixed(2)}
         </div>
-        <div className="flex items-center justify-center bg-[#ed5056]" style={{ width: `${sumAbs > 0 ? 100 * negativeTotal / sumAbs : 50}%` }}>
+        <div className="flex items-center justify-center bg-[#ed5056] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * negativeTotal / sumAbs : 50}%` }}>
           −{negativeTotal.toFixed(2)}
         </div>
       </div>
-      <p className="mt-1 text-right font-ticker text-[10px] text-zinc-500">
-        Top {impact.positive.length} kéo tăng / {impact.negative.length} kéo giảm · DNSE basketInfluence · {formatAsOf(impact.asOf)}
+      <p className="mt-0.5 flex items-center justify-end gap-2 truncate font-ticker text-[8px] text-zinc-500">
+        <LivePulse active={live} sessionOpen={sessionOpen} />
+        <span>DNSE basketInfluence · {formatAsOf(impact.asOf)}</span>
       </p>
     </div>
   )
@@ -533,27 +504,29 @@ function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
 function MarketDepthCard({
   snapshot,
   sessionDate,
+  live,
+  sessionOpen,
 }: {
   snapshot: MarketDepthSnapshot
   sessionDate: string
+  live: boolean
+  sessionOpen: boolean
 }) {
   const maxCount = Math.max(1, ...snapshot.bins)
-  const totalKnown = snapshot.advancers + snapshot.decliners + snapshot.unchanged
   const canShow = Boolean(sessionDate && snapshot.total > 0 && snapshot.covered > 0)
 
   return (
     <ContextCard
       title="Độ sâu thị trường"
-      icon={<BarChart3 className="h-4 w-4" />}
+      icon={<BarChart3 className="h-3.5 w-3.5" />}
       accent="green"
-      className="h-full"
-      headerRight={<span className="font-ticker text-right text-zinc-400"><span className="block text-[9px] uppercase tracking-wider">Mã HOSE trong Top 200</span><strong className="text-[20px] font-black tabular-nums text-white">{snapshot.total}</strong></span>}
+      className="h-full xl:h-[144px]"
+      headerRight={<span className="font-ticker text-[9px] font-medium text-zinc-400">HOSE · Top 200: <strong className="font-ticker text-[13px] font-extrabold tabular-nums text-white">{snapshot.total}</strong></span>}
       titleHint="Phân bố realtime theo % thay đổi của các mã HOSE trong Top 200. Không phải toàn bộ HOSE."
     >
-      <p className="mb-2 text-[10px] text-zinc-400">Phân bố biến động · HOSE trong Top 200</p>
       {canShow ? (
         <>
-          <div className="mt-auto grid h-[198px] grid-cols-11 items-end gap-[3px] border-b border-white/10 pb-1" role="img" aria-label="Phân bố cổ phiếu HOSE theo nhóm phần trăm biến động">
+          <div className="mt-auto grid h-[55px] shrink-0 grid-cols-11 items-end gap-[3px] border-b border-white/10" role="img" aria-label="Phân bố cổ phiếu HOSE theo 11 nhóm biến động phần trăm">
             {MARKET_DEPTH_BUCKETS.map((bucket, index) => {
               const count = snapshot.bins[index]
               const tone = bucket.tone === "down"
@@ -563,37 +536,38 @@ function MarketDepthCard({
                   : "bg-[#dec452] text-[#ead668]"
               return (
                 <div key={bucket.label} className="flex h-full min-w-0 flex-col items-center justify-end">
-                  <span className={`mb-1 font-ticker text-[11px] font-extrabold tabular-nums ${tone.split(" ")[1]}`}>{count}</span>
+                  <span className={`mb-0.5 font-ticker text-[9px] font-bold tabular-nums leading-none ${tone.split(" ")[1]}`}>{count}</span>
                   <div
-                    className={`w-full rounded-t-[9px] ${tone.split(" ")[0]}`}
-                    style={{ height: `${count === 0 ? 2 : Math.max(5, 150 * count / maxCount)}px`, opacity: count === 0 ? 0.2 : 1 }}
+                    className={`w-full rounded-t-[5px] motion-safe:transition-[height,opacity] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${tone.split(" ")[0]}`}
+                    style={{ height: `${count === 0 ? 1 : Math.max(3, 36 * count / maxCount)}px`, opacity: count === 0 ? 0.2 : 1 }}
                   />
                 </div>
               )
             })}
           </div>
-          <div className="mt-1 grid grid-cols-11 gap-[3px]">
+          <div className="mt-0.5 grid grid-cols-11 gap-[3px]">
             {MARKET_DEPTH_BUCKETS.map((bucket) => (
-              <span key={bucket.label} className="whitespace-nowrap text-center font-ticker text-[8px] text-zinc-400 sm:text-[9px]">{bucket.label}</span>
+              <span key={bucket.label} className="min-w-0 whitespace-nowrap text-center font-ticker text-[8px] leading-none text-zinc-500">{bucket.label}</span>
             ))}
           </div>
-          <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-zinc-700/60">
-            <span className="bg-[#ef5059]" style={{ width: `${100 * snapshot.decliners / Math.max(1, snapshot.total)}%` }} />
-            <span className="bg-[#dec452]" style={{ width: `${100 * snapshot.unchanged / Math.max(1, snapshot.total)}%` }} />
-            <span className="bg-[#26b965]" style={{ width: `${100 * snapshot.advancers / Math.max(1, snapshot.total)}%` }} />
+          <div className="mt-1.5 flex h-[5px] shrink-0 overflow-hidden rounded-full bg-zinc-700/60">
+            <span className="bg-[#ef5059] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.decliners / Math.max(1, snapshot.total)}%` }} />
+            <span className="bg-[#dec452] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.unchanged / Math.max(1, snapshot.total)}%` }} />
+            <span className="bg-[#26b965] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.advancers / Math.max(1, snapshot.total)}%` }} />
           </div>
-          <div className="mt-2 flex justify-between gap-1 font-ticker text-[11px] font-extrabold tabular-nums">
+          <div className="mt-1 flex justify-between gap-1 font-ticker text-[9px] font-bold tabular-nums leading-none">
             <span className="text-red-400">Giảm {snapshot.decliners}</span>
-            <span className="text-amber-300">Đứng giá {snapshot.unchanged}</span>
+            <span className="text-amber-300">Ngang {snapshot.unchanged}</span>
             <span className="text-green-400">Tăng {snapshot.advancers}</span>
           </div>
-          <p className="mt-3 border-t border-white/10 pt-2 text-[10px] text-zinc-400">
-            HOSE · Top 200 partial · Có giá {totalKnown}/{snapshot.total} · Thiếu {snapshot.missing} · {formatAsOf(snapshot.asOf)}
+          <p className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-1 font-ticker text-[8px] leading-none text-zinc-500" title="Chỉ cổ phiếu HOSE thuộc Top 200, có giá khớp hợp lệ của phiên hiện tại">
+            <span className="truncate">Top 200 partial · Có giá {snapshot.covered}/{snapshot.total} · Thiếu {snapshot.missing}</span>
+            <span className="inline-flex shrink-0 items-center gap-1"><LivePulse active={live} sessionOpen={sessionOpen} />{formatAsOf(snapshot.asOf)}</span>
           </p>
         </>
       ) : (
-        <div className="flex min-h-[195px] flex-1 items-center justify-center text-center text-[11px] text-zinc-400">
-          Chưa có đủ báo giá cùng phiên để tính độ sâu thị trường
+        <div className="flex min-h-[75px] flex-1 items-center justify-center text-center font-ticker text-[10px] text-zinc-400">
+          Chưa có đủ báo giá cùng phiên · Top 200 partial ({snapshot.covered}/{snapshot.total})
         </div>
       )}
     </ContextCard>
@@ -613,31 +587,69 @@ export function MarketContextStrip({
   const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
   const [liquidityPoints, setLiquidityPoints] = useState<MetricPoint[]>([])
   const [foreignPoints, setForeignPoints] = useState<ForeignMetricPoint[]>([])
+  const [observedAtMs, setObservedAtMs] = useState(0)
 
   useEffect(() => {
     let disposed = false
-    let timer: ReturnType<typeof setInterval> | null = null
+    let inFlight = false
+    let timer: ReturnType<typeof setTimeout> | null = null
 
     const load = async () => {
+      if (disposed || inFlight || document.visibilityState === "hidden") return
+      inFlight = true
+      setObservedAtMs(Date.now())
       try {
         const response = await fetch("/api/market/board-context", {
           cache: "no-store",
           credentials: "same-origin",
+          signal: AbortSignal.timeout(15_000),
         })
         const data = await response.json() as MarketContextApiResponse
         if (disposed) return
-        setBootstrap(data)
-        setLoadError(response.ok || data.ok ? "" : data.errors?.join("; ") || "Market context unavailable")
+        if (!response.ok || !data.ok) {
+          setLoadError(data.errors?.join("; ") || "Market context unavailable")
+          return
+        }
+        // A transient provider error must not blank a valid same-day snapshot.
+        // Retained data becomes stale (never labelled LIVE) if the source stops updating.
+        setBootstrap((previous) => ({
+          ...data,
+          impact: data.impact ?? (
+            previous
+              && vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)
+              && vietnamDateKey(previous.impact?.asOf ?? "") === vietnamDateKey(data.generatedAt)
+              ? previous.impact
+              : null
+          ),
+        }))
+        setLoadError(data.errors?.join("; ") ?? "")
       } catch (error) {
         if (!disposed) setLoadError(error instanceof Error ? error.message : "Market context unavailable")
+      } finally {
+        inFlight = false
       }
     }
 
+    const schedule = () => {
+      const ms = getMarketSessionStatus().isLiveSession ? 12_000 : 60_000
+      timer = setTimeout(async () => {
+        await load()
+        if (!disposed) schedule()
+      }, ms)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load()
+    }
+
     void load()
-    timer = setInterval(() => void load(), 30_000)
+    schedule()
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
     return () => {
       disposed = true
-      if (timer) clearInterval(timer)
+      if (timer) clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
     }
   }, [])
 
@@ -698,9 +710,12 @@ export function MarketContextStrip({
     }
   }, [])
 
-  const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate
-    ?? vietnamDateKey(indexQuotes.VNINDEX?.updatedAt ?? "")
-    ?? ""
+  const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.updatedAt ?? "")
+  const chartSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
+  // At 09:00 the minute chart may still reflect yesterday; use newer live index session.
+  const contextSessionDate = quoteSessionDate && quoteSessionDate > chartSessionDate
+    ? quoteSessionDate
+    : chartSessionDate || quoteSessionDate || ""
   const marketDepth = useMemo(
     () => buildMarketDepthSnapshot(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey),
     [canonicalUniverse, contextSessionDate, stockQuotes],
@@ -804,6 +819,18 @@ export function MarketContextStrip({
   const liquidityData = liquidityPoints.map((point) => point.value)
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
   const impact = bootstrap?.impact
+  const sessionOpen = observedAtMs > 0 && getMarketSessionStatus(new Date(observedAtMs)).isLiveSession
+  const isFresh = (asOf: string | null | undefined) => {
+    const sourceMs = Date.parse(asOf ?? "")
+    return sessionOpen
+      && contextSessionDate !== ""
+      && Number.isFinite(sourceMs)
+      && sourceMs <= observedAtMs + 5_000
+      && observedAtMs - sourceMs <= 120_000
+      && vietnamDateKey(asOf ?? "") === contextSessionDate
+  }
+  const impactLive = !loadError && isFresh(impact?.asOf)
+  const depthLive = isFresh(marketDepth.asOf)
 
   return (
     <div className="space-y-2 border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
@@ -817,6 +844,7 @@ export function MarketContextStrip({
 
         <ContextCard
           title="Thanh khoản HOSE"
+          className="xl:h-[144px]"
           icon={<WalletCards className="h-3.5 w-3.5" />}
           titleHint={hasFinhayLiquidity
             ? "Finhay VNINDEX trading_value · VND verified. Không có history GTGD phiên trước theo phút."
@@ -843,6 +871,7 @@ export function MarketContextStrip({
 
         <ContextCard
           title="Mua bán nước ngoài"
+          className="xl:h-[144px]"
           icon={<Globe2 className="h-3.5 w-3.5" />}
           accent="purple"
           titleHint={hasFinhayForeign
@@ -872,23 +901,23 @@ export function MarketContextStrip({
             title="Tác động VNINDEX"
             icon={<Scale className="h-4 w-4" />}
             accent="green"
-            className="h-full"
+            className="h-full xl:h-[144px]"
             titleHint={impact?.source}
             headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
-              ? <span className="font-ticker text-[11px] text-zinc-400">Top mã hiển thị: <strong className={`text-[15px] font-extrabold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
+              ? <span className="font-ticker text-[9px] text-zinc-400">Top mã: <strong className={`text-[11px] font-bold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
               : null}
           >
             {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-              <ImpactChart impact={impact} />
+              <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} />
             ) : (
-              <div className="flex min-h-[285px] items-center justify-center gap-2 text-[11px] text-zinc-500">
+              <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 font-ticker text-[10px] text-zinc-500">
                 <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
               </div>
             )}
           </ContextCard>
         </div>
         <div className="min-w-0" data-market-context-depth-card>
-          <MarketDepthCard snapshot={marketDepth} sessionDate={contextSessionDate} />
+          <MarketDepthCard snapshot={marketDepth} sessionDate={contextSessionDate} live={depthLive} sessionOpen={sessionOpen} />
         </div>
       </div>
     </div>
