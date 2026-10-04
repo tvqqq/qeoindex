@@ -50,6 +50,25 @@ type ForeignMetricPoint = {
 
 type MarketContextApiResponse = MarketBoardContextBootstrap & { ok?: boolean }
 
+type FinhayForeignSnapshot = {
+  symbol: string
+  sessionDate: string
+  buy: { volume?: number; value?: number }
+  sell: { volume?: number; value?: number }
+  net: { volume?: number; value?: number }
+  constituentCount?: number
+  sourceUpdatedAt?: string
+}
+
+type FinhayMarketContextResponse = {
+  ok?: boolean
+  state?: string
+  provider?: string
+  sampledAt?: string
+  foreign?: FinhayForeignSnapshot
+}
+
+
 const MAX_LIVE_POINTS = 120
 const GREEN = "#22c98a"
 const PURPLE = "#a855f7"
@@ -358,6 +377,8 @@ export function MarketContextStrip({
 }: MarketContextStripProps) {
   const [bootstrap, setBootstrap] = useState<MarketContextApiResponse | null>(null)
   const [loadError, setLoadError] = useState("")
+  const [finhayForeign, setFinhayForeign] = useState<(FinhayForeignSnapshot & { sampledAt: string }) | null>(null)
+  const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
   const [liquidityPoints, setLiquidityPoints] = useState<MetricPoint[]>([])
   const [foreignPoints, setForeignPoints] = useState<ForeignMetricPoint[]>([])
 
@@ -388,6 +409,50 @@ export function MarketContextStrip({
     }
   }, [])
 
+  useEffect(() => {
+    let disposed = false
+    let stopped = false
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const loadFinhayForeign = async () => {
+      if (stopped) return
+      try {
+        const response = await fetch("/api/finhay/market-context", {
+          cache: "no-store",
+          credentials: "same-origin",
+        })
+        if (response.status === 401 || response.status === 403) {
+          stopped = true
+          if (!disposed) setFinhayForeignState("UNAVAILABLE")
+          return
+        }
+
+        const data = await response.json() as FinhayMarketContextResponse
+        if (disposed) return
+        const foreign = data.foreign
+        const buy = foreign?.buy?.value
+        const sell = foreign?.sell?.value
+        const sampledAt = data.sampledAt ?? ""
+        if (!response.ok || !data.ok || !foreign || !sampledAt || !finite(buy) || !finite(sell)) {
+          setFinhayForeignState("UNAVAILABLE")
+          return
+        }
+
+        setFinhayForeign({ ...foreign, sampledAt })
+        setFinhayForeignState("AVAILABLE")
+      } catch {
+        if (!disposed) setFinhayForeignState("UNAVAILABLE")
+      }
+    }
+
+    void loadFinhayForeign()
+    timer = setInterval(() => void loadFinhayForeign(), 30_000)
+    return () => {
+      disposed = true
+      if (timer) clearInterval(timer)
+    }
+  }, [])
+
   const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
   const vnindexQuote = indexQuotes.VNINDEX
   const liquidityValue = vnindexQuote?.valueTraded
@@ -395,8 +460,11 @@ export function MarketContextStrip({
 
   useEffect(() => {
     setLiquidityPoints([])
-    setForeignPoints([])
   }, [contextSessionDate])
+
+  useEffect(() => {
+    setForeignPoints([])
+  }, [contextSessionDate, foreignSeriesSource])
 
   useEffect(() => {
     if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate) return
@@ -422,7 +490,25 @@ export function MarketContextStrip({
     return { buy, sell, covered, asOf }
   }, [canonicalUniverse, stockQuotes])
 
+  const hasFinhayForeign = Boolean(
+    finhayForeign
+    && contextSessionDate
+    && finhayForeign.sessionDate === contextSessionDate
+    && finite(finhayForeign.buy.value)
+    && finite(finhayForeign.sell.value),
+  )
+  const foreignSeriesSource = hasFinhayForeign ? "finhay-vnindex" : "top200-partial"
+  const displayedForeignBuy = hasFinhayForeign ? finhayForeign?.buy.value : foreignSnapshot.buy
+  const displayedForeignSell = hasFinhayForeign ? finhayForeign?.sell.value : foreignSnapshot.sell
+  const displayedForeignCoverage = hasFinhayForeign
+    ? finhayForeign?.constituentCount
+    : foreignSnapshot.covered
+  const displayedForeignAsOf = hasFinhayForeign
+    ? finhayForeign?.sourceUpdatedAt
+    : foreignSnapshot.asOf
+
   useEffect(() => {
+    if (hasFinhayForeign) return
     if (foreignSnapshot.covered === 0 || !foreignSnapshot.asOf || !contextSessionDate) return
     if (vietnamDateKey(foreignSnapshot.asOf) !== contextSessionDate) return
     setForeignPoints((current) => upsertForeignMetricPoint(
@@ -431,7 +517,16 @@ export function MarketContextStrip({
       foreignSnapshot.buy,
       foreignSnapshot.sell,
     ))
-  }, [contextSessionDate, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell])
+  }, [contextSessionDate, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell, hasFinhayForeign])
+
+  useEffect(() => {
+    if (!hasFinhayForeign || !finhayForeign || !contextSessionDate) return
+    if (vietnamDateKey(finhayForeign.sampledAt) !== contextSessionDate) return
+    const buy = finhayForeign.buy.value
+    const sell = finhayForeign.sell.value
+    if (!finite(buy) || !finite(sell)) return
+    setForeignPoints((current) => upsertForeignMetricPoint(current, finhayForeign.sampledAt, buy, sell))
+  }, [contextSessionDate, finhayForeign, hasFinhayForeign])
 
   const liquidityData = liquidityPoints.map((point) => point.value)
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
@@ -484,24 +579,36 @@ export function MarketContextStrip({
         icon={<Globe2 className="h-3.5 w-3.5" />}
         accent="purple"
         className="w-[285px]"
-        titleHint="Tổng foreign buy/sell value của canonical Top 200. Đây là partial scope, không được trình bày như toàn HOSE."
+        titleHint={hasFinhayForeign
+          ? "Finhay VNINDEX foreign trading: tổng mua/bán trên toàn universe HOSE."
+          : finhayForeignState === "UNAVAILABLE"
+            ? "Finhay full-HOSE unavailable; đang dùng foreign buy/sell của canonical Top 200 làm partial fallback."
+            : "Đang kiểm tra Finhay full-HOSE foreign flow; canonical Top 200 là fallback."}
       >
         <div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-2">
           <div className="space-y-1">
             <div>
               <div className="text-[8px] uppercase tracking-wide text-zinc-600">Mua</div>
-              <div className="font-mono text-[11px] font-bold text-emerald-300">{formatVndValue(foreignSnapshot.covered > 0 ? foreignSnapshot.buy : undefined)}</div>
+              <div className="font-mono text-[11px] font-bold text-emerald-300">
+                {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignBuy : undefined)}
+              </div>
             </div>
             <div>
               <div className="text-[8px] uppercase tracking-wide text-zinc-600">Bán</div>
-              <div className="font-mono text-[11px] font-bold text-purple-300">{formatVndValue(foreignSnapshot.covered > 0 ? foreignSnapshot.sell : undefined)}</div>
+              <div className="font-mono text-[11px] font-bold text-purple-300">
+                {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignSell : undefined)}
+              </div>
             </div>
           </div>
           <DualLineChart points={foreignPoints} />
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 text-[9px] text-zinc-600">
-          <span>Top 200 partial · {foreignSnapshot.covered}/{canonicalUniverse.length} mã</span>
-          <span>{formatAsOf(foreignSnapshot.asOf)}</span>
+          <span>
+            {hasFinhayForeign
+              ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã`
+              : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}
+          </span>
+          <span>{hasFinhayForeign ? finhayForeign?.sessionDate : formatAsOf(displayedForeignAsOf)}</span>
         </div>
       </ContextCard>
 
