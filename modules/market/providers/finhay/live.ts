@@ -66,6 +66,14 @@ export interface FinhayIndexForeignTrading {
   sourceUpdatedAt?: string
 }
 
+export interface FinhayIndexLiquidity {
+  symbol: string
+  value: number
+  volume?: number
+  constituentCount?: number
+  sourceUpdatedAt: string
+}
+
 function bearerResourceMetadata(header: string | null) {
   if (!header) return ""
   const match = header.match(/resource_metadata="([^"]+)"/i)
@@ -389,6 +397,36 @@ export async function getFinhayIndexForeignTrading(
     net: marketFlowValue(raw?.net?.total),
     constituentCount: optionalFiniteNumber(raw?.constituent_count),
     sourceUpdatedAt: typeof raw?.updated_at === "string" && raw.updated_at ? raw.updated_at : undefined,
+  }
+}
+
+export async function getFinhayIndexLiquidity(
+  accessToken: string,
+  symbol = "VNINDEX",
+): Promise<FinhayIndexLiquidity> {
+  const raw: any = await callFinhayTool(accessToken, "list_indices", {
+    exchange: "HOSE",
+    window: "1D",
+    fields: "index,volume,trading_value,constituent_count",
+    page: 1,
+    page_size: 50,
+  })
+  const items = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw?.data) ? raw.data : []
+  const normalizedSymbol = symbol.trim().toUpperCase()
+  const row = items.find((item: any) => String(item?.index ?? item?.symbol ?? "").trim().toUpperCase() === normalizedSymbol)
+  const value = optionalFiniteNumber(row?.trading_value)
+  const sourceUpdatedAt = typeof raw?.updated_at === "string" ? raw.updated_at : ""
+
+  if (value === undefined || value < 0 || !sourceUpdatedAt || !Number.isFinite(Date.parse(sourceUpdatedAt))) {
+    throw new Error("Finhay index liquidity did not include verified trading_value/as-of data")
+  }
+
+  return {
+    symbol: normalizedSymbol,
+    value,
+    volume: optionalFiniteNumber(row?.volume),
+    constituentCount: optionalFiniteNumber(row?.constituent_count),
+    sourceUpdatedAt,
   }
 }
 
