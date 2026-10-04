@@ -7,6 +7,7 @@ import { parseVnindexImpactPayload } from "../modules/market/board/market-contex
 const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 const stripSource = readFileSync(new URL("../components/market-board/market-context-strip.tsx", import.meta.url), "utf8")
 const serverSource = readFileSync(new URL("../modules/market/board/market-context-server.ts", import.meta.url), "utf8")
+const contractSource = readFileSync(new URL("../modules/market/board/market-context-contract.ts", import.meta.url), "utf8")
 const providerSource = readFileSync(new URL("../modules/market/providers/tradingview/index.ts", import.meta.url), "utf8")
 const routeSource = readFileSync(new URL("../app/api/market/board-context/route.ts", import.meta.url), "utf8")
 
@@ -50,7 +51,7 @@ test("market context bootstrap uses actual index candles and provider contributi
   assert.match(serverSource, /fetchMarketContextIndexSeries\("VNINDEX"/)
   assert.match(serverSource, /fetchMarketContextIndexSeries\("VN30"/)
   assert.match(serverSource, /basket-influence\?type=VNINDEX/)
-  assert.match(serverSource, /basketInfluence/)
+  assert.match(contractSource, /basketInfluence/)
   assert.doesNotMatch(serverSource, /constituent.*average|changePercent.*weight/i)
 })
 
