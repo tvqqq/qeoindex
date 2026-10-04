@@ -1471,7 +1471,7 @@ export function LiveMarketBoard({
                   setBoardView(nextView)
                   document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
                 }}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/12 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
               >
                 <ViewIcon className={`h-3.5 w-3.5 ${isSelected ? "text-brand" : "text-muted-2"}`} />
                 <span>{label}</span>
