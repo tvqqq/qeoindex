@@ -501,27 +501,27 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
 function MarketDepthCard({
   snapshot,
   sessionDate,
+  live,
 }: {
   snapshot: MarketDepthSnapshot
   sessionDate: string
+  live: boolean
 }) {
   const maxCount = Math.max(1, ...snapshot.bins)
-  const totalKnown = snapshot.advancers + snapshot.decliners + snapshot.unchanged
   const canShow = Boolean(sessionDate && snapshot.total > 0 && snapshot.covered > 0)
 
   return (
     <ContextCard
       title="Độ sâu thị trường"
-      icon={<BarChart3 className="h-4 w-4" />}
+      icon={<BarChart3 className="h-3.5 w-3.5" />}
       accent="green"
-      className="h-full"
-      headerRight={<span className="font-ticker text-right text-zinc-400"><span className="block text-[9px] uppercase tracking-wider">Mã HOSE trong Top 200</span><strong className="text-[20px] font-black tabular-nums text-white">{snapshot.total}</strong></span>}
+      className="h-full xl:h-[140px]"
+      headerRight={<span className="font-ticker text-[9px] font-medium text-zinc-400">HOSE · Top 200: <strong className="font-ticker text-[13px] font-extrabold tabular-nums text-white">{snapshot.total}</strong></span>}
       titleHint="Phân bố realtime theo % thay đổi của các mã HOSE trong Top 200. Không phải toàn bộ HOSE."
     >
-      <p className="mb-2 text-[10px] text-zinc-400">Phân bố biến động · HOSE trong Top 200</p>
       {canShow ? (
         <>
-          <div className="mt-auto grid h-[198px] grid-cols-11 items-end gap-[3px] border-b border-white/10 pb-1" role="img" aria-label="Phân bố cổ phiếu HOSE theo nhóm phần trăm biến động">
+          <div className="mt-auto grid h-[55px] shrink-0 grid-cols-11 items-end gap-[3px] border-b border-white/10" role="img" aria-label="Phân bố cổ phiếu HOSE theo 11 nhóm biến động phần trăm">
             {MARKET_DEPTH_BUCKETS.map((bucket, index) => {
               const count = snapshot.bins[index]
               const tone = bucket.tone === "down"
@@ -531,37 +531,38 @@ function MarketDepthCard({
                   : "bg-[#dec452] text-[#ead668]"
               return (
                 <div key={bucket.label} className="flex h-full min-w-0 flex-col items-center justify-end">
-                  <span className={`mb-1 font-ticker text-[11px] font-extrabold tabular-nums ${tone.split(" ")[1]}`}>{count}</span>
+                  <span className={`mb-0.5 font-ticker text-[9px] font-bold tabular-nums leading-none ${tone.split(" ")[1]}`}>{count}</span>
                   <div
-                    className={`w-full rounded-t-[9px] ${tone.split(" ")[0]}`}
-                    style={{ height: `${count === 0 ? 2 : Math.max(5, 150 * count / maxCount)}px`, opacity: count === 0 ? 0.2 : 1 }}
+                    className={`w-full rounded-t-[5px] motion-safe:transition-[height,opacity] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${tone.split(" ")[0]}`}
+                    style={{ height: `${count === 0 ? 1 : Math.max(3, 36 * count / maxCount)}px`, opacity: count === 0 ? 0.2 : 1 }}
                   />
                 </div>
               )
             })}
           </div>
-          <div className="mt-1 grid grid-cols-11 gap-[3px]">
+          <div className="mt-0.5 grid grid-cols-11 gap-[3px]">
             {MARKET_DEPTH_BUCKETS.map((bucket) => (
-              <span key={bucket.label} className="whitespace-nowrap text-center font-ticker text-[8px] text-zinc-400 sm:text-[9px]">{bucket.label}</span>
+              <span key={bucket.label} className="min-w-0 whitespace-nowrap text-center font-ticker text-[8px] leading-none text-zinc-500">{bucket.label}</span>
             ))}
           </div>
-          <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-zinc-700/60">
-            <span className="bg-[#ef5059]" style={{ width: `${100 * snapshot.decliners / Math.max(1, snapshot.total)}%` }} />
-            <span className="bg-[#dec452]" style={{ width: `${100 * snapshot.unchanged / Math.max(1, snapshot.total)}%` }} />
-            <span className="bg-[#26b965]" style={{ width: `${100 * snapshot.advancers / Math.max(1, snapshot.total)}%` }} />
+          <div className="mt-1.5 flex h-[5px] shrink-0 overflow-hidden rounded-full bg-zinc-700/60">
+            <span className="bg-[#ef5059] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.decliners / Math.max(1, snapshot.total)}%` }} />
+            <span className="bg-[#dec452] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.unchanged / Math.max(1, snapshot.total)}%` }} />
+            <span className="bg-[#26b965] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.advancers / Math.max(1, snapshot.total)}%` }} />
           </div>
-          <div className="mt-2 flex justify-between gap-1 font-ticker text-[11px] font-extrabold tabular-nums">
+          <div className="mt-1 flex justify-between gap-1 font-ticker text-[9px] font-bold tabular-nums leading-none">
             <span className="text-red-400">Giảm {snapshot.decliners}</span>
-            <span className="text-amber-300">Đứng giá {snapshot.unchanged}</span>
+            <span className="text-amber-300">Ngang {snapshot.unchanged}</span>
             <span className="text-green-400">Tăng {snapshot.advancers}</span>
           </div>
-          <p className="mt-3 border-t border-white/10 pt-2 text-[10px] text-zinc-400">
-            HOSE · Top 200 partial · Có giá {totalKnown}/{snapshot.total} · Thiếu {snapshot.missing} · {formatAsOf(snapshot.asOf)}
+          <p className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-1 font-ticker text-[8px] leading-none text-zinc-500" title="Chỉ cổ phiếu HOSE thuộc Top 200, có giá khớp hợp lệ của phiên hiện tại">
+            <span className="truncate">Top 200 partial · Có giá {snapshot.covered}/{snapshot.total} · Thiếu {snapshot.missing}</span>
+            <span className="inline-flex shrink-0 items-center gap-1"><LivePulse active={live} />{formatAsOf(snapshot.asOf)}</span>
           </p>
         </>
       ) : (
-        <div className="flex min-h-[195px] flex-1 items-center justify-center text-center text-[11px] text-zinc-400">
-          Chưa có đủ báo giá cùng phiên để tính độ sâu thị trường
+        <div className="flex min-h-[75px] flex-1 items-center justify-center text-center font-ticker text-[10px] text-zinc-400">
+          Chưa có đủ báo giá cùng phiên · Top 200 partial ({snapshot.covered}/{snapshot.total})
         </div>
       )}
     </ContextCard>
