@@ -11,6 +11,7 @@ import {
   industryPriceboardBackground,
   moveIndustryColumn,
   moveIndustryColumnBy,
+  packIndustryLanes,
   reconcileIndustryColumnOrder,
   sortIndustryStocksByPerformance,
   type IndustryPriceboardQuote,
@@ -71,7 +72,10 @@ type CompactStockRowProps = {
 const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen }: CompactStockRowProps) {
   const change = quoteIsValid(quote) ? quote.changePercent : null
   return (
-    <div className="board-stock-row flex h-[22px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1" style={{ backgroundColor: industryPriceboardBackground(quote) }}>
+    <div
+      className="board-stock-row group flex h-[22px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/25 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
+      style={{ backgroundColor: industryPriceboardBackground(quote) }}
+    >
       <button
         type="button"
         aria-label={watched ? `Bỏ ${stock.ticker} khỏi Theo dõi` : `Thêm ${stock.ticker} vào Theo dõi`}
@@ -87,7 +91,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
         className="grid min-w-0 flex-1 grid-cols-[minmax(31px,1fr)_52px_49px_34px] items-center gap-1 text-left font-sans text-[11px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
       >
-        <span className="truncate font-bold tracking-[0.01em]">{stock.ticker}</span>
+        <span className="truncate font-bold tracking-[0.01em] transition-colors group-hover:text-white">{stock.ticker}</span>
         <span className="truncate text-right tabular-nums">{formatPrice(quote?.price)}</span>
         <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
@@ -305,6 +309,11 @@ export function IndustryPriceboard({
     return new Map([...byIndustry].map(([industry, stocks]) => [industry, sortIndustryStocksByPerformance(stocks, orderingQuotes)]))
   }, [industries, orderingQuotes, visibleUniverse])
 
+  const industryLanes = useMemo(
+    () => packIndustryLanes(industryOrder, industryStocks),
+    [industryOrder, industryStocks],
+  )
+
   const reorderByKeyboard = useCallback((industry: string, offset: -1 | 1) => {
     setIndustryOrder((previous) => moveIndustryColumnBy(previous, industry, offset))
   }, [])
@@ -395,57 +404,65 @@ export function IndustryPriceboard({
           )}
         </section>
 
-        {industryOrder.map((industry) => {
-          const stocks = industryStocks.get(industry) ?? []
-          const average = averagePriceboardChange(stocks, orderingQuotes)
-          const isDragging = draggingColumn === industry
-          const isDropTarget = hoveredColumn === industry && draggingColumn !== industry
-          return (
-            <section
-              key={industry}
-              data-industry-column={industry}
-              data-market-board-industry-column
-              className={`${COLUMN_WIDTH} flex shrink-0 flex-col rounded-[15px] border bg-[#0b0f14] ${isDropTarget ? "border-brand/70" : "border-white/[0.10]"} ${isDragging ? "opacity-60" : ""}`}
-            >
-              <header
-                className="flex h-[32px] shrink-0 touch-none select-none items-center gap-1.5 border-b border-white/[0.07] px-2"
-                onPointerDown={(event) => beginDrag(event, industry)}
-              >
-                <button
-                  type="button"
-                  draggable={false}
-                  aria-label={`Kéo để sắp xếp ngành ${industry}; dùng mũi tên trái phải để di chuyển`}
-                  title="Kéo để đổi thứ tự; dùng ←/→ khi dùng bàn phím"
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowLeft") {
-                      event.preventDefault()
-                      reorderByKeyboard(industry, -1)
-                    } else if (event.key === "ArrowRight") {
-                      event.preventDefault()
-                      reorderByKeyboard(industry, 1)
-                    } else if (event.key === "Home") {
-                      event.preventDefault()
-                      setIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous[0] ?? industry))
-                    } else if (event.key === "End") {
-                      event.preventDefault()
-                      setIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous.at(-1) ?? industry))
-                    }
-                  }}
-                  className="flex h-6 w-4 shrink-0 touch-none items-center justify-center text-brand focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+        {industryLanes.map((lane, laneIndex) => (
+          <div
+            key={`industry-lane-${laneIndex}`}
+            className={`${COLUMN_WIDTH} flex shrink-0 flex-col gap-[9px]`}
+            data-market-board-industry-lane
+          >
+            {lane.industries.map((industry) => {
+              const stocks = industryStocks.get(industry) ?? []
+              const average = averagePriceboardChange(stocks, orderingQuotes)
+              const isDragging = draggingColumn === industry
+              const isDropTarget = hoveredColumn === industry && draggingColumn !== industry
+              return (
+                <section
+                  key={industry}
+                  data-industry-column={industry}
+                  data-market-board-industry-column
+                  className={`flex w-full flex-col rounded-[15px] border bg-[#0b0f14] ${isDropTarget ? "border-brand/70" : "border-white/[0.10]"} ${isDragging ? "opacity-60" : ""}`}
                 >
-                  <GripVertical className="h-3.5 w-3.5" />
-                </button>
-                <BarChart3 className="h-3 w-3 shrink-0 text-brand" />
-                <h2 className="min-w-0 flex-1 truncate font-sans text-[11px] font-bold text-foreground" title={industry}>{industry}</h2>
-                <span className={`shrink-0 font-mono text-[10px] font-semibold tabular-nums ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
-                  {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
-                </span>
-              </header>
-              <TableLabels />
-              <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} />
-            </section>
-          )
-        })}
+                  <header
+                    className="flex h-[32px] shrink-0 touch-none select-none items-center gap-1.5 border-b border-white/[0.07] px-2"
+                    onPointerDown={(event) => beginDrag(event, industry)}
+                  >
+                    <button
+                      type="button"
+                      draggable={false}
+                      aria-label={`Kéo để sắp xếp ngành ${industry}; dùng mũi tên trái phải để di chuyển`}
+                      title="Kéo để đổi thứ tự; dùng ←/→ khi dùng bàn phím"
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowLeft") {
+                          event.preventDefault()
+                          reorderByKeyboard(industry, -1)
+                        } else if (event.key === "ArrowRight") {
+                          event.preventDefault()
+                          reorderByKeyboard(industry, 1)
+                        } else if (event.key === "Home") {
+                          event.preventDefault()
+                          setIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous[0] ?? industry))
+                        } else if (event.key === "End") {
+                          event.preventDefault()
+                          setIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous.at(-1) ?? industry))
+                        }
+                      }}
+                      className="flex h-6 w-4 shrink-0 touch-none items-center justify-center text-brand focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
+                    </button>
+                    <BarChart3 className="h-3 w-3 shrink-0 text-brand" />
+                    <h2 className="min-w-0 flex-1 truncate font-sans text-[11px] font-bold text-foreground" title={industry}>{industry}</h2>
+                    <span className={`shrink-0 font-mono text-[10px] font-semibold tabular-nums ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
+                      {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
+                    </span>
+                  </header>
+                  <TableLabels />
+                  <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} />
+                </section>
+              )
+            })}
+          </div>
+        ))}
       </div>
 
       <div className="flex items-center justify-end gap-2 pb-1 pr-1">
