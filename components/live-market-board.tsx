@@ -68,6 +68,11 @@ export type IndexQuote = {
 type BoardMode = "sector" | "movers"
 type BoardView = "classic" | "industry"
 
+const MARKET_UI_COMMIT_MS = 250
+const MARKET_ORDERING_REFRESH_MS = 1000
+const SSR_HISTORY_COVERAGE_MIN = 0.95
+const EMPTY_HISTORY: number[] = []
+
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type IntradayHistoryResponse = {
   ok: boolean
