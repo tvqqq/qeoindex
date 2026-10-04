@@ -3,22 +3,21 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
-  BarChart3,
   Camera,
   ChartNoAxesCombined,
   Check,
   ChevronUp,
   CircleAlert,
-  Coins,
   Building2,
   Factory,
-  Globe2,
   Landmark,
   Layers,
   LayoutGrid,
   Loader2,
   RefreshCw,
   Search,
+  Table2,
+  PanelsTopLeft,
   ShoppingBag,
   Star,
   TrendingUp,
@@ -68,39 +67,6 @@ export type IndexQuote = {
 }
 type BoardMode = "sector" | "movers"
 type BoardView = "classic" | "industry"
-
-const BOARD_VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
-const BOARD_TRADED_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const BOARD_MARKET_VALUE_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 })
-const MARKET_UI_COMMIT_MS = 250
-const MARKET_ORDERING_REFRESH_MS = 1000
-const SSR_HISTORY_COVERAGE_MIN = 0.95
-const EMPTY_HISTORY: number[] = []
-
-function formatExactVolume(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
-  return BOARD_VOLUME_FORMATTER.format(value)
-}
-
-function formatExactTradedValue(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
-  const billions = value / 1_000_000_000
-  return `${BOARD_TRADED_VALUE_FORMATTER.format(billions)} tỷ`
-}
-
-function formatMarketValue(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "—"
-  const abs = Math.abs(value)
-  if (abs >= 1_000_000_000) {
-    const billions = abs / 1_000_000_000
-    return `${billions >= 100 ? billions.toFixed(0) : billions.toFixed(1)}b`
-  }
-  if (abs >= 1_000_000) {
-    const millions = abs / 1_000_000
-    return `${BOARD_MARKET_VALUE_FORMATTER.format(millions)}m`
-  }
-  return BOARD_VOLUME_FORMATTER.format(abs)
-}
 
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type IntradayHistoryResponse = {
@@ -1459,35 +1425,6 @@ export function LiveMarketBoard({
   }, [])
   const openIndexChart = useCallback(() => setIndexChartOpen(true), [])
 
-  const { totalUniverseVolume, totalUniverseValue, totalForeignNet } = useMemo(() => {
-    let vol = 0
-    let val = 0
-    let net = 0
-    for (const stock of universe) {
-      const q = displayQuotes[stock.ticker] as LiveStockQuote | undefined
-      if (q) {
-        if (q.volume && q.volume > 0) {
-          vol += q.volume
-          if (q.price && q.price > 0) {
-            val += q.volume * q.price * 1000
-          }
-        }
-        if (typeof q.foreignNetValue === "number" && Number.isFinite(q.foreignNetValue)) {
-          net += q.foreignNetValue
-        }
-      }
-    }
-    return { totalUniverseVolume: vol, totalUniverseValue: val, totalForeignNet: net }
-  }, [universe, displayQuotes])
-
-  const vnindexQuote = quotes.VNINDEX as IndexQuote | undefined
-  const vnindexVolume = vnindexQuote?.volume ?? (totalUniverseVolume > 0 ? totalUniverseVolume : undefined)
-  const vnindexValue = vnindexQuote?.valueTraded ?? (totalUniverseValue > 0 ? totalUniverseValue : undefined)
-
-  const vnindexAdv = vnindexQuote?.advances ?? advances
-  const vnindexDec = vnindexQuote?.declines ?? declines
-  const vnindexUnc = vnindexQuote?.unchanged ?? Math.max(0, universe.length - advances - declines)
-
   const indexQuotes = useMemo<Record<string, IndexQuote | undefined>>(() => ({
     VNINDEX: quotes.VNINDEX as IndexQuote | undefined,
     VN30: quotes.VN30 as IndexQuote | undefined,
@@ -1506,66 +1443,44 @@ export function LiveMarketBoard({
       <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#090d12] px-3 py-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-full border border-white/[0.10] bg-[#0b0f14] px-3 py-1">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-brand/30 bg-brand/10 text-brand">
-              <Coins className="h-3 w-3" />
-            </div>
-            <div className="flex items-center gap-1.5 font-mono text-xs">
-              <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng KL</span>
-              <span className="font-bold text-foreground">
-                {vnindexVolume !== undefined ? formatExactVolume(vnindexVolume) : "—"}
-              </span>
-            </div>
-            <div className="h-3 w-px bg-white/[0.1] hidden sm:block" />
-            <div className="flex items-center gap-1.5 font-mono text-xs">
-              <span className="text-[11px] text-muted-2 font-sans font-medium">Tổng GT</span>
-              <span className="font-bold text-foreground">
-                {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
-              </span>
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-2 rounded-full border border-white/[0.10] bg-[#0b0f14] px-3 py-1 md:flex">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-cyan-300">
-              <BarChart3 className="h-3 w-3" />
-            </div>
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="text-[11px] text-muted-2 font-sans font-medium">Độ rộng</span>
-              <span className="font-bold text-up flex items-center gap-0.5" title="Mã tăng">
-                ▲ {vnindexAdv}
-              </span>
-              <span className="font-bold text-ref flex items-center gap-0.5" title="Mã tham chiếu">
-                ■ {vnindexUnc}
-              </span>
-              <span className="font-bold text-down flex items-center gap-0.5" title="Mã giảm">
-                ▼ {vnindexDec}
-              </span>
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-2 rounded-full border border-white/[0.10] bg-[#0b0f14] px-3 py-1 lg:flex">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-ceiling/30 bg-ceiling-dim text-ceiling">
-              <Globe2 className="h-3 w-3" />
-            </div>
-            <div className="flex items-center gap-1.5 font-mono text-xs">
-              <span className="text-[11px] text-muted-2 font-sans font-medium">Khối ngoại</span>
-              <span
-                className={`font-bold ${
-                  totalForeignNet > 0
-                    ? "text-up"
-                    : totalForeignNet < 0
-                      ? "text-down"
-                      : "text-muted-2"
-                }`}
+        <div role="tablist" aria-label="Kiểu bảng giá" className="flex items-center rounded-xl border border-white/[0.10] bg-[#0b0f14] p-0.5">
+          {(["classic", "industry"] as const).map((view) => {
+            const isSelected = boardView === view
+            const label = view === "classic" ? "Bảng điện" : "Bảng ngành"
+            const targetId = `market-board-view-${view}-tab`
+            const ViewIcon = view === "classic" ? Table2 : PanelsTopLeft
+            return (
+              <button
+                key={view}
+                id={targetId}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls="market-board-view-panel"
+                tabIndex={isSelected ? 0 : -1}
+                disabled={boardViewHydratedKey !== boardViewStorageKey}
+                onClick={() => setBoardView(view)}
+                onKeyDown={(event) => {
+                  let nextView: BoardView | null = null
+                  if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = view === "classic" ? "industry" : "classic"
+                  else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = view === "industry" ? "classic" : "industry"
+                  else if (event.key === "Home") nextView = "classic"
+                  else if (event.key === "End") nextView = "industry"
+                  if (!nextView) return
+                  event.preventDefault()
+                  setBoardView(nextView)
+                  document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
+                }}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/12 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
               >
-                {totalForeignNet !== 0 ? `${totalForeignNet > 0 ? "+" : "-"}${formatMarketValue(totalForeignNet)}` : "0b"}
-              </span>
-            </div>
-          </div>
+                <ViewIcon className={`h-3.5 w-3.5 ${isSelected ? "text-brand" : "text-muted-2"}`} />
+                <span>{label}</span>
+              </button>
+            )
+          })}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {boardView === "classic" ? (
             <button
               type="button"
@@ -1581,41 +1496,6 @@ export function LiveMarketBoard({
             </button>
           ) : null}
 
-          <div role="tablist" aria-label="Kiểu bảng giá" className="flex items-center rounded-full border border-white/[0.10] bg-[#0b0f14] p-0.5">
-            {(["classic", "industry"] as const).map((view) => {
-              const isSelected = boardView === view
-              const label = view === "classic" ? "Bảng điện" : "Bảng ngành"
-              const targetId = `market-board-view-${view}-tab`
-              return (
-                <button
-                  key={view}
-                  id={targetId}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  aria-controls="market-board-view-panel"
-                  tabIndex={isSelected ? 0 : -1}
-                  disabled={boardViewHydratedKey !== boardViewStorageKey}
-                  onClick={() => setBoardView(view)}
-                  onKeyDown={(event) => {
-                    let nextView: BoardView | null = null
-                    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = view === "classic" ? "industry" : "classic"
-                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = view === "industry" ? "classic" : "industry"
-                    else if (event.key === "Home") nextView = "classic"
-                    else if (event.key === "End") nextView = "industry"
-                    if (!nextView) return
-                    event.preventDefault()
-                    setBoardView(nextView)
-                    document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
-                  }}
-                  className={`flex h-7 items-center rounded-full px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/10 text-white" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-
           <div className="relative min-w-[140px] sm:w-[180px]">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
             <input
@@ -1629,22 +1509,14 @@ export function LiveMarketBoard({
           <div className="flex items-center rounded-full border border-white/[0.10] bg-[#0b0f14] p-0.5">
             <button
               onClick={() => setMode("sector")}
-              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${
-                mode === "sector"
-                  ? "border border-white/[0.12] bg-white/[0.08] font-semibold text-white"
-                  : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
-              }`}
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${mode === "sector" ? "border border-white/[0.12] bg-white/[0.08] font-semibold text-white" : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"}`}
             >
               <LayoutGrid className="h-3 w-3" />
               <span>Tất cả</span>
             </button>
             <button
               onClick={() => setMode("movers")}
-              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${
-                mode === "movers"
-                  ? "border border-white/[0.12] bg-white/[0.08] font-semibold text-white"
-                  : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"
-              }`}
+              className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${mode === "movers" ? "border border-white/[0.12] bg-white/[0.08] font-semibold text-white" : "text-muted-2 hover:text-foreground hover:bg-white/[0.04]"}`}
             >
               <ChartNoAxesCombined className="h-3 w-3" />
               <span>Top movers</span>
@@ -1652,7 +1524,6 @@ export function LiveMarketBoard({
           </div>
         </div>
       </div>
-
       {streamState !== "LIVE" && streamError ? (
         <div className="flex items-center gap-2 border-b border-ref/30 bg-[#0b0f14] px-3.5 py-1.5 text-xs text-ref">
           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-ref" />
