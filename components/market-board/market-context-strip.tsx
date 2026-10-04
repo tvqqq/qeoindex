@@ -583,31 +583,67 @@ export function MarketContextStrip({
   const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
   const [liquidityPoints, setLiquidityPoints] = useState<MetricPoint[]>([])
   const [foreignPoints, setForeignPoints] = useState<ForeignMetricPoint[]>([])
+  const [observedAtMs, setObservedAtMs] = useState(0)
 
   useEffect(() => {
     let disposed = false
-    let timer: ReturnType<typeof setInterval> | null = null
+    let inFlight = false
+    let timer: ReturnType<typeof setTimeout> | null = null
 
     const load = async () => {
+      if (disposed || inFlight || document.visibilityState === "hidden") return
+      inFlight = true
+      setObservedAtMs(Date.now())
       try {
         const response = await fetch("/api/market/board-context", {
           cache: "no-store",
           credentials: "same-origin",
+          signal: AbortSignal.timeout(15_000),
         })
         const data = await response.json() as MarketContextApiResponse
         if (disposed) return
-        setBootstrap(data)
-        setLoadError(response.ok || data.ok ? "" : data.errors?.join("; ") || "Market context unavailable")
+        if (!response.ok || !data.ok) {
+          setLoadError(data.errors?.join("; ") || "Market context unavailable")
+          return
+        }
+        // A transient provider error must not blank a valid same-day snapshot.
+        // Retained data becomes stale (never labelled LIVE) if the source stops updating.
+        setBootstrap((previous) => ({
+          ...data,
+          impact: data.impact ?? (
+            previous && vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)
+              ? previous.impact
+              : null
+          ),
+        }))
+        setLoadError(data.errors?.join("; ") ?? "")
       } catch (error) {
         if (!disposed) setLoadError(error instanceof Error ? error.message : "Market context unavailable")
+      } finally {
+        inFlight = false
       }
     }
 
+    const schedule = () => {
+      const ms = getMarketSessionStatus().isLiveSession ? 12_000 : 60_000
+      timer = setTimeout(async () => {
+        await load()
+        if (!disposed) schedule()
+      }, ms)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load()
+    }
+
     void load()
-    timer = setInterval(() => void load(), 30_000)
+    schedule()
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
     return () => {
       disposed = true
-      if (timer) clearInterval(timer)
+      if (timer) clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
     }
   }, [])
 
