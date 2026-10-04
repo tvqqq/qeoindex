@@ -104,7 +104,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
       </button>
     </div>
   )
-}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch)
+}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch && previous.showPriceVolume === next.showPriceVolume)
 
 function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen, showPriceVolume }: {
   stocks: readonly IndustryPriceboardStock[]
