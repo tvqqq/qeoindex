@@ -31,24 +31,26 @@ test("depth counts only dated valid HOSE prices actually available in canonical 
     { ticker: "FPT", exchange: "HOSE" },
     { ticker: "HPG", exchange: "HOSE" },
     { ticker: "MBB", exchange: "HOSE" },
+    { ticker: "PNJ", exchange: "HOSE" },
     { ticker: "VIC", exchange: "HOSE" }, // duplicate ticker should count once
     { ticker: "SHS", exchange: "HNX" },
     { ticker: "OIL", exchange: "UPCOM" },
   ]
   const fresh = "2026-10-02T14:57:00+07:00"
   const quotes = {
-    VIC: { price: 105.5, changePercent: 6.5, updatedAt: fresh },
-    VCB: { price: 59, changePercent: -1.7, updatedAt: fresh },
-    FPT: { price: 97, changePercent: 0, updatedAt: fresh },
-    HPG: { price: 0, changePercent: 2.2, updatedAt: fresh }, // invalid price
-    MBB: { price: 26.5, changePercent: -2.1, updatedAt: "2026-10-01T14:59:00+07:00" },
-    SHS: { price: 18, changePercent: 8.3, updatedAt: fresh },
-    OIL: { price: 15, changePercent: -4.5, updatedAt: fresh },
+    VIC: { price: 105.5, volume: 1_100_000, changePercent: 6.5, updatedAt: fresh },
+    VCB: { price: 59, volume: 200_000, changePercent: -1.7, updatedAt: fresh },
+    FPT: { price: 97, volume: 1_200_000, changePercent: 0, updatedAt: fresh },
+    HPG: { price: 0, volume: 1_000, changePercent: 2.2, updatedAt: fresh }, // invalid price
+    MBB: { price: 26.5, volume: 200_000, changePercent: -2.1, updatedAt: "2026-10-01T14:59:00+07:00" },
+    PNJ: { price: 90, volume: 0, changePercent: 0, updatedAt: fresh }, // reference-only quote must be missing
+    SHS: { price: 18, volume: 50_000, changePercent: 8.3, updatedAt: fresh },
+    OIL: { price: 15, volume: 50_000, changePercent: -4.5, updatedAt: fresh },
   }
   const result = buildMarketDepthSnapshot(stocks, quotes, "2026-10-02", sessionDay)
-  assert.equal(result.total, 5)
+  assert.equal(result.total, 6)
   assert.equal(result.covered, 3)
-  assert.equal(result.missing, 2)
+  assert.equal(result.missing, 3)
   assert.equal(result.advancers, 1)
   assert.equal(result.decliners, 1)
   assert.equal(result.unchanged, 1)
@@ -61,7 +63,7 @@ test("depth counts only dated valid HOSE prices actually available in canonical 
 
 test("depth never pretends missing session or non-HOSE universe is full market", () => {
   const stocks = [{ ticker: "PVS", exchange: "HNX" }, { ticker: "VCB", exchange: "HOSE" }]
-  const quotes = { VCB: { price: 62, changePercent: 0, updatedAt: "2026-10-02T14:57:00+07:00" } }
+  const quotes = { VCB: { price: 62, volume: 200_000, changePercent: 0, updatedAt: "2026-10-02T14:57:00+07:00" } }
   const noSession = buildMarketDepthSnapshot(stocks, quotes, "", sessionDay)
   assert.deepEqual([noSession.total, noSession.covered, noSession.missing], [1, 0, 1])
   assert.equal(noSession.asOf, null)
