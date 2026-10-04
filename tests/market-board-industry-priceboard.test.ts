@@ -10,7 +10,10 @@ import {
   industryPriceboardTone,
   moveIndustryColumn,
   moveIndustryColumnBy,
+  mergeIndustryOrderIntoSettings,
+  normalizeSavedIndustryOrder,
   packIndustryLanes,
+  readIndustryOrderFromSettings,
   reconcileIndustryColumnOrder,
   sortIndustryStocksByPerformance,
 } from "../modules/market/board/industry-priceboard.ts"
@@ -48,6 +51,33 @@ test("saved industry order reconciles duplicate, removed, and newly discovered r
     ["Điện", "Ngân hàng", "Bán lẻ"],
   )
   assert.deepEqual(reconcileIndustryColumnOrder("corrupt", ["Ngân hàng", "Bán lẻ"]), ["Ngân hàng", "Bán lẻ"])
+})
+
+test("authenticated industry ordering is validated, preserved, and reconciled across device universes", () => {
+  assert.equal(normalizeSavedIndustryOrder(null), null)
+  assert.equal(normalizeSavedIndustryOrder(["Điện", "Điện"]), null)
+  assert.equal(normalizeSavedIndustryOrder(["", "Ngân hàng"]), null)
+  assert.equal(normalizeSavedIndustryOrder([12]), null)
+  assert.equal(normalizeSavedIndustryOrder(Array.from({ length: 121 }, (_, index) => `N${index}`)), null)
+  assert.deepEqual(normalizeSavedIndustryOrder([" Chứng khoán ", "Ngân hàng"]), ["Chứng khoán", "Ngân hàng"])
+
+  const initial = {
+    locale: "vi",
+    marketBoard: { stockFilter: { sectors: ["Ngân hàng"] }, otherPreference: "unchanged" },
+    chartLayout: { period: "1D" },
+  }
+  const saved = mergeIndustryOrderIntoSettings(initial, ["Cao su", "Chứng khoán"])
+  assert.deepEqual(readIndustryOrderFromSettings(saved), ["Cao su", "Chứng khoán"])
+  assert.deepEqual(saved.marketBoard, {
+    stockFilter: { sectors: ["Ngân hàng"] },
+    otherPreference: "unchanged",
+    industryOrder: ["Cao su", "Chứng khoán"],
+  })
+  assert.equal(saved.locale, "vi")
+  assert.deepEqual(saved.chartLayout, { period: "1D" })
+  assert.deepEqual(reconcileIndustryColumnOrder(readIndustryOrderFromSettings(saved), ["Ngân hàng", "Cao su", "Chứng khoán", "Dịch vụ"]), [
+    "Cao su", "Chứng khoán", "Ngân hàng", "Dịch vụ",
+  ])
 })
 
 test("fixed anchors remain outside industry reorder actions", () => {
@@ -120,9 +150,18 @@ test("row tones scale monotonically with percent and only use actual provider ce
   assert.ok(medium < strong)
   assert.equal(industryPriceboardChangeIntensity(7), industryPriceboardChangeIntensity(15))
   assert.equal(industryPriceboardChangeIntensity(3), industryPriceboardChangeIntensity(-3))
-  assert.ok(quiet >= 0.12)
+  assert.ok(quiet >= 0.018)
   assert.ok(strong <= 0.6)
 
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: 0 }), "rgba(255, 255, 255, 0.018)")
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: 0.5 }), "rgba(255, 255, 255, 0.049)")
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: -0.5 }), "rgba(255, 255, 255, 0.049)")
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: 1 }), "rgba(255, 255, 255, 0.080)")
+  assert.equal(industryPriceboardBackground({ price: 10, changePercent: -1 }), "rgba(255, 255, 255, 0.080)")
+  assert.match(industryPriceboardBackground({ price: 10, changePercent: 1.1 }), /^rgba\\(34, 201, 138, /)
+  assert.match(industryPriceboardBackground({ price: 10, changePercent: -1.1 }), /^rgba\\(255, 71, 87, /)
+  assert.ok(industryPriceboardChangeIntensity(0) < industryPriceboardChangeIntensity(0.5))
+  assert.ok(industryPriceboardChangeIntensity(0.5) < industryPriceboardChangeIntensity(1))
   assert.notEqual(industryPriceboardBackground({ price: 10, changePercent: 4 }), industryPriceboardBackground({ price: 10, changePercent: 0.2 }))
   assert.equal(industryPriceboardBackground({ price: 10, changePercent: 3, reference: 9, ceiling: 10 }), "rgba(176, 124, 255, 0.48)")
   assert.equal(industryPriceboardBackground({ price: 10, changePercent: -3, reference: 11, floor: 10 }), "rgba(34, 184, 207, 0.48)")
