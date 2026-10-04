@@ -58,7 +58,7 @@ test("classic Bảng điện remains the default with the original six sector gr
 })
 
 test("market context fills the board width and the freed summary row starts with icon board-view tabs", () => {
-  assert.match(contextStripSource, /sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6/)
+  assert.match(contextStripSource, /sm:grid-cols-2 xl:grid-cols-4/)
   assert.match(contextStripSource, /data-market-context-index-row/)
   assert.match(contextStripSource, /data-market-context-impact-row/)
   assert.match(contextStripSource, /min-h-\[31px\]/)

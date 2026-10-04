@@ -18,7 +18,7 @@ const NO_STORE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
 }
-const CACHE_NAMESPACE = "market-board-context-v1"
+const CACHE_NAMESPACE = "market-board-context-v2"
 
 function vietnamDateKey(now: Date) {
   return new Intl.DateTimeFormat("en-CA", {

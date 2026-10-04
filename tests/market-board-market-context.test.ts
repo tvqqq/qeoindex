@@ -53,9 +53,11 @@ test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and 
 test("market context bootstrap uses actual index candles and provider contribution endpoint", () => {
   assert.match(serverSource, /chart-api\/v2\/ohlcs/)
   assert.match(serverSource, /\$\{baseUrl\}\/index/)
-  assert.match(serverSource, /"VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"/)
+  assert.match(serverSource, /"VNINDEX", "VN30"/)
+  assert.doesNotMatch(serverSource, /HNXINDEX|UPCOMINDEX/)
   assert.match(serverSource, /indexSymbols\.map\(\(symbol\) => fetchMarketContextIndexSeries\(symbol, now\)\)/)
-  assert.match(contractSource, /"HNXINDEX", "UPCOMINDEX"/)
+  assert.match(contractSource, /MARKET_CONTEXT_INDEX_SYMBOLS = \["VNINDEX", "VN30"\] as const/)
+  assert.doesNotMatch(contractSource, /HNXINDEX|UPCOMINDEX/)
   assert.match(serverSource, /basket-influence\?type=VNINDEX/)
   assert.match(contractSource, /basketInfluence/)
   assert.doesNotMatch(serverSource, /constituent.*average|changePercent.*weight/i)
@@ -80,8 +82,13 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.match(stripSource, /formatVndValue\(quote\?\.valueTraded\)/)
   assert.match(stripSource, /quote\?\.advances/)
   assert.match(stripSource, /quote\?\.declines/)
-  assert.match(stripSource, /indexQuotes\.HNXINDEX/)
-  assert.match(stripSource, /indexQuotes\.UPCOMINDEX/)
+  assert.doesNotMatch(stripSource, /indexQuotes\.HNXINDEX|indexQuotes\.UPCOMINDEX/)
+  const topRow = stripSource.split("data-market-context-index-row>")[1]?.split("data-market-context-impact-row")[0]
+  assert.ok(topRow)
+  assert.equal((topRow.match(/<IndexContextCard\b/g) ?? []).length, 2)
+  assert.equal((topRow.match(/<ContextCard\b/g) ?? []).length, 2)
+  assert.match(topRow, /label="VNINDEX"[\s\S]*title="Thanh khoản HOSE"[\s\S]*label="VN30"[\s\S]*title="Mua bán nước ngoài"/)
+  assert.doesNotMatch(topRow, /label="HNX"|label="UPCOM"/)
   assert.match(stripSource, /data-market-context-index-row/)
   assert.match(stripSource, /data-market-context-impact-row/)
   assert.match(stripSource, /grid-flow-col sm:grid-cols-2 sm:grid-rows-4/)
@@ -95,6 +102,7 @@ test("market context API is authenticated, cached, and refreshes faster during t
   assert.match(routeSource, /readThroughUiCache/)
   assert.match(routeSource, /session\.isLiveSession \? 10/)
   assert.match(routeSource, /shouldCache: hasUsableContext/)
+  assert.match(routeSource, /market-board-context-v2/)
 })
 
 
