@@ -162,7 +162,9 @@ export function IndustryPriceboard({
   const [syncState, setSyncState] = useState<"loading" | "saved" | "saving" | "error" | "offline">("loading")
   const orderIdentity = `${storageKey}:${industries.join("\u001f")}`
   const activeIdentityRef = useRef(orderIdentity)
-  activeIdentityRef.current = orderIdentity
+  useLayoutEffect(() => {
+    activeIdentityRef.current = orderIdentity
+  }, [orderIdentity])
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
   const latestSaveRef = useRef(0)
 
