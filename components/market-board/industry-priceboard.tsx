@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { BarChart3, GripVertical, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
+import { getSectorIcon } from "@/components/stock-identity"
 import {
   averagePriceboardChange,
   defaultIndustryColumnOrder,
@@ -38,7 +39,7 @@ type IndustryPriceboardProps = {
 const INDUSTRY_ORDER_KEY = "qeoindex:market-board-industry-order:v1"
 const PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
-const COLUMN_WIDTH = "w-[220px] min-w-[220px] max-w-[220px]"
+const COLUMN_WIDTH = "w-[232px] min-w-[232px] max-w-[232px]"
 
 function formatPrice(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
@@ -73,7 +74,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
   const change = quoteIsValid(quote) ? quote.changePercent : null
   return (
     <div
-      className="board-stock-row group flex h-[22px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/25 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
+      className="board-stock-row group flex h-[25px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/25 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
       style={{ backgroundColor: industryPriceboardBackground(quote) }}
     >
       <button
@@ -89,14 +90,14 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         type="button"
         onClick={() => onOpen(stock.ticker)}
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
-        className="grid min-w-0 flex-1 grid-cols-[minmax(31px,1fr)_52px_49px_34px] items-center gap-1 text-left font-sans text-[11px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+        className="grid min-w-0 flex-1 grid-cols-[minmax(34px,1fr)_56px_54px_39px] items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
       >
         <span className="truncate font-bold tracking-[0.01em] transition-colors group-hover:text-white">{stock.ticker}</span>
         <span className="truncate text-right tabular-nums">{formatPrice(quote?.price)}</span>
         <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
         </span>
-        <span className="truncate text-right text-[10px] tabular-nums text-white/50">{formatVolume(quote?.volume)}</span>
+        <span className="truncate text-right text-[11px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span>
       </button>
     </div>
   )
@@ -109,7 +110,7 @@ function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpe
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
 }) {
-  if (stocks.length === 0) return <div className="px-2 py-4 text-center text-[10px] text-muted-2">Chưa có mã phù hợp</div>
+  if (stocks.length === 0) return <div className="px-2 py-4 text-center text-[11px] text-muted-2">Chưa có mã phù hợp</div>
   return <div className="space-y-[2px] p-1">{stocks.map((stock) => (
     <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} />
   ))}</div>
@@ -370,7 +371,7 @@ export function IndustryPriceboard({
                         stableToggleWatch(stock.ticker)
                         setWatchQuery("")
                       }}
-                      className="flex h-6 w-full items-center justify-between rounded px-1.5 font-mono text-[10px] text-foreground hover:bg-white/[0.06]"
+                      className="flex h-7 w-full items-center justify-between rounded px-1.5 font-mono text-[11px] text-foreground hover:bg-white/[0.06]"
                     >
                       <span>{stock.ticker}</span><span className="text-brand">+ Theo dõi</span>
                     </button>
@@ -392,7 +393,7 @@ export function IndustryPriceboard({
             title={vn30Membership ? `Nguồn: ${vn30Membership.source}; dữ liệu lúc ${vn30Membership.asOf}; tải lúc ${vn30Membership.fetchedAt}` : "Nguồn VN30 hiện không khả dụng"}
           />
           {vn30Membership && matchedMembershipCount < vn30Membership.symbols.length ? (
-            <div className="min-h-[19px] border-b border-white/[0.06] px-2 py-1 font-sans text-[8px] leading-tight text-ref">
+            <div className="min-h-[20px] border-b border-white/[0.06] px-2 py-1 font-sans text-[9px] leading-tight text-ref">
               Phủ {matchedMembershipCount}/{vn30Membership.symbols.length} mã trong danh sách hiện tại
             </div>
           ) : null}
@@ -400,7 +401,7 @@ export function IndustryPriceboard({
           {vn30Membership ? (
             <StockRows stocks={vn30Stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} />
           ) : (
-            <div className="px-2 py-4 text-center text-[10px] text-muted-2">Không có dữ liệu VN30</div>
+            <div className="px-2 py-4 text-center text-[11px] text-muted-2">Không có dữ liệu VN30</div>
           )}
         </section>
 
@@ -413,6 +414,7 @@ export function IndustryPriceboard({
             {lane.industries.map((industry) => {
               const stocks = industryStocks.get(industry) ?? []
               const average = averagePriceboardChange(stocks, orderingQuotes)
+              const IndustryIcon = getSectorIcon(industry)
               const isDragging = draggingColumn === industry
               const isDropTarget = hoveredColumn === industry && draggingColumn !== industry
               return (
@@ -450,9 +452,9 @@ export function IndustryPriceboard({
                     >
                       <GripVertical className="h-3.5 w-3.5" />
                     </button>
-                    <BarChart3 className="h-3 w-3 shrink-0 text-brand" />
-                    <h2 className="min-w-0 flex-1 truncate font-sans text-[11px] font-bold text-foreground" title={industry}>{industry}</h2>
-                    <span className={`shrink-0 font-mono text-[10px] font-semibold tabular-nums ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300"><IndustryIcon className="h-3.5 w-3.5" /></span>
+                    <h2 className="min-w-0 flex-1 truncate font-sans text-[12px] font-bold text-foreground" title={industry}>{industry}</h2>
+                    <span className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
                       {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
                     </span>
                   </header>
@@ -466,8 +468,8 @@ export function IndustryPriceboard({
       </div>
 
       <div className="flex items-center justify-end gap-2 pb-1 pr-1">
-        <span className="text-[9px] text-muted-2">Kéo biểu tượng ⋮⋮ hoặc dùng phím mũi tên để sắp xếp ngành</span>
-        <button type="button" onClick={resetOrder} className="flex h-6 items-center gap-1 rounded border border-white/[0.12] px-2 text-[9px] text-muted-2 transition-colors hover:border-brand/50 hover:text-foreground">
+        <span className="text-[10px] text-muted-2">Kéo biểu tượng ⋮⋮ hoặc dùng phím mũi tên để sắp xếp ngành</span>
+        <button type="button" onClick={resetOrder} className="flex h-7 items-center gap-1 rounded border border-white/[0.12] px-2 text-[10px] text-muted-2 transition-colors hover:border-brand/50 hover:text-foreground">
           <RotateCcw className="h-2.5 w-2.5" /> Đặt lại thứ tự
         </button>
       </div>
@@ -487,9 +489,9 @@ function ColumnHeader({ label, count, average, accent, title }: { label: string;
   return (
     <header className="flex h-[32px] shrink-0 items-center gap-1.5 border-b border-white/[0.07] px-2" title={title}>
       {isWatch ? <Star className="h-3 w-3 shrink-0 fill-amber-300 text-amber-300" /> : <BarChart3 className="h-3 w-3 shrink-0 text-brand" />}
-      <h2 className="min-w-0 flex-1 truncate font-sans text-[11px] font-bold text-foreground">{label}</h2>
-      <span className="shrink-0 font-mono text-[9px] text-muted-2">{count}</span>
-      <span className={`shrink-0 font-mono text-[10px] font-semibold tabular-nums ${averageTone(average)}`}>
+      <h2 className="min-w-0 flex-1 truncate font-sans text-[12px] font-bold text-foreground">{label}</h2>
+      <span className="shrink-0 font-mono text-[10px] text-muted-2">{count}</span>
+      <span className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${averageTone(average)}`}>
         {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
       </span>
     </header>
@@ -498,7 +500,7 @@ function ColumnHeader({ label, count, average, accent, title }: { label: string;
 
 function TableLabels() {
   return (
-    <div className="grid h-[20px] grid-cols-[14px_minmax(31px,1fr)_52px_49px_34px] items-center gap-1 border-b border-white/[0.07] px-1.5 font-sans text-[9px] text-muted-2">
+    <div className="grid h-[22px] grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px] items-center gap-1 border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2">
       <span />
       <span>Mã</span>
       <span className="text-right">Giá</span>
