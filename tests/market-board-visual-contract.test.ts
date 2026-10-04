@@ -67,6 +67,19 @@ test("market context fills the board width and the freed summary row starts with
   assert.doesNotMatch(boardSource, />Khối ngoại</)
 })
 
+test("market context can be collapsed beside Bảng ngành without unmounting its realtime state", () => {
+  assert.match(boardSource, /const MARKET_CONTEXT_VISIBILITY_KEY = "qeoindex:market-context-visible:v1"/)
+  assert.match(boardSource, /const marketContextVisibilityStorageKey = `\$\{MARKET_CONTEXT_VISIBILITY_KEY\}:\$\{userId\}`/)
+  assert.match(boardSource, /localStorage\.getItem\(marketContextVisibilityStorageKey\) !== "false"/)
+  assert.match(boardSource, /localStorage\.setItem\(marketContextVisibilityStorageKey, String\(showMarketContext\)\)/)
+  assert.match(boardSource, /id="market-board-context-panel" hidden=\{!showMarketContext\}[\s\S]*?<MarketContextStrip/)
+  assert.match(boardSource, /type="checkbox"[\s\S]*?checked=\{showMarketContext\}[\s\S]*?aria-controls="market-board-context-panel"/)
+  assert.match(boardSource, /Ẩn chỉ số/)
+  assert.match(boardSource, /Hiện chỉ số/)
+  assert.match(boardSource, /<ChevronUp/)
+  assert.match(boardSource, /<ChevronDown/)
+})
+
 test("board screenshots expand the cloned industry rail without changing visible scroll state", () => {
   assert.match(screenshotSource, /createExpandedBoardClone/)
   assert.match(screenshotSource, /originalRail\.scrollWidth/)
