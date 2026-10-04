@@ -139,6 +139,17 @@ test("industry board reuses Insights sector icons and increases compact-board ty
   assert.match(source, /w-\[232px\] min-w-\[232px\] max-w-\[232px\]/)
 })
 
+test("compact stock rows protect price/volume fit and strengthen hover affordance", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.match(source, /formatPrice\(quote\?\.price\)[\s\S]*?text-\[11px\]/)
+  assert.match(source, /text-\[10px\] tabular-nums text-white\/55/)
+  assert.match(source, /space-y-\[4px\]/)
+  assert.match(source, /hover:border-white\/35/)
+  assert.match(source, /hover:shadow-\[0_0_0_1px_rgba\(255,255,255,0\.10\)\]/)
+  assert.match(source, /font-semibold[\s\S]*?group-hover:font-extrabold/)
+  assert.doesNotMatch(source, /transition-all/)
+})
+
 test("DNSE membership parser requires exactly 30 unique valid symbols and uses provider time", () => {
   const fetchedAt = new Date("2026-10-04T06:00:00.000Z")
   const seconds = Math.floor(Date.parse("2026-10-04T05:59:30.000Z") / 1000)
