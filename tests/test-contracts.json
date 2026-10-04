@@ -459,6 +459,15 @@
       ]
     },
     {
+      "path": "tests/market-board-market-context.test.ts",
+      "owner": "market",
+      "invariant": "Preserve verified Market Board context sources, partial-data disclosure, and displayed-only VNINDEX impact totals.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-board-stock-filter-api.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market board stock filter api contract.",
