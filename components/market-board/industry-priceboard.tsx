@@ -74,7 +74,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
   const change = quoteIsValid(quote) ? quote.changePercent : null
   return (
     <div
-      className="board-stock-row group flex h-[25px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/25 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
+      className="board-stock-row group flex h-[25px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/35 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
       style={{ backgroundColor: industryPriceboardBackground(quote) }}
     >
       <button
@@ -92,12 +92,12 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
         className="grid min-w-0 flex-1 grid-cols-[minmax(34px,1fr)_56px_54px_39px] items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
       >
-        <span className="truncate font-bold tracking-[0.01em] transition-colors group-hover:text-white">{stock.ticker}</span>
-        <span className="truncate text-right tabular-nums">{formatPrice(quote?.price)}</span>
+        <span className="truncate font-semibold tracking-[0.01em] transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
+        <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span>
         <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
         </span>
-        <span className="truncate text-right text-[11px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span>
+        <span className="truncate text-right text-[10px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span>
       </button>
     </div>
   )
@@ -111,7 +111,7 @@ function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpe
   onOpen: (ticker: string) => void
 }) {
   if (stocks.length === 0) return <div className="px-2 py-4 text-center text-[11px] text-muted-2">Chưa có mã phù hợp</div>
-  return <div className="space-y-[2px] p-1">{stocks.map((stock) => (
+  return <div className="space-y-[4px] p-1">{stocks.map((stock) => (
     <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} />
   ))}</div>
 }
