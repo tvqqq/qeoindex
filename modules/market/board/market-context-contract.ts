@@ -45,6 +45,72 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
+function rowsFromImpactPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  if (!isRecord(payload)) return []
+  for (const key of ["data", "result", "items"]) {
+    if (Array.isArray(payload[key])) return payload[key] as unknown[]
+  }
+  return []
+}
+
+function providerTimestamp(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return new Date((value > 10_000_000_000 ? value : value * 1000)).toISOString()
+  }
+  if (!isRecord(value)) return null
+  const seconds = Number(value.seconds ?? value.Seconds)
+  const nanos = Number(value.nanos ?? value.Nanos ?? 0)
+  if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(nanos)) return null
+  return new Date((seconds + nanos / 1_000_000_000) * 1000).toISOString()
+}
+
+function parseImpactEntry(row: unknown): MarketImpactEntry | null {
+  if (!isRecord(row)) return null
+  const symbol = String(row.symbol ?? "").trim().toUpperCase()
+  const contribution = Number(row.basketInfluence)
+  if (!/^[A-Z0-9]{2,12}$/.test(symbol) || !Number.isFinite(contribution)) return null
+  return {
+    symbol,
+    contribution,
+    asOf: providerTimestamp(row.time),
+  }
+}
+
+export function parseVnindexImpactPayload(payload: unknown): MarketImpactSnapshot | null {
+  const rows = rowsFromImpactPayload(payload)
+  const entries = rows.map(parseImpactEntry).filter((entry): entry is MarketImpactEntry => Boolean(entry))
+  if (!entries.length) return null
+
+  const positive = entries
+    .filter((entry) => entry.contribution > 0)
+    .sort((left, right) => right.contribution - left.contribution)
+    .slice(0, 8)
+  const negative = entries
+    .filter((entry) => entry.contribution < 0)
+    .sort((left, right) => left.contribution - right.contribution)
+    .slice(0, 8)
+  const displayedPositiveTotal = positive.reduce((total, entry) => total + entry.contribution, 0)
+  const displayedNegativeTotal = negative.reduce((total, entry) => total + entry.contribution, 0)
+  const timestamps = entries
+    .map((entry) => entry.asOf)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+
+  return {
+    source: "DNSE basket-influence · VNINDEX",
+    scope: "VNINDEX",
+    asOf: timestamps.at(-1) ?? null,
+    providerRows: rows.length,
+    finiteRows: entries.length,
+    positive,
+    negative,
+    displayedPositiveTotal,
+    displayedNegativeTotal,
+    displayedNetTotal: displayedPositiveTotal + displayedNegativeTotal,
+  }
+}
+
 function isIndexSeries(value: unknown): value is MarketContextIndexSeries {
   if (!isRecord(value)) return false
   if (!MARKET_CONTEXT_INDEX_SYMBOLS.includes(value.symbol as MarketContextIndexSymbol)) return false
