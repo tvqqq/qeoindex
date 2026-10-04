@@ -96,23 +96,21 @@ export async function fetchVnindexImpactSnapshot(): Promise<MarketImpactSnapshot
 }
 
 export async function loadMarketBoardContext(now = new Date()): Promise<MarketBoardContextBootstrap> {
-  const settled = await Promise.allSettled([
-    fetchMarketContextIndexSeries("VNINDEX", now),
-    fetchMarketContextIndexSeries("VN30", now),
-    fetchVnindexImpactSnapshot(),
+  const indexSymbols = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"] as const
+  const [indexResults, impactResults] = await Promise.all([
+    Promise.allSettled(indexSymbols.map((symbol) => fetchMarketContextIndexSeries(symbol, now))),
+    Promise.allSettled([fetchVnindexImpactSnapshot()]),
   ])
   const indexes: MarketBoardContextBootstrap["indexes"] = {}
   const errors: string[] = []
 
-  const vnindex = settled[0]
-  if (vnindex.status === "fulfilled") indexes.VNINDEX = vnindex.value
-  else errors.push(`VNINDEX: ${vnindex.reason instanceof Error ? vnindex.reason.message : String(vnindex.reason)}`)
+  indexSymbols.forEach((symbol, index) => {
+    const outcome = indexResults[index]
+    if (outcome.status === "fulfilled") indexes[symbol] = outcome.value
+    else errors.push(`${symbol}: ${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}`)
+  })
 
-  const vn30 = settled[1]
-  if (vn30.status === "fulfilled") indexes.VN30 = vn30.value
-  else errors.push(`VN30: ${vn30.reason instanceof Error ? vn30.reason.message : String(vn30.reason)}`)
-
-  const impactResult = settled[2]
+  const impactResult = impactResults[0]
   const impact = impactResult.status === "fulfilled" ? impactResult.value : null
   if (impactResult.status === "rejected") {
     errors.push(`Index impact: ${impactResult.reason instanceof Error ? impactResult.reason.message : String(impactResult.reason)}`)

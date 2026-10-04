@@ -297,6 +297,8 @@ function ContextCard({
   children,
   className = "",
   titleHint,
+  headerRight,
+  titleValue,
 }: {
   title: string
   icon: ReactNode
@@ -304,24 +306,30 @@ function ContextCard({
   children: ReactNode
   className?: string
   titleHint?: string
+  headerRight?: ReactNode
+  titleValue?: ReactNode
 }) {
   const accentClass = accent === "green"
-    ? "border-emerald-400/25"
+    ? "border-emerald-400/20"
     : accent === "purple"
-      ? "border-purple-400/30"
-      : "border-zinc-300/15"
+      ? "border-purple-400/20"
+      : "border-white/[0.10]"
 
   return (
     <section
-      className={`min-h-[142px] min-w-0 rounded-2xl border bg-[#0b0f14] px-3 py-2.5 ${accentClass} ${className}`}
+      className={`flex min-h-[128px] min-w-0 flex-col overflow-hidden rounded-[22px] border bg-[#111511] font-ticker ${accentClass} ${className}`}
       title={titleHint}
       data-market-context-card
     >
-      <header className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-        <span className="text-zinc-300">{icon}</span>
-        <span>{title}</span>
+      <header className="flex min-h-[31px] items-center gap-1.5 border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
+        <span className="shrink-0 text-emerald-400">{icon}</span>
+        <span className="min-w-0 truncate">{title}</span>
+        {titleValue ? <span className="min-w-0 truncate">{titleValue}</span> : null}
+        {headerRight ? <span className="ml-auto shrink-0 text-right">{headerRight}</span> : null}
       </header>
-      {children}
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-1.5">
+        {children}
+      </div>
     </section>
   )
 }
@@ -342,41 +350,36 @@ function IndexContextCard({
   const hasHistory = Boolean(series?.points.length)
   const reference = indexReference(quote)
   const hasBreadth = finite(quote?.advances) || finite(quote?.declines) || finite(quote?.unchanged)
+  const indexValue = quote && finite(quote.value)
+    ? quote.value
+    : series?.points.at(-1)?.value
+  const change = quote?.change
+  const headerRight = (
+    <span className="flex items-center justify-end gap-1.5 font-ticker tabular-nums" style={{ color }}>
+      {finite(change) ? <span className="hidden text-[11px] sm:inline">{change > 0 ? "+" : ""}{INDEX_FORMATTER.format(change)}</span> : null}
+      <span className="text-[12px] font-extrabold">{formatChange(quote?.changePercent)}</span>
+    </span>
+  )
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-mono text-[19px] font-bold leading-none text-zinc-100">
-            {quote && finite(quote.value) ? INDEX_FORMATTER.format(quote.value) : series?.points.at(-1) ? INDEX_FORMATTER.format(series.points.at(-1)!.value) : "—"}
-          </div>
-          <div className="mt-1 font-mono text-[11px] font-semibold" style={{ color }}>
-            {formatChange(quote?.changePercent)}
-          </div>
-        </div>
-        <div className="text-right font-mono text-[9px] leading-relaxed text-zinc-500">
-          <div>KL <span className="font-semibold text-zinc-300">{formatCompactVolume(quote?.volume)}</span></div>
-          <div>GT <span className="font-semibold text-zinc-300">{formatVndValue(quote?.valueTraded)}</span></div>
-        </div>
-      </div>
-
       {hasBreadth ? (
-        <div className="mt-1 flex items-center gap-2 font-mono text-[9px] font-semibold">
-          <span className="text-emerald-300">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
-          <span className="text-amber-300">■ {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
-          <span className="text-red-300">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
+        <div className="flex items-center justify-between gap-1 font-ticker text-[10px] font-bold tabular-nums">
+          <span className="text-emerald-400">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
+          <span className="text-amber-400">● {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
+          <span className="text-red-400">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
         </div>
-      ) : null}
-
-      <div className="mt-1.5 h-[58px] w-full overflow-hidden rounded-lg">
+      ) : <div className="h-[15px]" />}
+      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-1 font-ticker text-[9px] tabular-nums text-zinc-500">
+        <span>KL <strong className="font-semibold text-zinc-300">{formatCompactVolume(quote?.volume)}</strong></span>
+        <span>GT <strong className="font-semibold text-zinc-300">{formatVndValue(quote?.valueTraded)}</strong></span>
+      </div>
+      <div className="mt-auto h-[45px] w-full overflow-hidden">
         {hasHistory ? (
           <ContextLineChart values={data} color={color} reference={reference} splitAtReference />
         ) : (
-          <div className="flex h-full items-center justify-center text-[9px] text-zinc-600">Chưa có lịch sử 1m</div>
+          <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">Chưa có dữ liệu 1m</div>
         )}
-      </div>
-      <div className="mt-1 truncate text-[8px] text-zinc-600">
-        {series ? `1m · ${series.sessionDate} · ${formatAsOf(quote?.updatedAt ?? series.asOf)}` : "Index history unavailable"}
       </div>
     </>
   )
@@ -385,15 +388,16 @@ function IndexContextCard({
     <ContextCard
       title={label}
       icon={<Landmark className="h-3.5 w-3.5" />}
-      accent={label === "VNINDEX" ? "green" : "purple"}
-      className="xl:col-span-2"
-      titleHint={series?.source}
+      accent={label === "VNINDEX" ? "green" : "platinum"}
+      titleHint={series?.source ?? "Chưa xác minh được lịch sử 1m"}
+      headerRight={headerRight}
+      titleValue={<span className="font-ticker text-[14px] font-extrabold tabular-nums" style={{ color }}>{finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}</span>}
     >
       {onOpen ? (
         <button
           type="button"
           onClick={onOpen}
-          className="w-full rounded-lg text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+          className="flex w-full flex-1 flex-col text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
           aria-label="Mở biểu đồ VN-INDEX"
         >
           {body}
@@ -402,7 +406,6 @@ function IndexContextCard({
     </ContextCard>
   )
 }
-
 function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   const width = 320
   const height = 58
@@ -427,19 +430,18 @@ function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
   )
 }
 
-function ImpactSide({ entry, maxAbs, positive }: { entry?: MarketImpactEntry; maxAbs: number; positive: boolean }) {
-  if (!entry) return <div className="h-3.5" />
+function ImpactSide({ entry, maxAbs, positive }: { entry: MarketImpactEntry; maxAbs: number; positive: boolean }) {
   const width = maxAbs > 0 ? Math.max(3, Math.min(100, (Math.abs(entry.contribution) / maxAbs) * 100)) : 0
   return (
-    <div className={`grid grid-cols-[34px_minmax(0,1fr)_45px] items-center gap-1 text-[8px] ${positive ? "" : "text-right"}`}>
-      <span className={`font-mono font-bold ${positive ? "text-emerald-300" : "text-red-300"}`}>{entry.symbol}</span>
-      <div className="flex h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+    <div className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)_48px] items-center gap-2 font-ticker text-[11px] tabular-nums">
+      <span className={`truncate font-extrabold ${positive ? "text-emerald-300" : "text-red-300"}`}>{entry.symbol}</span>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
         <span
-          className={`h-full rounded-full ${positive ? "bg-emerald-400/80" : "ml-auto bg-red-400/80"}`}
+          className={`h-full rounded-full ${positive ? "bg-emerald-400/90" : "ml-auto bg-red-400/90"}`}
           style={{ width: `${width}%` }}
         />
       </div>
-      <span className="font-mono tabular-nums text-zinc-400">
+      <span className="text-right font-bold text-zinc-300">
         {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
       </span>
     </div>
@@ -447,10 +449,6 @@ function ImpactSide({ entry, maxAbs, positive }: { entry?: MarketImpactEntry; ma
 }
 
 function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
-  const pairs = Array.from({ length: 8 }, (_, index) => ({
-    negative: impact.negative[index],
-    positive: impact.positive[index],
-  }))
   const maxAbs = Math.max(
     0,
     ...impact.negative.map((entry) => Math.abs(entry.contribution)),
@@ -458,19 +456,26 @@ function ImpactChart({ impact }: { impact: MarketImpactSnapshot }) {
   )
 
   return (
-    <>
-      <div className="mb-1 grid grid-cols-2 gap-3 text-[8px] font-semibold uppercase tracking-wide text-zinc-600">
-        <span>Giảm điểm</span><span>Tăng điểm</span>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7">
+      <div className="min-w-0">
+        <div className="mb-2 flex items-center justify-between border-b border-red-400/15 pb-1 font-ticker text-[11px] font-bold text-red-300">
+          <span>▼ Kéo giảm VNINDEX</span>
+          <span className="tabular-nums">{impact.displayedNegativeTotal.toFixed(2)} điểm</span>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-4">
+          {impact.negative.map((entry) => <ImpactSide key={entry.symbol} entry={entry} maxAbs={maxAbs} positive={false} />)}
+        </div>
       </div>
-      <div className="space-y-[1px]">
-        {pairs.map((pair, index) => (
-          <div key={index} className="grid grid-cols-2 gap-3">
-            <ImpactSide entry={pair.negative} maxAbs={maxAbs} positive={false} />
-            <ImpactSide entry={pair.positive} maxAbs={maxAbs} positive />
-          </div>
-        ))}
+      <div className="min-w-0">
+        <div className="mb-2 flex items-center justify-between border-b border-emerald-400/15 pb-1 font-ticker text-[11px] font-bold text-emerald-300">
+          <span>▲ Kéo tăng VNINDEX</span>
+          <span className="tabular-nums">+{impact.displayedPositiveTotal.toFixed(2)} điểm</span>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-4">
+          {impact.positive.map((entry) => <ImpactSide key={entry.symbol} entry={entry} maxAbs={maxAbs} positive />)}
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -668,124 +673,90 @@ export function MarketContextStrip({
   const impact = bootstrap?.impact
 
   return (
-    <div
-      className="grid shrink-0 grid-cols-1 gap-2 border-b border-white/[0.08] bg-[#06080a] px-2 py-2 md:grid-cols-2 xl:grid-cols-12"
-      data-market-context-strip
-      title={contextErrors || undefined}
-    >
-      <IndexContextCard
-        label="VNINDEX"
-        quote={indexQuotes.VNINDEX}
-        series={bootstrap?.indexes.VNINDEX}
-        onOpen={onOpenIndexChart}
-      />
+    <div className="space-y-2 border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" data-market-context-index-row>
+        <IndexContextCard
+          label="VNINDEX"
+          quote={indexQuotes.VNINDEX}
+          series={bootstrap?.indexes.VNINDEX}
+          onOpen={onOpenIndexChart}
+        />
 
-      <ContextCard
-        title="Thanh khoản HOSE"
-        icon={<WalletCards className="h-3.5 w-3.5" />}
-        accent="platinum"
-        className="xl:col-span-2"
-        titleHint={hasFinhayLiquidity
-          ? "Finhay VNINDEX trading_value: GTGD HOSE 1D, đơn vị VND đã xác minh. Chưa có aligned intraday history của phiên trước."
-          : "Index realtime fallback. Chưa có aligned intraday GTGD history của phiên trước."}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-mono text-[18px] font-bold leading-none text-zinc-100">{formatVndValue(liquidityValue)}</div>
-            <div className="mt-1 text-[9px] font-medium text-zinc-500">vs phiên trước: <span className="text-zinc-400">—</span></div>
+        <ContextCard
+          title="Thanh khoản HOSE"
+          icon={<WalletCards className="h-3.5 w-3.5" />}
+          titleHint={hasFinhayLiquidity
+            ? "Finhay VNINDEX trading_value · VND verified. Không có history GTGD phiên trước theo phút."
+            : "Index realtime fallback. Chưa có history GTGD phiên trước theo phút."}
+          headerRight={<span className="font-ticker text-[13px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}
+        >
+          <div className="flex items-center justify-between gap-2 font-ticker text-[9px] text-zinc-500">
+            <span>Giá trị khớp lệnh lũy kế</span>
+            <span>vs phiên trước: <strong className="text-zinc-400">—</strong></span>
           </div>
-          <div className="text-right text-[8px] leading-relaxed text-zinc-600">
-            <div>{hasFinhayLiquidity ? "Finhay full HOSE" : "Index realtime fallback"}</div>
-            <div>{contextSessionDate || "—"}</div>
+          <div className="mt-auto h-[45px] w-full overflow-hidden">
+            {liquidityData.length >= 2 ? (
+              <ContextLineChart values={liquidityData} color={PLATINUM} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">Đang tích lũy realtime</div>
+            )}
           </div>
-        </div>
-        <div className="mt-2 h-[58px] w-full overflow-hidden rounded-lg">
-          {liquidityData.length >= 2 ? (
-            <ContextLineChart values={liquidityData} color={PLATINUM} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[9px] text-zinc-600">Đang tích lũy realtime từ lúc mở bảng</div>
-          )}
-        </div>
-        <div className="mt-1 text-[8px] leading-tight text-zinc-600">
-          VND verified · history phiên trước chưa verified
-        </div>
-      </ContextCard>
+          <div className="mt-0.5 truncate text-[9px] text-zinc-500">
+            {hasFinhayLiquidity ? "Finhay HOSE" : "Index realtime"} · history phiên trước chưa verified
+          </div>
+        </ContextCard>
 
-      <IndexContextCard
-        label="VN30"
-        quote={indexQuotes.VN30}
-        series={bootstrap?.indexes.VN30}
-      />
+        <IndexContextCard label="VN30" quote={indexQuotes.VN30} series={bootstrap?.indexes.VN30} />
+        <IndexContextCard label="HNX" quote={indexQuotes.HNXINDEX} series={bootstrap?.indexes.HNXINDEX} />
+        <IndexContextCard label="UPCOM" quote={indexQuotes.UPCOMINDEX} series={bootstrap?.indexes.UPCOMINDEX} />
 
-      <ContextCard
-        title="Mua bán nước ngoài"
-        icon={<Globe2 className="h-3.5 w-3.5" />}
-        accent="purple"
-        className="xl:col-span-2"
-        titleHint={hasFinhayForeign
-          ? "Finhay VNINDEX foreign trading: tổng mua/bán trên toàn universe HOSE."
-          : finhayForeignState === "UNAVAILABLE"
-            ? "Finhay full-HOSE unavailable; đang dùng foreign buy/sell của canonical Top 200 làm partial fallback."
-            : "Đang kiểm tra Finhay full-HOSE foreign flow; canonical Top 200 là fallback."}
-      >
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <div className="text-[8px] uppercase tracking-wide text-zinc-600">Mua</div>
-            <div className="font-mono text-[11px] font-bold text-emerald-300">
-              {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignBuy : undefined)}
-            </div>
+        <ContextCard
+          title="Mua bán nước ngoài"
+          icon={<Globe2 className="h-3.5 w-3.5" />}
+          accent="purple"
+          titleHint={hasFinhayForeign
+            ? "Finhay full VNINDEX/HOSE foreign buy/sell, sampled during current session."
+            : finhayForeignState === "UNAVAILABLE"
+              ? "Finhay unavailable. Canonical Top 200 partial fallback."
+              : "Waiting for Finhay; Top 200 partial fallback."}
+          headerRight={<span className={`font-ticker text-[12px] font-extrabold tabular-nums ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(displayedForeignNet)}</span>}
+        >
+          <div className="flex items-center justify-between gap-2 font-ticker text-[10px] tabular-nums">
+            <span className="min-w-0 truncate text-emerald-300">Mua {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignBuy : undefined)}</span>
+            <span className="min-w-0 truncate text-right text-red-300">Bán {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignSell : undefined)}</span>
           </div>
-          <div>
-            <div className="text-[8px] uppercase tracking-wide text-zinc-600">Bán</div>
-            <div className="font-mono text-[11px] font-bold text-red-300">
-              {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignSell : undefined)}
-            </div>
-          </div>
-          <div>
-            <div className="text-[8px] uppercase tracking-wide text-zinc-600">Ròng</div>
-            <div className={`font-mono text-[11px] font-bold ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>
-              {formatSignedVndValue(displayedForeignNet)}
-            </div>
-          </div>
-        </div>
-        <div className="mt-2 overflow-hidden rounded-lg"><DualLineChart points={foreignPoints} /></div>
-        <div className="mt-1 flex items-center justify-between gap-2 text-[8px] text-zinc-600">
-          <span>
-            {hasFinhayForeign
+          <div className="mt-auto overflow-hidden rounded-lg"><DualLineChart points={foreignPoints} /></div>
+          <div className="mt-0.5 flex items-center justify-between gap-1 text-[9px] text-zinc-500">
+            <span className="truncate">{hasFinhayForeign
               ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã`
-              : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}
-          </span>
-          <span>{hasFinhayForeign ? finhayForeign?.sessionDate : formatAsOf(displayedForeignAsOf)}</span>
-        </div>
-      </ContextCard>
-
-      <ContextCard
-        title="Tác động VNINDEX"
-        icon={<Scale className="h-3.5 w-3.5" />}
-        accent="green"
-        className="xl:col-span-4"
-        titleHint={impact?.source}
-      >
-        {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-          <>
-            <ImpactChart impact={impact} />
-            <div className="mt-1 flex items-center justify-between gap-3 border-t border-white/[0.05] pt-1 text-[8px] text-zinc-600">
-              <span>
-                Tổng các mã hiển thị:{" "}
-                <strong className={impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}>
-                  {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm
-                </strong>
-              </span>
-              <span>{formatAsOf(impact.asOf)}</span>
-            </div>
-          </>
-        ) : (
-          <div className="flex h-[78px] items-center justify-center gap-2 text-[10px] text-zinc-600">
-            <Activity className="h-3.5 w-3.5" />
-            Chưa có provider contribution snapshot
+              : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}</span>
+            <span className="shrink-0">{hasFinhayForeign ? finhayForeign?.sessionDate : formatAsOf(displayedForeignAsOf)}</span>
           </div>
-        )}
-      </ContextCard>
+        </ContextCard>
+      </div>
+
+      <div data-market-context-impact-row>
+        <ContextCard
+          title="Tác động VNINDEX"
+          icon={<Scale className="h-4 w-4" />}
+          accent="green"
+          titleHint={impact?.source}
+          headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
+            ? <span className="font-ticker text-[11px] text-zinc-400">Tổng các mã hiển thị: <strong className={`text-[15px] font-extrabold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
+            : null}
+        >
+          {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
+            <>
+              <ImpactChart impact={impact} />
+              <div className="mt-2 text-right font-ticker text-[9px] text-zinc-500">{formatAsOf(impact.asOf)} · DNSE basketInfluence · Top mã hiển thị</div>
+            </>
+          ) : (
+            <div className="flex min-h-[66px] items-center justify-center gap-2 text-[11px] text-zinc-500">
+              <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
+            </div>
+          )}
+        </ContextCard>
+      </div>
     </div>
   )
 }

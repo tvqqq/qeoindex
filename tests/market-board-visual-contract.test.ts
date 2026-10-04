@@ -58,8 +58,13 @@ test("classic Bảng điện remains the default with the original six sector gr
 })
 
 test("market context fills the board width and the freed summary row starts with icon board-view tabs", () => {
-  assert.match(contextStripSource, /md:grid-cols-2 xl:grid-cols-12/)
-  assert.match(contextStripSource, /className="xl:col-span-4"/)
+  assert.match(contextStripSource, /sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6/)
+  assert.match(contextStripSource, /data-market-context-index-row/)
+  assert.match(contextStripSource, /data-market-context-impact-row/)
+  assert.match(contextStripSource, /min-h-\[31px\]/)
+  assert.match(contextStripSource, /font-ticker text-\[14px\] font-extrabold/)
+  assert.match(contextStripSource, /Kéo giảm VNINDEX/)
+  assert.match(contextStripSource, /Kéo tăng VNINDEX/)
   assert.match(boardSource, /const ViewIcon = view === "classic" \? Table2 : PanelsTopLeft/)
   assert.match(boardSource, /role="tablist" aria-label="Kiểu bảng giá"/)
   assert.doesNotMatch(boardSource, />Tổng KL</)
