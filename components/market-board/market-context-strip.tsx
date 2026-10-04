@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
-import { Activity, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 
 import type {
   MarketBoardContextBootstrap,
@@ -9,6 +9,7 @@ import type {
   MarketImpactEntry,
   MarketImpactSnapshot,
 } from "@/modules/market/board/market-context-contract"
+import { buildMarketDepthSnapshot, MARKET_DEPTH_BUCKETS, type MarketDepthSnapshot } from "@/modules/market/board/market-depth"
 
 type MarketContextIndexQuote = {
   symbol: string
@@ -25,6 +26,8 @@ type MarketContextIndexQuote = {
 
 type MarketContextStockQuote = {
   symbol: string
+  price?: number
+  changePercent?: number
   foreignBuyValue?: number
   foreignSellValue?: number
   updatedAt: string
@@ -32,6 +35,7 @@ type MarketContextStockQuote = {
 
 type MarketContextUniverseStock = {
   ticker: string
+  exchange?: string | null
 }
 
 type MarketContextStripProps = {
@@ -349,7 +353,6 @@ function IndexContextCard({
   const data = appendLiveIndexValue(series, quote)
   const hasHistory = Boolean(series?.points.length)
   const reference = indexReference(quote)
-  const hasBreadth = finite(quote?.advances) || finite(quote?.declines) || finite(quote?.unchanged)
   const indexValue = quote && finite(quote.value)
     ? quote.value
     : series?.points.at(-1)?.value
@@ -363,18 +366,7 @@ function IndexContextCard({
 
   const body = (
     <>
-      {hasBreadth ? (
-        <div className="flex items-center justify-between gap-1 font-ticker text-[10px] font-bold tabular-nums">
-          <span className="text-emerald-400">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
-          <span className="text-amber-400">● {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
-          <span className="text-red-400">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
-        </div>
-      ) : <div className="h-[15px]" />}
-      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-1 font-ticker text-[9px] tabular-nums text-zinc-500">
-        <span>KL <strong className="font-semibold text-zinc-300">{formatCompactVolume(quote?.volume)}</strong></span>
-        <span>GT <strong className="font-semibold text-zinc-300">{formatVndValue(quote?.valueTraded)}</strong></span>
-      </div>
-      <div className="mt-auto h-[45px] w-full overflow-hidden">
+      <div className="mt-auto h-[69px] w-full overflow-hidden">
         {hasHistory ? (
           <ContextLineChart values={data} color={color} reference={reference} splitAtReference />
         ) : (
@@ -590,6 +582,12 @@ export function MarketContextStrip({
   )
   const liquiditySeriesSource = hasFinhayLiquidity ? "finhay-vnindex" : "index-quote"
   const liquidityValue = hasFinhayLiquidity ? finhayLiquidity?.value : fallbackLiquidityValue
+  // Match the liquidity source/session when possible; never sum Top-200 volume as full HOSE.
+  const liquidityVolume = hasFinhayLiquidity && finite(finhayLiquidity?.volume)
+    ? finhayLiquidity.volume
+    : contextSessionDate && vietnamDateKey(vnindexQuote?.updatedAt ?? "") === contextSessionDate
+      ? vnindexQuote?.volume
+      : undefined
   const liquidityUpdatedAt = hasFinhayLiquidity ? finhayLiquidity?.sourceUpdatedAt ?? "" : fallbackLiquidityUpdatedAt
 
   useEffect(() => {
@@ -690,8 +688,8 @@ export function MarketContextStrip({
             : "Index realtime fallback. Chưa có history GTGD phiên trước theo phút."}
           headerRight={<span className="font-ticker text-[13px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}
         >
-          <div className="flex items-center justify-between gap-2 font-ticker text-[9px] text-zinc-500">
-            <span>Giá trị khớp lệnh lũy kế</span>
+          <div className="flex items-center justify-between gap-2 font-ticker text-[11px] text-zinc-400">
+            <span>KL <strong className="font-extrabold tabular-nums text-zinc-100">{formatCompactVolume(liquidityVolume)}</strong></span>
             <span>vs phiên trước: <strong className="text-zinc-400">—</strong></span>
           </div>
           <div className="mt-auto h-[45px] w-full overflow-hidden">
