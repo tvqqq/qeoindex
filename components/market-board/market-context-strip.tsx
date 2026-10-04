@@ -298,6 +298,7 @@ function ContextCard({
   className = "",
   titleHint,
   headerRight,
+  titleValue,
 }: {
   title: string
   icon: ReactNode
@@ -306,6 +307,7 @@ function ContextCard({
   className?: string
   titleHint?: string
   headerRight?: ReactNode
+  titleValue?: ReactNode
 }) {
   const accentClass = accent === "green"
     ? "border-emerald-400/20"
@@ -321,8 +323,9 @@ function ContextCard({
     >
       <header className="flex min-h-[31px] items-center gap-1.5 border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
         <span className="shrink-0 text-emerald-400">{icon}</span>
-        <span className="min-w-0 shrink-0 truncate">{title}</span>
-        {headerRight ? <span className="ml-auto min-w-0 text-right">{headerRight}</span> : null}
+        <span className="min-w-0 truncate">{title}</span>
+        {titleValue ? <span className="min-w-0 truncate">{titleValue}</span> : null}
+        {headerRight ? <span className="ml-auto shrink-0 text-right">{headerRight}</span> : null}
       </header>
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-1.5">
         {children}
@@ -360,18 +363,13 @@ function IndexContextCard({
 
   const body = (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 truncate font-ticker text-[16px] font-extrabold tabular-nums" style={{ color }}>
-          {finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}
+      {hasBreadth ? (
+        <div className="flex items-center justify-between gap-1 font-ticker text-[10px] font-bold tabular-nums">
+          <span className="text-emerald-400">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
+          <span className="text-amber-400">● {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
+          <span className="text-red-400">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
         </div>
-        {hasBreadth ? (
-          <div className="flex shrink-0 items-center gap-1.5 font-ticker text-[9px] font-bold tabular-nums sm:gap-2.5">
-            <span className="text-emerald-400">▲ {finite(quote?.advances) ? quote!.advances : "—"}</span>
-            <span className="text-amber-400">● {finite(quote?.unchanged) ? quote!.unchanged : "—"}</span>
-            <span className="text-red-400">▼ {finite(quote?.declines) ? quote!.declines : "—"}</span>
-          </div>
-        ) : null}
-      </div>
+      ) : <div className="h-[15px]" />}
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-1 font-ticker text-[9px] tabular-nums text-zinc-500">
         <span>KL <strong className="font-semibold text-zinc-300">{formatCompactVolume(quote?.volume)}</strong></span>
         <span>GT <strong className="font-semibold text-zinc-300">{formatVndValue(quote?.valueTraded)}</strong></span>
@@ -393,6 +391,7 @@ function IndexContextCard({
       accent={label === "VNINDEX" ? "green" : "platinum"}
       titleHint={series?.source ?? "Chưa xác minh được lịch sử 1m"}
       headerRight={headerRight}
+      titleValue={<span className="font-ticker text-[14px] font-extrabold tabular-nums" style={{ color }}>{finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}</span>}
     >
       {onOpen ? (
         <button
