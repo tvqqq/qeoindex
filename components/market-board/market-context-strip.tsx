@@ -698,7 +698,13 @@ export function MarketContextStrip({
     }
   }, [])
 
-  const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
+  const contextSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate
+    ?? vietnamDateKey(indexQuotes.VNINDEX?.updatedAt ?? "")
+    ?? ""
+  const marketDepth = useMemo(
+    () => buildMarketDepthSnapshot(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey),
+    [canonicalUniverse, contextSessionDate, stockQuotes],
+  )
   const vnindexQuote = indexQuotes.VNINDEX
   const fallbackLiquidityValue = vnindexQuote?.valueTraded
   const fallbackLiquidityUpdatedAt = vnindexQuote?.updatedAt ?? ""
@@ -860,27 +866,30 @@ export function MarketContextStrip({
         </ContextCard>
       </div>
 
-      <div data-market-context-impact-row>
-        <ContextCard
-          title="Tác động VNINDEX"
-          icon={<Scale className="h-4 w-4" />}
-          accent="green"
-          titleHint={impact?.source}
-          headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
-            ? <span className="font-ticker text-[11px] text-zinc-400">Tổng các mã hiển thị: <strong className={`text-[15px] font-extrabold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
-            : null}
-        >
-          {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-            <>
+      <div className="grid grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-market-context-impact-row>
+        <div className="min-w-0" data-market-context-impact-card>
+          <ContextCard
+            title="Tác động VNINDEX"
+            icon={<Scale className="h-4 w-4" />}
+            accent="green"
+            className="h-full"
+            titleHint={impact?.source}
+            headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
+              ? <span className="font-ticker text-[11px] text-zinc-400">Top mã hiển thị: <strong className={`text-[15px] font-extrabold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
+              : null}
+          >
+            {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
               <ImpactChart impact={impact} />
-              <div className="mt-2 text-right font-ticker text-[9px] text-zinc-500">{formatAsOf(impact.asOf)} · DNSE basketInfluence · Top mã hiển thị</div>
-            </>
-          ) : (
-            <div className="flex min-h-[66px] items-center justify-center gap-2 text-[11px] text-zinc-500">
-              <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
-            </div>
-          )}
-        </ContextCard>
+            ) : (
+              <div className="flex min-h-[285px] items-center justify-center gap-2 text-[11px] text-zinc-500">
+                <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
+              </div>
+            )}
+          </ContextCard>
+        </div>
+        <div className="min-w-0" data-market-context-depth-card>
+          <MarketDepthCard snapshot={marketDepth} sessionDate={contextSessionDate} />
+        </div>
       </div>
     </div>
   )
