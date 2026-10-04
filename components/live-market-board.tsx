@@ -27,11 +27,12 @@ import {
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
 import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
-import { marketToneFromChange, marketToneText } from "@/modules/market/tone"
+import { marketToneFromChange } from "@/modules/market/tone"
 import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
-import { LiveMoverCard, LiveStockRow, formatBoardPrice, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
+import { LiveMoverCard, LiveStockRow, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { IndustryPriceboard } from "@/components/market-board/industry-priceboard"
+import { MarketContextStrip } from "@/components/market-board/market-context-strip"
 import { industryLabelForStock } from "@/modules/market/board/industry-priceboard"
 import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
@@ -88,14 +89,6 @@ function formatExactTradedValue(value?: number | null) {
   return `${BOARD_TRADED_VALUE_FORMATTER.format(billions)} tỷ`
 }
 
-function formatCompactVolume(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} tỷ`
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)} tr`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} k`
-  return BOARD_VOLUME_FORMATTER.format(value)
-}
-
 function formatMarketValue(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "—"
   const abs = Math.abs(value)
@@ -137,8 +130,6 @@ type QuoteReconcileResponse = {
   updatedAt?: string
 }
 
-const INDEXES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"]
-const INDEX_LABELS: Record<string, string> = { VNINDEX: "VN-INDEX", VN30: "VN30", HNXINDEX: "HNX-INDEX", UPCOMINDEX: "UPCOM-INDEX" }
 const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
 const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
 const WATCHLIST_KEY = "stockos:watchlist:v1"
@@ -259,61 +250,6 @@ const WatchlistSection = memo(function WatchlistSection({
           </div>
         ))}
       </div>
-    </div>
-  )
-})
-
-const IndexStrip = memo(function IndexStrip({
-  quotes,
-  onOpenChart,
-}: {
-  quotes: Record<string, LiveStockQuote | IndexQuote | undefined>
-  onOpenChart: () => void
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2 bg-[#06080a] px-2 pb-1 pt-2 sm:grid-cols-4">
-      {INDEXES.map((symbol) => {
-        const quote = quotes[symbol] as IndexQuote | undefined
-        const tone = marketToneFromChange(quote?.changePercent)
-        const text = quote ? marketToneText(tone) : "text-muted-2"
-        const isChartTrigger = symbol === "VNINDEX"
-
-        return (
-          <div
-            key={symbol}
-            role={isChartTrigger ? "button" : undefined}
-            tabIndex={isChartTrigger ? 0 : undefined}
-            aria-label={isChartTrigger ? "Mở biểu đồ VN-INDEX và VN30F1M 1 phút" : undefined}
-            onClick={isChartTrigger ? onOpenChart : undefined}
-            onKeyDown={isChartTrigger ? (event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault()
-                onOpenChart()
-              }
-            } : undefined}
-            className={`flex min-h-[66px] min-w-0 flex-col justify-center rounded-[18px] border border-white/[0.10] bg-[#0b0f14] px-3 py-2 ${isChartTrigger ? "cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-brand/60" : ""}`}
-          >
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="truncate text-[11px] font-semibold tracking-wide text-muted-2">{INDEX_LABELS[symbol]}</span>
-              <span className={`shrink-0 font-mono text-[11px] font-bold tabular-nums ${text}`}>
-                {typeof quote?.changePercent === "number" && Number.isFinite(quote.changePercent)
-                  ? `${quote.changePercent > 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`
-                  : "—"}
-              </span>
-            </div>
-            <div className="mt-1 flex min-w-0 items-baseline justify-between gap-2">
-              <span className={`truncate font-mono text-[18px] font-bold tabular-nums ${text}`}>{formatBoardPrice(quote?.value)}</span>
-              <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-2">
-                {quote?.change !== undefined && Number.isFinite(quote.change) ? `${quote.change > 0 ? "+" : ""}${quote.change.toFixed(2)}` : "—"}
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between gap-2 font-sans text-[9px] text-muted-2">
-              <span>{typeof quote?.advances === "number" ? `▲ ${quote.advances}` : ""}{typeof quote?.declines === "number" ? `   ▼ ${quote.declines}` : ""}</span>
-              <span className="truncate text-right">{quote?.volume ? formatCompactVolume(quote.volume) : ""}</span>
-            </div>
-          </div>
-        )
-      })}
     </div>
   )
 })
@@ -1562,7 +1498,12 @@ export function LiveMarketBoard({
 
   return (
     <div ref={boardContainerRef} className="relative flex h-full min-h-0 flex-col bg-background">
-      <IndexStrip quotes={indexQuotes} onOpenChart={openIndexChart} />
+      <MarketContextStrip
+        indexQuotes={indexQuotes}
+        stockQuotes={displayQuotes as Record<string, LiveStockQuote | undefined>}
+        canonicalUniverse={fullCanonicalUniverse}
+        onOpenIndexChart={openIndexChart}
+      />
       <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#090d12] px-3 py-1.5">
@@ -1583,20 +1524,6 @@ export function LiveMarketBoard({
               <span className="font-bold text-foreground">
                 {vnindexValue !== undefined ? formatExactTradedValue(vnindexValue) : "—"}
               </span>
-              {vnindexQuote?.valueChangePercent !== undefined && vnindexQuote.valueChangePercent !== null && (
-                <span
-                  className={`font-bold font-mono text-xs ${
-                    vnindexQuote.valueChangePercent > 0
-                      ? "text-up"
-                      : vnindexQuote.valueChangePercent < 0
-                        ? "text-down"
-                        : "text-ref"
-                  }`}
-                  title="So sánh Tổng GT với phiên hôm qua"
-                >
-                  ({vnindexQuote.valueChangePercent > 0 ? "+" : ""}{vnindexQuote.valueChangePercent.toFixed(1)}%)
-                </span>
-              )}
             </div>
           </div>
 
