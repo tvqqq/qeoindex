@@ -141,7 +141,7 @@ test("industry board reuses Insights sector icons and increases compact-board ty
 
 test("compact stock rows protect price/volume fit and strengthen hover affordance", () => {
   const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
-  assert.match(source, /formatPrice\(quote\?\.price\)[\s\S]*?text-\[11px\]/)
+  assert.match(source, /text-\[11px\] tabular-nums">\{formatPrice\(quote\?\.price\)\}/)
   assert.match(source, /text-\[10px\] tabular-nums text-white\/55/)
   assert.match(source, /space-y-\[4px\]/)
   assert.match(source, /hover:border-white\/35/)
