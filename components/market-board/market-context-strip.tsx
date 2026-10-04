@@ -686,7 +686,7 @@ export function MarketContextStrip({
           title="Thanh khoản HOSE"
           icon={<WalletCards className="h-3.5 w-3.5" />}
           titleHint={hasFinhayLiquidity
-            ? "Finhay VNINDEX trading_value · VND. Không có history GTGD phiên trước theo phút."
+            ? "Finhay VNINDEX trading_value · VND verified. Không có history GTGD phiên trước theo phút."
             : "Index realtime fallback. Chưa có history GTGD phiên trước theo phút."}
           headerRight={<span className="font-ticker text-[13px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}
         >
