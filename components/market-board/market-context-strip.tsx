@@ -469,7 +469,7 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
                   />
                   <span
                     className="absolute inset-x-0 z-20 truncate text-center font-ticker text-[9px] font-bold tabular-nums text-zinc-200"
-                    style={{ top: `calc(${entry.contribution > 0 ? barTop : zeroPct}% - 12px)` }}
+                    style={{ top: `${Math.max(0, (entry.contribution > 0 ? barTop : zeroPct) * 0.55 - 12)}px` }}
                     title={`${entry.symbol}: ${entry.contribution.toFixed(2)} điểm`}
                   >
                     {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
