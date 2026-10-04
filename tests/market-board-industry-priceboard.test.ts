@@ -9,6 +9,7 @@ import {
   industryPriceboardTone,
   moveIndustryColumn,
   moveIndustryColumnBy,
+  packIndustryLanes,
   reconcileIndustryColumnOrder,
   sortIndustryStocksByPerformance,
 } from "../modules/market/board/industry-priceboard.ts"
@@ -50,10 +51,29 @@ test("saved industry order reconciles duplicate, removed, and newly discovered r
 
 test("fixed anchors remain outside industry reorder actions", () => {
   const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
-  assert.match(source, /data-industry-column="watchlist" data-market-board-industry-column[\s\S]*?data-industry-column="vn30" data-market-board-industry-column[\s\S]*?industryOrder\.map\(\(industry\)/)
+  assert.match(source, /data-industry-column="watchlist" data-market-board-industry-column[\s\S]*?data-industry-column="vn30" data-market-board-industry-column[\s\S]*?industryLanes\.map\(\(lane, laneIndex\)/)
   assert.deepEqual(moveIndustryColumn(["Bán lẻ", "Điện", "Thép"], "Thép", "Bán lẻ"), ["Thép", "Bán lẻ", "Điện"])
   assert.deepEqual(moveIndustryColumnBy(["Bán lẻ", "Điện", "Thép"], "Điện", -1), ["Điện", "Bán lẻ", "Thép"])
   assert.deepEqual(moveIndustryColumnBy(["Bán lẻ", "Điện", "Thép"], "Bán lẻ", -1), ["Bán lẻ", "Điện", "Thép"])
+})
+
+test("industry lane packing compresses contiguous small industries without changing their logical order", () => {
+  const byIndustry = new Map([
+    ["Bảo hiểm", [stock("BVH", "Bảo hiểm")]],
+    ["Cao su", [stock("DRI", "Cao su"), stock("CSM", "Cao su")]],
+    ["Công nghệ", [stock("FPT", "Công nghệ"), stock("CTR", "Công nghệ"), stock("ELC", "Công nghệ")]],
+    ["Dầu khí", Array.from({ length: 12 }, (_, index) => stock(`OIL${index}`, "Dầu khí", index + 1))],
+    ["Dịch vụ", [stock("VTD", "Dịch vụ"), stock("YEG", "Dịch vụ")]],
+  ])
+  const order = ["Bảo hiểm", "Cao su", "Công nghệ", "Dầu khí", "Dịch vụ"]
+  const lanes = packIndustryLanes(order, byIndustry, 18)
+
+  assert.ok(lanes.length < order.length)
+  assert.deepEqual(lanes.flatMap((lane) => lane.industries), order)
+  assert.deepEqual(lanes[0]?.industries, ["Bảo hiểm", "Cao su", "Công nghệ"])
+  assert.deepEqual(lanes[1]?.industries, ["Dầu khí"])
+  assert.deepEqual(lanes[2]?.industries, ["Dịch vụ"])
+  assert.deepEqual(packIndustryLanes(order, byIndustry, 18), lanes)
 })
 
 test("watchlist local storage hydrates after the first render and writes only after hydration", () => {

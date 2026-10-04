@@ -89,6 +89,47 @@ export function moveIndustryColumnBy(order: readonly string[], source: string, o
   return next
 }
 
+export type IndustryPriceboardLane = {
+  industries: string[]
+  units: number
+}
+
+export const INDUSTRY_PRICEBOARD_LANE_MAX_UNITS = 26
+
+export function industryPriceboardCardUnits(stockCount: number) {
+  const normalizedCount = Number.isFinite(stockCount) ? Math.max(0, Math.floor(stockCount)) : 0
+  // Header + table labels consume roughly the same vertical space as three rows.
+  return 3 + normalizedCount
+}
+
+export function packIndustryLanes(
+  order: readonly string[],
+  stocksByIndustry: ReadonlyMap<string, readonly IndustryPriceboardStock[]>,
+  maxUnits = INDUSTRY_PRICEBOARD_LANE_MAX_UNITS,
+) {
+  const limit = Number.isFinite(maxUnits) && maxUnits > 0
+    ? Math.max(1, Math.floor(maxUnits))
+    : INDUSTRY_PRICEBOARD_LANE_MAX_UNITS
+  const lanes: IndustryPriceboardLane[] = []
+  let current: IndustryPriceboardLane | null = null
+
+  for (const industry of order) {
+    const stocks = stocksByIndustry.get(industry) ?? []
+    if (stocks.length === 0) continue
+
+    const units = industryPriceboardCardUnits(stocks.length)
+    if (!current || (current.industries.length > 0 && current.units + units > limit)) {
+      current = { industries: [], units: 0 }
+      lanes.push(current)
+    }
+
+    current.industries.push(industry)
+    current.units += units
+  }
+
+  return lanes
+}
+
 function isValidPrice(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
 }

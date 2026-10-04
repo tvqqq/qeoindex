@@ -29,12 +29,18 @@ const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", 
 const marketStreamSource = readFileSync(new URL("../modules/market/providers/dnse/market-stream.ts", import.meta.url), "utf8")
 const marketRuntimeSource = readFileSync(new URL("../modules/market/providers/dnse/market-runtime.ts", import.meta.url), "utf8")
 const priceboardSource = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+const contextStripSource = readFileSync(new URL("../components/market-board/market-context-strip.tsx", import.meta.url), "utf8")
 const screenshotSource = readFileSync(new URL("../modules/shared/media/screenshot.ts", import.meta.url), "utf8")
 
-test("compact priceboard keeps Theo dõi and VN30 before every distinct industry column", () => {
+test("compact priceboard keeps fixed anchors, packs industries into lanes, and exposes a stable row hover", () => {
   assert.match(priceboardSource, /data-industry-column="watchlist" data-market-board-industry-column/)
   assert.match(priceboardSource, /data-industry-column="vn30" data-market-board-industry-column/)
-  assert.match(priceboardSource, /industryOrder\.map\(\(industry\)/)
+  assert.match(priceboardSource, /industryLanes\.map\(\(lane, laneIndex\)/)
+  assert.match(priceboardSource, /lane\.industries\.map\(\(industry\)/)
+  assert.match(priceboardSource, /data-market-board-industry-lane/)
+  assert.match(priceboardSource, /hover:border-white\/25/)
+  assert.match(priceboardSource, /hover:brightness-110/)
+  assert.doesNotMatch(priceboardSource, /transition-all/)
   assert.match(priceboardSource, /data-market-board-screenshot-rail/)
   assert.match(priceboardSource, /h-\[32px\]/)
   assert.match(boardSource, /mode === "sector" && boardView === "industry"/)
@@ -49,6 +55,16 @@ test("classic Bảng điện remains the default with the original six sector gr
   assert.match(boardSource, /<WatchlistSection/)
   assert.match(boardSource, /Bảng điện/)
   assert.match(boardSource, /Bảng ngành/)
+})
+
+test("market context fills the board width and the freed summary row starts with icon board-view tabs", () => {
+  assert.match(contextStripSource, /md:grid-cols-2 xl:grid-cols-12/)
+  assert.match(contextStripSource, /className="xl:col-span-4"/)
+  assert.match(boardSource, /const ViewIcon = view === "classic" \? Table2 : PanelsTopLeft/)
+  assert.match(boardSource, /role="tablist" aria-label="Kiểu bảng giá"/)
+  assert.doesNotMatch(boardSource, />Tổng KL</)
+  assert.doesNotMatch(boardSource, />Tổng GT</)
+  assert.doesNotMatch(boardSource, />Khối ngoại</)
 })
 
 test("board screenshots expand the cloned industry rail without changing visible scroll state", () => {
