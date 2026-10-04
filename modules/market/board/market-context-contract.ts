@@ -34,6 +34,15 @@ export type MarketImpactSnapshot = {
   displayedNetTotal: number
 }
 
+// Keep strongest positive at the far left, strongest negative at the far right.
+// Only reorders displayed provider contributions; does not change their totals.
+export function orderedImpactBars(impact: Pick<MarketImpactSnapshot, "positive" | "negative">): MarketImpactEntry[] {
+  return [
+    ...[...impact.positive].sort((a, b) => b.contribution - a.contribution),
+    ...[...impact.negative].sort((a, b) => b.contribution - a.contribution),
+  ]
+}
+
 export type MarketBoardContextBootstrap = {
   generatedAt: string
   indexes: Partial<Record<MarketContextIndexSymbol, MarketContextIndexSeries>>
