@@ -1,12 +1,12 @@
 import "server-only"
 
 import { normalizeDnseChartHistory } from "@/modules/market/providers/dnse/index-candles"
-import type {
-  MarketBoardContextBootstrap,
-  MarketContextIndexSeries,
-  MarketContextIndexSymbol,
-  MarketImpactEntry,
-  MarketImpactSnapshot,
+import {
+  parseVnindexImpactPayload,
+  type MarketBoardContextBootstrap,
+  type MarketContextIndexSeries,
+  type MarketContextIndexSymbol,
+  type MarketImpactSnapshot,
 } from "@/modules/market/board/market-context-contract"
 
 const PUBLIC_CHART_BASE_URLS = [
@@ -87,75 +87,6 @@ export async function fetchMarketContextIndexSeries(
   }
 
   throw new Error(`Index history unavailable for ${symbol} (${failures.join("; ")})`)
-}
-
-function rowsFromPayload(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload
-  if (!payload || typeof payload !== "object") return []
-  const record = payload as Record<string, unknown>
-  for (const key of ["data", "result", "items"]) {
-    if (Array.isArray(record[key])) return record[key] as unknown[]
-  }
-  return []
-}
-
-function providerTimestamp(value: unknown): string | null {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return new Date((value > 10_000_000_000 ? value : value * 1000)).toISOString()
-  }
-  if (!value || typeof value !== "object") return null
-  const record = value as Record<string, unknown>
-  const seconds = Number(record.seconds ?? record.Seconds)
-  const nanos = Number(record.nanos ?? record.Nanos ?? 0)
-  if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(nanos)) return null
-  return new Date((seconds + nanos / 1_000_000_000) * 1000).toISOString()
-}
-
-function parseImpactEntry(row: unknown): MarketImpactEntry | null {
-  if (!row || typeof row !== "object") return null
-  const record = row as Record<string, unknown>
-  const symbol = String(record.symbol ?? "").trim().toUpperCase()
-  const contribution = Number(record.basketInfluence)
-  if (!/^[A-Z0-9]{2,12}$/.test(symbol) || !Number.isFinite(contribution)) return null
-  return {
-    symbol,
-    contribution,
-    asOf: providerTimestamp(record.time),
-  }
-}
-
-export function parseVnindexImpactPayload(payload: unknown): MarketImpactSnapshot | null {
-  const rows = rowsFromPayload(payload)
-  const entries = rows.map(parseImpactEntry).filter((entry): entry is MarketImpactEntry => Boolean(entry))
-  if (!entries.length) return null
-
-  const positive = entries
-    .filter((entry) => entry.contribution > 0)
-    .sort((left, right) => right.contribution - left.contribution)
-    .slice(0, 8)
-  const negative = entries
-    .filter((entry) => entry.contribution < 0)
-    .sort((left, right) => left.contribution - right.contribution)
-    .slice(0, 8)
-  const displayedPositiveTotal = positive.reduce((total, entry) => total + entry.contribution, 0)
-  const displayedNegativeTotal = negative.reduce((total, entry) => total + entry.contribution, 0)
-  const timestamps = entries
-    .map((entry) => entry.asOf)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-
-  return {
-    source: "DNSE basket-influence · VNINDEX",
-    scope: "VNINDEX",
-    asOf: timestamps.at(-1) ?? null,
-    providerRows: rows.length,
-    finiteRows: entries.length,
-    positive,
-    negative,
-    displayedPositiveTotal,
-    displayedNegativeTotal,
-    displayedNetTotal: displayedPositiveTotal + displayedNegativeTotal,
-  }
 }
 
 export async function fetchVnindexImpactSnapshot(): Promise<MarketImpactSnapshot> {
