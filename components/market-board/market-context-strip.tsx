@@ -6,7 +6,6 @@ import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucid
 import type {
   MarketBoardContextBootstrap,
   MarketContextIndexSeries,
-  MarketImpactEntry,
   MarketImpactSnapshot,
 } from "@/modules/market/board/market-context-contract"
 import { buildMarketDepthSnapshot, MARKET_DEPTH_BUCKETS, type MarketDepthSnapshot } from "@/modules/market/board/market-depth"
