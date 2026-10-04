@@ -136,6 +136,7 @@ test("compact 60/40 cards track live provider timestamps without faking realtime
   assert.ok(stripSource.includes('document.addEventListener("visibilitychange"'))
   assert.ok(stripSource.includes('window.addEventListener("focus"'))
   assert.ok(stripSource.includes("vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)"))
+  assert.ok(stripSource.includes("vietnamDateKey(previous.impact?.asOf ?? \"\") === vietnamDateKey(data.generatedAt)"))
   assert.ok(stripSource.includes("quoteSessionDate > chartSessionDate"))
   assert.ok(stripSource.includes("Chậm"))
   assert.ok(stripSource.includes("LIVE"))
