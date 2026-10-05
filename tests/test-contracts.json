@@ -267,6 +267,15 @@
       ]
     },
     {
+      "path": "tests/dnse-market-frame.test.ts",
+      "owner": "market",
+      "invariant": "Parse DNSE index and foreign frames from provider fields, preserving source time, explicit zero totals, and verified references.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/dnse-request-windows.test.ts",
       "owner": "market",
       "invariant": "Preserve the current dnse request windows contract.",

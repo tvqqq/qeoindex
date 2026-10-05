@@ -54,18 +54,33 @@ import {
   subscribeDnseMarketStreamState,
 } from "@/modules/market/providers/dnse/market-stream"
 import { captureMarketBoardScreenshot, copyBlobToClipboard } from "@/modules/shared/media/screenshot"
+import {
+  isProviderTimestampNotOlder,
+  isSameVietnamSessionTimestamp,
+  parseDnseForeignFrame,
+  parseDnseMarketIndexFrame,
+  type VerifiedSessionReference,
+} from "@/modules/market/board/dnse-market-frame"
+import {
+  parseVnindexImpactPayload,
+  upsertObservedIndexPoint,
+  type MarketContextIndexSeries,
+  type MarketImpactSnapshot,
+} from "@/modules/market/board/market-context-contract"
 
 export type BoardUniverseStock = LiveBoardStock
 export type IndexQuote = {
   symbol: string
   value: number
+  reference?: number
   change?: number
-  changePercent: number
+  changePercent?: number
   volume?: number
   valueTraded?: number
   advances?: number
   declines?: number
   unchanged?: number
+  sourceAsOf?: string
   updatedAt: string
 }
 type BoardMode = "sector" | "movers"
@@ -104,7 +119,6 @@ type QuoteReconcileResponse = {
 }
 
 const STOCK_REFERENCE_KEYS = ["referencePrice", "refPrice", "reference", "basicPrice", "previousClose", "prevClose", "priorClose"]
-const INDEX_REFERENCE_KEYS = ["referenceIndex", "referenceValue", "reference", "previousClose", "prevClose", "priorClose"]
 const WATCHLIST_KEY = "stockos:watchlist:v1"
 const WATCHLIST_VISIBILITY_KEY = "qeoindex_show_watchlist"
 const BOARD_VIEW_KEY = "qeoindex:market-board-view:v1"
@@ -158,6 +172,11 @@ function vietnamSessionDay(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
   }).format(date)
+}
+
+function isCurrentSessionProviderTime(asOf: string, sessionDate: string) {
+  const date = new Date(asOf)
+  return isSameVietnamSessionTimestamp(asOf, sessionDate) && isTradingSessionOpen(date)
 }
 
 function normalizeIndexName(value: unknown) {
@@ -456,6 +475,8 @@ export function LiveMarketBoard({
   const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
   const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
   const [indexChartOpen, setIndexChartOpen] = useState(false)
+  const [realtimeIndexSeries, setRealtimeIndexSeries] = useState<Partial<Record<"VNINDEX" | "VN30", MarketContextIndexSeries>>>({})
+  const [realtimeImpact, setRealtimeImpact] = useState<MarketImpactSnapshot | null>(null)
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
     const initial: Record<string, LiveStockQuote | IndexQuote> = initialQuotes ? { ...initialQuotes } : {}
@@ -596,13 +617,16 @@ export function LiveMarketBoard({
   const latestCommittedQuotesRef = useRef(quotes)
   const quotesDirtyRef = useRef(false)
   const historyDirtyRef = useRef(false)
+  const indexSeriesDirtyRef = useRef(false)
   const marketUiCommitTimer = useRef<number | null>(null)
   const marketOrderingTimer = useRef<number | null>(null)
   const lastOrderingRefreshAt = useRef(0)
   const lastMessageAtRef = useRef("")
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
-  const indexReferences = useRef<Record<string, number>>({})
+  const indexReferences = useRef<Record<string, VerifiedSessionReference>>({})
+  const realtimeIndexSeriesRef = useRef<Partial<Record<"VNINDEX" | "VN30", MarketContextIndexSeries>>>({})
+  const realtimeImpactRef = useRef<MarketImpactSnapshot | null>(null)
   const marketUiPhaseRef = useRef<MarketUiPhase>(marketUiPhase)
   const sessionOpenAlertTimer = useRef<number | null>(null)
   const eodReloadTimers = useRef<number[]>([])
@@ -649,6 +673,11 @@ export function LiveMarketBoard({
         setPriceHistory({ ...priceHistoryRef.current })
       }
 
+      if (indexSeriesDirtyRef.current) {
+        indexSeriesDirtyRef.current = false
+        setRealtimeIndexSeries({ ...realtimeIndexSeriesRef.current })
+      }
+
       const messageAt = lastMessageAtRef.current
       if (messageAt) {
         setLastMessageAt((previous) => previous === messageAt ? previous : messageAt)
@@ -685,23 +714,28 @@ export function LiveMarketBoard({
     const nextSessionDay = vietnamSessionDay(now)
     const isTradingDayRollover = activeSessionDayRef.current !== nextSessionDay
     activeSessionDayRef.current = nextSessionDay
+    indexReferences.current = {}
+    realtimeIndexSeriesRef.current = {}
+    realtimeImpactRef.current = null
+    indexSeriesDirtyRef.current = false
+    setRealtimeIndexSeries({})
+    setRealtimeImpact(null)
     const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
     for (const [symbol, current] of Object.entries(quotesRef.current)) {
       if ("value" in current) {
-        const reference = isTradingDayRollover && current.value > 0
-          ? current.value
-          : indexReferences.current[symbol] || current.value - (current.change ?? 0)
-        if (reference > 0) indexReferences.current[symbol] = reference
+        const reference = current.value > 0 ? current.value : current.reference || 0
         resetQuotes[symbol] = {
           ...current,
           value: reference > 0 ? reference : current.value,
-          change: 0,
-          changePercent: 0,
-          volume: 0,
-          valueTraded: 0,
-          advances: 0,
-          declines: 0,
-          unchanged: 0,
+          reference: undefined,
+          change: undefined,
+          changePercent: undefined,
+          volume: undefined,
+          valueTraded: undefined,
+          advances: undefined,
+          declines: undefined,
+          unchanged: undefined,
+          sourceAsOf: undefined,
           updatedAt: now.toISOString(),
         }
         continue
@@ -720,11 +754,15 @@ export function LiveMarketBoard({
         change: 0,
         changePercent: 0,
         volume: 0,
-        foreignBuyVolume: 0,
-        foreignSellVolume: 0,
-        foreignBuyValue: 0,
-        foreignSellValue: 0,
-        foreignNetValue: 0,
+        foreignBuyVolume: undefined,
+        foreignSellVolume: undefined,
+        foreignBuyValue: undefined,
+        foreignSellValue: undefined,
+        foreignNetValue: undefined,
+        foreignUpdatedAt: undefined,
+        foreignSessionDate: undefined,
+        foreignSource: undefined,
+        foreignReceivedAt: undefined,
         updatedAt: now.toISOString(),
       }
     }
@@ -739,6 +777,7 @@ export function LiveMarketBoard({
     priceHistoryRef.current = resetHistory
     quotesDirtyRef.current = false
     historyDirtyRef.current = false
+    indexSeriesDirtyRef.current = false
     setQuotes(resetQuotes)
     setOrderingQuotes(resetQuotes)
     setPriceHistory(resetHistory)
@@ -837,6 +876,9 @@ export function LiveMarketBoard({
     })
   }, [watchlistHydrated])
 
+  const fullCanonicalUniverse = canonicalUniverse ?? universe
+  const canonicalSymbols = useMemo(() => fullCanonicalUniverse.map((stock) => stock.ticker), [fullCanonicalUniverse])
+  const canonicalTrackedSymbols = useMemo(() => new Set(canonicalSymbols), [canonicalSymbols])
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
   const trackedSymbols = useMemo(() => new Set(symbolList), [symbolList])
@@ -892,6 +934,8 @@ export function LiveMarketBoard({
 
           const existingUpdatedAt = existing?.updatedAt ? Date.parse(existing.updatedAt) : 0
           const hasNewerLiveQuote = Number.isFinite(existingUpdatedAt) && existingUpdatedAt > requestedAt
+          const hasCurrentSessionForeignEvidence = existing?.foreignSource === "DNSE Onidel WS"
+            && existing.foreignSessionDate === requestedSessionDay
           const price = hasNewerLiveQuote
             ? existing?.price
             : quote.price && quote.price > 0 ? quote.price : existing?.price || reference
@@ -912,11 +956,11 @@ export function LiveMarketBoard({
             change,
             changePercent,
             volume: hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume),
-            foreignBuyVolume: hasNewerLiveQuote ? existing?.foreignBuyVolume : (quote.foreignBuyVolume ?? existing?.foreignBuyVolume),
-            foreignSellVolume: hasNewerLiveQuote ? existing?.foreignSellVolume : (quote.foreignSellVolume ?? existing?.foreignSellVolume),
-            foreignBuyValue: hasNewerLiveQuote ? existing?.foreignBuyValue : (quote.foreignBuyValue ?? existing?.foreignBuyValue),
-            foreignSellValue: hasNewerLiveQuote ? existing?.foreignSellValue : (quote.foreignSellValue ?? existing?.foreignSellValue),
-            foreignNetValue: hasNewerLiveQuote ? existing?.foreignNetValue : (quote.foreignNetValue ?? existing?.foreignNetValue),
+            foreignBuyVolume: hasCurrentSessionForeignEvidence ? existing?.foreignBuyVolume : (hasNewerLiveQuote ? existing?.foreignBuyVolume : (quote.foreignBuyVolume ?? existing?.foreignBuyVolume)),
+            foreignSellVolume: hasCurrentSessionForeignEvidence ? existing?.foreignSellVolume : (hasNewerLiveQuote ? existing?.foreignSellVolume : (quote.foreignSellVolume ?? existing?.foreignSellVolume)),
+            foreignBuyValue: hasCurrentSessionForeignEvidence ? existing?.foreignBuyValue : (hasNewerLiveQuote ? existing?.foreignBuyValue : (quote.foreignBuyValue ?? existing?.foreignBuyValue)),
+            foreignSellValue: hasCurrentSessionForeignEvidence ? existing?.foreignSellValue : (hasNewerLiveQuote ? existing?.foreignSellValue : (quote.foreignSellValue ?? existing?.foreignSellValue)),
+            foreignNetValue: hasCurrentSessionForeignEvidence ? existing?.foreignNetValue : (hasNewerLiveQuote ? existing?.foreignNetValue : (quote.foreignNetValue ?? existing?.foreignNetValue)),
             foreignRoom: quote.foreignRoom ?? existing?.foreignRoom,
             updatedAt: hasNewerLiveQuote && existing?.updatedAt ? existing.updatedAt : receivedAt,
           }
@@ -1037,14 +1081,23 @@ export function LiveMarketBoard({
         const current = quotesRef.current
         const next = { ...current }
         for (const [symbol, quote] of Object.entries(payload.quotes ?? {})) {
-          const derivedReference = typeof quote.change === "number"
+          const changedReference = typeof quote.change === "number"
             ? quote.value - quote.change
-            : quote.changePercent !== -100 ? quote.value / (1 + quote.changePercent / 100) : 0
-          if (derivedReference > 0) indexReferences.current[symbol] = derivedReference
+            : typeof quote.changePercent === "number" && Number.isFinite(quote.changePercent) && quote.changePercent !== -100
+              ? quote.value / (1 + quote.changePercent / 100)
+              : 0
+          const derivedReference = Number.isFinite(changedReference) && changedReference > 0 ? changedReference : 0
           const existing = current[symbol] as IndexQuote | undefined
+          const quoteSessionDate = vietnamSessionDay(new Date(quote.updatedAt))
+          const hasCurrentLiveFrame = Boolean(existing?.sourceAsOf && isCurrentSessionProviderTime(existing.sourceAsOf, activeSessionDayRef.current))
+          if (hasCurrentLiveFrame) continue
+          if (derivedReference > 0 && quoteSessionDate === activeSessionDayRef.current) {
+            indexReferences.current[symbol] = { value: derivedReference, sessionDate: quoteSessionDate }
+          }
           if (existing?.value && derivedReference > 0) {
             next[symbol] = {
               ...existing,
+              reference: derivedReference,
               change: existing.value - derivedReference,
               changePercent: ((existing.value - derivedReference) / derivedReference) * 100,
             }
@@ -1241,76 +1294,84 @@ export function LiveMarketBoard({
 
         if (type === "mi") {
           const symbol = normalizeIndexName(data.indexName ?? data.symbol)
-          const value = firstPositive(data, ["valueIndexes", "value", "indexValue"])
-          if (!symbol || value <= 0) continue
-          const explicitReference = firstPositive(data, INDEX_REFERENCE_KEYS)
-          if (explicitReference > 0) indexReferences.current[symbol] = explicitReference
-          const vol = firstPositive(data, ["totalVolumeTraded", "totalVolume", "totalQtty", "allQtty", "vol", "v"])
-          const rawVal = firstPositive(data, ["totalValueTraded", "totalValue", "totalAmount", "allValue", "val"])
-          const val = rawVal > 0 ? (rawVal < 100_000 ? rawVal * 1_000_000_000 : rawVal < 100_000_000 ? rawVal * 1_000_000 : rawVal) : 0
+          if (!symbol) continue
+          const verifiedReference = indexReferences.current[symbol]
+          const parsed = parseDnseMarketIndexFrame(data, verifiedReference)
+          if (!parsed || parsed.sessionDate !== activeSessionDayRef.current || !isCurrentSessionProviderTime(parsed.asOf, activeSessionDayRef.current)) continue
+          const currentIndex = quotesRef.current[symbol] as IndexQuote | undefined
+          if (!isProviderTimestampNotOlder(parsed.asOf, currentIndex?.sourceAsOf)) continue
           updateLiveQuote(symbol, (currentQuote) => {
             const previous = currentQuote as IndexQuote | undefined
-            const previousDerivedReference = previous && typeof previous.change === "number" ? previous.value - previous.change : 0
-            const reference = indexReferences.current[symbol] || previousDerivedReference
-            if (reference > 0) indexReferences.current[symbol] = reference
-            const change = reference > 0 ? value - reference : previous?.change
-            const changePercent = reference > 0 ? ((value - reference) / reference) * 100 : previous?.changePercent ?? 0
+            if (!isProviderTimestampNotOlder(parsed.asOf, previous?.sourceAsOf)) return previous
+            if (parsed.reference !== undefined) {
+              indexReferences.current[symbol] = { value: parsed.reference, sessionDate: parsed.sessionDate }
+            }
             return {
+              ...previous,
               symbol,
-              value,
-              change,
-              changePercent,
-              volume: vol || previous?.volume,
-              valueTraded: val || previous?.valueTraded,
-              updatedAt: receivedAt,
+              value: parsed.value,
+              reference: parsed.reference,
+              change: parsed.change,
+              changePercent: parsed.changePercent,
+              volume: parsed.volume ?? previous?.volume,
+              valueTraded: parsed.valueTraded ?? previous?.valueTraded,
+              sourceAsOf: parsed.asOf,
+              updatedAt: parsed.asOf,
             }
           })
+          if (symbol === "VNINDEX" || symbol === "VN30") {
+            const previous = realtimeIndexSeriesRef.current[symbol]
+            const next = upsertObservedIndexPoint(previous, symbol, parsed.sessionDate, parsed.asOf, parsed.value)
+            if (next && next !== previous) {
+              realtimeIndexSeriesRef.current = { ...realtimeIndexSeriesRef.current, [symbol]: next }
+              indexSeriesDirtyRef.current = true
+              scheduleMarketUiCommit()
+            }
+          }
           continue
         }
 
         if (type === "f" && data.symbol) {
           const symbol = String(data.symbol).toUpperCase()
-          if (!trackedSymbols.has(symbol)) continue
-          const totalBuyVal = numeric(data.totalBuyTradedAmount ?? data.totalBuyValue ?? data.foreignBuyValue)
-          const totalSellVal = numeric(data.totalSellTradedAmount ?? data.totalSellValue ?? data.foreignSellValue)
-          const totalBuyVol = numeric(data.totalBuyVolume ?? data.totalBuyQtty ?? data.foreignBuyVolume)
-          const totalSellVol = numeric(data.totalSellVolume ?? data.totalSellQtty ?? data.foreignSellVolume)
-          const buyVal = numeric(data.buyTradedAmount)
-          const sellVal = numeric(data.sellTradedAmount)
-          const buyVol = numeric(data.buyVolume)
-          const sellVol = numeric(data.sellVolume)
+          if (!canonicalTrackedSymbols.has(symbol)) continue
+          const parsed = parseDnseForeignFrame(data)
+          if (!parsed || parsed.sessionDate !== activeSessionDayRef.current || !isCurrentSessionProviderTime(parsed.asOf, activeSessionDayRef.current)) continue
+          const currentStock = quotesRef.current[symbol] as LiveStockQuote | undefined
+          if (!isProviderTimestampNotOlder(parsed.asOf, currentStock?.foreignUpdatedAt)) continue
 
           updateLiveQuote(symbol, (currentQuote) => {
             const previous = currentQuote as LiveStockQuote | undefined
             if (!previous) return previous
-
-            const prevBuyVal = previous.foreignBuyValue ?? 0
-            const prevSellVal = previous.foreignSellValue ?? 0
-            const nextBuyVal = totalBuyVal || (buyVal > 0 ? prevBuyVal + buyVal : prevBuyVal)
-            const nextSellVal = totalSellVal || (sellVal > 0 ? prevSellVal + sellVal : prevSellVal)
-            const prevBuyVol = previous.foreignBuyVolume ?? 0
-            const prevSellVol = previous.foreignSellVolume ?? 0
-            const nextBuyVol = totalBuyVol || (buyVol > 0 ? prevBuyVol + buyVol : prevBuyVol)
-            const nextSellVol = totalSellVol || (sellVol > 0 ? prevSellVol + sellVol : prevSellVol)
-
-            let foreignNetValue: number | undefined
-            if (nextBuyVal > 0 || nextSellVal > 0) {
-              foreignNetValue = nextBuyVal - nextSellVal
-            } else if (nextBuyVol > 0 || nextSellVol > 0) {
-              foreignNetValue = (nextBuyVol - nextSellVol) * (previous.price || 0)
-            }
+            if (!isProviderTimestampNotOlder(parsed.asOf, previous.foreignUpdatedAt)) return previous
+            const hasCompleteAmounts = parsed.buyValue !== undefined && parsed.sellValue !== undefined
+            const nextBuyVolume = parsed.buyVolume ?? previous.foreignBuyVolume
+            const nextSellVolume = parsed.sellVolume ?? previous.foreignSellVolume
 
             return {
               ...previous,
-              foreignBuyValue: nextBuyVal || undefined,
-              foreignSellValue: nextSellVal || undefined,
-              foreignBuyVolume: nextBuyVol || undefined,
-              foreignSellVolume: nextSellVol || undefined,
-              foreignNetValue,
-              updatedAt: receivedAt,
+              ...(hasCompleteAmounts ? {
+                foreignBuyValue: parsed.buyValue,
+                foreignSellValue: parsed.sellValue,
+                foreignNetValue: parsed.netValue,
+                foreignUpdatedAt: parsed.asOf,
+                foreignSessionDate: parsed.sessionDate,
+                foreignSource: "DNSE Onidel WS",
+                foreignReceivedAt: receivedAt,
+              } : {}),
+              foreignBuyVolume: nextBuyVolume,
+              foreignSellVolume: nextSellVolume,
             }
           })
           continue
+        }
+
+        if (type === "index-impact" && String(data.symbol ?? "").toUpperCase() === "VNINDEX") {
+          const snapshot = parseVnindexImpactPayload(data)
+          if (!snapshot?.asOf || !isCurrentSessionProviderTime(snapshot.asOf, activeSessionDayRef.current)) continue
+          const parsed = { ...snapshot, source: "DNSE Onidel WS · VNINDEX basket-influence" }
+          if (!isProviderTimestampNotOlder(snapshot.asOf, realtimeImpactRef.current?.asOf)) continue
+          realtimeImpactRef.current = parsed
+          setRealtimeImpact(parsed)
         }
       }
     }
@@ -1346,7 +1407,7 @@ export function LiveMarketBoard({
       unsubscribeFrames()
       unsubscribeState()
     }
-  }, [reconnectKey, pushFiveMinuteClose, trackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote])
+  }, [reconnectKey, pushFiveMinuteClose, trackedSymbols, canonicalTrackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote, scheduleMarketUiCommit])
 
   const normalizedQuery = query.trim().toUpperCase()
   const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
@@ -1382,12 +1443,10 @@ export function LiveMarketBoard({
   }, [priceHistory, marketUiPhase])
 
   const boardUniverse = universe
-  const fullCanonicalUniverse = canonicalUniverse ?? universe
   const canonicalIndustries = useMemo(
     () => [...new Set(fullCanonicalUniverse.map(industryLabelForStock))],
     [fullCanonicalUniverse],
   )
-  const canonicalSymbols = useMemo(() => fullCanonicalUniverse.map((stock) => stock.ticker), [fullCanonicalUniverse])
   const filtered = useMemo(() => boardUniverse.filter((stock) => (!normalizedQuery || stock.ticker.includes(normalizedQuery))), [boardUniverse, normalizedQuery])
   const movers = useMemo(() => [...filtered].sort((a, b) => compareByPerformance(a, b, orderingQuotes)), [orderingQuotes, filtered])
   const watchedStocks = useMemo(() => {
@@ -1485,6 +1544,8 @@ export function LiveMarketBoard({
           indexQuotes={indexQuotes}
           stockQuotes={displayQuotes as Record<string, LiveStockQuote | undefined>}
           canonicalUniverse={fullCanonicalUniverse}
+          realtimeIndexSeries={realtimeIndexSeries}
+          realtimeImpact={realtimeImpact}
           onOpenIndexChart={openIndexChart}
         />
       </div>

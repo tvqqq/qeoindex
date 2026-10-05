@@ -84,10 +84,13 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		"window_end", windowEnd.Format(time.RFC3339),
 	)
 
-	checkpointBuffer := realtime.NewBuffer(maxRealtimePayloadBytes)
+	checkpointBuffer := realtime.NewBuffer(maxRealtimePayloadBytes - maxContextSnapshotBytes - 2)
 	marketRelayBuffer := realtime.NewBuffer(maxRealtimePayloadBytes)
 	orderbookBuffer := realtime.NewOrderbookBuffer(orderbookFanoutShards, cfg.OrderbookMaxPayloadBytes, cfg.OrderbookMaxExecutionFrames)
+	contextSnapshots := newContextSnapshotBuffer(vietnamDateKey(time.Now()), maxContextSnapshotBytes)
+	contextSnapshots.SetUniverse(tickers)
 	orderbookRelayState := newOrderbookRelayState(tickers)
+	frameRouter := newMarketFrameRouter(checkpointBuffer, marketRelayBuffer, orderbookBuffer, contextSnapshots)
 	checkpointWriter := newCheckpointWriter(runCtx, client, logger, time.Second)
 
 	// A process restart and any provider reconnect are continuity boundaries for
@@ -98,22 +101,9 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	var marketContinuityGap atomic.Bool
 
 	auth := dnseauth.New(cfg.DNSEAPIKey, cfg.DNSEAPISecret)
-	stampAndPushMarket := func(frame map[string]any) realtime.Frame {
-		stamped := stampOrderbookFrame(frame)
-		checkpointBuffer.Push(stamped)
-		marketRelayBuffer.Push(stamped)
-		return stamped
-	}
-	onBoardFrame := func(frame map[string]any) {
-		stampAndPushMarket(frame)
-	}
-	onTickFrame := func(frame map[string]any) {
-		stamped := stampAndPushMarket(frame)
-		orderbookBuffer.Push(stamped)
-	}
-	onOrderbookFrame := func(frame map[string]any) {
-		orderbookBuffer.Push(stampOrderbookFrame(frame))
-	}
+	onBoardFrame := frameRouter.OnBoardFrame
+	onTickFrame := frameRouter.OnTickFrame
+	onOrderbookFrame := frameRouter.OnOrderbookFrame
 	markOrderbookGap := func() {
 		orderbookBuffer.MarkContinuityGapAll()
 		orderbookRelayState.MarkContinuityGapAll()
@@ -125,6 +115,11 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 
 	var wg sync.WaitGroup
 	relayErrCh := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		runIndexImpactPoller(runCtx, logger, frameRouter.PushIndexImpact, indexImpactURL, indexImpactPollInterval, indexImpactRequestTimeout)
+	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -219,7 +214,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			)
 			lastMarketRelayFrames = len(frames)
 		case <-checkpointTicker.C:
-			frames := checkpointBuffer.Drain()
+			frames := combineCheckpointFrames(checkpointBuffer.Drain(), contextSnapshots.Snapshot(), maxRealtimePayloadBytes)
 			if len(frames) == 0 {
 				continue
 			}
@@ -277,6 +272,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			markStockGap()
 			hub.SetUniverse(next)
 			orderbookRelayState.SetUniverse(next)
+			contextSnapshots.SetUniverse(next)
 			stockCancel()
 			tickers = next
 			stockCancel = startStockStream(tickers)

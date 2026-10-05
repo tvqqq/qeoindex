@@ -2,7 +2,16 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
-import { orderedImpactBars, parseVnindexImpactPayload } from "../modules/market/board/market-context-contract.ts"
+import {
+  coveredTop200ForeignTotals,
+  currentSessionIndexMetrics,
+  mergeObservedIndexSeries,
+  orderedImpactBars,
+  parseVnindexImpactPayload,
+  selectCurrentSessionImpact,
+  upsertObservedIndexPoint,
+  type MarketContextIndexSeries,
+} from "../modules/market/board/market-context-contract.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 const stripSource = readFileSync(new URL("../components/market-board/market-context-strip.tsx", import.meta.url), "utf8")
@@ -69,6 +78,96 @@ test("impact chart keeps strongest gain at left and strongest negative at far ri
   )
 })
 
+test("worker index-impact rows retain provider age and fresh WebSocket data wins over later REST", () => {
+  const websocketFrame = {
+    T: "index-impact",
+    symbol: "VNINDEX",
+    providerAsOf: "2026-10-05T02:23:05.664Z",
+    rows: [
+      { symbol: "HPG", basketInfluence: 0.42, time: { seconds: 1_791_166_985, nanos: 664_143_789 } },
+      { symbol: "VIC", basketInfluence: -0.12, time: { seconds: 1_791_166_985, nanos: 664_143_789 } },
+    ],
+  }
+  const websocket = parseVnindexImpactPayload(websocketFrame)
+  const rest = parseVnindexImpactPayload([
+    { symbol: "HPG", basketInfluence: 0.2, time: { seconds: 1_791_167_045, nanos: 0 } },
+  ])
+  assert.ok(websocket)
+  assert.ok(rest)
+  assert.equal(websocket.asOf, "2026-10-05T02:23:05.664Z")
+  assert.equal(websocket.providerRows, 2)
+
+  const nowMs = Date.parse("2026-10-05T02:23:30.000Z")
+  const freshSelection = selectCurrentSessionImpact(rest, websocket, "2026-10-05", nowMs)
+  assert.equal(freshSelection.source, "websocket")
+  assert.equal(freshSelection.impact, websocket)
+
+  const staleSelection = selectCurrentSessionImpact(rest, websocket, "2026-10-05", nowMs + 121_000)
+  assert.equal(staleSelection.source, "rest")
+  assert.equal(staleSelection.impact, rest)
+})
+
+test("observed index points accept equal-time corrections, reject older frames, and merge after completed REST candles", () => {
+  const sessionDate = "2026-10-05"
+  const first = upsertObservedIndexPoint(undefined, "VNINDEX", sessionDate, "2026-10-05T09:15:10+07:00", 1750.61)
+  assert.ok(first)
+  const older = upsertObservedIndexPoint(first, "VNINDEX", sessionDate, "2026-10-05T09:15:09+07:00", 1749.99)
+  assert.equal(older, first)
+  const correction = upsertObservedIndexPoint(first, "VNINDEX", sessionDate, "2026-10-05T09:15:10+07:00", 1750.62)
+  assert.equal(correction?.points[0]?.value, 1750.62)
+
+  const rest: MarketContextIndexSeries = {
+    symbol: "VNINDEX",
+    sessionDate,
+    points: [
+      { time: Date.parse("2026-10-05T09:15:00+07:00") / 1000, value: 1750.5 },
+      { time: Date.parse("2026-10-05T09:16:00+07:00") / 1000, value: 1750.7 },
+    ],
+    asOf: "2026-10-05T02:16:00.000Z",
+    source: "DNSE REST 1m history",
+  }
+  const observed: MarketContextIndexSeries = {
+    ...first,
+    points: [
+      { time: Date.parse("2026-10-05T09:15:10+07:00") / 1000, value: 1749.9 },
+      { time: Date.parse("2026-10-05T09:16:10+07:00") / 1000, value: 1750.8 },
+      { time: Date.parse("2026-10-05T09:17:10+07:00") / 1000, value: 1750.9 },
+    ],
+    asOf: "2026-10-05T02:17:10.000Z",
+  }
+  const merged = mergeObservedIndexSeries(rest, observed, sessionDate)
+  assert.deepEqual(merged?.points, [
+    rest.points[0],
+    rest.points[1],
+    observed.points[2],
+  ])
+})
+
+test("HOSE index liquidity requires a current provider source timestamp and preserves provider zero", () => {
+  const sessionDate = "2026-10-05"
+  const receivedOnly = currentSessionIndexMetrics({
+    updatedAt: "2026-10-05T02:23:30.000Z",
+    volume: 67_014_841,
+    valueTraded: 1_630_070_727_140,
+  }, sessionDate)
+  assert.deepEqual(receivedOnly, { asOf: "", volume: undefined, valueTraded: undefined })
+
+  const providerZero = currentSessionIndexMetrics({
+    sourceAsOf: "2026-10-05T02:23:05.664Z",
+    updatedAt: "2026-10-05T02:24:00.000Z",
+    volume: 0,
+    valueTraded: 0,
+  }, sessionDate)
+  assert.deepEqual(providerZero, { asOf: "2026-10-05T02:23:05.664Z", volume: 0, valueTraded: 0 })
+})
+
+test("Top-200 foreign flow stays unavailable without coverage but preserves a covered zero snapshot", () => {
+  assert.equal(coveredTop200ForeignTotals({ buy: 0, sell: 0, covered: 0 }), null)
+  assert.deepEqual(coveredTop200ForeignTotals({ buy: 0, sell: 0, covered: 1 }), { buy: 0, sell: 0, net: 0 })
+  assert.equal(coveredTop200ForeignTotals({ buy: 10, sell: 5, covered: 1.5 })?.net, 5)
+  assert.equal(coveredTop200ForeignTotals({ buy: Number.NaN, sell: 0, covered: 1 }), null)
+})
+
 test("market context bootstrap uses actual index candles and provider contribution endpoint", () => {
   assert.match(serverSource, /chart-api\/v2\/ohlcs/)
   assert.match(serverSource, /\$\{baseUrl\}\/index/)
@@ -92,7 +191,7 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.match(stripSource, /Top 200 partial/)
   assert.match(stripSource, /Top mã:/)
   assert.match(stripSource, /points\.length < 2/)
-  assert.match(stripSource, /vietnamDateKey\(quote\.updatedAt\) !== series\.sessionDate/)
+  assert.match(stripSource, /vietnamDateKey\(quote\.sourceAsOf\) !== series\.sessionDate/)
   assert.match(stripSource, /liquidityData\.length >= 2/)
   assert.match(stripSource, /<DualLineChart points=\{foreignPoints\}/)
   assert.match(stripSource, /text-red-300/)
@@ -101,7 +200,9 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.doesNotMatch(stripSource, /formatVndValue\(quote\?\.valueTraded\)/)
   assert.match(stripSource, /formatCompactVolume\(liquidityVolume\)/)
   assert.match(stripSource, /hasFinhayLiquidity && finite\(finhayLiquidity\?\.volume\)/)
-  assert.match(stripSource, /vietnamDateKey\(vnindexQuote\?\.updatedAt \?\? ""\) === contextSessionDate/)
+  assert.match(stripSource, /currentSessionIndexMetrics\(vnindexQuote, contextSessionDate\)/)
+  assert.match(contractSource, /const asOf = quote\?\.sourceAsOf \?\? ""/)
+  assert.doesNotMatch(contractSource, /quote\?\.sourceAsOf \?\? quote\?\.updatedAt/)
   assert.doesNotMatch(stripSource, /indexQuotes\.HNXINDEX|indexQuotes\.UPCOMINDEX/)
   const topRow = stripSource.split("data-market-context-index-row>")[1]?.split("data-market-context-impact-row")[0]
   assert.ok(topRow)
@@ -121,7 +222,7 @@ test("top strip is honest about partial liquidity and foreign history instead of
   assert.doesNotMatch(providerSource, /vndirect|yV \* yC|tV \* tC|valueChangePercent/i)
 })
 
-test("compact 60/40 cards track live provider timestamps without faking realtime or changing past data", () => {
+test("compact context cards preserve provider time and let the worker stream drive fresh impact", () => {
   assert.ok(stripSource.includes("xl:h-[144px]"))
   assert.ok(stripSource.includes("h-[55px]"))
   assert.ok(stripSource.includes("min-h-[75px]"))
@@ -131,13 +232,14 @@ test("compact 60/40 cards track live provider timestamps without faking realtime
   assert.ok(stripSource.includes("motion-safe:animate-pulse"))
   assert.ok(stripSource.includes("return sessionOpen"))
   assert.ok(stripSource.includes("observedAtMs - sourceMs <= 120_000"))
-  assert.ok(stripSource.includes("12_000 : 60_000"))
+  assert.ok(stripSource.includes("}, 60_000)"))
   assert.ok(stripSource.includes('if (disposed || inFlight || document.visibilityState === "hidden") return'))
   assert.ok(stripSource.includes('document.addEventListener("visibilitychange"'))
   assert.ok(stripSource.includes('window.addEventListener("focus"'))
   assert.ok(stripSource.includes("vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)"))
   assert.ok(stripSource.includes("vietnamDateKey(previous.impact?.asOf ?? \"\") === vietnamDateKey(data.generatedAt)"))
-  assert.ok(stripSource.includes("quoteSessionDate > chartSessionDate"))
+  assert.ok(stripSource.includes("const contextSessionDate = [quoteSessionDate, chartSessionDate, liveImpactDate]"))
+  assert.ok(stripSource.includes('impactSelection.source === "websocket"'))
   assert.ok(stripSource.includes("Chậm"))
   assert.ok(stripSource.includes("LIVE"))
   assert.ok(!stripSource.includes("setInterval(() => void load(), 30_000)"))
