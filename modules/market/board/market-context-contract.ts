@@ -1,5 +1,12 @@
 export const MARKET_CONTEXT_INDEX_SYMBOLS = ["VNINDEX", "VN30"] as const
 
+const VIETNAM_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
 export type MarketContextIndexSymbol = (typeof MARKET_CONTEXT_INDEX_SYMBOLS)[number]
 
 export type MarketContextPoint = {
@@ -13,6 +20,86 @@ export type MarketContextIndexSeries = {
   points: MarketContextPoint[]
   asOf: string
   source: string
+}
+
+export function currentSessionIndexMetrics(
+  quote: { sourceAsOf?: string; updatedAt?: string; volume?: number; valueTraded?: number } | undefined,
+  sessionDate: string,
+) {
+  const asOf = quote?.sourceAsOf ?? ""
+  const timestamp = Date.parse(asOf)
+  if (!sessionDate || !Number.isFinite(timestamp) || VIETNAM_DATE_FORMATTER.format(new Date(timestamp)) !== sessionDate) {
+    return { asOf: "", volume: undefined, valueTraded: undefined }
+  }
+  return {
+    asOf,
+    volume: typeof quote?.volume === "number" && Number.isFinite(quote.volume) && quote.volume >= 0 ? quote.volume : undefined,
+    valueTraded: typeof quote?.valueTraded === "number" && Number.isFinite(quote.valueTraded) && quote.valueTraded >= 0 ? quote.valueTraded : undefined,
+  }
+}
+
+export function upsertObservedIndexPoint(
+  current: MarketContextIndexSeries | undefined,
+  symbol: MarketContextIndexSymbol,
+  sessionDate: string,
+  observedAt: string,
+  value: number,
+): MarketContextIndexSeries | null {
+  const timestamp = Date.parse(observedAt)
+  if (!sessionDate || !Number.isFinite(timestamp) || !Number.isFinite(value) || value <= 0) return null
+  const currentAsOf = current?.sessionDate === sessionDate ? Date.parse(current.asOf) : Number.NaN
+  if (Number.isFinite(currentAsOf) && timestamp < currentAsOf) return current ?? null
+  const minute = Math.floor(timestamp / 60_000)
+  const points = current?.sessionDate === sessionDate ? current.points : []
+  const existing = points.findIndex((point) => Math.floor(point.time / 60) === minute)
+  const nextPoint = { time: Math.floor(timestamp / 1000), value }
+  let nextPoints = points
+  if (existing >= 0) {
+    if (points[existing].time > nextPoint.time) return current ?? null
+    if (points[existing].time === nextPoint.time && points[existing].value === value) return current ?? null
+    nextPoints = [...points.slice(0, existing), ...points.slice(existing + 1), nextPoint]
+  } else {
+    nextPoints = [...points, nextPoint]
+  }
+  nextPoints = nextPoints.sort((left, right) => left.time - right.time).slice(-360)
+  return {
+    symbol,
+    sessionDate,
+    points: nextPoints,
+    asOf: current?.sessionDate === sessionDate && Date.parse(current.asOf) > timestamp ? current.asOf : observedAt,
+    source: "DNSE Onidel realtime · observed 1m values",
+  }
+}
+
+export function mergeObservedIndexSeries(
+  bootstrap: MarketContextIndexSeries | undefined,
+  observed: MarketContextIndexSeries | undefined,
+  sessionDate: string,
+): MarketContextIndexSeries | undefined {
+  const rest = bootstrap?.sessionDate === sessionDate ? bootstrap : undefined
+  const live = observed?.sessionDate === sessionDate ? observed : undefined
+  if (!rest && !live) return undefined
+  if (!rest) return live
+  if (!live) return rest
+
+  const pointsByMinute = new Map<number, MarketContextPoint>()
+  for (const point of rest.points) pointsByMinute.set(Math.floor(point.time / 60), point)
+  const latestRestMinute = Math.max(...rest.points.map((point) => Math.floor(point.time / 60)))
+  for (const point of live.points) {
+    const minute = Math.floor(point.time / 60)
+    // REST points are completed provider candles. Keep them through their latest
+    // minute; append observed socket values only after that completed history.
+    if (minute <= latestRestMinute) continue
+    pointsByMinute.set(minute, point)
+  }
+  const points = [...pointsByMinute.values()].sort((left, right) => left.time - right.time).slice(-360)
+  return {
+    symbol: rest.symbol,
+    sessionDate,
+    points,
+    asOf: Date.parse(live.asOf) >= Date.parse(rest.asOf) ? live.asOf : rest.asOf,
+    source: `${rest.source} + observed DNSE live values`,
+  }
 }
 
 export type MarketImpactEntry = {
@@ -32,6 +119,44 @@ export type MarketImpactSnapshot = {
   displayedPositiveTotal: number
   displayedNegativeTotal: number
   displayedNetTotal: number
+}
+
+export function coveredTop200ForeignTotals(snapshot: { buy: number; sell: number; covered: number } | undefined) {
+  if (
+    !snapshot
+    || !Number.isFinite(snapshot.covered)
+    || snapshot.covered <= 0
+    || !Number.isFinite(snapshot.buy)
+    || !Number.isFinite(snapshot.sell)
+    || snapshot.buy < 0
+    || snapshot.sell < 0
+  ) return null
+  return { buy: snapshot.buy, sell: snapshot.sell, net: snapshot.buy - snapshot.sell }
+}
+
+export function selectCurrentSessionImpact(
+  rest: MarketImpactSnapshot | null | undefined,
+  realtime: MarketImpactSnapshot | null | undefined,
+  sessionDate: string,
+  nowMs: number,
+  maxAgeMs = 120_000,
+): { impact: MarketImpactSnapshot | null; source: "websocket" | "rest" | null } {
+  const isCurrentSession = (impact: MarketImpactSnapshot | null | undefined) => {
+    const timestamp = Date.parse(impact?.asOf ?? "")
+    return Boolean(
+      sessionDate
+      && Number.isFinite(timestamp)
+      && timestamp <= nowMs + 5_000
+      && nowMs - timestamp <= maxAgeMs
+      && VIETNAM_DATE_FORMATTER.format(new Date(timestamp)) === sessionDate,
+    )
+  }
+  if (isCurrentSession(realtime)) return { impact: realtime ?? null, source: "websocket" }
+  const restTime = Date.parse(rest?.asOf ?? "")
+  if (rest && sessionDate && Number.isFinite(restTime) && VIETNAM_DATE_FORMATTER.format(new Date(restTime)) === sessionDate) {
+    return { impact: rest, source: "rest" }
+  }
+  return { impact: null, source: null }
 }
 
 // Keep strongest positive at the far left, strongest negative at the far right.
@@ -57,7 +182,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function rowsFromImpactPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload
   if (!isRecord(payload)) return []
-  for (const key of ["data", "result", "items"]) {
+  for (const key of ["rows", "data", "result", "items"]) {
     if (Array.isArray(payload[key])) return payload[key] as unknown[]
   }
   return []

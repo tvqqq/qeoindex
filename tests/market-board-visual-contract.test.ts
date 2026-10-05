@@ -17,6 +17,7 @@ import {
 } from "../modules/market/board/stock-filter.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
+const dnseMarketFrameSource = readFileSync(new URL("../modules/market/board/dnse-market-frame.ts", import.meta.url), "utf8")
 const stockSource = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
 const sparklineSource = readFileSync(new URL("../components/sparkline.tsx", import.meta.url), "utf8")
 const pageSource = readFileSync(new URL("../app/board/page.tsx", import.meta.url), "utf8")
@@ -120,7 +121,9 @@ test("stock row keeps clipping guards and hides rank", () => {
 
 test("daily performance stays anchored to reference price, never session open", () => {
   assert.match(boardSource, /STOCK_REFERENCE_KEYS/)
-  assert.match(boardSource, /INDEX_REFERENCE_KEYS/)
+  assert.match(dnseMarketFrameSource, /INDEX_REFERENCE_KEYS/)
+  assert.match(dnseMarketFrameSource, /verifiedReference\?\.sessionDate === currentSessionDate/)
+  assert.match(boardSource, /parseDnseMarketIndexFrame\(data, verifiedReference\)/)
   assert.match(boardSource, /dailyReferences\.current\[symbol\] = history\.reference/)
   assert.doesNotMatch(boardSource, /OPEN_PRICE_KEYS|INDEX_OPEN_KEYS|openingReferences|indexOpeningReferences/)
   assert.match(stockSource, /giá tham chiếu \(đóng cửa phiên trước\)/)

@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
-import { orderedImpactBars } from "@/modules/market/board/market-context-contract"
+import { coveredTop200ForeignTotals, currentSessionIndexMetrics, mergeObservedIndexSeries, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
 import type {
   MarketBoardContextBootstrap,
   MarketContextIndexSeries,
@@ -15,13 +15,15 @@ import { buildMarketDepthSnapshot, MARKET_DEPTH_BUCKETS, type MarketDepthSnapsho
 type MarketContextIndexQuote = {
   symbol: string
   value: number
+  reference?: number
   change?: number
-  changePercent: number
+  changePercent?: number
   volume?: number
   valueTraded?: number
   advances?: number
   declines?: number
   unchanged?: number
+  sourceAsOf?: string
   updatedAt: string
 }
 
@@ -32,6 +34,9 @@ type MarketContextStockQuote = {
   changePercent?: number
   foreignBuyValue?: number
   foreignSellValue?: number
+  foreignUpdatedAt?: string
+  foreignSessionDate?: string
+  foreignSource?: string
   updatedAt: string
 }
 
@@ -43,6 +48,8 @@ type MarketContextUniverseStock = {
 type MarketContextStripProps = {
   indexQuotes: Record<string, MarketContextIndexQuote | undefined>
   stockQuotes: Record<string, MarketContextStockQuote | undefined>
+  realtimeIndexSeries: Partial<Record<"VNINDEX" | "VN30", MarketContextIndexSeries>>
+  realtimeImpact: MarketImpactSnapshot | null
   canonicalUniverse: readonly MarketContextUniverseStock[]
   onOpenIndexChart: () => void
 }
@@ -147,8 +154,8 @@ function upsertForeignMetricPoint(current: ForeignMetricPoint[], updatedAt: stri
 
 function appendLiveIndexValue(series: MarketContextIndexSeries | undefined, quote: MarketContextIndexQuote | undefined) {
   const values = series?.points.map((point) => point.value) ?? []
-  if (!values.length || !series || !quote || !finite(quote.value) || quote.value <= 0) return values
-  if (vietnamDateKey(quote.updatedAt) !== series.sessionDate) return values
+  if (!values.length || !series || !quote || !quote.sourceAsOf || !finite(quote.value) || quote.value <= 0) return values
+  if (vietnamDateKey(quote.sourceAsOf) !== series.sessionDate) return values
   if (Math.abs(values.at(-1)! - quote.value) < 1e-6) return values
   return [...values, quote.value]
 }
@@ -187,6 +194,7 @@ function formatCompactVolume(value?: number) {
 
 function indexReference(quote?: MarketContextIndexQuote) {
   if (!quote || !finite(quote.value) || quote.value <= 0) return undefined
+  if (finite(quote.reference) && quote.reference > 0) return quote.reference
   if (finite(quote.change)) {
     const reference = quote.value - quote.change
     if (reference > 0) return reference
@@ -353,7 +361,7 @@ function IndexContextCard({
 }) {
   const color = marketColor(quote?.changePercent)
   const data = appendLiveIndexValue(series, quote)
-  const quoteDate = quote?.updatedAt ? vietnamDateKey(quote.updatedAt) : null
+  const quoteDate = quote?.sourceAsOf ? vietnamDateKey(quote.sourceAsOf) : null
   const hasHistory = Boolean(series?.points.length && (!quoteDate || series?.sessionDate === quoteDate))
   const reference = indexReference(quote)
   const indexValue = quote && finite(quote.value)
@@ -578,6 +586,8 @@ export function MarketContextStrip({
   indexQuotes,
   stockQuotes,
   canonicalUniverse,
+  realtimeIndexSeries,
+  realtimeImpact,
   onOpenIndexChart,
 }: MarketContextStripProps) {
   const [bootstrap, setBootstrap] = useState<MarketContextApiResponse | null>(null)
@@ -631,11 +641,10 @@ export function MarketContextStrip({
     }
 
     const schedule = () => {
-      const ms = getMarketSessionStatus().isLiveSession ? 12_000 : 60_000
       timer = setTimeout(async () => {
         await load()
         if (!disposed) schedule()
-      }, ms)
+      }, 60_000)
     }
     const onVisible = () => {
       if (document.visibilityState === "visible") void load()
@@ -652,6 +661,10 @@ export function MarketContextStrip({
       window.removeEventListener("focus", onVisible)
     }
   }, [])
+
+  useEffect(() => {
+    if (realtimeImpact?.asOf) setObservedAtMs(Date.now())
+  }, [realtimeImpact])
 
   useEffect(() => {
     let disposed = false
@@ -710,19 +723,21 @@ export function MarketContextStrip({
     }
   }, [])
 
-  const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.updatedAt ?? "")
+  const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.sourceAsOf ?? indexQuotes.VNINDEX?.updatedAt ?? "")
   const chartSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
+  const liveImpactDate = vietnamDateKey(realtimeImpact?.asOf ?? "") ?? ""
   // At 09:00 the minute chart may still reflect yesterday; use newer live index session.
-  const contextSessionDate = quoteSessionDate && quoteSessionDate > chartSessionDate
-    ? quoteSessionDate
-    : chartSessionDate || quoteSessionDate || ""
+  const contextSessionDate = [quoteSessionDate, chartSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
+  const vnindexSeries = mergeObservedIndexSeries(bootstrap?.indexes.VNINDEX, realtimeIndexSeries.VNINDEX, contextSessionDate)
+  const vn30Series = mergeObservedIndexSeries(bootstrap?.indexes.VN30, realtimeIndexSeries.VN30, contextSessionDate)
   const marketDepth = useMemo(
     () => buildMarketDepthSnapshot(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey),
     [canonicalUniverse, contextSessionDate, stockQuotes],
   )
   const vnindexQuote = indexQuotes.VNINDEX
-  const fallbackLiquidityValue = vnindexQuote?.valueTraded
-  const fallbackLiquidityUpdatedAt = vnindexQuote?.updatedAt ?? ""
+  const indexLiquidity = currentSessionIndexMetrics(vnindexQuote, contextSessionDate)
+  const fallbackLiquidityValue = indexLiquidity.valueTraded
+  const fallbackLiquidityUpdatedAt = indexLiquidity.asOf
   const hasFinhayLiquidity = Boolean(
     finhayLiquidity
     && contextSessionDate
@@ -735,9 +750,7 @@ export function MarketContextStrip({
   // Match the liquidity source/session when possible; never sum Top-200 volume as full HOSE.
   const liquidityVolume = hasFinhayLiquidity && finite(finhayLiquidity?.volume)
     ? finhayLiquidity.volume
-    : contextSessionDate && vietnamDateKey(vnindexQuote?.updatedAt ?? "") === contextSessionDate
-      ? vnindexQuote?.volume
-      : undefined
+    : indexLiquidity.volume
   const liquidityUpdatedAt = hasFinhayLiquidity ? finhayLiquidity?.sourceUpdatedAt ?? "" : fallbackLiquidityUpdatedAt
 
   useEffect(() => {
@@ -758,11 +771,21 @@ export function MarketContextStrip({
 
     for (const stock of canonicalUniverse) {
       const quote = stockQuotes[stock.ticker]
-      if (!quote || !finite(quote.foreignBuyValue) || !finite(quote.foreignSellValue)) continue
+      if (
+        !quote
+        || quote.foreignSource !== "DNSE Onidel WS"
+        || quote.foreignSessionDate !== contextSessionDate
+        || !quote.foreignUpdatedAt
+        || vietnamDateKey(quote.foreignUpdatedAt) !== contextSessionDate
+        || !finite(quote.foreignBuyValue)
+        || !finite(quote.foreignSellValue)
+        || quote.foreignBuyValue < 0
+        || quote.foreignSellValue < 0
+      ) continue
       buy += quote.foreignBuyValue
       sell += quote.foreignSellValue
       covered += 1
-      if (quote.updatedAt > asOf) asOf = quote.updatedAt
+      if (quote.foreignUpdatedAt > asOf) asOf = quote.foreignUpdatedAt
     }
 
     return { buy, sell, covered, asOf }
@@ -775,9 +798,10 @@ export function MarketContextStrip({
     && finite(finhayForeign.buy.value)
     && finite(finhayForeign.sell.value),
   )
+  const top200ForeignTotals = coveredTop200ForeignTotals(foreignSnapshot)
   const foreignSeriesSource = hasFinhayForeign ? "finhay-vnindex" : "top200-partial"
-  const displayedForeignBuy = hasFinhayForeign ? finhayForeign?.buy.value : foreignSnapshot.buy
-  const displayedForeignSell = hasFinhayForeign ? finhayForeign?.sell.value : foreignSnapshot.sell
+  const displayedForeignBuy = hasFinhayForeign ? finhayForeign?.buy.value : top200ForeignTotals?.buy
+  const displayedForeignSell = hasFinhayForeign ? finhayForeign?.sell.value : top200ForeignTotals?.sell
   const displayedForeignCoverage = hasFinhayForeign
     ? finhayForeign?.constituentCount
     : foreignSnapshot.covered
@@ -785,11 +809,13 @@ export function MarketContextStrip({
     ? finhayForeign?.sourceUpdatedAt
     : foreignSnapshot.asOf
 
-  const displayedForeignNet = hasFinhayForeign && finite(finhayForeign?.net.value)
-    ? finhayForeign!.net.value
-    : finite(displayedForeignBuy) && finite(displayedForeignSell)
-      ? displayedForeignBuy - displayedForeignSell
-      : undefined
+  const displayedForeignNet = hasFinhayForeign
+    ? finite(finhayForeign?.net.value)
+      ? finhayForeign!.net.value
+      : finite(displayedForeignBuy) && finite(displayedForeignSell)
+        ? displayedForeignBuy - displayedForeignSell
+        : undefined
+    : top200ForeignTotals?.net
 
   useEffect(() => {
     setForeignPoints([])
@@ -818,7 +844,6 @@ export function MarketContextStrip({
 
   const liquidityData = liquidityPoints.map((point) => point.value)
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
-  const impact = bootstrap?.impact
   const sessionOpen = observedAtMs > 0 && getMarketSessionStatus(new Date(observedAtMs)).isLiveSession
   const isFresh = (asOf: string | null | undefined) => {
     const sourceMs = Date.parse(asOf ?? "")
@@ -829,7 +854,9 @@ export function MarketContextStrip({
       && observedAtMs - sourceMs <= 120_000
       && vietnamDateKey(asOf ?? "") === contextSessionDate
   }
-  const impactLive = !loadError && isFresh(impact?.asOf)
+  const impactSelection = selectCurrentSessionImpact(bootstrap?.impact, realtimeImpact, contextSessionDate, observedAtMs)
+  const impact = impactSelection.impact
+  const impactLive = impactSelection.source === "websocket" && Boolean(impact?.asOf && isFresh(impact.asOf))
   const depthLive = isFresh(marketDepth.asOf)
 
   return (
@@ -838,7 +865,7 @@ export function MarketContextStrip({
         <IndexContextCard
           label="VNINDEX"
           quote={indexQuotes.VNINDEX}
-          series={bootstrap?.indexes.VNINDEX}
+          series={vnindexSeries}
           onOpen={onOpenIndexChart}
         />
 
@@ -867,7 +894,7 @@ export function MarketContextStrip({
           </div>
         </ContextCard>
 
-        <IndexContextCard label="VN30" quote={indexQuotes.VN30} series={bootstrap?.indexes.VN30} />
+        <IndexContextCard label="VN30" quote={indexQuotes.VN30} series={vn30Series} />
 
         <ContextCard
           title="Mua bán nước ngoài"
@@ -877,8 +904,8 @@ export function MarketContextStrip({
           titleHint={hasFinhayForeign
             ? "Finhay full VNINDEX/HOSE foreign buy/sell, sampled during current session."
             : finhayForeignState === "UNAVAILABLE"
-              ? "Finhay unavailable. Canonical Top 200 partial fallback."
-              : "Waiting for Finhay; Top 200 partial fallback."}
+              ? "Finhay unavailable. DNSE Onidel WebSocket cumulative Top 200 snapshots."
+              : "Finhay full market snapshot when available; DNSE Onidel WebSocket cumulative Top 200 fallback."}
           headerRight={<span className={`font-ticker text-[12px] font-extrabold tabular-nums ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(displayedForeignNet)}</span>}
         >
           <div className="flex items-center justify-between gap-2 font-ticker text-[10px] tabular-nums">
