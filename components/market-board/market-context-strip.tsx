@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
@@ -544,6 +544,12 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   const progress = indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])
   const total = hasBreadth ? progress.total : 0
   const percent = quote?.changePercent
+  const trend = finite(change) ? change : finite(percent) ? percent : undefined
+  const trendColor = !finite(trend) ? "text-zinc-500" : trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"
+  const trendIcon = !finite(trend) ? <Activity className="h-[13px] w-[13px]" aria-hidden="true" />
+    : trend > 0 ? <ArrowUpRight className="h-[13px] w-[13px]" aria-hidden="true" />
+      : trend < 0 ? <ArrowDownRight className="h-[13px] w-[13px]" aria-hidden="true" />
+        : <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
   const pillTone = !finite(percent)
     ? "border-zinc-600/40 bg-zinc-500/10 text-zinc-400"
     : percent > 0
@@ -552,14 +558,15 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
         : "border-amber-400/35 bg-amber-400/10 text-amber-300"
   return (
-    <div className="min-w-0 flex-1 px-2.5 py-1.5">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5">
       <div className="flex items-center justify-between gap-1.5">
         {onOpen ? (
           <button type="button" onClick={onOpen} className="truncate text-[11px] font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
         ) : <span className="truncate text-[11px] font-bold text-zinc-200">{label}</span>}
-        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[10px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
+        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
-      <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
+      <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
+        <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
         <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
       </div>
@@ -568,7 +575,7 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
       <div
-        className="mt-1 min-w-0"
+        className="mt-auto min-w-0 pt-1"
         aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
         data-index-breadth-progress
