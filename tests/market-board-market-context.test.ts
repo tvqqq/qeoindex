@@ -194,7 +194,7 @@ test("realtime comparison reuses only observed source-scoped same-session data",
   assert.match(stripSource, /vietnamDateKey\(new Date\(point.minute\)\.toISOString\(\)\) === day/)
   assert.match(stripSource, /vietnamSessionMinute/)
   assert.match(stripSource, /ComparisonLineChart/)
-  assert.match(stripSource, /previousLiquidity\?\.points/)
+  assert.match(stripSource, /verifiedPreviousLiquidity\?\.points/)
   assert.doesNotMatch(stripSource, /previousForeign\?\.points/)
   assert.match(stripSource, /previous: true/)
   assert.match(stripSource, /Chưa ghi nhận phiên trước/)
