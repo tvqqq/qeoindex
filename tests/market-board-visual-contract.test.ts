@@ -58,6 +58,18 @@ test("classic Bảng điện remains the default with the original six sector gr
   assert.match(boardSource, /Bảng ngành/)
 })
 
+test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
+  assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
+  assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))
+  assert.ok(contextStripSource.includes('label: "Nay"'))
+  assert.ok(contextStripSource.includes('label: "Trước"'))
+  assert.ok(contextStripSource.includes('label: "Ròng"'))
+  assert.ok(contextStripSource.includes('onPointerMove={(event) =>'))
+  assert.ok(contextStripSource.includes('onPointerLeave={() => setHoveredMinute(null)}'))
+  assert.ok(contextStripSource.includes("Mua "))
+  assert.ok(contextStripSource.includes("Bán "))
+})
+
 test("market context fits one desktop row and preserves the board-view controls", () => {
   assert.match(contextStripSource, /data-market-context-single-row/)
   assert.match(contextStripSource, /sm:grid-cols-2 xl:grid-cols-\[/)

@@ -5,6 +5,7 @@ import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } f
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
 import { coveredTop200ForeignTotals, currentSessionIndexMetrics, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
+import { intradayForeignNet, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
 import type {
   MarketBoardContextBootstrap,
   MarketImpactSnapshot,
@@ -226,9 +227,8 @@ function readMetricHistory<T extends MetricPoint | ForeignMetricPoint>(key: stri
 function previousMetricHistory<T extends MetricPoint | ForeignMetricPoint>(key: string, day: string): SessionHistory<T> | null {
   try {
     const days: unknown = JSON.parse(localStorage.getItem(`${key}:days`) ?? "[]")
-    if (!Array.isArray(days)) return null
-    const previous = days.filter((date): date is string => typeof date === "string" && date < day).sort().at(-1)
-    if (!previous) return null
+    const previous = previousTradingSessionDateKey(day)
+    if (!previous || !Array.isArray(days) || !days.includes(previous)) return null
     const points = readMetricHistory<T>(key, previous)
     return points.length >= 2 ? { day: previous, points } : null
   } catch {
@@ -250,33 +250,110 @@ function writeMetricHistory<T extends MetricPoint | ForeignMetricPoint>(key: str
   }
 }
 
-function minuteOfSession(instant: number) {
-  return (((Math.floor(instant / 60_000) + 7 * 60) % (24 * 60)) + 24 * 60) % (24 * 60)
-}
+type ComparisonSeries = { label: string; points: MetricPoint[]; color: string; previous?: boolean }
 
-type ComparisonSeries = { points: MetricPoint[]; color: string; previous?: boolean }
-function ComparisonLineChart({ series }: { series: ComparisonSeries[] }) {
+function ComparisonLineChart({
+  series,
+  zeroReference = false,
+}: {
+  series: ComparisonSeries[]
+  zeroReference?: boolean
+}) {
+  const [hoveredMinute, setHoveredMinute] = useState<number | null>(null)
   const valid = series.filter((line) => line.points.length)
-  if (!valid.length) return <div className="flex h-[55px] items-center justify-center text-[9px] text-zinc-500">Đang tích lũy realtime</div>
+  if (!valid.length) {
+    return <div className="flex h-[69px] items-center justify-center text-[9px] text-zinc-500">Chưa có mẫu realtime trong phiên</div>
+  }
+
   const width = 320
-  const height = 55
+  const height = 69
+  const left = 7
+  const right = 5
+  const top = 3
+  const bottom = 16
+  const plotHeight = height - top - bottom
   const values = valid.flatMap((line) => line.points.map((point) => point.value))
-  const minValue = Math.min(...values)
-  const maxValue = Math.max(...values)
-  const padY = Math.max((maxValue - minValue) * 0.1, maxValue * 0.002, 1)
-  const y = (value: number) => 3 + (maxValue + padY - value) / (maxValue - minValue + 2 * padY) * (height - 6)
-  const x = (minute: number) => 3 + Math.max(0, Math.min(1, (minuteOfSession(minute) - 9 * 60) / (6 * 60))) * (width - 6)
+  // Include zero for truthful signed net flow; keep a comparable zero-based cumulative liquidity scale.
+  const minValue = Math.min(0, ...values)
+  const maxValue = Math.max(0, ...values)
+  const padding = Math.max((maxValue - minValue) * 0.08, Math.max(Math.abs(maxValue), Math.abs(minValue)) * 0.002, 1)
+  const y = (value: number) => top + (maxValue + padding - value) / (maxValue - minValue + 2 * padding) * plotHeight
+  const x = (minute: number) => left + Math.max(0, Math.min(1, (minute - 540) / 360)) * (width - left - right)
+  const zeroY = y(0)
+  const chartAt = hoveredMinute === null ? [] : series.map((line) => ({
+    label: line.label,
+    color: line.color,
+    value: observedValueAtMinute(line.points, hoveredMinute),
+  }))
+  const timeLabel = hoveredMinute === null ? "" : `${String(Math.floor(hoveredMinute / 60)).padStart(2, "0")}:${String(hoveredMinute % 60).padStart(2, "0")}`
+  const ticks = [
+    { minute: 540, label: "09:00" },
+    { minute: 630, label: "10:30" },
+    { minute: 720, label: "12:00" },
+    { minute: 810, label: "13:30" },
+    { minute: 900, label: "15:00" },
+  ]
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[55px] w-full" aria-label="Nét liền phiên hiện tại; nét đứt phiên trước, căn cùng phút giao dịch" role="img">
-      {valid.map((line, index) => {
-        const sorted = [...line.points].sort((a, b) => a.minute - b.minute)
-        const path = sorted.map((point, position) => `${position ? "L" : "M"}${x(point.minute).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ")
-        return <g key={index}>
-          {sorted.length > 1 ? <path d={path} fill="none" stroke={line.color} strokeDasharray={line.previous ? "5 4" : undefined} strokeWidth={line.previous ? 1.4 : 2} strokeOpacity={line.previous ? 0.65 : 1} strokeLinecap="round" /> : null}
-          {!line.previous && sorted.length === 1 ? <circle cx={x(sorted[0].minute)} cy={y(sorted[0].value)} r="2" fill={line.color} /> : null}
-        </g>
-      })}
-    </svg>
+    <div className="relative min-w-0">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[69px] w-full touch-pan-y"
+        role="img"
+        aria-label={zeroReference ? "Giá trị mua ròng lũy kế trong phiên hôm nay, trục 0 thể hiện cân bằng mua bán" : "So sánh thanh khoản lũy kế hôm nay và phiên giao dịch trước tại cùng giờ Việt Nam"}
+        onPointerMove={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect()
+          if (!bounds.width) return
+          const minute = Math.round(540 + Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) * 360)
+          setHoveredMinute(minute)
+        }}
+        onPointerLeave={() => setHoveredMinute(null)}
+      >
+        {[0.25, 0.5, 0.75].map((ratio) => (
+          <line key={ratio} x1={left} x2={width-right} y1={top + plotHeight * ratio}
+            y2={top + plotHeight * ratio} stroke="#525b61" strokeOpacity="0.28" strokeDasharray="3 4" />
+        ))}
+        {zeroReference && (
+          <line x1={left} x2={width - right} y1={zeroY} y2={zeroY}
+            stroke="#a1a1aa" strokeOpacity="0.8" strokeDasharray="3 3" />
+        )}
+        {valid.map((line, index) => {
+          const ordered = [...line.points].sort((a, b) => a.minute - b.minute)
+          const path = ordered.map((point, position) =>
+            `${position ? "L" : "M"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
+          ).join(" ")
+          const latest = ordered.at(-1)
+          return <g key={index}>
+            {ordered.length > 1 && (
+              <path d={path} fill="none" stroke={line.color} strokeDasharray={line.previous ? "5 4" : undefined}
+                strokeWidth={line.previous ? 1.8 : 2.4} strokeOpacity={line.previous ? 0.85 : 1} strokeLinecap="round" strokeLinejoin="round" />
+            )}
+            {latest && (
+              <circle cx={x(vietnamSessionMinute(latest.minute))} cy={y(latest.value)} r={line.previous ? 1.7 : 2.4} fill={line.color} />
+            )}
+          </g>
+        })}
+        {hoveredMinute !== null && (
+          <g>
+            <line x1={x(hoveredMinute)} x2={x(hoveredMinute)} y1={top} y2={top + plotHeight}
+              stroke="#e4e4e7" strokeDasharray="2 3" strokeOpacity="0.8" />
+            {chartAt.map((point, index) => point.value === undefined ? null : (
+              <circle key={index} cx={x(hoveredMinute)} cy={y(point.value)} r="2.8" stroke="#101410" strokeWidth="0.8" fill={point.color} />
+            ))}
+          </g>
+        )}
+        {ticks.map((tick) => (
+          <text key={tick.minute} x={x(tick.minute)} y={height - 3}
+            fontSize="10" textAnchor={tick.minute === 540 ? "start" : tick.minute === 900 ? "end" : "middle"} fill="#9ca3af">{tick.label}</text>
+        ))}
+      </svg>
+      {hoveredMinute !== null && (
+        <div className="pointer-events-none absolute inset-x-1 top-0 z-20 flex flex-wrap justify-center gap-x-1 rounded bg-[#101410]/95 px-1 py-0.5 font-ticker text-[9px] tabular-nums">
+          <span className="text-zinc-300">{timeLabel}</span>
+          {chartAt.map((point, index) => (
+            <span key={index} style={{ color: point.color }}>{point.label} {point.value === undefined ? "—" : formatSignedVndValue(point.value)}</span>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -502,7 +579,6 @@ export function MarketContextStrip({
   const [liquiditySamples, setLiquiditySamples] = useState<{ key: string; points: MetricPoint[] }>({ key: "", points: [] })
   const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
   const [previousLiquidity, setPreviousLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
-  const [previousForeign, setPreviousForeign] = useState<SessionHistory<ForeignMetricPoint> | null>(null)
   const [observedAtMs, setObservedAtMs] = useState(0)
 
   useEffect(() => {
@@ -721,7 +797,6 @@ export function MarketContextStrip({
   const foreignPoints = foreignSamples.key === foreignSampleKey ? foreignSamples.points : []
   useEffect(() => {
     setForeignSamples({ key: foreignSampleKey, points: readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate) })
-    setPreviousForeign(previousMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate))
   }, [contextSessionDate, foreignHistoryKey, foreignSampleKey])
   useEffect(() => {
     if (hasFinhayForeign || foreignSnapshot.covered === 0 || !contextSessionDate || vietnamDateKey(foreignSnapshot.asOf) !== contextSessionDate) return
@@ -741,6 +816,15 @@ export function MarketContextStrip({
     setForeignSamples({ key: foreignSampleKey, points: next })
   }, [contextSessionDate, finhayForeign, foreignHistoryKey, foreignSampleKey, hasFinhayForeign])
 
+  // A new trading day must not label yesterday's retained snapshots as today's flow.
+  const observedDay = observedAtMs > 0 ? vietnamDateKey(new Date(observedAtMs).toISOString()) : ""
+  const isTodaySession = contextSessionDate !== "" && contextSessionDate === observedDay
+  const todayLiquidityPoints = isTodaySession ? liquidityPoints : []
+  const verifiedPreviousLiquidity = isTodaySession ? previousLiquidity : null
+  const todayForeignNetPoints = isTodaySession ? intradayForeignNet(foreignPoints) : []
+  const todayForeignBuy = isTodaySession ? displayedForeignBuy : undefined
+  const todayForeignSell = isTodaySession ? displayedForeignSell : undefined
+  const todayForeignNet = isTodaySession ? displayedForeignNet : undefined
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
   const sessionOpen = observedAtMs > 0 && getMarketSessionStatus(new Date(observedAtMs)).isLiveSession
   const isFresh = (asOf: string | null | undefined) => {
@@ -784,33 +868,30 @@ export function MarketContextStrip({
           headerRight={<span className="font-ticker text-[12px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] text-zinc-400">
             <span>KL <strong className="text-zinc-100">{formatCompactVolume(liquidityVolume)}</strong></span>
-            <span className="truncate">{previousLiquidity ? `vs ${previousLiquidity.day}` : "Chưa có phiên trước"}</span>
+            <span className="truncate">{verifiedPreviousLiquidity ? `So với ${verifiedPreviousLiquidity.day}` : "Chưa ghi nhận phiên trước"}</span>
           </div>
           <div className="mt-auto min-w-0"><ComparisonLineChart series={[
-            { points: liquidityPoints, color: PLATINUM },
-            { points: previousLiquidity?.points ?? [], color: "#8b9da1", previous: true },
+            { label: "Nay", points: todayLiquidityPoints, color: PLATINUM },
+            { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#eb6f6f", previous: true },
           ]} /></div>
           <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
             <span className="truncate">{hasFinhayLiquidity ? "Finhay full HOSE" : "Index realtime"}</span>
-            <span className="shrink-0">━ Nay　┄ Trước</span>
+            <span className="shrink-0">━ Hôm nay　┄ Phiên trước</span>
           </div>
         </ContextCard>
         <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
           titleHint={hasFinhayForeign ? "Finhay full HOSE" : finhayForeignState === "UNAVAILABLE" ? "DNSE Top 200 partial" : "Finhay / DNSE Top 200 partial"}
-          headerRight={<span className={`text-[11px] font-bold tabular-nums ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(displayedForeignNet)}</span>}>
+          headerRight={<span className={`text-[11px] font-bold tabular-nums ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] tabular-nums">
-            <span className="truncate text-emerald-300">Mua {formatVndValue(displayedForeignBuy)}</span>
-            <span className="truncate text-red-300">Bán {formatVndValue(displayedForeignSell)}</span>
+            <span className="truncate text-emerald-300">Mua {formatVndValue(todayForeignBuy)}</span>
+            <span className="truncate text-red-300">Bán {formatVndValue(todayForeignSell)}</span>
           </div>
-          <div className="mt-auto min-w-0"><ComparisonLineChart series={[
-            { points: foreignPoints.map((point) => ({ minute: point.minute, value: point.buy })), color: GREEN },
-            { points: foreignPoints.map((point) => ({ minute: point.minute, value: point.sell })), color: RED },
-            { points: (previousForeign?.points ?? []).map((point) => ({ minute: point.minute, value: point.buy })), color: GREEN, previous: true },
-            { points: (previousForeign?.points ?? []).map((point) => ({ minute: point.minute, value: point.sell })), color: RED, previous: true },
+          <div className="mt-auto min-w-0"><ComparisonLineChart zeroReference series={[
+            { label: "Ròng", points: todayForeignNetPoints, color: finite(todayForeignNet) && todayForeignNet < 0 ? RED : GREEN },
           ]} /></div>
           <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
             <span className="truncate">{hasFinhayForeign ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã` : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length}`}</span>
-            <span className="shrink-0">{previousForeign ? `┄ ${previousForeign.day}` : "Chưa có phiên trước"}</span>
+            <span className="shrink-0">━ Ròng hôm nay</span>
           </div>
         </ContextCard>
         <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
