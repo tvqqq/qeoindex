@@ -63,8 +63,6 @@ import {
 } from "@/modules/market/board/dnse-market-frame"
 import {
   parseVnindexImpactPayload,
-  upsertObservedIndexPoint,
-  type MarketContextIndexSeries,
   type MarketImpactSnapshot,
 } from "@/modules/market/board/market-context-contract"
 
@@ -475,7 +473,6 @@ export function LiveMarketBoard({
   const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
   const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
   const [indexChartOpen, setIndexChartOpen] = useState(false)
-  const [realtimeIndexSeries, setRealtimeIndexSeries] = useState<Partial<Record<"VNINDEX" | "VN30", MarketContextIndexSeries>>>({})
   const [realtimeImpact, setRealtimeImpact] = useState<MarketImpactSnapshot | null>(null)
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
@@ -617,7 +614,6 @@ export function LiveMarketBoard({
   const latestCommittedQuotesRef = useRef(quotes)
   const quotesDirtyRef = useRef(false)
   const historyDirtyRef = useRef(false)
-  const indexSeriesDirtyRef = useRef(false)
   const marketUiCommitTimer = useRef<number | null>(null)
   const marketOrderingTimer = useRef<number | null>(null)
   const lastOrderingRefreshAt = useRef(0)
@@ -625,7 +621,6 @@ export function LiveMarketBoard({
   const whaleTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
   const dailyReferences = useRef<Record<string, number>>(extractInitialRefs(initialQuotes))
   const indexReferences = useRef<Record<string, VerifiedSessionReference>>({})
-  const realtimeIndexSeriesRef = useRef<Partial<Record<"VNINDEX" | "VN30", MarketContextIndexSeries>>>({})
   const realtimeImpactRef = useRef<MarketImpactSnapshot | null>(null)
   const marketUiPhaseRef = useRef<MarketUiPhase>(marketUiPhase)
   const sessionOpenAlertTimer = useRef<number | null>(null)
@@ -673,11 +668,6 @@ export function LiveMarketBoard({
         setPriceHistory({ ...priceHistoryRef.current })
       }
 
-      if (indexSeriesDirtyRef.current) {
-        indexSeriesDirtyRef.current = false
-        setRealtimeIndexSeries({ ...realtimeIndexSeriesRef.current })
-      }
-
       const messageAt = lastMessageAtRef.current
       if (messageAt) {
         setLastMessageAt((previous) => previous === messageAt ? previous : messageAt)
@@ -715,10 +705,7 @@ export function LiveMarketBoard({
     const isTradingDayRollover = activeSessionDayRef.current !== nextSessionDay
     activeSessionDayRef.current = nextSessionDay
     indexReferences.current = {}
-    realtimeIndexSeriesRef.current = {}
     realtimeImpactRef.current = null
-    indexSeriesDirtyRef.current = false
-    setRealtimeIndexSeries({})
     setRealtimeImpact(null)
     const resetQuotes: Record<string, LiveStockQuote | IndexQuote> = {}
     for (const [symbol, current] of Object.entries(quotesRef.current)) {
@@ -777,7 +764,6 @@ export function LiveMarketBoard({
     priceHistoryRef.current = resetHistory
     quotesDirtyRef.current = false
     historyDirtyRef.current = false
-    indexSeriesDirtyRef.current = false
     setQuotes(resetQuotes)
     setOrderingQuotes(resetQuotes)
     setPriceHistory(resetHistory)
@@ -1319,15 +1305,6 @@ export function LiveMarketBoard({
               updatedAt: parsed.asOf,
             }
           })
-          if (symbol === "VNINDEX" || symbol === "VN30") {
-            const previous = realtimeIndexSeriesRef.current[symbol]
-            const next = upsertObservedIndexPoint(previous, symbol, parsed.sessionDate, parsed.asOf, parsed.value)
-            if (next && next !== previous) {
-              realtimeIndexSeriesRef.current = { ...realtimeIndexSeriesRef.current, [symbol]: next }
-              indexSeriesDirtyRef.current = true
-              scheduleMarketUiCommit()
-            }
-          }
           continue
         }
 
@@ -1544,7 +1521,6 @@ export function LiveMarketBoard({
           indexQuotes={indexQuotes}
           stockQuotes={displayQuotes as Record<string, LiveStockQuote | undefined>}
           canonicalUniverse={fullCanonicalUniverse}
-          realtimeIndexSeries={realtimeIndexSeries}
           realtimeImpact={realtimeImpact}
           onOpenIndexChart={openIndexChart}
         />

@@ -5,19 +5,15 @@ import { readFileSync } from "node:fs"
 import {
   coveredTop200ForeignTotals,
   currentSessionIndexMetrics,
-  mergeObservedIndexSeries,
   orderedImpactBars,
   parseVnindexImpactPayload,
   selectCurrentSessionImpact,
-  upsertObservedIndexPoint,
-  type MarketContextIndexSeries,
 } from "../modules/market/board/market-context-contract.ts"
 
 const boardSource = readFileSync(new URL("../components/live-market-board.tsx", import.meta.url), "utf8")
 const stripSource = readFileSync(new URL("../components/market-board/market-context-strip.tsx", import.meta.url), "utf8")
 const serverSource = readFileSync(new URL("../modules/market/board/market-context-server.ts", import.meta.url), "utf8")
 const contractSource = readFileSync(new URL("../modules/market/board/market-context-contract.ts", import.meta.url), "utf8")
-const providerSource = readFileSync(new URL("../modules/market/providers/tradingview/index.ts", import.meta.url), "utf8")
 const routeSource = readFileSync(new URL("../app/api/market/board-context/route.ts", import.meta.url), "utf8")
 const finhayProviderSource = readFileSync(new URL("../modules/market/providers/finhay/live.ts", import.meta.url), "utf8")
 const finhayRouteSource = readFileSync(new URL("../app/api/finhay/market-context/route.ts", import.meta.url), "utf8")
@@ -43,8 +39,8 @@ test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and 
   assert.ok(parsed)
   assert.equal(parsed.providerRows, 22)
   assert.equal(parsed.finiteRows, 20)
-  assert.equal(parsed.positive.length, 8)
-  assert.equal(parsed.negative.length, 8)
+  assert.equal(parsed.positive.length, 5)
+  assert.equal(parsed.negative.length, 5)
   assert.equal(parsed.positive[0]?.symbol, "P00")
   assert.equal(parsed.negative[0]?.symbol, "N00")
   assert.equal(parsed.positive.some((entry) => entry.symbol === "OMIT"), false)
@@ -107,42 +103,6 @@ test("worker index-impact rows retain provider age and fresh WebSocket data wins
   assert.equal(staleSelection.impact, rest)
 })
 
-test("observed index points accept equal-time corrections, reject older frames, and merge after completed REST candles", () => {
-  const sessionDate = "2026-10-05"
-  const first = upsertObservedIndexPoint(undefined, "VNINDEX", sessionDate, "2026-10-05T09:15:10+07:00", 1750.61)
-  assert.ok(first)
-  const older = upsertObservedIndexPoint(first, "VNINDEX", sessionDate, "2026-10-05T09:15:09+07:00", 1749.99)
-  assert.equal(older, first)
-  const correction = upsertObservedIndexPoint(first, "VNINDEX", sessionDate, "2026-10-05T09:15:10+07:00", 1750.62)
-  assert.equal(correction?.points[0]?.value, 1750.62)
-
-  const rest: MarketContextIndexSeries = {
-    symbol: "VNINDEX",
-    sessionDate,
-    points: [
-      { time: Date.parse("2026-10-05T09:15:00+07:00") / 1000, value: 1750.5 },
-      { time: Date.parse("2026-10-05T09:16:00+07:00") / 1000, value: 1750.7 },
-    ],
-    asOf: "2026-10-05T02:16:00.000Z",
-    source: "DNSE REST 1m history",
-  }
-  const observed: MarketContextIndexSeries = {
-    ...first,
-    points: [
-      { time: Date.parse("2026-10-05T09:15:10+07:00") / 1000, value: 1749.9 },
-      { time: Date.parse("2026-10-05T09:16:10+07:00") / 1000, value: 1750.8 },
-      { time: Date.parse("2026-10-05T09:17:10+07:00") / 1000, value: 1750.9 },
-    ],
-    asOf: "2026-10-05T02:17:10.000Z",
-  }
-  const merged = mergeObservedIndexSeries(rest, observed, sessionDate)
-  assert.deepEqual(merged?.points, [
-    rest.points[0],
-    rest.points[1],
-    observed.points[2],
-  ])
-})
-
 test("HOSE index liquidity requires a current provider source timestamp and preserves provider zero", () => {
   const sessionDate = "2026-10-05"
   const receivedOnly = currentSessionIndexMetrics({
@@ -168,93 +128,88 @@ test("Top-200 foreign flow stays unavailable without coverage but preserves a co
   assert.equal(coveredTop200ForeignTotals({ buy: Number.NaN, sell: 0, covered: 1 }), null)
 })
 
-test("market context bootstrap uses actual index candles and provider contribution endpoint", () => {
-  assert.match(serverSource, /chart-api\/v2\/ohlcs/)
-  assert.match(serverSource, /\$\{baseUrl\}\/index/)
-  assert.match(serverSource, /"VNINDEX", "VN30"/)
-  assert.doesNotMatch(serverSource, /HNXINDEX|UPCOMINDEX/)
-  assert.match(serverSource, /indexSymbols\.map\(\(symbol\) => fetchMarketContextIndexSeries\(symbol, now\)\)/)
-  assert.match(contractSource, /MARKET_CONTEXT_INDEX_SYMBOLS = \["VNINDEX", "VN30"\] as const/)
-  assert.doesNotMatch(contractSource, /HNXINDEX|UPCOMINDEX/)
+
+test("market context backend requests only provider VNINDEX influence; old index chart bootstrap is retired", () => {
   assert.match(serverSource, /basket-influence\?type=VNINDEX/)
-  assert.match(contractSource, /basketInfluence/)
-  assert.doesNotMatch(serverSource, /constituent.*average|changePercent.*weight/i)
+  assert.doesNotMatch(serverSource, /chart-api\/v2\/ohlcs|fetchMarketContextIndexSeries/)
+  assert.doesNotMatch(contractSource, /MARKET_CONTEXT_INDEX_SYMBOLS|MarketContextIndexSeries|upsertObservedIndexPoint/)
+  assert.match(contractSource, /\.slice\(0, 5\)/)
+  assert.match(serverSource, /fetchVnindexImpactSnapshot/)
+  assert.match(routeSource, /hasUsableContext/)
 })
 
-test("top strip is honest about partial liquidity and foreign history instead of drawing synthetic comparisons", () => {
+test("single-row responsive layout combines indices, leaves flow realtime, removes depth and horizontal scroll", () => {
   assert.match(boardSource, /<MarketContextStrip/)
   assert.match(boardSource, /useState<BoardView>\("classic"\)/)
-  assert.match(stripSource, /history phiên trước chưa verified/)
+  assert.match(stripSource, /data-market-context-single-row/)
+  assert.match(stripSource, /grid-cols-1 items-stretch.*sm:grid-cols-2 xl:grid-cols-/)
+  assert.match(stripSource, /title="VN-Index \/ VN30"/)
+  assert.match(stripSource, /<IndexedSummary label="VN-Index"/)
+  assert.match(stripSource, /<IndexedSummary label="VN30"/)
+  assert.match(stripSource, /title="Thanh khoản HOSE"/)
+  assert.match(stripSource, /title="Mua bán nước ngoài"/)
+  assert.match(stripSource, /title="Tác động VNINDEX"/)
+  assert.equal((stripSource.match(/<ContextCard\b/g) ?? []).length, 4)
+  assert.doesNotMatch(stripSource, /MarketDepthCard|MARKET_DEPTH_BUCKETS|buildMarketDepthSnapshot|data-market-context-depth-card/)
+  assert.doesNotMatch(stripSource, /ContextLineChart|IndexContextCard|DualLineChart|overflow-x-auto|min-w-\[570px\]/)
+  assert.match(stripSource, /currentSessionIndexMetrics\(quote, day\)/)
+  assert.match(stripSource, /quote\?\.advances/)
+  assert.match(stripSource, /quote\?\.declines/)
+})
+
+test("realtime comparison reuses only observed source-scoped same-session data", () => {
+  assert.match(stripSource, /previousMetricHistory/)
+  assert.match(stripSource, /readMetricHistory/)
+  assert.match(stripSource, /writeMetricHistory/)
+  assert.match(stripSource, /metricHistoryPrefix\("liquidity", liquiditySeriesSource\)/)
+  assert.match(stripSource, /metricHistoryPrefix\("foreign", foreignSeriesSource\)/)
+  assert.match(stripSource, /vietnamDateKey\(new Date\(point.minute\)\.toISOString\(\)\) === day/)
+  assert.match(stripSource, /minuteOfSession/)
+  assert.match(stripSource, /ComparisonLineChart/)
+  assert.match(stripSource, /previousLiquidity\?\.points/)
+  assert.match(stripSource, /previousForeign\?\.points/)
+  assert.match(stripSource, /previous: true/)
+  assert.match(stripSource, /Chưa có phiên trước/)
   assert.match(stripSource, /Finhay full HOSE/)
-  assert.match(stripSource, /VND verified/)
-  assert.match(stripSource, /liquiditySeriesSource = hasFinhayLiquidity \? "finhay-vnindex" : "index-quote"/)
   assert.match(stripSource, /Top 200 partial/)
-  assert.match(stripSource, /Top mã:/)
-  assert.match(stripSource, /points\.length < 2/)
-  assert.match(stripSource, /vietnamDateKey\(quote\.sourceAsOf\) !== series\.sessionDate/)
-  assert.match(stripSource, /liquidityData\.length >= 2/)
-  assert.match(stripSource, /<DualLineChart points=\{foreignPoints\}/)
-  assert.match(stripSource, /text-red-300/)
-  assert.match(stripSource, /#ef4e53/)
-  assert.doesNotMatch(stripSource, /quote\?\.advances|quote\?\.declines/)
-  assert.doesNotMatch(stripSource, /formatVndValue\(quote\?\.valueTraded\)/)
-  assert.match(stripSource, /formatCompactVolume\(liquidityVolume\)/)
-  assert.match(stripSource, /hasFinhayLiquidity && finite\(finhayLiquidity\?\.volume\)/)
-  assert.match(stripSource, /currentSessionIndexMetrics\(vnindexQuote, contextSessionDate\)/)
-  assert.match(contractSource, /const asOf = quote\?\.sourceAsOf \?\? ""/)
-  assert.doesNotMatch(contractSource, /quote\?\.sourceAsOf \?\? quote\?\.updatedAt/)
-  assert.doesNotMatch(stripSource, /indexQuotes\.HNXINDEX|indexQuotes\.UPCOMINDEX/)
-  const topRow = stripSource.split("data-market-context-index-row>")[1]?.split("data-market-context-impact-row")[0]
-  assert.ok(topRow)
-  assert.equal((topRow.match(/<IndexContextCard\b/g) ?? []).length, 2)
-  assert.equal((topRow.match(/<ContextCard\b/g) ?? []).length, 2)
-  assert.match(topRow, /label="VNINDEX"[\s\S]*title="Thanh khoản HOSE"[\s\S]*label="VN30"[\s\S]*title="Mua bán nước ngoài"/)
-  assert.doesNotMatch(topRow, /label="HNX"|label="UPCOM"/)
-  assert.match(stripSource, /data-market-context-index-row/)
-  assert.match(stripSource, /data-market-context-impact-row/)
-  assert.match(stripSource, /lg:grid-cols-\[minmax\(0,3fr\)_minmax\(0,2fr\)\]/)
-  assert.match(stripSource, /data-market-context-depth-card/)
-  assert.match(stripSource, /buildMarketDepthSnapshot\(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey\)/)
-  assert.match(stripSource, /MARKET_DEPTH_BUCKETS\.map/)
-  assert.match(stripSource, /Top 200 partial · Có giá/)
-
-  assert.doesNotMatch(stripSource, /valueChangePercent/)
-  assert.doesNotMatch(providerSource, /vndirect|yV \* yC|tV \* tC|valueChangePercent/i)
+  assert.match(stripSource, /foreignSeriesSource = hasFinhayForeign \? "finhay-vnindex" : "top200-partial"/)
+  assert.match(stripSource, /liquiditySeriesSource = hasFinhayLiquidity \? "finhay-vnindex" : "index-quote"/)
+  assert.doesNotMatch(stripSource, /volume \* price|volume \* close/)
 })
 
-test("compact context cards preserve provider time and let the worker stream drive fresh impact", () => {
-  assert.ok(stripSource.includes("xl:h-[144px]"))
-  assert.ok(stripSource.includes("h-[55px]"))
-  assert.ok(stripSource.includes("min-h-[75px]"))
-  assert.ok(stripSource.includes("orderedImpactBars(impact)"))
-  assert.ok(stripSource.includes("motion-safe:transition-[top,height]"))
-  assert.ok(stripSource.includes("motion-safe:transition-[height,opacity]"))
-  assert.ok(stripSource.includes("motion-safe:animate-pulse"))
-  assert.ok(stripSource.includes("return sessionOpen"))
-  assert.ok(stripSource.includes("observedAtMs - sourceMs <= 120_000"))
-  assert.ok(stripSource.includes("}, 60_000)"))
-  assert.ok(stripSource.includes('if (disposed || inFlight || document.visibilityState === "hidden") return'))
-  assert.ok(stripSource.includes('document.addEventListener("visibilitychange"'))
-  assert.ok(stripSource.includes('window.addEventListener("focus"'))
-  assert.ok(stripSource.includes("vietnamDateKey(previous.generatedAt) === vietnamDateKey(data.generatedAt)"))
-  assert.ok(stripSource.includes("vietnamDateKey(previous.impact?.asOf ?? \"\") === vietnamDateKey(data.generatedAt)"))
-  assert.ok(stripSource.includes("const contextSessionDate = [quoteSessionDate, chartSessionDate, liveImpactDate]"))
-  assert.ok(stripSource.includes('impactSelection.source === "websocket"'))
-  assert.ok(stripSource.includes("Chậm"))
-  assert.ok(stripSource.includes("LIVE"))
-  assert.ok(!stripSource.includes("setInterval(() => void load(), 30_000)"))
+test("compact contributors show provider top-5 entries and verified-only tooltip, no synthetic fields", () => {
+  const entries = parseVnindexImpactPayload([
+    ...Array.from({ length: 12 }, (_, i) => ({ symbol: `P${i + 10}`, basketInfluence: 1 - i * 0.02 })),
+    ...Array.from({ length: 12 }, (_, i) => ({ symbol: `N${i + 10}`, basketInfluence: -1 + i * 0.02 })),
+  ])
+  assert.ok(entries)
+  assert.equal(entries.positive.length + entries.negative.length, 10)
+  assert.equal(orderedImpactBars(entries).length, 10)
+  assert.match(stripSource, /impactTooltip\(entry, quotes\[entry.symbol\], day\)/)
+  assert.match(stripSource, /foreignBuyVolume/)
+  assert.match(stripSource, /foreignSellVolume/)
+  assert.match(stripSource, /formatVndValue\(current\?\.valueTraded\)/)
+  assert.match(stripSource, /formatChange\(current\?\.changePercent\)/)
+  assert.match(stripSource, /motion-safe:transition-\[top,height\]/)
+  assert.match(stripSource, /motion-safe:animate-pulse/)
+  assert.match(stripSource, /observedAtMs - sourceMs <= 120_000/)
+  assert.match(stripSource, /}, 60_000\)/)
 })
 
-test("market context API is authenticated, cached, and refreshes faster during the live session", () => {
+test("market context API remains authenticated and cached with impact-only bootstrap", () => {
   assert.match(routeSource, /requireApiFeature\("market_board"\)/)
   assert.match(routeSource, /readThroughUiCache/)
   assert.match(routeSource, /session\.isLiveSession \? 10/)
   assert.match(routeSource, /shouldCache: hasUsableContext/)
-  assert.match(routeSource, /market-board-context-v2/)
+  assert.match(routeSource, /market-board-context-v3/)
+  assert.match(stripSource, /if \(disposed \|\| inFlight \|\| document.visibilityState === "hidden"\) return/)
+  assert.match(stripSource, /vietnamDateKey\(previous.impact\?\.asOf \?\? ""\)/)
+  assert.match(stripSource, /impactSelection.source === "websocket"/)
+  assert.match(stripSource, /Chậm/)
+  assert.match(stripSource, /LIVE/)
 })
 
-
-test("foreign flow upgrades to Finhay full-HOSE data when OAuth is available and otherwise stays explicit Top-200 partial", () => {
+test("Finhay flow stays independent, and DNSE Top-200 fallback remains partial", () => {
   assert.match(finhayProviderSource, /getFinhayIndexForeignTrading/)
   assert.match(finhayProviderSource, /getFinhayIndexMarketContext/)
   assert.match(finhayProviderSource, /get_index_foreign_trading/)
@@ -266,10 +221,7 @@ test("foreign flow upgrades to Finhay full-HOSE data when OAuth is available and
   assert.match(finhayRouteSource, /getActiveFinhayAccessToken/)
   assert.match(finhayRouteSource, /getFinhayIndexMarketContext\(accessToken, "VNINDEX"\)/)
   assert.match(stripSource, /\/api\/finhay\/market-context/)
-  assert.match(stripSource, /Finhay full HOSE/)
-  assert.match(stripSource, /Top 200 partial/)
-  assert.match(stripSource, /foreignSeriesSource = hasFinhayForeign \? "finhay-vnindex" : "top200-partial"/)
-  assert.match(stripSource, /if \(hasFinhayForeign\) return/)
   assert.match(stripSource, /finhayForeign\.sessionDate === contextSessionDate/)
   assert.match(stripSource, /vietnamDateKey\(finhayLiquidity\.sourceUpdatedAt\) === contextSessionDate/)
+  assert.match(stripSource, /if \(hasFinhayForeign \|\| foreignSnapshot.covered === 0/)
 })

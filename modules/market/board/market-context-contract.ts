@@ -1,26 +1,9 @@
-export const MARKET_CONTEXT_INDEX_SYMBOLS = ["VNINDEX", "VN30"] as const
-
 const VIETNAM_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
 })
-
-export type MarketContextIndexSymbol = (typeof MARKET_CONTEXT_INDEX_SYMBOLS)[number]
-
-export type MarketContextPoint = {
-  time: number
-  value: number
-}
-
-export type MarketContextIndexSeries = {
-  symbol: MarketContextIndexSymbol
-  sessionDate: string
-  points: MarketContextPoint[]
-  asOf: string
-  source: string
-}
 
 export function currentSessionIndexMetrics(
   quote: { sourceAsOf?: string; updatedAt?: string; volume?: number; valueTraded?: number } | undefined,
@@ -35,70 +18,6 @@ export function currentSessionIndexMetrics(
     asOf,
     volume: typeof quote?.volume === "number" && Number.isFinite(quote.volume) && quote.volume >= 0 ? quote.volume : undefined,
     valueTraded: typeof quote?.valueTraded === "number" && Number.isFinite(quote.valueTraded) && quote.valueTraded >= 0 ? quote.valueTraded : undefined,
-  }
-}
-
-export function upsertObservedIndexPoint(
-  current: MarketContextIndexSeries | undefined,
-  symbol: MarketContextIndexSymbol,
-  sessionDate: string,
-  observedAt: string,
-  value: number,
-): MarketContextIndexSeries | null {
-  const timestamp = Date.parse(observedAt)
-  if (!sessionDate || !Number.isFinite(timestamp) || !Number.isFinite(value) || value <= 0) return null
-  const currentAsOf = current?.sessionDate === sessionDate ? Date.parse(current.asOf) : Number.NaN
-  if (Number.isFinite(currentAsOf) && timestamp < currentAsOf) return current ?? null
-  const minute = Math.floor(timestamp / 60_000)
-  const points = current?.sessionDate === sessionDate ? current.points : []
-  const existing = points.findIndex((point) => Math.floor(point.time / 60) === minute)
-  const nextPoint = { time: Math.floor(timestamp / 1000), value }
-  let nextPoints = points
-  if (existing >= 0) {
-    if (points[existing].time > nextPoint.time) return current ?? null
-    if (points[existing].time === nextPoint.time && points[existing].value === value) return current ?? null
-    nextPoints = [...points.slice(0, existing), ...points.slice(existing + 1), nextPoint]
-  } else {
-    nextPoints = [...points, nextPoint]
-  }
-  nextPoints = nextPoints.sort((left, right) => left.time - right.time).slice(-360)
-  return {
-    symbol,
-    sessionDate,
-    points: nextPoints,
-    asOf: current?.sessionDate === sessionDate && Date.parse(current.asOf) > timestamp ? current.asOf : observedAt,
-    source: "DNSE Onidel realtime · observed 1m values",
-  }
-}
-
-export function mergeObservedIndexSeries(
-  bootstrap: MarketContextIndexSeries | undefined,
-  observed: MarketContextIndexSeries | undefined,
-  sessionDate: string,
-): MarketContextIndexSeries | undefined {
-  const rest = bootstrap?.sessionDate === sessionDate ? bootstrap : undefined
-  const live = observed?.sessionDate === sessionDate ? observed : undefined
-  if (!rest && !live) return undefined
-  if (!rest) return live
-  if (!live) return rest
-
-  const pointsByMinute = new Map<number, MarketContextPoint>()
-  for (const point of rest.points) pointsByMinute.set(Math.floor(point.time / 60), point)
-  const latestRestMinute = Math.max(...rest.points.map((point) => Math.floor(point.time / 60)))
-  for (const point of live.points) {
-    const minute = Math.floor(point.time / 60)
-    // REST points are completed provider candles. Keep them through their latest
-    // minute; append observed socket values only after that completed history.
-    if (minute <= latestRestMinute) continue
-    pointsByMinute.set(minute, point)
-  }
-  const points = [...pointsByMinute.values()].sort((left, right) => left.time - right.time).slice(-360)
-  return {
-    symbol: rest.symbol,
-    sessionDate,
-    points,
-    asOf: Date.parse(live.asOf) >= Date.parse(rest.asOf) ? live.asOf : rest.asOf,
-    source: `${rest.source} + observed DNSE live values`,
   }
 }
 
@@ -170,7 +89,6 @@ export function orderedImpactBars(impact: Pick<MarketImpactSnapshot, "positive" 
 
 export type MarketBoardContextBootstrap = {
   generatedAt: string
-  indexes: Partial<Record<MarketContextIndexSymbol, MarketContextIndexSeries>>
   impact: MarketImpactSnapshot | null
   errors: string[]
 }
@@ -226,11 +144,11 @@ export function parseVnindexImpactPayload(payload: unknown): MarketImpactSnapsho
   const positive = entries
     .filter((entry) => entry.contribution > 0)
     .sort((left, right) => right.contribution - left.contribution)
-    .slice(0, 8)
+    .slice(0, 5)
   const negative = entries
     .filter((entry) => entry.contribution < 0)
     .sort((left, right) => left.contribution - right.contribution)
-    .slice(0, 8)
+    .slice(0, 5)
   const displayedPositiveTotal = positive.reduce((total, entry) => total + entry.contribution, 0)
   const displayedNegativeTotal = negative.reduce((total, entry) => total + entry.contribution, 0)
   const timestamps = entries
@@ -252,25 +170,9 @@ export function parseVnindexImpactPayload(payload: unknown): MarketImpactSnapsho
   }
 }
 
-function isIndexSeries(value: unknown): value is MarketContextIndexSeries {
-  if (!isRecord(value)) return false
-  if (!MARKET_CONTEXT_INDEX_SYMBOLS.includes(value.symbol as MarketContextIndexSymbol)) return false
-  if (typeof value.sessionDate !== "string" || typeof value.asOf !== "string" || typeof value.source !== "string") return false
-  if (!Array.isArray(value.points)) return false
-  return value.points.every((point) => {
-    if (!isRecord(point)) return false
-    return Number.isFinite(Number(point.time)) && Number.isFinite(Number(point.value)) && Number(point.value) > 0
-  })
-}
-
 export function isMarketBoardContextBootstrap(value: unknown): value is MarketBoardContextBootstrap {
   if (!isRecord(value)) return false
   if (typeof value.generatedAt !== "string" || !Array.isArray(value.errors)) return false
-  if (!isRecord(value.indexes)) return false
-  for (const symbol of MARKET_CONTEXT_INDEX_SYMBOLS) {
-    const series = value.indexes[symbol]
-    if (series !== undefined && !isIndexSeries(series)) return false
-  }
   if (value.impact !== null && value.impact !== undefined && !isRecord(value.impact)) return false
   return true
 }

@@ -1,16 +1,14 @@
 "use client"
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
-import { Activity, BarChart3, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { Activity, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
-import { coveredTop200ForeignTotals, currentSessionIndexMetrics, mergeObservedIndexSeries, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
+import { coveredTop200ForeignTotals, currentSessionIndexMetrics, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
 import type {
   MarketBoardContextBootstrap,
-  MarketContextIndexSeries,
   MarketImpactSnapshot,
 } from "@/modules/market/board/market-context-contract"
-import { buildMarketDepthSnapshot, MARKET_DEPTH_BUCKETS, type MarketDepthSnapshot } from "@/modules/market/board/market-depth"
 
 type MarketContextIndexQuote = {
   symbol: string
@@ -31,7 +29,10 @@ type MarketContextStockQuote = {
   symbol: string
   price?: number
   volume?: number
+  valueTraded?: number
   changePercent?: number
+  foreignBuyVolume?: number
+  foreignSellVolume?: number
   foreignBuyValue?: number
   foreignSellValue?: number
   foreignUpdatedAt?: string
@@ -48,7 +49,6 @@ type MarketContextUniverseStock = {
 type MarketContextStripProps = {
   indexQuotes: Record<string, MarketContextIndexQuote | undefined>
   stockQuotes: Record<string, MarketContextStockQuote | undefined>
-  realtimeIndexSeries: Partial<Record<"VNINDEX" | "VN30", MarketContextIndexSeries>>
   realtimeImpact: MarketImpactSnapshot | null
   canonicalUniverse: readonly MarketContextUniverseStock[]
   onOpenIndexChart: () => void
@@ -95,7 +95,7 @@ type FinhayMarketContextResponse = {
 }
 
 
-const MAX_LIVE_POINTS = 120
+const MAX_LIVE_POINTS = 360
 const GREEN = "#22c98a"
 const PLATINUM = "#d4d4d8"
 const RED = "#ff4757"
@@ -152,14 +152,6 @@ function upsertForeignMetricPoint(current: ForeignMetricPoint[], updatedAt: stri
   return [...current, { minute, buy, sell }].slice(-MAX_LIVE_POINTS)
 }
 
-function appendLiveIndexValue(series: MarketContextIndexSeries | undefined, quote: MarketContextIndexQuote | undefined) {
-  const values = series?.points.map((point) => point.value) ?? []
-  if (!values.length || !series || !quote || !quote.sourceAsOf || !finite(quote.value) || quote.value <= 0) return values
-  if (vietnamDateKey(quote.sourceAsOf) !== series.sessionDate) return values
-  if (Math.abs(values.at(-1)! - quote.value) < 1e-6) return values
-  return [...values, quote.value]
-}
-
 function marketColor(changePercent?: number) {
   if (!finite(changePercent)) return PLATINUM
   if (changePercent > 0) return GREEN
@@ -192,20 +184,6 @@ function formatCompactVolume(value?: number) {
   return VALUE_FORMATTER.format(value)
 }
 
-function indexReference(quote?: MarketContextIndexQuote) {
-  if (!quote || !finite(quote.value) || quote.value <= 0) return undefined
-  if (finite(quote.reference) && quote.reference > 0) return quote.reference
-  if (finite(quote.change)) {
-    const reference = quote.value - quote.change
-    if (reference > 0) return reference
-  }
-  if (finite(quote.changePercent) && Math.abs(100 + quote.changePercent) > 1e-6) {
-    const reference = quote.value / (1 + quote.changePercent / 100)
-    if (reference > 0 && Number.isFinite(reference)) return reference
-  }
-  return undefined
-}
-
 function formatAsOf(value?: string | null) {
   if (!value) return "—"
   const timestamp = Date.parse(value)
@@ -219,88 +197,126 @@ function formatAsOf(value?: string | null) {
   }).format(new Date(timestamp))
 }
 
-function ContextLineChart({
-  values,
-  color,
-  reference,
-  splitAtReference = false,
-}: {
-  values: number[]
-  color: string
-  reference?: number
-  splitAtReference?: boolean
-}) {
-  const reactId = useId()
-  const uid = reactId.replace(/:/g, "")
-  const width = 320
-  const height = 58
-  const valid = values.filter((value) => Number.isFinite(value) && value >= 0)
-  if (valid.length < 2) return null
 
-  const maxPoints = 90
-  const step = Math.max(1, Math.ceil(valid.length / maxPoints))
-  const points = valid.length <= maxPoints
-    ? valid
-    : valid.filter((_, index) => index % step === 0 || index === valid.length - 1)
-  const hasReference = finite(reference) && reference > 0
-  const domainValues = hasReference ? [...points, reference] : points
-  const rawMin = Math.min(...domainValues)
-  const rawMax = Math.max(...domainValues)
-  const rawRange = rawMax - rawMin
-  const domainPadding = rawRange > 0 ? rawRange * 0.12 : Math.max(Math.abs(rawMax) * 0.003, 1)
-  const min = rawMin - domainPadding
-  const max = rawMax + domainPadding
-  const range = max - min || 1
-  const pad = 2
-  const x = (index: number) => pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2)
-  const y = (value: number) => height - pad - ((value - min) / range) * (height - pad * 2)
-  const coords = points.map((value, index) => [x(index), y(value)] as const)
-  let path = `M ${coords[0][0].toFixed(1)},${coords[0][1].toFixed(1)}`
-  for (let index = 0; index < coords.length - 1; index += 1) {
-    const [x0, y0] = coords[index]
-    const [x1, y1] = coords[index + 1]
-    const midX = (x0 + x1) / 2
-    path += ` C ${midX.toFixed(1)},${y0.toFixed(1)} ${midX.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`
+type SessionHistory<T> = { day: string; points: T[] }
+const OBSERVED_HISTORY_PREFIX = "qeoindex:board-metrics:v1"
+const SESSION_HISTORY_LIMIT = 3
+
+function metricHistoryPrefix(kind: "liquidity" | "foreign", source: string) {
+  return `${OBSERVED_HISTORY_PREFIX}:${kind}:${source}`
+}
+
+function readMetricHistory<T extends MetricPoint | ForeignMetricPoint>(key: string, day: string): T[] {
+  if (!day) return []
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(`${key}:${day}`) ?? "null")
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is T => {
+      if (!item || typeof item !== "object") return false
+      const point = item as Partial<ForeignMetricPoint> & Partial<MetricPoint>
+      return finite(point.minute) && vietnamDateKey(new Date(point.minute).toISOString()) === day
+        && (finite(point.value) && point.value >= 0
+          || finite(point.buy) && point.buy >= 0 && finite(point.sell) && point.sell >= 0)
+    }).slice(-MAX_LIVE_POINTS)
+  } catch {
+    return []
   }
-  const last = coords.at(-1)!
-  const referenceValue = hasReference ? reference : undefined
-  const referenceY = referenceValue !== undefined ? Math.max(pad, Math.min(height - pad, y(referenceValue))) : null
-  const splitReferenceY = referenceY ?? 0
-  const shouldSplit = splitAtReference && referenceValue !== undefined && referenceY !== null
-  const lastValue = points.at(-1)!
+}
 
+function previousMetricHistory<T extends MetricPoint | ForeignMetricPoint>(key: string, day: string): SessionHistory<T> | null {
+  try {
+    const days: unknown = JSON.parse(localStorage.getItem(`${key}:days`) ?? "[]")
+    if (!Array.isArray(days)) return null
+    const previous = days.filter((date): date is string => typeof date === "string" && date < day).sort().at(-1)
+    if (!previous) return null
+    const points = readMetricHistory<T>(key, previous)
+    return points.length >= 2 ? { day: previous, points } : null
+  } catch {
+    return null
+  }
+}
+
+function writeMetricHistory<T extends MetricPoint | ForeignMetricPoint>(key: string, day: string, points: T[]) {
+  if (!day || !points.length) return
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(`${key}:days`) ?? "[]")
+    const days = [...new Set([...(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === "string") : []), day])].sort()
+    const keep = days.slice(-SESSION_HISTORY_LIMIT)
+    for (const expired of days.slice(0, -SESSION_HISTORY_LIMIT)) localStorage.removeItem(`${key}:${expired}`)
+    localStorage.setItem(`${key}:days`, JSON.stringify(keep))
+    localStorage.setItem(`${key}:${day}`, JSON.stringify(points.slice(-MAX_LIVE_POINTS)))
+  } catch {
+    // Storage is optional; realtime always works without browser persistence.
+  }
+}
+
+function minuteOfSession(instant: number) {
+  return (((Math.floor(instant / 60_000) + 7 * 60) % (24 * 60)) + 24 * 60) % (24 * 60)
+}
+
+type ComparisonSeries = { points: MetricPoint[]; color: string; previous?: boolean }
+function ComparisonLineChart({ series }: { series: ComparisonSeries[] }) {
+  const valid = series.filter((line) => line.points.length)
+  if (!valid.length) return <div className="flex h-[55px] items-center justify-center text-[9px] text-zinc-500">Đang tích lũy realtime</div>
+  const width = 320
+  const height = 55
+  const values = valid.flatMap((line) => line.points.map((point) => point.value))
+  const minValue = Math.min(...values)
+  const maxValue = Math.max(...values)
+  const padY = Math.max((maxValue - minValue) * 0.1, maxValue * 0.002, 1)
+  const y = (value: number) => 3 + (maxValue + padY - value) / (maxValue - minValue + 2 * padY) * (height - 6)
+  const x = (minute: number) => 3 + Math.max(0, Math.min(1, (minuteOfSession(minute) - 9 * 60) / (6 * 60))) * (width - 6)
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" aria-hidden="true" shapeRendering="optimizeSpeed">
-      <defs>
-        <linearGradient id={`context-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.24" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-        {shouldSplit ? (
-          <>
-            <clipPath id={`context-above-${uid}`}><rect x="0" y="0" width={width} height={splitReferenceY} /></clipPath>
-            <clipPath id={`context-below-${uid}`}><rect x="0" y={splitReferenceY} width={width} height={Math.max(0, height - splitReferenceY)} /></clipPath>
-          </>
-        ) : null}
-      </defs>
-      <path
-        d={`${path} L ${last[0].toFixed(1)},${height} L ${coords[0][0].toFixed(1)},${height} Z`}
-        fill={`url(#context-fill-${uid})`}
-        stroke="none"
-      />
-      {shouldSplit ? (
-        <>
-          <path d={path} fill="none" stroke={GREEN} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" clipPath={`url(#context-above-${uid})`} />
-          <path d={path} fill="none" stroke={RED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" clipPath={`url(#context-below-${uid})`} />
-        </>
-      ) : (
-        <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      )}
-      {referenceY !== null ? (
-        <line x1="0" x2={width} y1={referenceY} y2={referenceY} stroke="rgba(226,232,240,0.48)" strokeWidth="1" strokeDasharray="3 3" />
-      ) : null}
-      <circle cx={last[0]} cy={last[1]} r="2.2" fill={shouldSplit && referenceValue !== undefined && lastValue < referenceValue ? RED : shouldSplit && referenceValue !== undefined && lastValue > referenceValue ? GREEN : color} />
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-[55px] w-full" aria-label="Nét liền phiên hiện tại; nét đứt phiên trước, căn cùng phút giao dịch" role="img">
+      {valid.map((line, index) => {
+        const sorted = [...line.points].sort((a, b) => a.minute - b.minute)
+        const path = sorted.map((point, position) => `${position ? "L" : "M"}${x(point.minute).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ")
+        return <g key={index}>
+          {sorted.length > 1 ? <path d={path} fill="none" stroke={line.color} strokeDasharray={line.previous ? "5 4" : undefined} strokeWidth={line.previous ? 1.4 : 2} strokeOpacity={line.previous ? 0.65 : 1} strokeLinecap="round" /> : null}
+          {!line.previous && sorted.length === 1 ? <circle cx={x(sorted[0].minute)} cy={y(sorted[0].value)} r="2" fill={line.color} /> : null}
+        </g>
+      })}
     </svg>
+  )
+}
+
+function IndexedSummary({ label, quote, day, onOpen }: { label: string; quote?: MarketContextIndexQuote; day: string; onOpen?: () => void }) {
+  const value = finite(quote?.value) && quote!.value > 0 ? quote!.value : undefined
+  const color = marketColor(quote?.changePercent)
+  const change = quote?.change
+  const metrics = currentSessionIndexMetrics(quote, day)
+  const breadth = [quote?.advances, quote?.unchanged, quote?.declines]
+  const hasBreadth = breadth.every((number) => finite(number) && number >= 0)
+  const total = hasBreadth ? breadth.reduce<number>((sum, number) => sum + (number ?? 0), 0) : 0
+  return (
+    <div className="min-w-0 flex-1 px-2.5 py-1.5">
+      <div className="flex items-center justify-between gap-1.5">
+        {onOpen ? (
+          <button type="button" onClick={onOpen} className="truncate text-[11px] font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
+        ) : <span className="truncate text-[11px] font-bold text-zinc-200">{label}</span>}
+        <span className="text-[9px] font-bold tabular-nums" style={{ color }}>{formatChange(quote?.changePercent)}</span>
+      </div>
+      <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
+        <strong className="text-[clamp(13px,1.35vw,22px)] font-black leading-tight tabular-nums text-zinc-100">{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
+        <span className="text-[10px] font-extrabold tabular-nums" style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-zinc-400">
+        <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
+        <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
+      </div>
+      <div className="mt-1 flex h-1 overflow-hidden rounded-full bg-zinc-800" aria-label="Mã tăng, đứng, giảm theo dữ liệu chỉ số">
+        {hasBreadth && total > 0 ? <>
+          <span className="bg-[#22c98a]" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
+          <span className="bg-amber-400" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
+          <span className="bg-[#ff4757]" style={{ width: `${100 * (breadth[2] ?? 0) / total}%` }} />
+        </> : null}
+      </div>
+      <div className="mt-0.5 flex justify-between gap-1 text-[9px] font-semibold tabular-nums">
+        <span className="text-emerald-400">▲ {hasBreadth ? breadth[0] : "—"}</span>
+        <span className="text-amber-300">– {hasBreadth ? breadth[1] : "—"}</span>
+        <span className="text-red-400">▼ {hasBreadth ? breadth[2] : "—"}</span>
+      </div>
+    </div>
   )
 }
 
@@ -312,7 +328,6 @@ function ContextCard({
   className = "",
   titleHint,
   headerRight,
-  titleValue,
 }: {
   title: string
   icon: ReactNode
@@ -321,7 +336,6 @@ function ContextCard({
   className?: string
   titleHint?: string
   headerRight?: ReactNode
-  titleValue?: ReactNode
 }) {
   const accentClass = accent === "green"
     ? "border-emerald-400/20"
@@ -338,7 +352,6 @@ function ContextCard({
       <header className="flex min-h-[31px] items-center gap-1.5 border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
         <span className="shrink-0 text-emerald-400">{icon}</span>
         <span className="min-w-0 truncate">{title}</span>
-        {titleValue ? <span className="min-w-0 truncate">{titleValue}</span> : null}
         {headerRight ? <span className="ml-auto shrink-0 text-right">{headerRight}</span> : null}
       </header>
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-1.5">
@@ -348,90 +361,17 @@ function ContextCard({
   )
 }
 
-function IndexContextCard({
-  label,
-  quote,
-  series,
-  onOpen,
-}: {
-  label: string
-  quote?: MarketContextIndexQuote
-  series?: MarketContextIndexSeries
-  onOpen?: () => void
-}) {
-  const color = marketColor(quote?.changePercent)
-  const data = appendLiveIndexValue(series, quote)
-  const quoteDate = quote?.sourceAsOf ? vietnamDateKey(quote.sourceAsOf) : null
-  const hasHistory = Boolean(series?.points.length && (!quoteDate || series?.sessionDate === quoteDate))
-  const reference = indexReference(quote)
-  const indexValue = quote && finite(quote.value)
-    ? quote.value
-    : series?.points.at(-1)?.value
-  const change = quote?.change
-  const headerRight = (
-    <span className="flex items-center justify-end gap-1.5 font-ticker tabular-nums" style={{ color }}>
-      {finite(change) ? <span className="hidden text-[11px] sm:inline">{change > 0 ? "+" : ""}{INDEX_FORMATTER.format(change)}</span> : null}
-      <span className="text-[12px] font-extrabold">{formatChange(quote?.changePercent)}</span>
-    </span>
-  )
 
-  const body = (
-    <>
-      <div className="mt-auto h-[69px] w-full overflow-hidden">
-        {hasHistory ? (
-          <ContextLineChart values={data} color={color} reference={reference} splitAtReference />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">Chưa có dữ liệu 1m</div>
-        )}
-      </div>
-    </>
-  )
-
-  return (
-    <ContextCard
-      title={label}
-      icon={<Landmark className="h-3.5 w-3.5" />}
-      accent={label === "VNINDEX" ? "green" : "platinum"}
-      className="xl:h-[144px]"
-      titleHint={series?.source ?? "Chưa xác minh được lịch sử 1m"}
-      headerRight={headerRight}
-      titleValue={<span className="font-ticker text-[14px] font-extrabold tabular-nums" style={{ color }}>{finite(indexValue) ? INDEX_FORMATTER.format(indexValue) : "—"}</span>}
-    >
-      {onOpen ? (
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex w-full flex-1 flex-col text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
-          aria-label="Mở biểu đồ VN-INDEX"
-        >
-          {body}
-        </button>
-      ) : body}
-    </ContextCard>
-  )
-}
-function DualLineChart({ points }: { points: ForeignMetricPoint[] }) {
-  const width = 320
-  const height = 58
-  if (points.length < 2) {
-    return <div className="flex h-[58px] items-center justify-center text-[9px] leading-tight text-zinc-600">Đang tích lũy realtime từ lúc mở bảng</div>
-  }
-
-  const values = points.flatMap((point) => [point.buy, point.sell]).filter((value) => Number.isFinite(value))
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min || Math.max(max * 0.01, 1)
-  const y = (value: number) => height - 3 - ((value - min) / range) * (height - 6)
-  const x = (index: number) => 2 + (index / Math.max(1, points.length - 1)) * (width - 4)
-  const buyPoints = points.map((point, index) => `${x(index).toFixed(1)},${y(point.buy).toFixed(1)}`).join(" ")
-  const sellPoints = points.map((point, index) => `${x(index).toFixed(1)},${y(point.sell).toFixed(1)}`).join(" ")
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[58px] w-full" aria-hidden="true" shapeRendering="optimizeSpeed">
-      <polyline points={buyPoints} fill="none" stroke={GREEN} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points={sellPoints} fill="none" stroke={RED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+function impactTooltip(entry: { symbol: string; contribution: number }, quote: MarketContextStockQuote | undefined, day: string) {
+  const current = quote && vietnamDateKey(quote.updatedAt) === day && finite(quote.volume) && quote.volume > 0 ? quote : undefined
+  const foreign = quote?.foreignSessionDate === day && quote.foreignSource === "DNSE Onidel WS" ? quote : undefined
+  return [
+    `Mã: ${entry.symbol}`,
+    `GT giao dịch: ${formatVndValue(current?.valueTraded)} (chỉ dữ liệu verified)`,
+    `Đóng góp: ${entry.contribution > 0 ? "+" : ""}${entry.contribution.toFixed(2)} điểm`,
+    `Biến động giá: ${formatChange(current?.changePercent)}`,
+    `KL nước ngoài: Mua ${formatCompactVolume(foreign?.foreignBuyVolume)} / Bán ${formatCompactVolume(foreign?.foreignSellVolume)} cp`,
+  ].join("\n")
 }
 
 function LivePulse({ active, sessionOpen }: { active: boolean; sessionOpen: boolean }) {
@@ -444,7 +384,7 @@ function LivePulse({ active, sessionOpen }: { active: boolean; sessionOpen: bool
   return sessionOpen ? <span className="text-amber-300" title="Timestamp nguồn chưa đủ mới">Chậm</span> : null
 }
 
-function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean }) {
+function ImpactChart({ impact, live, sessionOpen, quotes, day }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean; quotes: Record<string, MarketContextStockQuote | undefined>; day: string }) {
   const entries = orderedImpactBars(impact)
   const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.15
   const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
@@ -456,12 +396,12 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
   const columns = { gridTemplateColumns: `repeat(${entries.length},minmax(0,1fr))` }
   return (
     <div className="min-w-0">
-      <div className="overflow-x-auto [scrollbar-color:#34414b_#111511] [scrollbar-width:thin]">
-        <div className="min-w-[570px]">
+      <div className="min-w-0">
+        <div className="min-w-0">
           <div
             className="relative grid h-[55px] border-b-0"
             style={columns}
-            role="img"
+            role="group"
             aria-label="Tác động VNINDEX: cột xanh kéo tăng ở trái, cột đỏ kéo giảm ở phải; mã âm mạnh nhất đứng ngoài cùng bên phải, chung trục 0"
           >
             <div className="pointer-events-none absolute inset-x-0 z-10 border-t border-zinc-400/70" style={{ top: `${zeroPct}%` }} />
@@ -470,7 +410,10 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
               const barTop = Math.min(yPct, zeroPct)
               const barHeight = Math.abs(zeroPct - yPct)
               return (
-                <div key={entry.symbol} className={`relative min-w-0 ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}>
+                <div key={entry.symbol} className={`relative min-w-0 cursor-help focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}
+                  tabIndex={0}
+                  title={impactTooltip(entry, quotes[entry.symbol], day)}
+                  aria-label={impactTooltip(entry, quotes[entry.symbol], day)}>
                   <div
                     className={`absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
                     style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
@@ -478,7 +421,7 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
                   <span
                     className="absolute inset-x-0 z-20 truncate text-center font-ticker text-[9px] font-bold tabular-nums text-zinc-200"
                     style={{ top: `${Math.max(0, (entry.contribution > 0 ? barTop : zeroPct) * 0.55 - 12)}px` }}
-                    title={`${entry.symbol}: ${entry.contribution.toFixed(2)} điểm`}
+                    title={impactTooltip(entry, quotes[entry.symbol], day)}
                   >
                     {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
                   </span>
@@ -509,84 +452,10 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
   )
 }
 
-function MarketDepthCard({
-  snapshot,
-  sessionDate,
-  live,
-  sessionOpen,
-}: {
-  snapshot: MarketDepthSnapshot
-  sessionDate: string
-  live: boolean
-  sessionOpen: boolean
-}) {
-  const maxCount = Math.max(1, ...snapshot.bins)
-  const canShow = Boolean(sessionDate && snapshot.total > 0 && snapshot.covered > 0)
-
-  return (
-    <ContextCard
-      title="Độ sâu thị trường"
-      icon={<BarChart3 className="h-3.5 w-3.5" />}
-      accent="green"
-      className="h-full xl:h-[144px]"
-      headerRight={<span className="font-ticker text-[9px] font-medium text-zinc-400">HOSE · Top 200: <strong className="font-ticker text-[13px] font-extrabold tabular-nums text-white">{snapshot.total}</strong></span>}
-      titleHint="Phân bố realtime theo % thay đổi của các mã HOSE trong Top 200. Không phải toàn bộ HOSE."
-    >
-      {canShow ? (
-        <>
-          <div className="mt-auto grid h-[55px] shrink-0 grid-cols-11 items-end gap-[3px] border-b border-white/10" role="img" aria-label="Phân bố cổ phiếu HOSE theo 11 nhóm biến động phần trăm">
-            {MARKET_DEPTH_BUCKETS.map((bucket, index) => {
-              const count = snapshot.bins[index]
-              const tone = bucket.tone === "down"
-                ? "bg-[#ef5059] text-[#ff6670]"
-                : bucket.tone === "up"
-                  ? "bg-[#26b965] text-[#3fd881]"
-                  : "bg-[#dec452] text-[#ead668]"
-              return (
-                <div key={bucket.label} className="flex h-full min-w-0 flex-col items-center justify-end">
-                  <span className={`mb-0.5 font-ticker text-[9px] font-bold tabular-nums leading-none ${tone.split(" ")[1]}`}>{count}</span>
-                  <div
-                    className={`w-full rounded-t-[5px] motion-safe:transition-[height,opacity] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${tone.split(" ")[0]}`}
-                    style={{ height: `${count === 0 ? 1 : Math.max(3, 36 * count / maxCount)}px`, opacity: count === 0 ? 0.2 : 1 }}
-                  />
-                </div>
-              )
-            })}
-          </div>
-          <div className="mt-0.5 grid grid-cols-11 gap-[3px]">
-            {MARKET_DEPTH_BUCKETS.map((bucket) => (
-              <span key={bucket.label} className="min-w-0 whitespace-nowrap text-center font-ticker text-[8px] leading-none text-zinc-500">{bucket.label}</span>
-            ))}
-          </div>
-          <div className="mt-1.5 flex h-[5px] shrink-0 overflow-hidden rounded-full bg-zinc-700/60">
-            <span className="bg-[#ef5059] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.decliners / Math.max(1, snapshot.total)}%` }} />
-            <span className="bg-[#dec452] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.unchanged / Math.max(1, snapshot.total)}%` }} />
-            <span className="bg-[#26b965] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * snapshot.advancers / Math.max(1, snapshot.total)}%` }} />
-          </div>
-          <div className="mt-1 flex justify-between gap-1 font-ticker text-[9px] font-bold tabular-nums leading-none">
-            <span className="text-red-400">Giảm {snapshot.decliners}</span>
-            <span className="text-amber-300">Ngang {snapshot.unchanged}</span>
-            <span className="text-green-400">Tăng {snapshot.advancers}</span>
-          </div>
-          <p className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-1 font-ticker text-[8px] leading-none text-zinc-500" title="Chỉ cổ phiếu HOSE thuộc Top 200, có giá khớp hợp lệ của phiên hiện tại">
-            <span className="truncate">Top 200 partial · Có giá {snapshot.covered}/{snapshot.total} · Thiếu {snapshot.missing}</span>
-            <span className="inline-flex shrink-0 items-center gap-1"><LivePulse active={live} sessionOpen={sessionOpen} />{formatAsOf(snapshot.asOf)}</span>
-          </p>
-        </>
-      ) : (
-        <div className="flex min-h-[75px] flex-1 items-center justify-center text-center font-ticker text-[10px] text-zinc-400">
-          Chưa có đủ báo giá cùng phiên · Top 200 partial ({snapshot.covered}/{snapshot.total})
-        </div>
-      )}
-    </ContextCard>
-  )
-}
-
 export function MarketContextStrip({
   indexQuotes,
   stockQuotes,
   canonicalUniverse,
-  realtimeIndexSeries,
   realtimeImpact,
   onOpenIndexChart,
 }: MarketContextStripProps) {
@@ -595,8 +464,10 @@ export function MarketContextStrip({
   const [finhayForeign, setFinhayForeign] = useState<(FinhayForeignSnapshot & { sampledAt: string }) | null>(null)
   const [finhayLiquidity, setFinhayLiquidity] = useState<FinhayLiquiditySnapshot | null>(null)
   const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
-  const [liquidityPoints, setLiquidityPoints] = useState<MetricPoint[]>([])
-  const [foreignPoints, setForeignPoints] = useState<ForeignMetricPoint[]>([])
+  const [liquiditySamples, setLiquiditySamples] = useState<{ key: string; points: MetricPoint[] }>({ key: "", points: [] })
+  const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
+  const [previousLiquidity, setPreviousLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
+  const [previousForeign, setPreviousForeign] = useState<SessionHistory<ForeignMetricPoint> | null>(null)
   const [observedAtMs, setObservedAtMs] = useState(0)
 
   useEffect(() => {
@@ -724,16 +595,8 @@ export function MarketContextStrip({
   }, [])
 
   const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.sourceAsOf ?? indexQuotes.VNINDEX?.updatedAt ?? "")
-  const chartSessionDate = bootstrap?.indexes.VNINDEX?.sessionDate ?? ""
   const liveImpactDate = vietnamDateKey(realtimeImpact?.asOf ?? "") ?? ""
-  // At 09:00 the minute chart may still reflect yesterday; use newer live index session.
-  const contextSessionDate = [quoteSessionDate, chartSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
-  const vnindexSeries = mergeObservedIndexSeries(bootstrap?.indexes.VNINDEX, realtimeIndexSeries.VNINDEX, contextSessionDate)
-  const vn30Series = mergeObservedIndexSeries(bootstrap?.indexes.VN30, realtimeIndexSeries.VN30, contextSessionDate)
-  const marketDepth = useMemo(
-    () => buildMarketDepthSnapshot(canonicalUniverse, stockQuotes, contextSessionDate, vietnamDateKey),
-    [canonicalUniverse, contextSessionDate, stockQuotes],
-  )
+  const contextSessionDate = [quoteSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
   const vnindexQuote = indexQuotes.VNINDEX
   const indexLiquidity = currentSessionIndexMetrics(vnindexQuote, contextSessionDate)
   const fallbackLiquidityValue = indexLiquidity.valueTraded
@@ -753,15 +616,20 @@ export function MarketContextStrip({
     : indexLiquidity.volume
   const liquidityUpdatedAt = hasFinhayLiquidity ? finhayLiquidity?.sourceUpdatedAt ?? "" : fallbackLiquidityUpdatedAt
 
+  const liquidityHistoryKey = metricHistoryPrefix("liquidity", liquiditySeriesSource)
+  const liquiditySampleKey = `${liquidityHistoryKey}:${contextSessionDate}`
+  const liquidityPoints = liquiditySamples.key === liquiditySampleKey ? liquiditySamples.points : []
   useEffect(() => {
-    setLiquidityPoints([])
-  }, [contextSessionDate, liquiditySeriesSource])
-
+    setLiquiditySamples({ key: liquiditySampleKey, points: readMetricHistory<MetricPoint>(liquidityHistoryKey, contextSessionDate) })
+    setPreviousLiquidity(previousMetricHistory<MetricPoint>(liquidityHistoryKey, contextSessionDate))
+  }, [contextSessionDate, liquidityHistoryKey, liquiditySampleKey])
   useEffect(() => {
-    if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate) return
-    if (!finite(liquidityValue) || liquidityValue < 0) return
-    setLiquidityPoints((current) => upsertMetricPoint(current, liquidityUpdatedAt, liquidityValue))
-  }, [contextSessionDate, liquidityUpdatedAt, liquidityValue])
+    if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate || !finite(liquidityValue) || liquidityValue < 0) return
+    const existing = readMetricHistory<MetricPoint>(liquidityHistoryKey, contextSessionDate)
+    const next = upsertMetricPoint(existing, liquidityUpdatedAt, liquidityValue)
+    writeMetricHistory(liquidityHistoryKey, contextSessionDate, next)
+    setLiquiditySamples({ key: liquiditySampleKey, points: next })
+  }, [contextSessionDate, liquidityUpdatedAt, liquidityValue, liquidityHistoryKey, liquiditySampleKey])
 
   const foreignSnapshot = useMemo(() => {
     let buy = 0
@@ -789,7 +657,7 @@ export function MarketContextStrip({
     }
 
     return { buy, sell, covered, asOf }
-  }, [canonicalUniverse, stockQuotes])
+  }, [canonicalUniverse, stockQuotes, contextSessionDate])
 
   const hasFinhayForeign = Boolean(
     finhayForeign
@@ -805,10 +673,6 @@ export function MarketContextStrip({
   const displayedForeignCoverage = hasFinhayForeign
     ? finhayForeign?.constituentCount
     : foreignSnapshot.covered
-  const displayedForeignAsOf = hasFinhayForeign
-    ? finhayForeign?.sourceUpdatedAt
-    : foreignSnapshot.asOf
-
   const displayedForeignNet = hasFinhayForeign
     ? finite(finhayForeign?.net.value)
       ? finhayForeign!.net.value
@@ -817,32 +681,31 @@ export function MarketContextStrip({
         : undefined
     : top200ForeignTotals?.net
 
+  const foreignHistoryKey = metricHistoryPrefix("foreign", foreignSeriesSource)
+  const foreignSampleKey = `${foreignHistoryKey}:${contextSessionDate}`
+  const foreignPoints = foreignSamples.key === foreignSampleKey ? foreignSamples.points : []
   useEffect(() => {
-    setForeignPoints([])
-  }, [contextSessionDate, foreignSeriesSource])
-
+    setForeignSamples({ key: foreignSampleKey, points: readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate) })
+    setPreviousForeign(previousMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate))
+  }, [contextSessionDate, foreignHistoryKey, foreignSampleKey])
   useEffect(() => {
-    if (hasFinhayForeign) return
-    if (foreignSnapshot.covered === 0 || !foreignSnapshot.asOf || !contextSessionDate) return
-    if (vietnamDateKey(foreignSnapshot.asOf) !== contextSessionDate) return
-    setForeignPoints((current) => upsertForeignMetricPoint(
-      current,
-      foreignSnapshot.asOf,
-      foreignSnapshot.buy,
-      foreignSnapshot.sell,
-    ))
-  }, [contextSessionDate, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell, hasFinhayForeign])
-
+    if (hasFinhayForeign || foreignSnapshot.covered === 0 || !contextSessionDate || vietnamDateKey(foreignSnapshot.asOf) !== contextSessionDate) return
+    const existing = readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate)
+    const next = upsertForeignMetricPoint(existing, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.sell)
+    writeMetricHistory(foreignHistoryKey, contextSessionDate, next)
+    setForeignSamples({ key: foreignSampleKey, points: next })
+  }, [contextSessionDate, foreignHistoryKey, foreignSampleKey, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell, hasFinhayForeign])
   useEffect(() => {
-    if (!hasFinhayForeign || !finhayForeign || !contextSessionDate) return
-    if (vietnamDateKey(finhayForeign.sampledAt) !== contextSessionDate) return
+    if (!hasFinhayForeign || !finhayForeign || !contextSessionDate || vietnamDateKey(finhayForeign.sampledAt) !== contextSessionDate) return
     const buy = finhayForeign.buy.value
     const sell = finhayForeign.sell.value
     if (!finite(buy) || !finite(sell)) return
-    setForeignPoints((current) => upsertForeignMetricPoint(current, finhayForeign.sampledAt, buy, sell))
-  }, [contextSessionDate, finhayForeign, hasFinhayForeign])
+    const existing = readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate)
+    const next = upsertForeignMetricPoint(existing, finhayForeign.sampledAt, buy, sell)
+    writeMetricHistory(foreignHistoryKey, contextSessionDate, next)
+    setForeignSamples({ key: foreignSampleKey, points: next })
+  }, [contextSessionDate, finhayForeign, foreignHistoryKey, foreignSampleKey, hasFinhayForeign])
 
-  const liquidityData = liquidityPoints.map((point) => point.value)
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
   const sessionOpen = observedAtMs > 0 && getMarketSessionStatus(new Date(observedAtMs)).isLiveSession
   const isFresh = (asOf: string | null | undefined) => {
@@ -857,95 +720,62 @@ export function MarketContextStrip({
   const impactSelection = selectCurrentSessionImpact(bootstrap?.impact, realtimeImpact, contextSessionDate, observedAtMs)
   const impact = impactSelection.impact
   const impactLive = impactSelection.source === "websocket" && Boolean(impact?.asOf && isFresh(impact.asOf))
-  const depthLive = isFresh(marketDepth.asOf)
+
 
   return (
-    <div className="space-y-2 border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4" data-market-context-index-row>
-        <IndexContextCard
-          label="VNINDEX"
-          quote={indexQuotes.VNINDEX}
-          series={vnindexSeries}
-          onOpen={onOpenIndexChart}
-        />
-
-        <ContextCard
-          title="Thanh khoản HOSE"
-          className="xl:h-[144px]"
-          icon={<WalletCards className="h-3.5 w-3.5" />}
-          titleHint={hasFinhayLiquidity
-            ? "Finhay VNINDEX trading_value · VND verified. Không có history GTGD phiên trước theo phút."
-            : "Index realtime fallback. Chưa có history GTGD phiên trước theo phút."}
-          headerRight={<span className="font-ticker text-[13px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}
-        >
-          <div className="flex items-center justify-between gap-2 font-ticker text-[11px] text-zinc-400">
-            <span>KL <strong className="font-extrabold tabular-nums text-zinc-100">{formatCompactVolume(liquidityVolume)}</strong></span>
-            <span>vs phiên trước: <strong className="text-zinc-400">—</strong></span>
-          </div>
-          <div className="mt-auto h-[45px] w-full overflow-hidden">
-            {liquidityData.length >= 2 ? (
-              <ContextLineChart values={liquidityData} color={PLATINUM} />
-            ) : (
-              <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">Đang tích lũy realtime</div>
-            )}
-          </div>
-          <div className="mt-0.5 truncate text-[9px] text-zinc-500">
-            {hasFinhayLiquidity ? "Finhay HOSE" : "Index realtime"} · history phiên trước chưa verified
+    <div className="border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)]" data-market-context-single-row>
+        <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full xl:h-[156px]">
+          <div className="-mx-2.5 -my-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
+            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} onOpen={onOpenIndexChart} />
+            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} />
           </div>
         </ContextCard>
-
-        <IndexContextCard label="VN30" quote={indexQuotes.VN30} series={vn30Series} />
-
-        <ContextCard
-          title="Mua bán nước ngoài"
-          className="xl:h-[144px]"
-          icon={<Globe2 className="h-3.5 w-3.5" />}
-          accent="purple"
-          titleHint={hasFinhayForeign
-            ? "Finhay full VNINDEX/HOSE foreign buy/sell, sampled during current session."
-            : finhayForeignState === "UNAVAILABLE"
-              ? "Finhay unavailable. DNSE Onidel WebSocket cumulative Top 200 snapshots."
-              : "Finhay full market snapshot when available; DNSE Onidel WebSocket cumulative Top 200 fallback."}
-          headerRight={<span className={`font-ticker text-[12px] font-extrabold tabular-nums ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(displayedForeignNet)}</span>}
-        >
-          <div className="flex items-center justify-between gap-2 font-ticker text-[10px] tabular-nums">
-            <span className="min-w-0 truncate text-emerald-300">Mua {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignBuy : undefined)}</span>
-            <span className="min-w-0 truncate text-right text-red-300">Bán {formatVndValue((hasFinhayForeign || foreignSnapshot.covered > 0) ? displayedForeignSell : undefined)}</span>
+        <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
+          titleHint={hasFinhayLiquidity ? "Finhay VNINDEX trading_value · VND verified" : "Dữ liệu VNINDEX theo timestamp provider"}
+          headerRight={<span className="font-ticker text-[12px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}>
+          <div className="flex justify-between gap-1 text-[10px] text-zinc-400">
+            <span>KL <strong className="text-zinc-100">{formatCompactVolume(liquidityVolume)}</strong></span>
+            <span className="truncate">{previousLiquidity ? `vs ${previousLiquidity.day}` : "Chưa có phiên trước"}</span>
           </div>
-          <div className="mt-auto overflow-hidden rounded-lg"><DualLineChart points={foreignPoints} /></div>
-          <div className="mt-0.5 flex items-center justify-between gap-1 text-[9px] text-zinc-500">
-            <span className="truncate">{hasFinhayForeign
-              ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã`
-              : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}</span>
-            <span className="shrink-0">{hasFinhayForeign ? finhayForeign?.sessionDate : formatAsOf(displayedForeignAsOf)}</span>
+          <div className="mt-auto min-w-0"><ComparisonLineChart series={[
+            { points: liquidityPoints, color: PLATINUM },
+            { points: previousLiquidity?.points ?? [], color: "#8b9da1", previous: true },
+          ]} /></div>
+          <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
+            <span className="truncate">{hasFinhayLiquidity ? "Finhay full HOSE" : "Index realtime"}</span>
+            <span className="shrink-0">━ Nay　┄ Trước</span>
           </div>
         </ContextCard>
-      </div>
-
-      <div className="grid grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-market-context-impact-row>
-        <div className="min-w-0" data-market-context-impact-card>
-          <ContextCard
-            title="Tác động VNINDEX"
-            icon={<Scale className="h-4 w-4" />}
-            accent="green"
-            className="h-full xl:h-[144px]"
-            titleHint={impact?.source}
-            headerRight={impact && (impact.negative.length > 0 || impact.positive.length > 0)
-              ? <span className="font-ticker text-[9px] text-zinc-400">Top mã: <strong className={`text-[11px] font-bold tabular-nums ${impact.displayedNetTotal >= 0 ? "text-emerald-300" : "text-red-300"}`}>{impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)} điểm</strong></span>
-              : null}
-          >
-            {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-              <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} />
-            ) : (
-              <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 font-ticker text-[10px] text-zinc-500">
-                <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
-              </div>
-            )}
-          </ContextCard>
-        </div>
-        <div className="min-w-0" data-market-context-depth-card>
-          <MarketDepthCard snapshot={marketDepth} sessionDate={contextSessionDate} live={depthLive} sessionOpen={sessionOpen} />
-        </div>
+        <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
+          titleHint={hasFinhayForeign ? "Finhay full HOSE" : finhayForeignState === "UNAVAILABLE" ? "DNSE Top 200 partial" : "Finhay / DNSE Top 200 partial"}
+          headerRight={<span className={`text-[11px] font-bold tabular-nums ${finite(displayedForeignNet) && displayedForeignNet > 0 ? "text-emerald-300" : finite(displayedForeignNet) && displayedForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(displayedForeignNet)}</span>}>
+          <div className="flex justify-between gap-1 text-[10px] tabular-nums">
+            <span className="truncate text-emerald-300">Mua {formatVndValue(displayedForeignBuy)}</span>
+            <span className="truncate text-red-300">Bán {formatVndValue(displayedForeignSell)}</span>
+          </div>
+          <div className="mt-auto min-w-0"><ComparisonLineChart series={[
+            { points: foreignPoints.map((point) => ({ minute: point.minute, value: point.buy })), color: GREEN },
+            { points: foreignPoints.map((point) => ({ minute: point.minute, value: point.sell })), color: RED },
+            { points: (previousForeign?.points ?? []).map((point) => ({ minute: point.minute, value: point.buy })), color: GREEN, previous: true },
+            { points: (previousForeign?.points ?? []).map((point) => ({ minute: point.minute, value: point.sell })), color: RED, previous: true },
+          ]} /></div>
+          <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
+            <span className="truncate">{hasFinhayForeign ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã` : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length}`}</span>
+            <span className="shrink-0">{previousForeign ? `┄ ${previousForeign.day}` : "Chưa có phiên trước"}</span>
+          </div>
+        </ContextCard>
+        <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
+          titleHint={impact?.source}
+          headerRight={impact && (impact.positive.length || impact.negative.length) ? <span className="text-[10px] font-bold tabular-nums text-zinc-300">Top 5 ± · {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)}đ</span> : null}>
+          {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
+            <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} quotes={stockQuotes} day={contextSessionDate} />
+          ) : (
+            <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 text-[10px] text-zinc-500">
+              <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
+            </div>
+          )}
+        </ContextCard>
       </div>
     </div>
   )
