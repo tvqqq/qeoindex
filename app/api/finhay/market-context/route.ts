@@ -27,13 +27,14 @@ export async function GET() {
 
   try {
     const sampledAt = new Date().toISOString()
-    const { foreign, liquidity } = await getFinhayIndexMarketContext(accessToken, "VNINDEX")
+    const { foreign, liquidity, breadth } = await getFinhayIndexMarketContext(accessToken, "VNINDEX")
     return NextResponse.json({
       ok: true,
       provider: "Finhay MCP",
       sampledAt,
       foreign,
       liquidity,
+      breadth,
     }, { headers: NO_STORE_HEADERS })
   } catch (error) {
     return NextResponse.json({

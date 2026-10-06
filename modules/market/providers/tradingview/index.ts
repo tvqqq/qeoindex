@@ -43,6 +43,18 @@ const VPS_INDEX_MAP: Record<string, string> = {
   "03": "UPCOMINDEX",
 }
 
+/** VPS `ot` lists counts as pipe-separated fields 3–5; zero is valid. */
+export function parseVpsIndexBreadth(raw: unknown): { advances: number; declines: number; unchanged: number } | null {
+  if (typeof raw !== "string") return null
+  const fields = raw.split("|")
+  if (fields.length < 6) return null
+  const counts = fields.slice(3, 6).map((field) => field.trim())
+  if (!counts.every((field) => /^\d+$/.test(field))) return null
+  const [advances, declines, unchanged] = counts.map(Number)
+  if (![advances, declines, unchanged].every(Number.isSafeInteger)) return null
+  return { advances, declines, unchanged }
+}
+
 export async function fetchTradingViewIndexes() {
   const [tvResult, vpsResult] = await Promise.allSettled([
     fetch("https://scanner.tradingview.com/vietnam/scan", {
@@ -84,18 +96,10 @@ export async function fetchTradingViewIndexes() {
       const val = Number((item as any).value) // in million VND
       const cIndex = Number((item as any).cIndex)
       const oIndex = Number((item as any).oIndex)
-      const ot = String((item as any).ot ?? "")
-      let advances: number | undefined
-      let declines: number | undefined
-      let unchanged: number | undefined
-      if (ot) {
-        const parts = ot.split("|")
-        if (parts.length >= 6) {
-          advances = Number(parts[3]) || undefined
-          declines = Number(parts[4]) || undefined
-          unchanged = Number(parts[5]) || undefined
-        }
-      }
+      const breadth = parseVpsIndexBreadth((item as any).ot)
+      const advances = breadth?.advances
+      const declines = breadth?.declines
+      const unchanged = breadth?.unchanged
 
       if (quotes[symbol]) {
         if (Number.isFinite(vol) && vol > 0) quotes[symbol].volume = vol

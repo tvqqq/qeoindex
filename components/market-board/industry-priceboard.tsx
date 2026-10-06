@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import { BarChart3, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
 import { getSectorIcon } from "@/components/stock-identity"
@@ -438,7 +438,13 @@ export function IndustryPriceboard({
         data-market-board-screenshot-rail
       >
         <section className={`${FULL_COLUMN_WIDTH} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="watchlist" data-market-board-industry-column>
-          <ColumnHeader label="Theo dõi" count={watchlistStocks.length} average={averagePriceboardChange(watchlistStocks, orderingQuotes)} accent="watch" />
+          <ColumnHeader
+            label="Theo dõi"
+            average={averagePriceboardChange(watchlistStocks, orderingQuotes)}
+            breadth={industryPriceboardBreadth(watchlistStocks, orderingQuotes)}
+            accent="watch"
+            title={`${watchlistStocks.length} mã trong danh sách theo dõi`}
+          />
           <div className="border-b border-white/[0.06] p-1.5">
             <div className="relative flex h-7 items-center gap-1 rounded-full border border-white/[0.10] bg-[#090d12] px-2">
               <Search className="h-3 w-3 shrink-0 text-muted-2" />
@@ -487,8 +493,8 @@ export function IndustryPriceboard({
         <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="vn30" data-market-board-industry-column>
           <ColumnHeader
             label="VN30"
-            count={vn30Stocks.length}
-            average={averagePriceboardChange(vn30Stocks, orderingQuotes)}
+            average={vn30Membership ? averagePriceboardChange(vn30Stocks, orderingQuotes) : null}
+            breadth={vn30Membership ? industryPriceboardBreadth(vn30Stocks, orderingQuotes) : null}
             accent="index"
             title={vn30Membership ? `Nguồn: ${vn30Membership.source}; dữ liệu lúc ${vn30Membership.asOf}; tải lúc ${vn30Membership.fetchedAt}` : "Nguồn VN30 hiện không khả dụng"}
           />
@@ -548,22 +554,12 @@ export function IndustryPriceboard({
                       }
                     }}
                   >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-                      <IndustryIcon className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-                      <h2 className="min-w-0 break-words font-sans text-[12px] font-bold leading-[1.2] text-foreground" title={industry}>{industry}</h2>
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 font-mono text-[10px] leading-[1.2] tabular-nums">
-                        <span className="flex min-w-0 shrink-0 items-center gap-1" aria-label={`Tăng ${breadth.up}, ngang ${breadth.unchanged}, giảm ${breadth.down}; thiếu dữ liệu ${breadth.unavailable}`} title={`Tăng: ${breadth.up} · Ngang: ${breadth.unchanged} · Giảm: ${breadth.down} · Chưa có giá hợp lệ: ${breadth.unavailable}`}>
-                          <span className="text-up">↑{breadth.up}</span>
-                          <span className="text-ref">={breadth.unchanged}</span>
-                          <span className="text-down">↓{breadth.down}</span>
-                        </span>
-                        <span className={`ml-auto inline-flex shrink-0 items-center justify-center rounded-full border px-1.5 py-0.5 font-semibold leading-none ${averagePillTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
-                          {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
-                        </span>
-                      </div>
-                    </div>
+                    <PriceboardHeaderContent
+                      label={industry}
+                      icon={<IndustryIcon className="h-3.5 w-3.5" />}
+                      breadth={breadth}
+                      average={average}
+                    />
                   </header>
                   <TableLabels showPriceVolume={showPriceVolume} />
                   <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
@@ -598,23 +594,82 @@ function averagePillTone(value: number | null) {
   return "border-ref/30 bg-ref/10 text-ref"
 }
 
-function averageTone(value: number | null) {
-  if (value === null) return "text-muted-2"
-  if (value > 0) return "text-up"
-  if (value < 0) return "text-down"
-  return "text-ref"
+type HeaderBreadth = ReturnType<typeof industryPriceboardBreadth>
+
+function PriceboardHeaderContent({
+  label,
+  icon,
+  breadth,
+  average,
+  accent = "sector",
+}: {
+  label: string
+  icon: ReactNode
+  breadth: HeaderBreadth | null
+  average: number | null
+  accent?: "watch" | "sector"
+}) {
+  const iconColor = accent === "watch"
+    ? "border-amber-400/20 bg-amber-400/10 text-amber-300"
+    : "border-cyan-400/20 bg-cyan-400/10 text-cyan-300"
+
+  return (
+    <>
+      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${iconColor}`} aria-hidden="true">
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+        <h2 className="min-w-0 break-words font-sans text-[11px] font-bold leading-[1.2] text-foreground" title={label}>{label}</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 font-mono text-[10px] leading-[1.2] tabular-nums">
+          <span
+            className="flex min-w-0 shrink-0 items-center gap-1"
+            aria-label={breadth
+              ? `Tăng ${breadth.up}, ngang ${breadth.unchanged}, giảm ${breadth.down}; thiếu dữ liệu ${breadth.unavailable}`
+              : "Chưa có dữ liệu thành phần"}
+            title={breadth
+              ? `Tăng: ${breadth.up} · Ngang: ${breadth.unchanged} · Giảm: ${breadth.down} · Chưa có giá hợp lệ: ${breadth.unavailable}`
+              : "Chưa có dữ liệu thành phần"}
+          >
+            <span className="text-up">↑{breadth?.up ?? "—"}</span>
+            <span className="text-ref">-{breadth?.unchanged ?? "—"}</span>
+            <span className="text-down">↓{breadth?.down ?? "—"}</span>
+          </span>
+          <span
+            className={`ml-auto inline-flex shrink-0 items-center justify-center rounded-full border px-1.5 py-0.5 font-semibold leading-none ${averagePillTone(average)}`}
+            title="Trung bình % thay đổi của các mã có giá và % hợp lệ"
+          >
+            {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
+          </span>
+        </div>
+      </div>
+    </>
+  )
 }
 
-function ColumnHeader({ label, count, average, accent, title }: { label: string; count: number; average: number | null; accent: "watch" | "index"; title?: string }) {
-  const isWatch = accent === "watch"
+function ColumnHeader({
+  label,
+  breadth,
+  average,
+  accent,
+  title,
+}: {
+  label: string
+  breadth: HeaderBreadth | null
+  average: number | null
+  accent: "watch" | "index"
+  title?: string
+}) {
   return (
-    <header className="flex min-h-[62px] shrink-0 items-center gap-1.5 border-b border-white/[0.07] px-2" title={title}>
-      {isWatch ? <Star className="h-3 w-3 shrink-0 fill-amber-300 text-amber-300" /> : <BarChart3 className="h-3 w-3 shrink-0 text-brand" />}
-      <h2 className="min-w-0 flex-1 truncate font-sans text-[12px] font-bold text-foreground">{label}</h2>
-      <span className="shrink-0 font-mono text-[10px] text-muted-2">{count}</span>
-      <span className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${averageTone(average)}`}>
-        {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
-      </span>
+    <header className="flex min-h-[62px] shrink-0 items-center gap-1.5 border-b border-white/[0.07] px-2 py-1.5" title={title}>
+      <PriceboardHeaderContent
+        label={label}
+        icon={accent === "watch"
+          ? <Star className="h-3.5 w-3.5 fill-current" />
+          : <BarChart3 className="h-3.5 w-3.5" />}
+        breadth={breadth}
+        average={average}
+        accent={accent === "watch" ? "watch" : "sector"}
+      />
     </header>
   )
 }
