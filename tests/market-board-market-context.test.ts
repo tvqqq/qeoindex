@@ -149,12 +149,24 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.match(stripSource, /title="Thanh khoản HOSE"/)
   assert.match(stripSource, /title="Mua bán nước ngoài"/)
   assert.match(stripSource, /title="Tác động VNINDEX"/)
-  assert.equal((stripSource.match(/<ContextCard\b/g) ?? []).length, 4)
+  assert.equal(stripSource.split('<ContextCard').length - 1, 4)
   assert.doesNotMatch(stripSource, /MarketDepthCard|MARKET_DEPTH_BUCKETS|buildMarketDepthSnapshot|data-market-context-depth-card/)
   assert.doesNotMatch(stripSource, /ContextLineChart|IndexContextCard|DualLineChart|overflow-x-auto|min-w-\[570px\]/)
   assert.match(stripSource, /currentSessionIndexMetrics\(quote, day\)/)
   assert.match(stripSource, /quote\?\.advances/)
   assert.match(stripSource, /quote\?\.declines/)
+})
+
+test("combined index card exposes an explicit chart button using the existing realtime modal", () => {
+  assert.ok(stripSource.includes('headerRight={'))
+  assert.ok(stripSource.includes('onClick={onOpenIndexChart}'))
+  assert.ok(stripSource.includes('aria-label="Mở biểu đồ realtime VN-Index và VN30F1M"'))
+  assert.ok(stripSource.includes('<ChartNoAxesCombined'))
+  assert.ok(stripSource.includes('onOpen={onOpenIndexChart}'))
+  assert.ok(boardSource.includes('onOpenIndexChart={openIndexChart}'))
+  assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setIndexChartOpen(true), [])'))
+  assert.ok(boardSource.includes('<IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />'))
+  assert.equal((stripSource.match(/<ContextCard\\b/g) ?? []).length, 4)
 })
 
 test("realtime comparison reuses only observed source-scoped same-session data", () => {
