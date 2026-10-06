@@ -402,3 +402,39 @@ body::after {
   }
 }
 
+/* Compact market context: animate ONLY on confirmed source revisions. */
+@keyframes market-header-fresh-tick {
+  0% { opacity: 0; transform: translateX(-95%); }
+  28% { opacity: 0.6; }
+  100% { opacity: 0; transform: translateX(95%); }
+}
+.market-header-sheen {
+  background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.22), transparent);
+  animation: market-header-fresh-tick 700ms ease-out 1 both;
+}
+@keyframes market-realtime-value-tick {
+  0% { opacity: 0.68; filter: brightness(1.7); transform: translateY(3px); }
+  55% { opacity: 1; filter: brightness(1.3); transform: translateY(-1px); }
+  100% { opacity: 1; filter: brightness(1); transform: translateY(0); }
+}
+.market-realtime-number {
+  display: inline-block;
+  animation: market-realtime-value-tick 420ms ease-out 1 both;
+}
+@keyframes market-chart-latest-segment {
+  0% { stroke-dashoffset: 1; opacity: 0.5; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+.market-chart-trace {
+  stroke-dashoffset: 0;
+  animation: market-chart-latest-segment 500ms ease-out 1 both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-header-sheen,
+  .market-realtime-number,
+  .market-chart-trace {
+    animation: none !important;
+    transition: none !important;
+  }
+}

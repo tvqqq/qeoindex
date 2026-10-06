@@ -71,6 +71,23 @@ test("intraday hour ticks use undistorted CSS-pixel sans font in both compact ch
   assert.ok(contextStripSource.includes('<ComparisonLineChart zeroReference series={['))
 })
 
+test("market context numbers, chart traces, and headers honor motion reduction", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
+  assert.ok(css.includes("@keyframes market-header-fresh-tick"))
+  assert.ok(css.includes("@keyframes market-realtime-value-tick"))
+  assert.ok(css.includes("@keyframes market-chart-latest-segment"))
+  assert.ok(css.includes(".market-header-sheen"))
+  assert.ok(css.includes(".market-realtime-number"))
+  assert.ok(css.includes(".market-chart-trace"))
+  assert.ok(css.includes("@media (prefers-reduced-motion: reduce)"))
+  assert.ok(contextStripSource.includes('pathLength={1}'))
+  assert.ok(contextStripSource.includes('strokeDasharray="1"'))
+  assert.ok(contextStripSource.includes('motion-safe:animate-pulse'))
+  assert.ok(contextStripSource.includes('motion-safe:transition-[width]'))
+  assert.ok(contextStripSource.includes('role="img"'))
+  assert.equal(contextStripSource.includes('cursor-help'), false)
+})
+
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))

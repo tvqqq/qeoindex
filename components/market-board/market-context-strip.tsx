@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
+import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
 import { coveredTop200ForeignTotals, currentSessionIndexMetrics, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
 import { intradayForeignNet, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
@@ -307,9 +308,11 @@ type ComparisonSeries = { label: string; points: MetricPoint[]; color: string; p
 function ComparisonLineChart({
   series,
   zeroReference = false,
+  animate = false,
 }: {
   series: ComparisonSeries[]
   zeroReference?: boolean
+  animate?: boolean
 }) {
   const [hoveredMinute, setHoveredMinute] = useState<number | null>(null)
   const valid = series.filter((line) => line.points.length)
@@ -374,13 +377,37 @@ function ComparisonLineChart({
             `${position ? "L" : "M"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
           ).join(" ")
           const latest = ordered.at(-1)
+          const prior = ordered.at(-2)
+          const lastSegment = prior && latest
+            ? `M${x(vietnamSessionMinute(prior.minute)).toFixed(1)},${y(prior.value).toFixed(1)} L${x(vietnamSessionMinute(latest.minute)).toFixed(1)},${y(latest.value).toFixed(1)}`
+            : ""
           return <g key={index}>
             {ordered.length > 1 && (
               <path d={path} fill="none" stroke={line.color} strokeDasharray={line.previous ? "5 4" : undefined}
                 strokeWidth={line.previous ? 1.8 : 2.4} strokeOpacity={line.previous ? 0.85 : 1} strokeLinecap="round" strokeLinejoin="round" />
             )}
+            {animate && !line.previous && prior && latest && (
+              <path
+                key={`${latest.minute}:${latest.value}`}
+                d={lastSegment}
+                pathLength={1}
+                strokeDasharray="1"
+                stroke={line.color}
+                strokeWidth="3"
+                strokeLinecap="round"
+                fill="none"
+                className="pointer-events-none market-chart-trace"
+                aria-hidden="true"
+              />
+            )}
             {latest && (
-              <circle cx={x(vietnamSessionMinute(latest.minute))} cy={y(latest.value)} r={line.previous ? 1.7 : 2.4} fill={line.color} />
+              <circle
+                cx={x(vietnamSessionMinute(latest.minute))}
+                cy={y(latest.value)}
+                r={line.previous ? 1.7 : 2.4}
+                fill={line.color}
+                className={animate && !line.previous ? "motion-safe:animate-pulse" : undefined}
+              />
             )}
           </g>
         })}
@@ -458,7 +485,57 @@ function MarketSessionClock() {
   )
 }
 
-function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void }) {
+function MarketHeaderActivity({
+  sources,
+  sessionDay,
+  canStream = true,
+}: {
+  sources: readonly (string | null | undefined)[]
+  sessionDay: string
+  canStream?: boolean
+}) {
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => {
+    const refresh = () => setNow(Date.now())
+    refresh()
+    const timer = window.setInterval(refresh, 15_000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [])
+  const state = now === null ? "unavailable" : getMarketCardActivity({
+    sources,
+    sessionDay,
+    nowMs: now,
+    canStream,
+  })
+  const revision = sources.map((source) => source ?? "").join("|")
+  const label = state === "live" ? "LIVE" : state === "delayed" ? "Chậm" : state === "closed" ? "Nghỉ" : "—"
+  return (
+    <span
+      data-market-live-state={state}
+      className={`relative inline-flex h-[17px] shrink-0 items-center gap-1 overflow-hidden rounded-full border px-1.5 font-sans text-[9px] font-bold tracking-wide tabular-nums ${state === "live"
+        ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+        : state === "delayed" ? "border-amber-400/20 text-amber-300"
+          : "border-white/10 text-zinc-500"}`}
+      aria-label={state === "live" ? "Dữ liệu có timestamp provider mới trong phiên" : state === "delayed" ? "Dữ liệu nguồn chậm" : state === "closed" ? "Ngoài phiên giao dịch" : "Chưa xác nhận dữ liệu realtime"}
+    >
+      {state === "live" && (
+        <>
+          <span key={revision} className="pointer-events-none absolute inset-0 market-header-sheen" aria-hidden="true" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" aria-hidden="true" />
+        </>
+      )}
+      <span className="relative">{label}</span>
+    </span>
+  )
+}
+
+function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean }) {
   const value = finite(quote?.value) && quote!.value > 0 ? quote!.value : undefined
   const color = marketColor(quote?.changePercent)
   const change = quote?.change
@@ -473,11 +550,11 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen }: {
         {onOpen ? (
           <button type="button" onClick={onOpen} className="truncate text-[11px] font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
         ) : <span className="truncate text-[11px] font-bold text-zinc-200">{label}</span>}
-        <span className="text-[9px] font-bold tabular-nums" style={{ color }}>{formatChange(quote?.changePercent)}</span>
+        <span key={`${quote?.changePercent ?? "missing"}`} className={`text-[9px] font-bold tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{formatChange(quote?.changePercent)}</span>
       </div>
       <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
-        <strong className="text-[clamp(13px,1.35vw,22px)] font-black leading-tight tabular-nums text-zinc-100">{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
-        <span className="text-[10px] font-extrabold tabular-nums" style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
+        <strong key={finite(value) ? value : "missing"} className={`text-[clamp(13px,1.35vw,22px)] font-black leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
+        <span key={finite(change) ? change : "missing"} className={`text-[10px] font-extrabold tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-zinc-400">
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
@@ -488,9 +565,9 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen }: {
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}>
 
         {hasBreadth && total > 0 ? <>
-          <span className="bg-[#22c98a]" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
-          <span className="bg-amber-400" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
-          <span className="bg-[#ff4757]" style={{ width: `${100 * (breadth[2] ?? 0) / total}%` }} />
+          <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
+          <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
+          <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[2] ?? 0) / total}%` }} />
         </> : null}
       </div>
       <div className="mt-0.5 flex justify-between gap-1 text-[9px] font-semibold tabular-nums">
@@ -510,6 +587,9 @@ function ContextCard({
   className = "",
   titleHint,
   headerRight,
+  activitySources,
+  activitySessionDay = "",
+  activityCanStream = true,
 }: {
   title: string
   icon: ReactNode
@@ -518,6 +598,9 @@ function ContextCard({
   className?: string
   titleHint?: string
   headerRight?: ReactNode
+  activitySources?: readonly (string | null | undefined)[]
+  activitySessionDay?: string
+  activityCanStream?: boolean
 }) {
   const accentClass = accent === "green"
     ? "border-emerald-400/20"
@@ -531,10 +614,13 @@ function ContextCard({
       title={titleHint}
       data-market-context-card
     >
-      <header className="flex min-h-[31px] items-center gap-1.5 border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
+      <header className="relative flex min-h-[31px] items-center gap-1.5 overflow-hidden border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
         <span className="shrink-0 text-emerald-400">{icon}</span>
         <span className="min-w-0 truncate">{title}</span>
-        {headerRight ? <span className="ml-auto shrink-0 text-right">{headerRight}</span> : null}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {activitySources ? <MarketHeaderActivity sources={activitySources} sessionDay={activitySessionDay} canStream={activityCanStream} /> : null}
+          {headerRight ? <span className="shrink-0 text-right">{headerRight}</span> : null}
+        </span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-1.5">
         {children}
@@ -598,7 +684,7 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
                         ? "border-emerald-400/45 bg-[#102e29]/95 text-emerald-200"
                         : "border-rose-400/45 bg-[#351d24]/95 text-rose-200"}`}
                     >
-                      <span>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
+                      <span key={entry.contribution} className={live ? "market-realtime-number" : ""}>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
                       <span className="pt-0.5 text-[8px] font-medium leading-none opacity-90">điểm</span>
                     </span>
                   </div>
@@ -615,10 +701,10 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
       </div>
       <div className="mt-1 flex h-[15px] overflow-hidden rounded font-ticker text-[10px] font-extrabold tabular-nums text-white" aria-label="Tổng điểm kéo tăng và kéo giảm của các mã hiển thị">
         <div className="flex items-center justify-center bg-[#269f91] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * positiveTotal / sumAbs : 50}%` }}>
-          +{positiveTotal.toFixed(2)}
+          <span key={positiveTotal} className={live ? "market-realtime-number" : ""}>+{positiveTotal.toFixed(2)}</span>
         </div>
         <div className="flex items-center justify-center bg-[#ed5056] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * negativeTotal / sumAbs : 50}%` }}>
-          −{negativeTotal.toFixed(2)}
+          <span key={negativeTotal} className={live ? "market-realtime-number" : ""}>−{negativeTotal.toFixed(2)}</span>
         </div>
       </div>
       <p className="mt-0.5 flex items-center justify-end gap-2 truncate font-ticker text-[8px] text-zinc-500">
@@ -964,6 +1050,8 @@ export function MarketContextStrip({
     <div className="border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)]" data-market-context-single-row>
         <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full xl:h-[156px]"
+          activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
+          activitySessionDay={contextSessionDate}
           headerRight={
             <button
               type="button"
@@ -977,44 +1065,51 @@ export function MarketContextStrip({
             </button>
           }>
           <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
-            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)} onOpen={onOpenIndexChart} />
-            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)} />
+            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} />
+            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} />
           </div>
           <MarketSessionClock />
         </ContextCard>
         <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
+          activitySources={[liquidityUpdatedAt]}
+          activitySessionDay={contextSessionDate}
           titleHint={hasFinhayLiquidity ? "Finhay VNINDEX trading_value · VND verified" : "Dữ liệu VNINDEX theo timestamp provider"}
-          headerRight={<span className="font-ticker text-[12px] font-extrabold tabular-nums text-zinc-100">{formatVndValue(liquidityValue)}</span>}>
+          headerRight={<span key={finite(liquidityValue) ? liquidityValue : "missing"} className={`font-ticker text-[12px] font-extrabold tabular-nums text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatVndValue(liquidityValue)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] text-zinc-400">
-            <span>KL <strong className="text-zinc-100">{formatCompactVolume(liquidityVolume)}</strong></span>
+            <span>KL <strong key={finite(liquidityVolume) ? liquidityVolume : "missing"} className={`text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatCompactVolume(liquidityVolume)}</strong></span>
             <span className="truncate">{verifiedPreviousLiquidity ? `So với ${verifiedPreviousLiquidity.day}` : "Chưa ghi nhận phiên trước"}</span>
           </div>
           <div className="mt-auto min-w-0"><ComparisonLineChart series={[
             { label: "Nay", points: todayLiquidityPoints, color: PLATINUM },
             { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#eb6f6f", previous: true },
-          ]} /></div>
+          ]} animate={isTodaySession && isFresh(liquidityUpdatedAt)} /></div>
           <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
             <span className="truncate">{hasFinhayLiquidity ? "Finhay full HOSE" : "Index realtime"}</span>
             <span className="shrink-0">━ Hôm nay　┄ Phiên trước</span>
           </div>
         </ContextCard>
         <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
+          activitySources={[hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf]}
+          activitySessionDay={contextSessionDate}
           titleHint={hasFinhayForeign ? "Finhay full HOSE" : finhayForeignState === "UNAVAILABLE" ? "DNSE Top 200 partial" : "Finhay / DNSE Top 200 partial"}
-          headerRight={<span className={`text-[11px] font-bold tabular-nums ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
+          headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] tabular-nums">
-            <span className="truncate text-emerald-300">Mua {formatVndValue(todayForeignBuy)}</span>
-            <span className="truncate text-red-300">Bán {formatVndValue(todayForeignSell)}</span>
+            <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
+            <span className="truncate text-red-300">Bán <span key={finite(todayForeignSell) ? todayForeignSell : "missing"} className={isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignSell)}</span></span>
           </div>
           <div className="mt-auto min-w-0"><ComparisonLineChart zeroReference series={[
             { label: "Ròng", points: todayForeignNetPoints, color: finite(todayForeignNet) && todayForeignNet < 0 ? RED : GREEN },
-          ]} /></div>
+          ]} animate={isTodaySession && isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf)} /></div>
           <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
             <span className="truncate">{hasFinhayForeign ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã` : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length}`}</span>
             <span className="shrink-0">━ Ròng hôm nay</span>
           </div>
         </ContextCard>
         <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
-          headerRight={impact && (impact.positive.length || impact.negative.length) ? <span className="text-[10px] font-bold tabular-nums text-zinc-300">Top 5 ± · {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)}đ</span> : null}>
+          activitySources={[impact?.asOf]}
+          activitySessionDay={contextSessionDate}
+          activityCanStream={impactSelection.source === "websocket"}
+          headerRight={impact && (impact.positive.length || impact.negative.length) ? <span key={impact.displayedNetTotal} className={`text-[10px] font-bold tabular-nums text-zinc-300 ${impactLive ? "market-realtime-number" : ""}`}>Top 5 ± · {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)}đ</span> : null}>
           {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
             <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} />
           ) : (
