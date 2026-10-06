@@ -277,7 +277,8 @@ test("combined indices use smaller levels, larger point changes, colored percent
 
 test("combined index trend icon replaces leading dash, percentage pill is larger and breadth stays at bottom", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
-  assert.ok(stripSource.includes("ArrowUpRight, ArrowRight"))
+  assert.ok(stripSource.includes("ArrowUpRight"))
+  assert.ok(stripSource.includes("ArrowRight"))
   assert.ok(stripSource.includes("ArrowDownRight"))
   assert.ok(summary.includes('className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5"'))
   assert.ok(summary.includes('className="mt-auto min-w-0 pt-1"'))
