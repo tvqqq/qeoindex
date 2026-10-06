@@ -71,6 +71,19 @@ test("intraday hour ticks use undistorted CSS-pixel sans font in both compact ch
   assert.ok(contextStripSource.includes('<ComparisonLineChart zeroReference series={['))
 })
 
+test("market card cleanup preserves one-row desktop fit, visible breadth and expanded impact", () => {
+  const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
+  const impact = contextStripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
+  assert.ok(summary.includes("data-index-breadth-inline"))
+  assert.ok(summary.includes('rounded-full border px-1.5 py-0.5'))
+  assert.ok(impact.includes('grid h-[80px]'))
+  assert.equal(impact.includes('Tổng điểm kéo tăng và kéo giảm của các mã hiển thị'), false)
+  assert.equal(contextStripSource.includes("Top 200 partial</span>"), false)
+  assert.ok(contextStripSource.includes('không phải tổng toàn HOSE'))
+  assert.ok(contextStripSource.includes('xl:h-[156px]'))
+  assert.ok(contextStripSource.includes("market-header-sheen"))
+})
+
 test("market context numbers, chart traces, and headers honor motion reduction", () => {
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
   assert.ok(css.includes("@keyframes market-header-fresh-tick"))
@@ -109,7 +122,8 @@ test("market context places ICT next to the title and removes all four bottom an
   assert.equal(contextStripSource.includes('DNSE basketInfluence ·'), false)
   assert.equal(contextStripSource.includes('━ Hôm nay　┄ Phiên trước'), false)
   assert.equal(contextStripSource.includes('━ Ròng hôm nay'), false)
-  assert.ok(contextStripSource.includes('Top 200 partial</span>'))
+  assert.equal(contextStripSource.includes('Top 200 partial</span>'), false)
+  assert.ok(contextStripSource.includes('không phải tổng toàn HOSE'))
   assert.ok(contextStripSource.includes('xl:h-[156px]'))
   assert.ok(contextStripSource.includes("getMarketCardActivity({"))
   assert.equal(contextStripSource.includes("function LivePulse("), false)

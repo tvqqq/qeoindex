@@ -206,6 +206,52 @@ test("VNINDEX point badges stay near the zero axis, show points with direction a
   assert.equal(stripSource.includes('titleHint={impact?.source}'), false)
 })
 
+test("market headers omit LIVE/Chậm and partial labels without losing provenance or animation", () => {
+  const marker = stripSource.split("function MarketHeaderActivity(")[1]?.split("function IndexedSummary(")[0] ?? ""
+  assert.ok(marker.includes("data-market-live-state={state}"))
+  assert.ok(marker.includes('state === "live"'))
+  assert.ok(marker.includes('market-header-sheen'))
+  assert.ok(marker.includes('motion-safe:animate-pulse'))
+  assert.equal(marker.includes('const label = state'), false)
+  assert.equal(marker.includes('>{label}</span>'), false)
+  assert.ok(stripSource.includes("data-index-breadth-inline"))
+  assert.ok(stripSource.includes("mã Top 200; không phải tổng toàn HOSE"))
+  assert.equal(stripSource.includes("Top 200 partial</span>"), false)
+})
+
+test("combined indices use smaller levels, larger point changes, colored percent pills and inline breadth", () => {
+  const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
+  assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
+  assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
+  assert.ok(summary.includes("rounded-full border px-1.5 py-0.5"))
+  assert.ok(summary.includes("pillTone"))
+  assert.ok(summary.includes("border-emerald-400/35"))
+  assert.ok(summary.includes("border-rose-400/35"))
+  assert.ok(summary.includes("border-amber-400/35"))
+  assert.ok(summary.includes('data-index-breadth-inline'))
+  assert.ok(summary.includes("Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}"))
+  assert.ok(summary.includes("h-[7px]"))
+  assert.ok(summary.includes("total > 0"))
+  assert.ok(summary.includes("100 * (breadth[0] ?? 0) / total"))
+  assert.ok(summary.includes("100 * (breadth[1] ?? 0) / total"))
+  assert.ok(summary.includes("100 * (breadth[2] ?? 0) / total"))
+  assert.ok(summary.includes('hasBreadth ? breadth[0] : "—"'))
+  assert.equal(summary.includes('mt-0.5 flex justify-between gap-1 text-[9px]'), false)
+})
+
+test("VNINDEX impact uses header +/- totals to give stock bars more height", () => {
+  const chart = stripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
+  assert.ok(chart.includes('grid h-[80px]'))
+  assert.equal(chart.includes('h-[55px]'), false)
+  assert.equal(chart.includes('Tổng điểm kéo tăng và kéo giảm của các mã hiển thị'), false)
+  assert.equal(chart.includes('sumAbs'), false)
+  assert.ok(stripSource.includes("impact.displayedPositiveTotal.toFixed(2)"))
+  assert.ok(stripSource.includes("impact.displayedNegativeTotal"))
+  assert.ok(stripSource.includes("Tổng 5 mã kéo tăng"))
+  assert.ok(chart.includes("role=\"group\""))
+  assert.ok(chart.includes("orderedImpactBars(impact)"))
+})
+
 test("all four market cards animate only source-backed ticks, not polling or idle status", () => {
   assert.equal((stripSource.match(/activitySources=\{/g) ?? []).length, 4)
   assert.ok(stripSource.includes('activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}'))
@@ -241,7 +287,8 @@ test("market cards remove bottom annotation rows but preserve source integrity",
   assert.equal(liquidity.includes("━ Hôm nay"), false)
   assert.equal(foreign.includes("━ Ròng hôm nay"), false)
   assert.ok(liquidity.includes("So với ${verifiedPreviousLiquidity.day}"))
-  assert.ok(foreign.includes("Top 200 partial</span>"))
+  assert.equal(foreign.includes("Top 200 partial</span>"), false)
+  assert.ok(foreign.includes("mã Top 200; không phải tổng toàn HOSE"))
   assert.ok(foreign.includes("${foreignSnapshot.covered}/${canonicalUniverse.length}"))
   assert.equal(impactChart.includes("DNSE basketInfluence ·"), false)
   assert.equal(impactChart.includes("LivePulse"), false)
@@ -297,8 +344,8 @@ test("realtime comparison reuses only observed source-scoped same-session data",
   assert.doesNotMatch(stripSource, /previousForeign\?\.points/)
   assert.match(stripSource, /previous: true/)
   assert.match(stripSource, /Chưa ghi nhận phiên trước/)
-  assert.match(stripSource, /Finhay full HOSE/)
-  assert.match(stripSource, /Top 200 partial/)
+  assert.match(stripSource, /Finhay: giao dịch nước ngoài toàn HOSE/)
+  assert.match(stripSource, /mã Top 200; không phải tổng toàn HOSE/)
   assert.match(stripSource, /foreignSeriesSource = hasFinhayForeign \? "finhay-vnindex" : "top200-partial"/)
   assert.match(stripSource, /liquiditySeriesSource = hasFinhayLiquidity \? "finhay-vnindex" : "index-quote"/)
   assert.doesNotMatch(stripSource, /volume \* price|volume \* close/)
