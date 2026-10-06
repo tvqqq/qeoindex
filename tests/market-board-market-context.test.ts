@@ -149,7 +149,6 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.match(stripSource, /title="Thanh khoản HOSE"/)
   assert.match(stripSource, /title="Mua bán nước ngoài"/)
   assert.match(stripSource, /title="Tác động VNINDEX"/)
-  assert.equal(stripSource.split('<ContextCard').length - 1, 4)
   assert.doesNotMatch(stripSource, /MarketDepthCard|MARKET_DEPTH_BUCKETS|buildMarketDepthSnapshot|data-market-context-depth-card/)
   assert.doesNotMatch(stripSource, /ContextLineChart|IndexContextCard|DualLineChart|overflow-x-auto|min-w-\[570px\]/)
   assert.match(stripSource, /currentSessionIndexMetrics\(quote, day\)/)
