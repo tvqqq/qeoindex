@@ -531,6 +531,15 @@
       ]
     },
     {
+      "path": "tests/market-context-metrics.test.ts",
+      "owner": "market",
+      "invariant": "HOSE intraday comparison uses the exact prior trading date, real minute samples, and signed current-session foreign net only.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-data-contract.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market data contract contract.",
