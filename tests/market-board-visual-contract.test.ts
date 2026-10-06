@@ -58,6 +58,19 @@ test("classic Bảng điện remains the default with the original six sector gr
   assert.match(boardSource, /Bảng ngành/)
 })
 
+test("intraday hour ticks use undistorted CSS-pixel sans font in both compact charts", () => {
+  assert.ok(contextStripSource.includes('data-market-intraday-time-axis'))
+  assert.ok(contextStripSource.includes('font-sans text-[11px] font-medium leading-none tracking-normal tabular-nums text-zinc-400'))
+  assert.ok(contextStripSource.includes('left: `${100 * x(tick.minute) / width}%`'))
+  assert.ok(contextStripSource.includes('"translateX(-50%)"'))
+  assert.ok(contextStripSource.includes('preserveAspectRatio="none"'))
+  assert.equal(contextStripSource.includes('<text key={tick.minute}'), false)
+  assert.ok(contextStripSource.includes('09:00'))
+  assert.ok(contextStripSource.includes('15:00'))
+  assert.ok(contextStripSource.includes('<ComparisonLineChart series={['))
+  assert.ok(contextStripSource.includes('<ComparisonLineChart zeroReference series={['))
+})
+
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))

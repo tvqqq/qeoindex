@@ -189,11 +189,20 @@ test("VPS ot parser retains genuine zero counts and rejects missing, negative an
   assert.equal(parseVpsIndexBreadth("x"), null)
 })
 
-test("positive VNINDEX impact labels sit near the shared X axis instead of above the bars", () => {
-  assert.ok(stripSource.includes('entry.contribution > 0'))
-  assert.ok(stripSource.includes('max(0px, calc(${zeroPct}% - 12px))'))
-  assert.ok(stripSource.includes('zeroPct * 0.55 - 12'))
-  assert.ok(stripSource.includes('impactTooltip(entry, quotes[entry.symbol], day)'))
+test("VNINDEX point badges stay near the zero axis, show points with direction and no hover help", () => {
+  const impact = stripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
+  assert.ok(impact.includes('max(0px, calc(${zeroPct}% - 25px))'))
+  assert.ok(impact.includes('Math.abs(entry.contribution).toFixed(2)'))
+  assert.ok(impact.includes("điểm</span>"))
+  assert.ok(impact.includes('role="img"'))
+  assert.ok(impact.includes('aria-label={`${entry.symbol}:'))
+  assert.ok(impact.includes('font-sans text-[10px] font-extrabold'))
+  assert.ok(impact.includes("sm:text-[11px]"))
+  assert.ok(impact.includes("text-emerald-200"))
+  assert.ok(impact.includes("text-rose-200"))
+  assert.ok(impact.includes('entry.contribution > 0 ? "+" : "−"'))
+  assert.equal(/title=|cursor-help|tabIndex=|impactTooltip/.test(impact), false)
+  assert.equal(stripSource.includes('titleHint={impact?.source}'), false)
 })
 
 test("combined index card exposes an explicit chart button using the existing realtime modal", () => {
@@ -273,7 +282,7 @@ test("foreign flow charts signed cumulative net today only, not prior session bu
   assert.equal(stripSource.includes("previousForeign?.points"), false)
 })
 
-test("compact contributors show provider top-5 entries and verified-only tooltip, no synthetic fields", () => {
+test("compact contributors keep provider top-5 and realtime provenance without tooltip", () => {
   const entries = parseVnindexImpactPayload([
     ...Array.from({ length: 12 }, (_, i) => ({ symbol: `P${i + 10}`, basketInfluence: 1 - i * 0.02 })),
     ...Array.from({ length: 12 }, (_, i) => ({ symbol: `N${i + 10}`, basketInfluence: -1 + i * 0.02 })),
@@ -281,15 +290,11 @@ test("compact contributors show provider top-5 entries and verified-only tooltip
   assert.ok(entries)
   assert.equal(entries.positive.length + entries.negative.length, 10)
   assert.equal(orderedImpactBars(entries).length, 10)
-  assert.match(stripSource, /impactTooltip\(entry, quotes\[entry.symbol\], day\)/)
-  assert.match(stripSource, /foreignBuyVolume/)
-  assert.match(stripSource, /foreignSellVolume/)
-  assert.match(stripSource, /formatVndValue\(current\?\.valueTraded\)/)
-  assert.match(stripSource, /formatChange\(current\?\.changePercent\)/)
-  assert.match(stripSource, /motion-safe:transition-\[top,height\]/)
-  assert.match(stripSource, /motion-safe:animate-pulse/)
-  assert.match(stripSource, /observedAtMs - sourceMs <= 120_000/)
-  assert.match(stripSource, /}, 60_000\)/)
+  assert.equal(stripSource.includes("function impactTooltip("), false)
+  assert.ok(stripSource.includes("motion-safe:transition-[top,height]"))
+  assert.ok(stripSource.includes("motion-safe:animate-pulse"))
+  assert.ok(stripSource.includes("observedAtMs - sourceMs <= 120_000"))
+  assert.ok(stripSource.includes("}, 60_000)"))
 })
 
 test("market context API remains authenticated and cached with impact-only bootstrap", () => {
