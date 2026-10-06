@@ -530,7 +530,7 @@ export function IndustryPriceboard({
                     tabIndex={0}
                     aria-label={`Sắp xếp ngành ${industry}; dùng phím mũi tên trái phải, Home hoặc End`}
                     title="Kéo tiêu đề để đổi thứ tự; dùng ←/→ khi dùng bàn phím"
-                    className="flex min-h-[62px] shrink-0 cursor-grab touch-none select-none flex-col justify-center gap-1 border-b border-white/[0.07] px-2 py-1.5 focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand active:cursor-grabbing"
+                    className="flex min-h-[62px] shrink-0 cursor-grab touch-none select-none items-center gap-1.5 border-b border-white/[0.07] px-2 py-1.5 focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand active:cursor-grabbing"
                     onPointerDown={(event) => beginDrag(event, industry)}
                     onKeyDown={(event) => {
                       if (event.key === "ArrowLeft") {
@@ -548,19 +548,21 @@ export function IndustryPriceboard({
                       }
                     }}
                   >
-                    <div className="flex w-full min-w-0 items-start gap-1.5">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300"><IndustryIcon className="h-3.5 w-3.5" /></span>
-                      <h2 className="min-w-0 flex-1 break-words font-sans text-[12px] font-bold leading-[1.2] text-foreground" title={industry}>{industry}</h2>
-                    </div>
-                    <div className="flex w-full min-w-0 items-center justify-between gap-1 font-mono text-[10px] leading-[1.2] tabular-nums">
-                      <span className={`shrink-0 font-semibold ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
-                        {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1" aria-label={`Tăng ${breadth.up}, ngang ${breadth.unchanged}, giảm ${breadth.down}; thiếu dữ liệu ${breadth.unavailable}`} title={`Tăng: ${breadth.up} · Ngang: ${breadth.unchanged} · Giảm: ${breadth.down} · Chưa có giá hợp lệ: ${breadth.unavailable}`}>
-                        <span className="text-up">↑{breadth.up}</span>
-                        <span className="text-ref">={breadth.unchanged}</span>
-                        <span className="text-down">↓{breadth.down}</span>
-                      </span>
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                      <IndustryIcon className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                      <h2 className="min-w-0 break-words font-sans text-[12px] font-bold leading-[1.2] text-foreground" title={industry}>{industry}</h2>
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 font-mono text-[10px] leading-[1.2] tabular-nums">
+                        <span className="flex min-w-0 shrink-0 items-center gap-1" aria-label={`Tăng ${breadth.up}, ngang ${breadth.unchanged}, giảm ${breadth.down}; thiếu dữ liệu ${breadth.unavailable}`} title={`Tăng: ${breadth.up} · Ngang: ${breadth.unchanged} · Giảm: ${breadth.down} · Chưa có giá hợp lệ: ${breadth.unavailable}`}>
+                          <span className="text-up">↑{breadth.up}</span>
+                          <span className="text-ref">={breadth.unchanged}</span>
+                          <span className="text-down">↓{breadth.down}</span>
+                        </span>
+                        <span className={`ml-auto inline-flex shrink-0 items-center justify-center rounded-full border px-1.5 py-0.5 font-semibold leading-none ${averagePillTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
+                          {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
+                        </span>
+                      </div>
                     </div>
                   </header>
                   <TableLabels showPriceVolume={showPriceVolume} />
@@ -587,6 +589,13 @@ export function IndustryPriceboard({
       </div>
     </div>
   )
+}
+
+function averagePillTone(value: number | null) {
+  if (value === null) return "border-white/10 bg-white/[0.05] text-muted-2"
+  if (value > 0) return "border-up/30 bg-up/10 text-up"
+  if (value < 0) return "border-down/30 bg-down/10 text-down"
+  return "border-ref/30 bg-ref/10 text-ref"
 }
 
 function averageTone(value: number | null) {
