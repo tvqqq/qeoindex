@@ -393,11 +393,24 @@ function ComparisonLineChart({
             ))}
           </g>
         )}
-        {ticks.map((tick) => (
-          <text key={tick.minute} x={x(tick.minute)} y={height - 3}
-            fontSize="10" textAnchor={tick.minute === 540 ? "start" : tick.minute === 900 ? "end" : "middle"} fill="#9ca3af">{tick.label}</text>
-        ))}
       </svg>
+      {/* SVG paths stretch to card width; CSS-pixel ticks remain crisp and undistorted. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[14px] font-sans text-[11px] font-medium leading-none tracking-normal tabular-nums text-zinc-400"
+        aria-hidden="true"
+        data-market-intraday-time-axis
+      >
+        {ticks.map((tick) => (
+          <span
+            key={tick.minute}
+            className="absolute bottom-0 whitespace-nowrap"
+            style={{
+              left: `${100 * x(tick.minute) / width}%`,
+              transform: tick.minute === 540 ? "translateX(0)" : tick.minute === 900 ? "translateX(-100%)" : "translateX(-50%)",
+            }}
+          >{tick.label}</span>
+        ))}
+      </div>
       {hoveredMinute !== null && (
         <div className="pointer-events-none absolute inset-x-1 top-0 z-20 flex flex-wrap justify-center gap-x-1 rounded bg-[#101410]/95 px-1 py-0.5 font-ticker text-[9px] tabular-nums">
           <span className="text-zinc-300">{timeLabel}</span>
@@ -531,29 +544,17 @@ function ContextCard({
 }
 
 
-function impactTooltip(entry: { symbol: string; contribution: number }, quote: MarketContextStockQuote | undefined, day: string) {
-  const current = quote && vietnamDateKey(quote.updatedAt) === day && finite(quote.volume) && quote.volume > 0 ? quote : undefined
-  const foreign = quote?.foreignSessionDate === day && quote.foreignSource === "DNSE Onidel WS" ? quote : undefined
-  return [
-    `Mã: ${entry.symbol}`,
-    `GT giao dịch: ${formatVndValue(current?.valueTraded)} (chỉ dữ liệu verified)`,
-    `Đóng góp: ${entry.contribution > 0 ? "+" : ""}${entry.contribution.toFixed(2)} điểm`,
-    `Biến động giá: ${formatChange(current?.changePercent)}`,
-    `KL nước ngoài: Mua ${formatCompactVolume(foreign?.foreignBuyVolume)} / Bán ${formatCompactVolume(foreign?.foreignSellVolume)} cp`,
-  ].join("\n")
-}
-
 function LivePulse({ active, sessionOpen }: { active: boolean; sessionOpen: boolean }) {
   if (active) return (
-    <span className="inline-flex items-center gap-1 text-emerald-300" title="Nguồn có timestamp mới trong phiên">
+    <span className="inline-flex items-center gap-1 text-emerald-300">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
       LIVE
     </span>
   )
-  return sessionOpen ? <span className="text-amber-300" title="Timestamp nguồn chưa đủ mới">Chậm</span> : null
+  return sessionOpen ? <span className="text-amber-300">Chậm</span> : null
 }
 
-function ImpactChart({ impact, live, sessionOpen, quotes, day }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean; quotes: Record<string, MarketContextStockQuote | undefined>; day: string }) {
+function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean }) {
   const entries = orderedImpactBars(impact)
   const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.15
   const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
@@ -579,23 +580,28 @@ function ImpactChart({ impact, live, sessionOpen, quotes, day }: { impact: Marke
               const barTop = Math.min(yPct, zeroPct)
               const barHeight = Math.abs(zeroPct - yPct)
               return (
-                <div key={entry.symbol} className={`relative min-w-0 cursor-help focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}
-                  tabIndex={0}
-                  title={impactTooltip(entry, quotes[entry.symbol], day)}
-                  aria-label={impactTooltip(entry, quotes[entry.symbol], day)}>
+                <div
+                  key={entry.symbol}
+                  role="img"
+                  aria-label={`${entry.symbol}: ${entry.contribution > 0 ? "kéo tăng" : "kéo giảm"} ${Math.abs(entry.contribution).toFixed(2)} điểm VNINDEX`}
+                  className={`relative min-w-0 ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}
+                >
                   <div
-                    className={`absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
+                    className={`pointer-events-none absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
                     style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
                   />
-                  <span
-                    className="absolute inset-x-0 z-20 truncate text-center font-ticker text-[9px] font-bold tabular-nums text-zinc-200"
-                    style={{ top: entry.contribution > 0
-                      ? `max(0px, calc(${zeroPct}% - 12px))`
-                      : `${Math.max(0, zeroPct * 0.55 - 12)}px` }}
-                    title={impactTooltip(entry, quotes[entry.symbol], day)}
+                  <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center"
+                    style={{ top: `max(0px, calc(${zeroPct}% - 25px))` }}
                   >
-                    {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
-                  </span>
+                    <span
+                      className={`inline-flex max-w-full flex-col items-center rounded-[4px] border px-0.5 py-[2px] font-sans text-[10px] font-extrabold leading-none tracking-tight tabular-nums shadow-sm sm:text-[11px] ${entry.contribution > 0
+                        ? "border-emerald-400/45 bg-[#102e29]/95 text-emerald-200"
+                        : "border-rose-400/45 bg-[#351d24]/95 text-rose-200"}`}
+                    >
+                      <span>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
+                      <span className="pt-0.5 text-[8px] font-medium leading-none opacity-90">điểm</span>
+                    </span>
+                  </div>
                 </div>
               )
             })}
@@ -1008,10 +1014,9 @@ export function MarketContextStrip({
           </div>
         </ContextCard>
         <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
-          titleHint={impact?.source}
           headerRight={impact && (impact.positive.length || impact.negative.length) ? <span className="text-[10px] font-bold tabular-nums text-zinc-300">Top 5 ± · {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)}đ</span> : null}>
           {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-            <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} quotes={stockQuotes} day={contextSessionDate} />
+            <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} />
           ) : (
             <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 text-[10px] text-zinc-500">
               <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
