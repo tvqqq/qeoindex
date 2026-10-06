@@ -214,6 +214,29 @@ function validIndexBreadth(value: IndexBreadthSnapshot | null | undefined, sessi
       .every((count) => Number.isSafeInteger(count) && count >= 0)
 }
 
+/** Same-session breadth never uses an unverified or prior-day DNSE quote count. */
+function selectMarketBreadth(
+  symbol: "VNINDEX" | "VN30",
+  sessionDay: string,
+  finhay: Readonly<Record<string, IndexBreadthSnapshot | null>>,
+  vps: Readonly<Record<string, IndexBreadthSnapshot>>,
+  now: Date = new Date(),
+): SelectedBreadth | undefined {
+  if (!sessionDay || sessionDay !== vietnamDateKey(now.toISOString())) return undefined
+  const provider = finhay[symbol]
+  if (validIndexBreadth(provider, sessionDay)) return { ...provider, source: "Finhay" }
+
+  const phase = getMarketSessionStatus(now).phase
+  // VPS only timestamps the *receipt* of the snapshot, not the underlying exchange event.
+  // Suppress it before open or on non-trading days to avoid showing yesterday as today's breadth.
+  const displayAfterOpen = phase === "MORNING" || phase === "LUNCH_BREAK" || phase === "AFTERNOON"
+    || getMarketSessionDisplay(now).label === "Đã đóng cửa"
+  const snapshot = vps[symbol]
+  return displayAfterOpen && validIndexBreadth(snapshot, sessionDay)
+    ? { ...snapshot, source: "VPS snapshot" }
+    : undefined
+}
+
 function formatAsOf(value?: string | null) {
   if (!value) return "—"
   const timestamp = Date.parse(value)
@@ -798,19 +821,6 @@ export function MarketContextStrip({
   const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.sourceAsOf ?? indexQuotes.VNINDEX?.updatedAt ?? "")
   const liveImpactDate = vietnamDateKey(realtimeImpact?.asOf ?? "") ?? ""
   const contextSessionDate = [quoteSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
-  const pickBreadth = (symbol: "VNINDEX" | "VN30"): SelectedBreadth | undefined => {
-    const provider = finhayBreadth[symbol]
-    if (validIndexBreadth(provider, contextSessionDate)) return { ...provider, source: "Finhay" }
-    const fallback = vpsBreadth[symbol]
-    // VPS timestamps are snapshot-receipt times; never present a pre-open prior-session snapshot as today's live breadth.
-    const now = new Date()
-    const displayAfterOpen = getMarketSessionStatus(now).isLiveSession || (() => {
-      const currentSession = getMarketSessionDisplay(now)
-      return currentSession.label === "Đã đóng cửa" || currentSession.label.startsWith("Nghỉ trưa")
-    })()
-    if (displayAfterOpen && validIndexBreadth(fallback, contextSessionDate)) return { ...fallback, source: "VPS snapshot" }
-    return undefined
-  }
   const vnindexQuote = indexQuotes.VNINDEX
   const indexLiquidity = currentSessionIndexMetrics(vnindexQuote, contextSessionDate)
   const fallbackLiquidityValue = indexLiquidity.valueTraded
@@ -961,8 +971,8 @@ export function MarketContextStrip({
             </button>
           }>
           <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
-            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={pickBreadth("VNINDEX")} onOpen={onOpenIndexChart} />
-            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={pickBreadth("VN30")} />
+            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)} onOpen={onOpenIndexChart} />
+            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)} />
           </div>
           <MarketSessionClock />
         </ContextCard>
