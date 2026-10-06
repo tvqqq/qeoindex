@@ -5,6 +5,33 @@ const VIETNAM_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 })
 
+/**
+ * Position breadth labels under their actual green/flat/red segments.
+ * In narrow columns, limit label centers to 7–93% and keep at least 13%
+ * between adjacent labels so tiny/zero-width segments cannot stack text.
+ * The bar shares remain exact provider counts (no artificial min widths).
+ */
+export function indexBreadthProgress(counts: readonly [number, number, number]) {
+  const safeCount = (value: number) => Number.isSafeInteger(value) && value >= 0 ? value : 0
+  const up = safeCount(counts[0])
+  const flat = safeCount(counts[1])
+  const down = safeCount(counts[2])
+  const total = up + flat + down
+  const shares: [number, number, number] = total > 0
+    ? [100 * up / total, 100 * flat / total, 100 * down / total]
+    : [0, 0, 0]
+  const [upShare, flatShare, downShare] = shares
+  const centers = total > 0
+    ? [upShare / 2, upShare + flatShare / 2, upShare + flatShare + downShare / 2]
+    : [16, 50, 84]
+  const edge = 7
+  const gap = 13
+  const first = Math.max(edge, Math.min(centers[0], 100 - edge - 2 * gap))
+  const second = Math.max(first + gap, Math.min(centers[1], 100 - edge - gap))
+  const third = Math.max(second + gap, Math.min(centers[2], 100 - edge))
+  return { total, shares, centers: [first, second, third] as [number, number, number] }
+}
+
 export function currentSessionIndexMetrics(
   quote: { sourceAsOf?: string; updatedAt?: string; volume?: number; valueTraded?: number } | undefined,
   sessionDate: string,

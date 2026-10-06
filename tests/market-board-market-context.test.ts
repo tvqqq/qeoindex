@@ -7,6 +7,7 @@ import { parseVpsIndexBreadth } from "../modules/market/providers/tradingview/in
 import {
   coveredTop200ForeignTotals,
   currentSessionIndexMetrics,
+  indexBreadthProgress,
   orderedImpactBars,
   parseVnindexImpactPayload,
   selectCurrentSessionImpact,
@@ -214,12 +215,39 @@ test("market headers omit LIVE/Chậm and partial labels without losing provenan
   assert.ok(marker.includes('motion-safe:animate-pulse'))
   assert.equal(marker.includes('const label = state'), false)
   assert.equal(marker.includes('>{label}</span>'), false)
-  assert.ok(stripSource.includes("data-index-breadth-inline"))
+  assert.ok(stripSource.includes("data-index-breadth-progress"))
   assert.ok(stripSource.includes("mã Top 200; không phải tổng toàn HOSE"))
   assert.equal(stripSource.includes("Top 200 partial</span>"), false)
 })
 
-test("combined indices use smaller levels, larger point changes, colored percent pills and inline breadth", () => {
+test("breadth progress places labels below exact proportion centers, keeping narrow labels separate", () => {
+  const example = indexBreadthProgress([52, 56, 230])
+  assert.equal(example.total, 338)
+  assert.equal(example.shares.length, 3)
+  assert.ok(Math.abs(example.shares.reduce((a, b) => a + b, 0) - 100) < 1e-9)
+  assert.ok(Math.abs(example.centers[0] - (100 * 26 / 338)) < 1e-9)
+  assert.ok(Math.abs(example.centers[1] - (100 * (52 + 28) / 338)) < 1e-9)
+  assert.ok(Math.abs(example.centers[2] - (100 * (52 + 56 + 115) / 338)) < 1e-9)
+
+  const vn30 = indexBreadthProgress([4, 3, 23])
+  assert.equal(vn30.total, 30)
+  assert.ok(vn30.centers[0] >= 7 && vn30.centers[2] <= 93)
+  assert.ok(vn30.centers[1] - vn30.centers[0] >= 13 - 1e-9)
+  assert.ok(vn30.centers[2] - vn30.centers[1] >= 13 - 1e-9)
+
+  for (const counts of [[0, 0, 30], [1, 1, 998], [998, 1, 1], [0, 0, 0], [0, 25, 0]] as [number, number, number][]) {
+    const result = indexBreadthProgress(counts)
+    assert.ok(result.shares.every(Number.isFinite))
+    assert.ok(result.centers.every(Number.isFinite))
+    assert.ok(result.centers[0] >= 7 && result.centers[2] <= 93)
+    assert.ok(result.centers[1] - result.centers[0] >= 13 - 1e-9)
+    assert.ok(result.centers[2] - result.centers[1] >= 13 - 1e-9)
+  }
+  assert.deepEqual(indexBreadthProgress([0, 0, 0]), { total: 0, shares: [0, 0, 0], centers: [16, 50, 84] })
+  assert.deepEqual(indexBreadthProgress([Number.NaN, -1, 0]).shares, [0, 0, 0])
+})
+
+test("combined indices use smaller levels, larger point changes, colored percent pills and segment-following breadth labels", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
@@ -228,14 +256,21 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes("border-emerald-400/35"))
   assert.ok(summary.includes("border-rose-400/35"))
   assert.ok(summary.includes("border-amber-400/35"))
-  assert.ok(summary.includes('data-index-breadth-inline'))
+  assert.ok(summary.includes('data-index-breadth-progress'))
   assert.ok(summary.includes("Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}"))
-  assert.ok(summary.includes("h-[7px]"))
+  assert.ok(summary.includes("h-[8px] w-full"))
   assert.ok(summary.includes("total > 0"))
-  assert.ok(summary.includes("100 * (breadth[0] ?? 0) / total"))
-  assert.ok(summary.includes("100 * (breadth[1] ?? 0) / total"))
-  assert.ok(summary.includes("100 * (breadth[2] ?? 0) / total"))
+  assert.ok(summary.includes("indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])"))
+  assert.ok(summary.includes("progress.shares[0]"))
+  assert.ok(summary.includes("progress.shares[1]"))
+  assert.ok(summary.includes("progress.shares[2]"))
+  assert.ok(summary.includes("relative mt-1 h-[14px]"))
+  assert.ok(summary.includes("progress.centers[0]"))
+  assert.ok(summary.includes("progress.centers[1]"))
+  assert.ok(summary.includes("progress.centers[2]"))
+  assert.ok(summary.includes("motion-safe:transition-[left]"))
   assert.ok(summary.includes('hasBreadth ? breadth[0] : "—"'))
+  assert.equal(summary.includes('data-index-breadth-inline'), false)
   assert.equal(summary.includes('mt-0.5 flex justify-between gap-1 text-[9px]'), false)
 })
 
