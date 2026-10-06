@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
@@ -533,7 +533,7 @@ function MarketHeaderActivity({
   )
 }
 
-function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean }) {
+function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false, breadthFresh = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean; breadthFresh?: boolean }) {
   const value = finite(quote?.value) && quote!.value > 0 ? quote!.value : undefined
   const color = marketColor(quote?.changePercent)
   const change = quote?.change
@@ -544,12 +544,6 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   const progress = indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])
   const total = hasBreadth ? progress.total : 0
   const percent = quote?.changePercent
-  const trend = finite(change) ? change : finite(percent) ? percent : undefined
-  const trendColor = !finite(trend) ? "text-zinc-500" : trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"
-  const trendIcon = !finite(trend) ? <Activity className="h-[13px] w-[13px]" aria-hidden="true" />
-    : trend > 0 ? <ArrowUpRight className="h-[13px] w-[13px]" aria-hidden="true" />
-      : trend < 0 ? <ArrowDownRight className="h-[13px] w-[13px]" aria-hidden="true" />
-        : <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
   const pillTone = !finite(percent)
     ? "border-zinc-600/40 bg-zinc-500/10 text-zinc-400"
     : percent > 0
@@ -566,7 +560,6 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
-        <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
         <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
       </div>
@@ -588,9 +581,9 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
           </> : null}
         </div>
         <div className="relative mt-1 h-[14px] w-full font-sans text-[9px] font-bold leading-[14px] tabular-nums" aria-hidden="true">
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[0]}%` }}>▲{hasBreadth ? breadth[0] : "—"}</span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[1]}%` }}>–{hasBreadth ? breadth[1] : "—"}</span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[2]}%` }}>▼{hasBreadth ? breadth[2] : "—"}</span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
         </div>
       </div>
     </div>
@@ -681,9 +674,17 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
                   className={`relative min-w-0 ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}
                 >
                   <div
-                    className={`pointer-events-none absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
+                    className={`pointer-events-none absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-500 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
                     style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
-                  />
+                  >
+                    {live && (
+                      <span
+                        key={`${entry.symbol}:${entry.contribution}`}
+                        className="pointer-events-none absolute inset-0 rounded-[2px] market-impact-bar-tick"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
                   <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center"
                     style={{ top: `max(0px, calc(${zeroPct}% - 17px))` }}
                   >
@@ -692,7 +693,7 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
                         ? "border-emerald-400/45 bg-[#102e29]/95 text-emerald-200"
                         : "border-rose-400/45 bg-[#351d24]/95 text-rose-200"}`}
                     >
-                      <span key={entry.contribution} className={live ? "market-realtime-number" : ""}>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
+                      <span key={entry.contribution} className={live ? "market-impact-value-tick" : ""}>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
                     </span>
                   </div>
                 </div>
@@ -1032,6 +1033,8 @@ export function MarketContextStrip({
   const impactSelection = selectCurrentSessionImpact(bootstrap?.impact, realtimeImpact, contextSessionDate, observedAtMs)
   const impact = impactSelection.impact
   const impactLive = impactSelection.source === "websocket" && Boolean(impact?.asOf && isFresh(impact.asOf))
+  const vnindexBreadth = selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)
+  const vn30Breadth = selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)
 
 
   return (
@@ -1054,8 +1057,8 @@ export function MarketContextStrip({
             </button>
           }>
           <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
-            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} />
-            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} />
+            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={vnindexBreadth} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} breadthFresh={isFresh(vnindexBreadth?.sourceUpdatedAt)} />
+            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={vn30Breadth} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)} />
           </div>
         </ContextCard>
         <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
