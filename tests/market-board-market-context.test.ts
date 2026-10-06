@@ -252,6 +252,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
   assert.ok(summary.includes("rounded-full border px-1.5 py-0.5"))
+  assert.ok(summary.includes('font-sans text-[12px] font-extrabold'))
   assert.ok(summary.includes("pillTone"))
   assert.ok(summary.includes("border-emerald-400/35"))
   assert.ok(summary.includes("border-rose-400/35"))
@@ -272,6 +273,21 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes('hasBreadth ? breadth[0] : "—"'))
   assert.equal(summary.includes('data-index-breadth-inline'), false)
   assert.equal(summary.includes('mt-0.5 flex justify-between gap-1 text-[9px]'), false)
+})
+
+test("combined index trend icon replaces leading dash, percentage pill is larger and breadth stays at bottom", () => {
+  const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
+  assert.ok(stripSource.includes("ArrowUpRight, ArrowRight"))
+  assert.ok(stripSource.includes("ArrowDownRight"))
+  assert.ok(summary.includes('className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5"'))
+  assert.ok(summary.includes('className="mt-auto min-w-0 pt-1"'))
+  assert.ok(summary.includes('aria-label={!finite(trend) ? "Chưa xác định xu hướng"'))
+  assert.ok(summary.includes('trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm"'))
+  assert.ok(summary.includes("trendIcon"))
+  assert.ok(summary.includes("font-sans text-[12px] font-extrabold"))
+  assert.ok(summary.includes("data-index-breadth-progress"))
+  assert.ok(summary.includes("progress.centers[0]"))
+  assert.ok(summary.includes("progress.centers[2]"))
 })
 
 test("VNINDEX impact uses header +/- totals to give stock bars more height", () => {
