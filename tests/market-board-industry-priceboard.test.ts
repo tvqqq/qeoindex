@@ -169,6 +169,26 @@ test("industry header shows whole label, breadth, and reorderable title without 
   assert.match(source, /↑\{breadth\.up\}[\s\S]*?=\{breadth\.unchanged\}[\s\S]*?↓\{breadth\.down\}/)
 })
 
+test("industry breadth sits before the percent pill and the icon centers on both text lines", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  const headerStart = source.indexOf('className="flex min-h-[62px] shrink-0 cursor-grab')
+  const headerEnd = source.indexOf("<TableLabels showPriceVolume={showPriceVolume} />", headerStart)
+  assert.ok(headerStart >= 0 && headerEnd > headerStart)
+  const header = source.slice(headerStart, headerEnd)
+  assert.match(header, /items-center gap-1\.5/)
+  assert.match(header, /<IndustryIcon className="h-3\.5 w-3\.5" \/>/)
+  assert.match(header, /flex min-w-0 flex-1 flex-col justify-center gap-1/)
+  assert.match(header, /break-words font-sans text-\[12px\] font-bold/)
+  assert.ok(header.indexOf("<IndustryIcon") < header.indexOf("<h2"))
+  assert.ok(header.indexOf("↑{breadth.up}") < header.indexOf("averagePillTone(average)"))
+  assert.match(header, /rounded-full border px-1\.5 py-0\.5/)
+  assert.match(header, /ml-auto inline-flex shrink-0/)
+  assert.doesNotMatch(header, /truncate|text-ellipsis/)
+  assert.match(source, /if \(value > 0\) return "border-up\/30 bg-up\/10 text-up"/)
+  assert.match(source, /if \(value < 0\) return "border-down\/30 bg-down\/10 text-down"/)
+  assert.match(source, /if \(value === null\) return "border-white\/10 bg-white\/\[0\.05\] text-muted-2"/)
+})
+
 test("row tones scale monotonically with percent and only use actual provider ceiling/floor metadata", () => {
   assert.equal(industryPriceboardTone({ price: 10, changePercent: 7 }), "up")
   assert.equal(industryPriceboardTone({ price: 10, changePercent: 0 }), "unchanged")
