@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
 import { coveredTop200ForeignTotals, currentSessionIndexMetrics, indexBreadthProgress, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
 import { intradayForeignNet, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
+import { displayedMarketMetricDay, readRetainedMetric, validSessionMetricTimestamp, writeRetainedMetric } from "@/modules/market/board/market-context-retention"
+import type { RetainedLiquidity, RetainedForeign } from "@/modules/market/board/market-context-retention"
 import type {
   MarketBoardContextBootstrap,
   MarketImpactSnapshot,
@@ -251,6 +253,49 @@ function formatAsOf(value?: string | null) {
   }).format(new Date(timestamp))
 }
 
+
+type RetainedFlow = {
+  day: string
+  liquidityFull: RetainedLiquidity | null
+  liquidityIndex: RetainedLiquidity | null
+  foreignFull: RetainedForeign | null
+  foreignPartial: RetainedForeign | null
+}
+
+function readLastLiquidity(key: string, source: RetainedLiquidity["source"], day: string): RetainedLiquidity | null {
+  try {
+    const persisted = readRetainedMetric(localStorage, "liquidity", source, day)
+    if (persisted) return persisted
+  } catch { /* Browser storage may be disabled. */ }
+  // Migrate real source-scoped chart history written before EOD summary retention existed.
+  const last = readMetricHistory<MetricPoint>(key, day).at(-1)
+  const asOf = last && new Date(last.minute).toISOString()
+  return asOf && validSessionMetricTimestamp(asOf, day)
+    ? { day, source, asOf, value: last.value }
+    : null
+}
+
+function readLastForeign(key: string, source: RetainedForeign["source"], day: string): RetainedForeign | null {
+  try {
+    const persisted = readRetainedMetric(localStorage, "foreign", source, day)
+    if (persisted) return persisted
+  } catch { /* Browser storage may be disabled. */ }
+  const last = readMetricHistory<ForeignMetricPoint>(key, day).at(-1)
+  const asOf = last && new Date(last.minute).toISOString()
+  return asOf && validSessionMetricTimestamp(asOf, day)
+    ? { day, source, asOf, buy: last.buy, sell: last.sell }
+    : null
+}
+
+function loadRetainedFlow(day: string): RetainedFlow {
+  return {
+    day,
+    liquidityFull: day ? readLastLiquidity(metricHistoryPrefix("liquidity", "finhay-vnindex"), "finhay-vnindex", day) : null,
+    liquidityIndex: day ? readLastLiquidity(metricHistoryPrefix("liquidity", "index-quote"), "index-quote", day) : null,
+    foreignFull: day ? readLastForeign(metricHistoryPrefix("foreign", "finhay-vnindex"), "finhay-vnindex", day) : null,
+    foreignPartial: day ? readLastForeign(metricHistoryPrefix("foreign", "top200-partial"), "top200-partial", day) : null,
+  }
+}
 
 type SessionHistory<T> = { day: string; points: T[] }
 const OBSERVED_HISTORY_PREFIX = "qeoindex:board-metrics:v1"
@@ -533,7 +578,7 @@ function MarketHeaderActivity({
   )
 }
 
-function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean }) {
+function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false, breadthFresh = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean; breadthFresh?: boolean }) {
   const value = finite(quote?.value) && quote!.value > 0 ? quote!.value : undefined
   const color = marketColor(quote?.changePercent)
   const change = quote?.change
@@ -544,12 +589,6 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   const progress = indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])
   const total = hasBreadth ? progress.total : 0
   const percent = quote?.changePercent
-  const trend = finite(change) ? change : finite(percent) ? percent : undefined
-  const trendColor = !finite(trend) ? "text-zinc-500" : trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"
-  const trendIcon = !finite(trend) ? <Activity className="h-[13px] w-[13px]" aria-hidden="true" />
-    : trend > 0 ? <ArrowUpRight className="h-[13px] w-[13px]" aria-hidden="true" />
-      : trend < 0 ? <ArrowDownRight className="h-[13px] w-[13px]" aria-hidden="true" />
-        : <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
   const pillTone = !finite(percent)
     ? "border-zinc-600/40 bg-zinc-500/10 text-zinc-400"
     : percent > 0
@@ -566,7 +605,6 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
-        <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
         <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
       </div>
@@ -588,9 +626,9 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
           </> : null}
         </div>
         <div className="relative mt-1 h-[14px] w-full font-sans text-[9px] font-bold leading-[14px] tabular-nums" aria-hidden="true">
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[0]}%` }}>▲{hasBreadth ? breadth[0] : "—"}</span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[1]}%` }}>–{hasBreadth ? breadth[1] : "—"}</span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[2]}%` }}>▼{hasBreadth ? breadth[2] : "—"}</span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
         </div>
       </div>
     </div>
@@ -681,9 +719,17 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
                   className={`relative min-w-0 ${index % 2 ? "bg-white/[0.025]" : "bg-white/[0.012]"}`}
                 >
                   <div
-                    className={`pointer-events-none absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
+                    className={`pointer-events-none absolute left-[20%] w-[60%] rounded-[2px] motion-safe:transition-[top,height] motion-safe:duration-500 motion-safe:ease-out motion-reduce:transition-none ${entry.contribution > 0 ? "bg-[#28b6a6]" : "bg-[#ef4e53]"}`}
                     style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
-                  />
+                  >
+                    {live && (
+                      <span
+                        key={`${entry.symbol}:${entry.contribution}`}
+                        className="pointer-events-none absolute inset-0 rounded-[2px] market-impact-bar-tick"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
                   <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center"
                     style={{ top: `max(0px, calc(${zeroPct}% - 17px))` }}
                   >
@@ -692,7 +738,7 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
                         ? "border-emerald-400/45 bg-[#102e29]/95 text-emerald-200"
                         : "border-rose-400/45 bg-[#351d24]/95 text-rose-200"}`}
                     >
-                      <span key={entry.contribution} className={live ? "market-realtime-number" : ""}>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
+                      <span key={entry.contribution} className={live ? "market-impact-value-tick" : ""}>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
                     </span>
                   </div>
                 </div>
@@ -727,6 +773,23 @@ export function MarketContextStrip({
   const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
   const [previousLiquidity, setPreviousLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
   const [observedAtMs, setObservedAtMs] = useState(0)
+  const [retainedFlow, setRetainedFlow] = useState<RetainedFlow>(() => ({
+    day: "", liquidityFull: null, liquidityIndex: null, foreignFull: null, foreignPartial: null,
+  }))
+
+  // Switch the held session at 09:00 ICT on the next actual trading day even
+  // if a provider stops polling, a tab stays open, or no new tick has arrived.
+  useEffect(() => {
+    const refresh = () => setObservedAtMs(Date.now())
+    const timer = window.setInterval(refresh, 15_000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -866,28 +929,22 @@ export function MarketContextStrip({
         const data = await response.json() as FinhayMarketContextResponse
         if (disposed) return
         if (response.ok && data.ok) setFinhayBreadth(data.breadth ?? {})
+        if (!response.ok || !data.ok) return
         const foreign = data.foreign
         const liquidity = data.liquidity
-        const buy = foreign?.buy?.value
-        const sell = foreign?.sell?.value
         const sampledAt = data.sampledAt ?? ""
-        const liquidityValue = liquidity?.value
-        if (
-          !response.ok
-          || !data.ok
-          || !foreign
-          || !liquidity
-          || !sampledAt
-          || !finite(buy)
-          || !finite(sell)
-          || !finite(liquidityValue)
-          || !Number.isFinite(Date.parse(liquidity.sourceUpdatedAt))
-        ) {
-          return
+        // The two Finhay sources are independent; loss of one after close
+        // must not prevent retention of the other verified session snapshot.
+        if (liquidity && finite(liquidity.value) && liquidity.value >= 0
+          && Number.isFinite(Date.parse(liquidity.sourceUpdatedAt))) {
+          setFinhayLiquidity(liquidity)
         }
-
-        setFinhayForeign({ ...foreign, sampledAt })
-        setFinhayLiquidity(liquidity)
+        if (foreign && sampledAt
+          && finite(foreign.buy?.value) && foreign.buy.value >= 0
+          && finite(foreign.sell?.value) && foreign.sell.value >= 0
+          && Number.isFinite(Date.parse(foreign.sourceUpdatedAt ?? ""))) {
+          setFinhayForeign({ ...foreign, sampledAt })
+        }
       } catch {
         // Optional Finhay data is unavailable; verified DNSE snapshots remain eligible.
       }
@@ -904,39 +961,65 @@ export function MarketContextStrip({
   const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.sourceAsOf ?? indexQuotes.VNINDEX?.updatedAt ?? "")
   const liveImpactDate = vietnamDateKey(realtimeImpact?.asOf ?? "") ?? ""
   const contextSessionDate = [quoteSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
+  const metricDisplayDay = observedAtMs > 0 ? displayedMarketMetricDay(new Date(observedAtMs)) : ""
+  const retention = retainedFlow.day === metricDisplayDay ? retainedFlow : null
+  useEffect(() => {
+    setRetainedFlow(loadRetainedFlow(metricDisplayDay))
+  }, [metricDisplayDay])
+
   const vnindexQuote = indexQuotes.VNINDEX
-  const indexLiquidity = currentSessionIndexMetrics(vnindexQuote, contextSessionDate)
+  const indexLiquidity = currentSessionIndexMetrics(vnindexQuote, metricDisplayDay)
   const fallbackLiquidityValue = indexLiquidity.valueTraded
   const fallbackLiquidityUpdatedAt = indexLiquidity.asOf
   const hasFinhayLiquidity = Boolean(
-    finhayLiquidity
-    && contextSessionDate
-    && vietnamDateKey(finhayLiquidity.sourceUpdatedAt) === contextSessionDate
-    && finite(finhayLiquidity.value)
-    && finhayLiquidity.value >= 0,
+    finhayLiquidity && validSessionMetricTimestamp(finhayLiquidity.sourceUpdatedAt, metricDisplayDay)
+      && finite(finhayLiquidity.value) && finhayLiquidity.value >= 0,
   )
-  const liquiditySeriesSource = hasFinhayLiquidity ? "finhay-vnindex" : "index-quote"
-  const liquidityValue = hasFinhayLiquidity ? finhayLiquidity?.value : fallbackLiquidityValue
-  // Match the liquidity source/session when possible; never sum Top-200 volume as full HOSE.
-  const liquidityVolume = hasFinhayLiquidity && finite(finhayLiquidity?.volume)
-    ? finhayLiquidity.volume
-    : indexLiquidity.volume
-  const liquidityUpdatedAt = hasFinhayLiquidity ? finhayLiquidity?.sourceUpdatedAt ?? "" : fallbackLiquidityUpdatedAt
+  const freshLiquidity: RetainedLiquidity | null = hasFinhayLiquidity && finhayLiquidity
+    ? { day: metricDisplayDay, source: "finhay-vnindex", asOf: finhayLiquidity.sourceUpdatedAt,
+        value: finhayLiquidity.value, ...(finite(finhayLiquidity.volume) && finhayLiquidity.volume >= 0 ? { volume: finhayLiquidity.volume } : {}) }
+    : null
+  const indexSnapshot: RetainedLiquidity | null = validSessionMetricTimestamp(fallbackLiquidityUpdatedAt, metricDisplayDay)
+    && finite(fallbackLiquidityValue) && fallbackLiquidityValue >= 0
+    ? { day: metricDisplayDay, source: "index-quote", asOf: fallbackLiquidityUpdatedAt,
+        value: fallbackLiquidityValue, ...(finite(indexLiquidity.volume) && indexLiquidity.volume >= 0 ? { volume: indexLiquidity.volume } : {}) }
+    : null
+  // Both sources represent full-index liquidity; choose the most recently
+  // timestamped actual sample, not whichever REST endpoint answered last.
+  const liquidityCandidate = [freshLiquidity, indexSnapshot, retention?.liquidityFull, retention?.liquidityIndex]
+    .filter((item): item is RetainedLiquidity => Boolean(item))
+    .sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf))[0]
+  const liquiditySeriesSource = liquidityCandidate?.source ?? "index-quote"
+  const liquidityValue = liquidityCandidate?.value
+  const liquidityVolume = liquidityCandidate?.volume
+  const liquidityUpdatedAt = liquidityCandidate?.asOf ?? ""
+
+  useEffect(() => {
+    for (const [field, snapshot] of [["liquidityFull", freshLiquidity], ["liquidityIndex", indexSnapshot]] as const) {
+      if (!snapshot || !metricDisplayDay) continue
+      try { writeRetainedMetric(localStorage, "liquidity", snapshot) } catch { /* Optional storage. */ }
+      setRetainedFlow((current) => current.day === metricDisplayDay
+        && (!current[field] || Date.parse(current[field]!.asOf) <= Date.parse(snapshot.asOf))
+        ? { ...current, [field]: snapshot } : current)
+    }
+  }, [metricDisplayDay, freshLiquidity?.asOf, freshLiquidity?.value, freshLiquidity?.volume,
+    indexSnapshot?.asOf, indexSnapshot?.value, indexSnapshot?.volume])
 
   const liquidityHistoryKey = metricHistoryPrefix("liquidity", liquiditySeriesSource)
-  const liquiditySampleKey = `${liquidityHistoryKey}:${contextSessionDate}`
+  const liquiditySampleKey = `${liquidityHistoryKey}:${metricDisplayDay}`
   const liquidityPoints = liquiditySamples.key === liquiditySampleKey ? liquiditySamples.points : []
   useEffect(() => {
-    setLiquiditySamples({ key: liquiditySampleKey, points: readMetricHistory<MetricPoint>(liquidityHistoryKey, contextSessionDate) })
-    setPreviousLiquidity(previousMetricHistory<MetricPoint>(liquidityHistoryKey, contextSessionDate))
-  }, [contextSessionDate, liquidityHistoryKey, liquiditySampleKey])
+    setLiquiditySamples({ key: liquiditySampleKey, points: readMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay) })
+    setPreviousLiquidity(previousMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay))
+  }, [metricDisplayDay, liquidityHistoryKey, liquiditySampleKey])
   useEffect(() => {
-    if (!contextSessionDate || vietnamDateKey(liquidityUpdatedAt) !== contextSessionDate || !finite(liquidityValue) || liquidityValue < 0) return
-    const existing = readMetricHistory<MetricPoint>(liquidityHistoryKey, contextSessionDate)
+    if (!metricDisplayDay || !validSessionMetricTimestamp(liquidityUpdatedAt, metricDisplayDay)
+      || !finite(liquidityValue) || liquidityValue < 0) return
+    const existing = readMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay)
     const next = upsertMetricPoint(existing, liquidityUpdatedAt, liquidityValue)
-    writeMetricHistory(liquidityHistoryKey, contextSessionDate, next)
+    writeMetricHistory(liquidityHistoryKey, metricDisplayDay, next)
     setLiquiditySamples({ key: liquiditySampleKey, points: next })
-  }, [contextSessionDate, liquidityUpdatedAt, liquidityValue, liquidityHistoryKey, liquiditySampleKey])
+  }, [metricDisplayDay, liquidityUpdatedAt, liquidityValue, liquidityHistoryKey, liquiditySampleKey])
 
   const foreignSnapshot = useMemo(() => {
     let buy = 0
@@ -949,9 +1032,9 @@ export function MarketContextStrip({
       if (
         !quote
         || quote.foreignSource !== "DNSE Onidel WS"
-        || quote.foreignSessionDate !== contextSessionDate
+        || quote.foreignSessionDate !== metricDisplayDay
         || !quote.foreignUpdatedAt
-        || vietnamDateKey(quote.foreignUpdatedAt) !== contextSessionDate
+        || !validSessionMetricTimestamp(quote.foreignUpdatedAt, metricDisplayDay)
         || !finite(quote.foreignBuyValue)
         || !finite(quote.foreignSellValue)
         || quote.foreignBuyValue < 0
@@ -964,60 +1047,87 @@ export function MarketContextStrip({
     }
 
     return { buy, sell, covered, asOf }
-  }, [canonicalUniverse, stockQuotes, contextSessionDate])
+  }, [canonicalUniverse, stockQuotes, metricDisplayDay])
 
   const hasFinhayForeign = Boolean(
-    finhayForeign
-    && contextSessionDate
-    && finhayForeign.sessionDate === contextSessionDate
-    && finite(finhayForeign.buy.value)
-    && finite(finhayForeign.sell.value),
+    finhayForeign && metricDisplayDay
+      && finhayForeign.sessionDate === metricDisplayDay
+      && validSessionMetricTimestamp(finhayForeign.sourceUpdatedAt ?? "", metricDisplayDay)
+      && finite(finhayForeign.buy.value) && finhayForeign.buy.value >= 0
+      && finite(finhayForeign.sell.value) && finhayForeign.sell.value >= 0,
   )
+  const foreignFullSnapshot: RetainedForeign | null = hasFinhayForeign && finhayForeign
+    ? { day: metricDisplayDay, source: "finhay-vnindex",
+        asOf: finhayForeign.sourceUpdatedAt!,
+        buy: finhayForeign.buy.value!, sell: finhayForeign.sell.value! }
+    : null
   const top200ForeignTotals = coveredTop200ForeignTotals(foreignSnapshot)
-  const foreignSeriesSource = hasFinhayForeign ? "finhay-vnindex" : "top200-partial"
-  const displayedForeignBuy = hasFinhayForeign ? finhayForeign?.buy.value : top200ForeignTotals?.buy
-  const displayedForeignSell = hasFinhayForeign ? finhayForeign?.sell.value : top200ForeignTotals?.sell
-  const displayedForeignNet = hasFinhayForeign
-    ? finite(finhayForeign?.net.value)
-      ? finhayForeign!.net.value
-      : finite(displayedForeignBuy) && finite(displayedForeignSell)
-        ? displayedForeignBuy - displayedForeignSell
-        : undefined
-    : top200ForeignTotals?.net
+  const foreignPartialSnapshot: RetainedForeign | null = top200ForeignTotals
+    && validSessionMetricTimestamp(foreignSnapshot.asOf, metricDisplayDay)
+    ? { day: metricDisplayDay, source: "top200-partial", asOf: foreignSnapshot.asOf,
+        buy: top200ForeignTotals.buy, sell: top200ForeignTotals.sell }
+    : null
+  // Full HOSE and partial Top-200 totals must never be combined or relabelled.
+  // Prefer a retained full-HOSE observation to a fresh *partial* observation.
+  const fullForeign = [foreignFullSnapshot, retention?.foreignFull]
+    .filter((item): item is RetainedForeign => Boolean(item))
+    .sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf))[0]
+  const partialForeign = [foreignPartialSnapshot, retention?.foreignPartial]
+    .filter((item): item is RetainedForeign => Boolean(item))
+    .sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf))[0]
+  const foreignCandidate = fullForeign ?? partialForeign
+  const foreignSeriesSource = foreignCandidate?.source ?? "top200-partial"
+  const foreignUpdatedAt = foreignCandidate?.asOf ?? ""
+  const displayedForeignBuy = foreignCandidate?.buy
+  const displayedForeignSell = foreignCandidate?.sell
+  const displayedForeignNet = finite(displayedForeignBuy) && finite(displayedForeignSell)
+    ? displayedForeignBuy - displayedForeignSell : undefined
+
+  useEffect(() => {
+    for (const [field, snapshot] of [["foreignFull", foreignFullSnapshot], ["foreignPartial", foreignPartialSnapshot]] as const) {
+      if (!snapshot || !metricDisplayDay) continue
+      try { writeRetainedMetric(localStorage, "foreign", snapshot) } catch { /* Optional storage. */ }
+      setRetainedFlow((current) => current.day === metricDisplayDay
+        && (!current[field] || Date.parse(current[field]!.asOf) <= Date.parse(snapshot.asOf))
+        ? { ...current, [field]: snapshot } : current)
+    }
+  }, [metricDisplayDay, foreignFullSnapshot?.asOf, foreignFullSnapshot?.buy, foreignFullSnapshot?.sell,
+    foreignPartialSnapshot?.asOf, foreignPartialSnapshot?.buy, foreignPartialSnapshot?.sell])
 
   const foreignHistoryKey = metricHistoryPrefix("foreign", foreignSeriesSource)
-  const foreignSampleKey = `${foreignHistoryKey}:${contextSessionDate}`
+  const foreignSampleKey = `${foreignHistoryKey}:${metricDisplayDay}`
   const foreignPoints = foreignSamples.key === foreignSampleKey ? foreignSamples.points : []
   useEffect(() => {
-    setForeignSamples({ key: foreignSampleKey, points: readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate) })
-  }, [contextSessionDate, foreignHistoryKey, foreignSampleKey])
+    setForeignSamples({ key: foreignSampleKey, points: readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, metricDisplayDay) })
+  }, [metricDisplayDay, foreignHistoryKey, foreignSampleKey])
   useEffect(() => {
-    if (hasFinhayForeign || foreignSnapshot.covered === 0 || !contextSessionDate || vietnamDateKey(foreignSnapshot.asOf) !== contextSessionDate) return
-    const existing = readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate)
-    const next = upsertForeignMetricPoint(existing, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.sell)
-    writeMetricHistory(foreignHistoryKey, contextSessionDate, next)
+    if (!foreignPartialSnapshot || foreignSeriesSource !== "top200-partial") return
+    const existing = readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, metricDisplayDay)
+    const next = upsertForeignMetricPoint(existing, foreignPartialSnapshot.asOf, foreignPartialSnapshot.buy, foreignPartialSnapshot.sell)
+    writeMetricHistory(foreignHistoryKey, metricDisplayDay, next)
     setForeignSamples({ key: foreignSampleKey, points: next })
-  }, [contextSessionDate, foreignHistoryKey, foreignSampleKey, foreignSnapshot.asOf, foreignSnapshot.buy, foreignSnapshot.covered, foreignSnapshot.sell, hasFinhayForeign])
+  }, [metricDisplayDay, foreignHistoryKey, foreignSampleKey, foreignSeriesSource,
+    foreignPartialSnapshot?.asOf, foreignPartialSnapshot?.buy, foreignPartialSnapshot?.sell])
   useEffect(() => {
-    if (!hasFinhayForeign || !finhayForeign || !contextSessionDate || vietnamDateKey(finhayForeign.sampledAt) !== contextSessionDate) return
-    const buy = finhayForeign.buy.value
-    const sell = finhayForeign.sell.value
-    if (!finite(buy) || !finite(sell)) return
-    const existing = readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, contextSessionDate)
-    const next = upsertForeignMetricPoint(existing, finhayForeign.sampledAt, buy, sell)
-    writeMetricHistory(foreignHistoryKey, contextSessionDate, next)
+    if (!foreignFullSnapshot || foreignSeriesSource !== "finhay-vnindex") return
+    const existing = readMetricHistory<ForeignMetricPoint>(foreignHistoryKey, metricDisplayDay)
+    // Keep the original provider timestamp, not the later Finhay polling time.
+    const next = upsertForeignMetricPoint(existing, foreignFullSnapshot.asOf, foreignFullSnapshot.buy, foreignFullSnapshot.sell)
+    writeMetricHistory(foreignHistoryKey, metricDisplayDay, next)
     setForeignSamples({ key: foreignSampleKey, points: next })
-  }, [contextSessionDate, finhayForeign, foreignHistoryKey, foreignSampleKey, hasFinhayForeign])
+  }, [metricDisplayDay, foreignHistoryKey, foreignSampleKey, foreignSeriesSource,
+    foreignFullSnapshot?.asOf, foreignFullSnapshot?.buy, foreignFullSnapshot?.sell])
 
-  // A new trading day must not label yesterday's retained snapshots as today's flow.
-  const observedDay = observedAtMs > 0 ? vietnamDateKey(new Date(observedAtMs).toISOString()) : ""
-  const isTodaySession = contextSessionDate !== "" && contextSessionDate === observedDay
-  const todayLiquidityPoints = isTodaySession ? liquidityPoints : []
-  const verifiedPreviousLiquidity = isTodaySession ? previousLiquidity : null
-  const todayForeignNetPoints = isTodaySession ? intradayForeignNet(foreignPoints) : []
-  const todayForeignBuy = isTodaySession ? displayedForeignBuy : undefined
-  const todayForeignSell = isTodaySession ? displayedForeignSell : undefined
-  const todayForeignNet = isTodaySession ? displayedForeignNet : undefined
+  // The rendered session holds through EOD, midnight, weekends and holidays.
+  // At 09:00 on the next trading day it switches and does NOT reuse yesterday's
+  // totals or primary chart as if they were current-session observations.
+  const isDisplaySession = metricDisplayDay !== ""
+  const todayLiquidityPoints = isDisplaySession ? liquidityPoints : []
+  const verifiedPreviousLiquidity = isDisplaySession ? previousLiquidity : null
+  const todayForeignNetPoints = isDisplaySession ? intradayForeignNet(foreignPoints) : []
+  const todayForeignBuy = isDisplaySession ? displayedForeignBuy : undefined
+  const todayForeignSell = isDisplaySession ? displayedForeignSell : undefined
+  const todayForeignNet = isDisplaySession ? displayedForeignNet : undefined
   const contextErrors = bootstrap?.errors?.join("; ") || loadError
   const sessionOpen = observedAtMs > 0 && getMarketSessionStatus(new Date(observedAtMs)).isLiveSession
   const isFresh = (asOf: string | null | undefined) => {
@@ -1032,6 +1142,8 @@ export function MarketContextStrip({
   const impactSelection = selectCurrentSessionImpact(bootstrap?.impact, realtimeImpact, contextSessionDate, observedAtMs)
   const impact = impactSelection.impact
   const impactLive = impactSelection.source === "websocket" && Boolean(impact?.asOf && isFresh(impact.asOf))
+  const vnindexBreadth = selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)
+  const vn30Breadth = selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)
 
 
   return (
@@ -1054,8 +1166,8 @@ export function MarketContextStrip({
             </button>
           }>
           <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
-            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} />
-            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} />
+            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={vnindexBreadth} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} breadthFresh={isFresh(vnindexBreadth?.sourceUpdatedAt)} />
+            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={vn30Breadth} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)} />
           </div>
         </ContextCard>
         <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
@@ -1070,22 +1182,24 @@ export function MarketContextStrip({
           <div className="mt-auto min-w-0"><ComparisonLineChart series={[
             { label: "Nay", points: todayLiquidityPoints, color: PLATINUM },
             { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#eb6f6f", previous: true },
-          ]} animate={isTodaySession && isFresh(liquidityUpdatedAt)} /></div>
+          ]} animate={isDisplaySession && isFresh(liquidityUpdatedAt)} /></div>
         </ContextCard>
         <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
-          activitySources={[hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf]}
+          activitySources={[foreignUpdatedAt]}
           activitySessionDay={contextSessionDate}
-          titleHint={hasFinhayForeign
+          titleHint={foreignSeriesSource === "finhay-vnindex"
             ? "Finhay: giao dịch nước ngoài toàn HOSE"
-            : `DNSE: chỉ ${foreignSnapshot.covered}/${canonicalUniverse.length} mã Top 200; không phải tổng toàn HOSE`}
-          headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
+            : foreignSnapshot.covered > 0 && foreignPartialSnapshot?.asOf === foreignUpdatedAt
+              ? `DNSE: chỉ ${foreignSnapshot.covered}/${canonicalUniverse.length} mã Top 200; không phải tổng toàn HOSE`
+              : "DNSE: dữ liệu Top 200 partial; không phải tổng toàn HOSE"}
+          headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] tabular-nums">
-            <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
-            <span className="truncate text-red-300">Bán <span key={finite(todayForeignSell) ? todayForeignSell : "missing"} className={isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignSell)}</span></span>
+            <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
+            <span className="truncate text-red-300">Bán <span key={finite(todayForeignSell) ? todayForeignSell : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignSell)}</span></span>
           </div>
           <div className="mt-auto min-w-0"><ComparisonLineChart zeroReference series={[
             { label: "Ròng", points: todayForeignNetPoints, color: finite(todayForeignNet) && todayForeignNet < 0 ? RED : GREEN },
-          ]} animate={isTodaySession && isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf)} /></div>
+          ]} animate={isDisplaySession && isFresh(foreignUpdatedAt)} /></div>
         </ContextCard>
         <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
           activitySources={[impact?.asOf]}
