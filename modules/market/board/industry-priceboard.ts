@@ -224,6 +224,30 @@ export function averagePriceboardChange(
   return changes.reduce((sum, change) => sum + change, 0) / changes.length
 }
 
+export function industryPriceboardBreadth(
+  stocks: readonly IndustryPriceboardStock[],
+  quotes: Readonly<Record<string, IndustryPriceboardQuote | undefined>>,
+) {
+  let up = 0
+  let unchanged = 0
+  let down = 0
+  let unavailable = 0
+  for (const stock of stocks) {
+    const quote = quotes[stock.ticker]
+    // Invalid or missing provider quotes must not count as unchanged.
+    if (!hasValidPriceboardQuote(quote)) {
+      unavailable += 1
+    } else if (quote.changePercent > 0) {
+      up += 1
+    } else if (quote.changePercent < 0) {
+      down += 1
+    } else {
+      unchanged += 1
+    }
+  }
+  return { up, unchanged, down, unavailable }
+}
+
 function marketPrice(value: unknown) {
   if (!isValidPrice(value)) return null
   return value > 1000 ? value / 1000 : value

@@ -43,7 +43,7 @@ test("compact priceboard keeps fixed anchors, packs industries into lanes, and e
   assert.match(priceboardSource, /hover:brightness-110/)
   assert.doesNotMatch(priceboardSource, /transition-all/)
   assert.match(priceboardSource, /data-market-board-screenshot-rail/)
-  assert.match(priceboardSource, /h-\[32px\]/)
+  assert.match(priceboardSource, /min-h-\[62px\]/)
   assert.match(boardSource, /mode === "sector" && boardView === "industry"/)
 })
 

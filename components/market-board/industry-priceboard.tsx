@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
-import { BarChart3, GripVertical, RotateCcw, Search, Star } from "lucide-react"
+import { BarChart3, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
 import { getSectorIcon } from "@/components/stock-identity"
 import {
@@ -10,6 +10,7 @@ import {
   hasValidPriceboardQuote,
   industryLabelForStock,
   industryPriceboardBackground,
+  industryPriceboardBreadth,
   moveIndustryColumn,
   moveIndustryColumnBy,
   normalizeSavedIndustryOrder,
@@ -513,6 +514,7 @@ export function IndustryPriceboard({
             {lane.industries.map((industry) => {
               const stocks = industryStocks.get(industry) ?? []
               const average = averagePriceboardChange(stocks, orderingQuotes)
+              const breadth = industryPriceboardBreadth(stocks, orderingQuotes)
               const IndustryIcon = getSectorIcon(industry)
               const isDragging = draggingColumn === industry
               const isDropTarget = hoveredColumn === industry && draggingColumn !== industry
@@ -524,38 +526,42 @@ export function IndustryPriceboard({
                   className={`flex w-full flex-col rounded-[15px] border bg-[#0b0f14] ${isDropTarget ? "border-brand/70" : "border-white/[0.10]"} ${isDragging ? "opacity-60" : ""}`}
                 >
                   <header
-                    className="flex h-[32px] shrink-0 touch-none select-none items-center gap-1.5 border-b border-white/[0.07] px-2"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Sắp xếp ngành ${industry}; dùng phím mũi tên trái phải, Home hoặc End`}
+                    title="Kéo tiêu đề để đổi thứ tự; dùng ←/→ khi dùng bàn phím"
+                    className="flex min-h-[62px] shrink-0 cursor-grab touch-none select-none flex-col justify-center gap-1 border-b border-white/[0.07] px-2 py-1.5 focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand active:cursor-grabbing"
                     onPointerDown={(event) => beginDrag(event, industry)}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowLeft") {
+                        event.preventDefault()
+                        reorderByKeyboard(industry, -1)
+                      } else if (event.key === "ArrowRight") {
+                        event.preventDefault()
+                        reorderByKeyboard(industry, 1)
+                      } else if (event.key === "Home") {
+                        event.preventDefault()
+                        commitIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous[0] ?? industry))
+                      } else if (event.key === "End") {
+                        event.preventDefault()
+                        commitIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous.at(-1) ?? industry))
+                      }
+                    }}
                   >
-                    <button
-                      type="button"
-                      draggable={false}
-                      aria-label={`Kéo để sắp xếp ngành ${industry}; dùng mũi tên trái phải để di chuyển`}
-                      title="Kéo để đổi thứ tự; dùng ←/→ khi dùng bàn phím"
-                      onKeyDown={(event) => {
-                        if (event.key === "ArrowLeft") {
-                          event.preventDefault()
-                          reorderByKeyboard(industry, -1)
-                        } else if (event.key === "ArrowRight") {
-                          event.preventDefault()
-                          reorderByKeyboard(industry, 1)
-                        } else if (event.key === "Home") {
-                          event.preventDefault()
-                          commitIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous[0] ?? industry))
-                        } else if (event.key === "End") {
-                          event.preventDefault()
-                          commitIndustryOrder((previous) => moveIndustryColumn(previous, industry, previous.at(-1) ?? industry))
-                        }
-                      }}
-                      className="flex h-6 w-4 shrink-0 touch-none items-center justify-center text-brand focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
-                    >
-                      <GripVertical className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300"><IndustryIcon className="h-3.5 w-3.5" /></span>
-                    <h2 className="min-w-0 flex-1 truncate font-sans text-[12px] font-bold text-foreground" title={industry}>{industry}</h2>
-                    <span className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
-                      {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
-                    </span>
+                    <div className="flex w-full min-w-0 items-start gap-1.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300"><IndustryIcon className="h-3.5 w-3.5" /></span>
+                      <h2 className="min-w-0 flex-1 break-words font-sans text-[12px] font-bold leading-[1.2] text-foreground" title={industry}>{industry}</h2>
+                    </div>
+                    <div className="flex w-full min-w-0 items-center justify-between gap-1 font-mono text-[10px] leading-[1.2] tabular-nums">
+                      <span className={`shrink-0 font-semibold ${averageTone(average)}`} title="Trung bình % thay đổi của các mã có giá và % hợp lệ">
+                        {average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1" aria-label={`Tăng ${breadth.up}, ngang ${breadth.unchanged}, giảm ${breadth.down}; thiếu dữ liệu ${breadth.unavailable}`} title={`Tăng: ${breadth.up} · Ngang: ${breadth.unchanged} · Giảm: ${breadth.down} · Chưa có giá hợp lệ: ${breadth.unavailable}`}>
+                        <span className="text-up">↑{breadth.up}</span>
+                        <span className="text-ref">={breadth.unchanged}</span>
+                        <span className="text-down">↓{breadth.down}</span>
+                      </span>
+                    </div>
                   </header>
                   <TableLabels showPriceVolume={showPriceVolume} />
                   <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
@@ -567,7 +573,7 @@ export function IndustryPriceboard({
       </div>
 
       <div className="flex items-center justify-end gap-2 pb-1 pr-8">
-        <span className="text-[10px] text-muted-2">Kéo biểu tượng ⋮⋮ hoặc dùng phím mũi tên để sắp xếp ngành</span>
+        <span className="text-[10px] text-muted-2">Kéo tiêu đề ngành hoặc dùng phím mũi tên để sắp xếp</span>
         {syncState === "saving" || syncState === "loading" ? <span className="text-[10px] text-muted-2">Đang đồng bộ…</span> : null}
         {syncState === "offline" ? <span className="text-[10px] text-amber-300">Dùng thứ tự lưu trên máy</span> : null}
         {syncState === "error" ? (
@@ -593,7 +599,7 @@ function averageTone(value: number | null) {
 function ColumnHeader({ label, count, average, accent, title }: { label: string; count: number; average: number | null; accent: "watch" | "index"; title?: string }) {
   const isWatch = accent === "watch"
   return (
-    <header className="flex h-[32px] shrink-0 items-center gap-1.5 border-b border-white/[0.07] px-2" title={title}>
+    <header className="flex min-h-[62px] shrink-0 items-center gap-1.5 border-b border-white/[0.07] px-2" title={title}>
       {isWatch ? <Star className="h-3 w-3 shrink-0 fill-amber-300 text-amber-300" /> : <BarChart3 className="h-3 w-3 shrink-0 text-brand" />}
       <h2 className="min-w-0 flex-1 truncate font-sans text-[12px] font-bold text-foreground">{label}</h2>
       <span className="shrink-0 font-mono text-[10px] text-muted-2">{count}</span>
