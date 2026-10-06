@@ -129,6 +129,20 @@ test("market context numbers, chart traces, and headers honor motion reduction",
   assert.equal(contextStripSource.includes('cursor-help'), false)
 })
 
+test("after 15:00 and before 09:00 metrics retain exact last trading session observations", () => {
+  assert.ok(contextStripSource.includes("displayedMarketMetricDay(new Date(observedAtMs))"))
+  assert.ok(contextStripSource.includes("loadRetainedFlow(metricDisplayDay)"))
+  assert.ok(contextStripSource.includes("metricDisplayDay !== \"\""))
+  assert.ok(contextStripSource.includes("value: last.value"))
+  assert.ok(contextStripSource.includes("buy: last.buy, sell: last.sell"))
+  assert.ok(contextStripSource.includes("foreignCandidate = fullForeign ?? partialForeign"))
+  assert.ok(contextStripSource.includes("liquidityCandidate?.volume"))
+  assert.ok(contextStripSource.includes("writeRetainedMetric(localStorage"))
+  assert.ok(contextStripSource.includes('metricHistoryPrefix("liquidity", liquiditySeriesSource)'))
+  assert.ok(contextStripSource.includes('metricHistoryPrefix("foreign", foreignSeriesSource)'))
+  assert.ok(contextStripSource.includes("Chưa ghi nhận phiên trước"))
+})
+
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))

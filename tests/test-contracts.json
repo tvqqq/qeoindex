@@ -540,6 +540,15 @@
       ]
     },
     {
+      "path": "tests/market-context-retention.test.ts",
+      "owner": "market",
+      "invariant": "Retain only verified source and exchange-day scoped EOD liquidity/foreign totals through next 09:00 ICT trading open; reject stale data after open.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-data-contract.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market data contract contract.",
