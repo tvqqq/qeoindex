@@ -107,3 +107,39 @@ export function getMarketSessionStatus(date: Date = new Date()): MarketSessionSt
 
   return closedStatus(secondsUntilNextTradingOpen(date))
 }
+
+export type MarketSessionDisplay = {
+  time: string
+  label: string
+  tone: "live" | "paused" | "closed"
+}
+
+/** Local exchange timetable, not an indicator of provider connection health. */
+export function getMarketSessionDisplay(date: Date = new Date()): MarketSessionDisplay {
+  const { totalSeconds } = getVnTimeSeconds(date)
+  const status = getMarketSessionStatus(date)
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0")
+  const minutes = String(Math.floor(totalSeconds % 3600 / 60)).padStart(2, "0")
+  const time = `${hours}:${minutes}`
+
+  switch (status.phase) {
+    case "PRE_MARKET":
+      return { time, label: "Chờ mở cửa · 09:00", tone: "paused" }
+    case "MORNING":
+      return totalSeconds < 33300
+        ? { time, label: "ATO · 09:00–09:15", tone: "live" }
+        : { time, label: "Phiên sáng · 09:15–11:30", tone: "live" }
+    case "LUNCH_BREAK":
+      return { time, label: "Nghỉ trưa · 11:30–13:00", tone: "paused" }
+    case "AFTERNOON":
+      if (totalSeconds < 52200) return { time, label: "Phiên chiều · 13:00–14:30", tone: "live" }
+      if (totalSeconds < 53100) return { time, label: "ATC · 14:30–14:45", tone: "live" }
+      return { time, label: "Kết phiên · 14:45–14:46", tone: "live" }
+    case "EOD_CLOSED":
+      return {
+        time,
+        label: isVietnamSecuritiesTradingDay(date) ? "Đã đóng cửa" : "Nghỉ giao dịch",
+        tone: "closed",
+      }
+  }
+}
