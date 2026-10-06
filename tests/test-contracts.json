@@ -495,15 +495,6 @@
       ]
     },
     {
-      "path": "tests/market-board-market-depth.test.ts",
-      "owner": "market",
-      "invariant": "Realtime HOSE Top-200 market depth bins use valid same-session prices and never invent full-market coverage.",
-      "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
-    },
-    {
       "path": "tests/market-board-stock-filter-api.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market board stock filter api contract.",

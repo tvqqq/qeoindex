@@ -3,7 +3,6 @@ import { NextResponse } from "next/server"
 import { requireApiFeature } from "@/modules/auth/server"
 import {
   isMarketBoardContextBootstrap,
-  MARKET_CONTEXT_INDEX_SYMBOLS,
   type MarketBoardContextBootstrap,
 } from "@/modules/market/board/market-context-contract"
 import { loadMarketBoardContext } from "@/modules/market/board/market-context-server"
@@ -18,7 +17,7 @@ const NO_STORE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
 }
-const CACHE_NAMESPACE = "market-board-context-v2"
+const CACHE_NAMESPACE = "market-board-context-v3"
 
 function vietnamDateKey(now: Date) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -30,7 +29,7 @@ function vietnamDateKey(now: Date) {
 }
 
 function hasUsableContext(data: MarketBoardContextBootstrap) {
-  return Boolean(data.impact || MARKET_CONTEXT_INDEX_SYMBOLS.some((symbol) => data.indexes[symbol]))
+  return Boolean(data.impact)
 }
 
 export async function GET() {
@@ -60,7 +59,6 @@ export async function GET() {
     return NextResponse.json({
       ok: false,
       generatedAt: new Date().toISOString(),
-      indexes: {},
       impact: null,
       errors: [error instanceof Error ? error.message : String(error)],
     }, { status: 503, headers: NO_STORE_HEADERS })
