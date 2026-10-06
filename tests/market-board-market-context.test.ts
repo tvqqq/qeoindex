@@ -344,7 +344,7 @@ test("realtime comparison reuses only observed source-scoped same-session data",
   assert.doesNotMatch(stripSource, /previousForeign\?\.points/)
   assert.match(stripSource, /previous: true/)
   assert.match(stripSource, /Chưa ghi nhận phiên trước/)
-  assert.match(stripSource, /Finhay full HOSE/)
+  assert.match(stripSource, /Finhay: giao dịch nước ngoài toàn HOSE/)
   assert.match(stripSource, /mã Top 200; không phải tổng toàn HOSE/)
   assert.match(stripSource, /foreignSeriesSource = hasFinhayForeign \? "finhay-vnindex" : "top200-partial"/)
   assert.match(stripSource, /liquiditySeriesSource = hasFinhayLiquidity \? "finhay-vnindex" : "index-quote"/)
