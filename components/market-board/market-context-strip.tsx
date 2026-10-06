@@ -5,7 +5,7 @@ import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } f
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
-import { coveredTop200ForeignTotals, currentSessionIndexMetrics, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
+import { coveredTop200ForeignTotals, currentSessionIndexMetrics, indexBreadthProgress, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
 import { intradayForeignNet, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
 import type {
   MarketBoardContextBootstrap,
@@ -541,7 +541,8 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   const breadth = [sourceBreadth?.advances, sourceBreadth?.unchanged, sourceBreadth?.declines]
   const hasBreadth = Boolean(sourceBreadth)
   // An index may have untraded constituents; the colored shares apply only to classified stocks.
-  const total = hasBreadth ? breadth.reduce<number>((sum, number) => sum + (number ?? 0), 0) : 0
+  const progress = indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])
+  const total = hasBreadth ? progress.total : 0
   const percent = quote?.changePercent
   const pillTone = !finite(percent)
     ? "border-zinc-600/40 bg-zinc-500/10 text-zinc-400"
@@ -567,22 +568,22 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
       <div
-        className="mt-1 flex min-w-0 items-center gap-1.5"
+        className="mt-1 min-w-0"
         aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
-        data-index-breadth-inline
+        data-index-breadth-progress
       >
-        <div className="flex shrink-0 items-center gap-1 font-sans text-[9px] font-bold leading-none tabular-nums">
-          <span className="text-emerald-400">▲{hasBreadth ? breadth[0] : "—"}</span>
-          <span className="text-amber-300">–{hasBreadth ? breadth[1] : "—"}</span>
-          <span className="text-red-400">▼{hasBreadth ? breadth[2] : "—"}</span>
-        </div>
-        <div className="flex h-[7px] min-w-[12px] flex-1 overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
+        <div className="flex h-[8px] w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
           {hasBreadth && total > 0 ? <>
-            <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
-            <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
-            <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[2] ?? 0) / total}%` }} />
+            <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progress.shares[0]}%` }} />
+            <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progress.shares[1]}%` }} />
+            <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progress.shares[2]}%` }} />
           </> : null}
+        </div>
+        <div className="relative mt-1 h-[14px] w-full font-sans text-[9px] font-bold leading-[14px] tabular-nums" aria-hidden="true">
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[0]}%` }}>▲{hasBreadth ? breadth[0] : "—"}</span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[1]}%` }}>–{hasBreadth ? breadth[1] : "—"}</span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[2]}%` }}>▼{hasBreadth ? breadth[2] : "—"}</span>
         </div>
       </div>
     </div>

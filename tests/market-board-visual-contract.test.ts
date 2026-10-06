@@ -74,7 +74,13 @@ test("intraday hour ticks use undistorted CSS-pixel sans font in both compact ch
 test("market card cleanup preserves one-row desktop fit, visible breadth and expanded impact", () => {
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   const impact = contextStripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
-  assert.ok(summary.includes("data-index-breadth-inline"))
+  assert.ok(summary.includes("data-index-breadth-progress"))
+  assert.ok(summary.includes('className="flex h-[8px] w-full overflow-hidden rounded-full bg-zinc-800"'))
+  assert.ok(summary.includes('relative mt-1 h-[14px] w-full'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[0]}%` }}'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[1]}%` }}'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[2]}%` }}'))
+  assert.ok(summary.includes('motion-safe:transition-[left]'))
   assert.ok(summary.includes('rounded-full border px-1.5 py-0.5'))
   assert.ok(impact.includes('grid h-[80px]'))
   assert.equal(impact.includes('Tổng điểm kéo tăng và kéo giảm của các mã hiển thị'), false)
