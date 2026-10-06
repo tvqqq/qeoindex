@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
-import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
+import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 
 import { coveredTop200ForeignTotals, currentSessionIndexMetrics, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
 import type {
@@ -277,6 +277,41 @@ function ComparisonLineChart({ series }: { series: ComparisonSeries[] }) {
         </g>
       })}
     </svg>
+  )
+}
+
+function MarketSessionClock() {
+  const [now, setNow] = useState<number | null>(null)
+
+  useEffect(() => {
+    const refresh = () => setNow(Date.now())
+    refresh()
+    const timer = window.setInterval(refresh, 15_000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [])
+
+  const display = now === null ? null : getMarketSessionDisplay(new Date(now))
+  const color = display?.tone === "live"
+    ? "text-emerald-300"
+    : display?.tone === "paused"
+      ? "text-amber-300"
+      : "text-zinc-400"
+
+  return (
+    <div className="mt-0.5 flex h-[20px] min-w-0 shrink-0 items-center gap-1.5 border-t border-white/[0.07] pt-1 font-ticker text-[10px] tabular-nums"
+      data-market-session-status
+      title="Lịch phiên giao dịch theo giờ Việt Nam (ICT, UTC+7), độc lập với trạng thái kết nối dữ liệu realtime"
+    >
+      <span className="shrink-0 text-zinc-400">{display?.time ?? "--:--"} ICT</span>
+      <span className="text-zinc-600">·</span>
+      <span className={`min-w-0 truncate font-semibold ${color}`}>Thị trường: {display?.label ?? "Đang xác định…"}</span>
+    </div>
   )
 }
 
@@ -738,10 +773,11 @@ export function MarketContextStrip({
               Chart
             </button>
           }>
-          <div className="-mx-2.5 -my-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
+          <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
             <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} onOpen={onOpenIndexChart} />
             <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} />
           </div>
+          <MarketSessionClock />
         </ContextCard>
         <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
           titleHint={hasFinhayLiquidity ? "Finhay VNINDEX trading_value · VND verified" : "Dữ liệu VNINDEX theo timestamp provider"}

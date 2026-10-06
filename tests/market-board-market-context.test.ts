@@ -167,6 +167,24 @@ test("combined index card exposes an explicit chart button using the existing re
   assert.ok(boardSource.includes('<IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />'))
 })
 
+
+test("VN-Index / VN30 shows a client-only ICT market status without new data requests", () => {
+  assert.ok(stripSource.includes("function MarketSessionClock()"))
+  assert.ok(stripSource.includes("getMarketSessionDisplay(new Date(now))"))
+  assert.ok(stripSource.includes("data-market-session-status"))
+  assert.ok(stripSource.includes("Thị trường: {display?.label"))
+  assert.ok(stripSource.includes("<MarketSessionClock />"))
+  assert.ok(stripSource.includes("window.setInterval(refresh, 15_000)"))
+  assert.ok(stripSource.includes("window.clearInterval(timer)"))
+  assert.ok(stripSource.includes('window.addEventListener("focus", refresh)'))
+  assert.ok(stripSource.includes('document.addEventListener("visibilitychange", refresh)'))
+  assert.ok(stripSource.includes("useState<number | null>(null)"))
+  assert.ok(stripSource.includes("Lịch phiên giao dịch theo giờ Việt Nam"))
+  assert.ok(stripSource.includes("onClick={onOpenIndexChart}"))
+  const clockComponent = stripSource.split("function MarketSessionClock()")[1]?.split("function IndexedSummary")[0] ?? ""
+  assert.equal(clockComponent.includes("fetch("), false)
+})
+
 test("realtime comparison reuses only observed source-scoped same-session data", () => {
   assert.match(stripSource, /previousMetricHistory/)
   assert.match(stripSource, /readMetricHistory/)

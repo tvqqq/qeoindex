@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
-import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
+import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getMarketSessionDisplay, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
 import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart, shouldResetForNewTradingDay } from "../modules/market/realtime/session-ui.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
@@ -113,6 +113,24 @@ test("getMarketSessionStatus returns accurate session phase, live flag, and cach
   assert.equal(weekendStatus.isLiveSession, false)
   assert.equal(weekendStatus.cacheBucketKey, "eod_closed")
   assert.ok(weekendStatus.ttlSeconds > 86400)
+})
+
+
+test("getMarketSessionDisplay follows Vietnam exchange clock across phase boundaries and weekends", () => {
+  const cases: Array<[string, string, string, string]> = [
+    ["2026-08-18T08:59:59+07:00", "08:59", "Chờ mở cửa · 09:00", "paused"],
+    ["2026-08-18T09:00:00+07:00", "09:00", "ATO · 09:00–09:15", "live"],
+    ["2026-08-18T09:15:00+07:00", "09:15", "Phiên sáng · 09:15–11:30", "live"],
+    ["2026-08-18T11:30:00+07:00", "11:30", "Nghỉ trưa · 11:30–13:00", "paused"],
+    ["2026-08-18T13:00:00+07:00", "13:00", "Phiên chiều · 13:00–14:30", "live"],
+    ["2026-08-18T14:30:00+07:00", "14:30", "ATC · 14:30–14:45", "live"],
+    ["2026-08-18T14:45:00+07:00", "14:45", "Kết phiên · 14:45–14:46", "live"],
+    ["2026-08-18T14:46:00+07:00", "14:46", "Đã đóng cửa", "closed"],
+    ["2026-08-22T10:00:00+07:00", "10:00", "Nghỉ giao dịch", "closed"],
+  ]
+  for (const [timestamp, time, label, tone] of cases) {
+    assert.deepEqual(getMarketSessionDisplay(new Date(timestamp)), { time, label, tone }, timestamp)
+  }
 })
 
 test("market UI phases enforce ATO, mini-chart, closing, and EOD boundaries", () => {
