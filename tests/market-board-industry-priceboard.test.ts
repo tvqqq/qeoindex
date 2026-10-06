@@ -6,6 +6,7 @@ import {
   defaultIndustryColumnOrder,
   industryLabelForStock,
   industryPriceboardBackground,
+  industryPriceboardBreadth,
   industryPriceboardChangeIntensity,
   industryPriceboardTone,
   moveIndustryColumn,
@@ -133,6 +134,39 @@ test("sorting ranks valid live quotes by gain first and averages only finite val
   assert.deepEqual(sortIndustryStocksByPerformance(stocks, quotes).map(({ ticker }) => ticker), ["GAIN", "LOSS", "MISSING", "BAD"])
   assert.equal(averagePriceboardChange(stocks, quotes), -0.375)
   assert.equal(averagePriceboardChange([stock("BAD")], { BAD: { price: -1, changePercent: 50 } }), null)
+})
+
+test("industry breadth counts only valid realtime quotes; missing is not flat", () => {
+  const stocks = [
+    stock("UP"), stock("CEIL"), stock("FLAT"), stock("DOWN"), stock("FLOOR"),
+    stock("MISSING"), stock("BAD_PRICE"), stock("BAD_CHANGE"),
+  ]
+  const quotes = {
+    UP: { price: 10, changePercent: 1.25 },
+    CEIL: { price: 11, changePercent: 7, reference: 10, ceiling: 11 },
+    FLAT: { price: 10, changePercent: 0 },
+    DOWN: { price: 9, changePercent: -2 },
+    FLOOR: { price: 8, changePercent: -7, reference: 10, floor: 8 },
+    BAD_PRICE: { price: 0, changePercent: 0 },
+    BAD_CHANGE: { price: 8, changePercent: Number.NaN },
+  }
+  assert.deepEqual(industryPriceboardBreadth(stocks, quotes), {
+    up: 2, unchanged: 1, down: 2, unavailable: 3,
+  })
+  assert.equal(averagePriceboardChange(stocks, quotes), (-0.75) / 5)
+  assert.deepEqual(industryPriceboardBreadth([stock("MISSING")], {}), {
+    up: 0, unchanged: 0, down: 0, unavailable: 1,
+  })
+})
+
+test("industry header shows whole label, breadth, and reorderable title without a grip icon", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.doesNotMatch(source, /GripVertical|Kéo biểu tượng ⋮⋮/)
+  assert.match(source, /const breadth = industryPriceboardBreadth\(stocks, orderingQuotes\)/)
+  assert.match(source, /role="button"[\s\S]*?tabIndex=\{0\}[\s\S]*?onPointerDown=\{\(event\) => beginDrag\(event, industry\)\}/)
+  assert.match(source, /onKeyDown=\{\(event\) => \{[\s\S]*?reorderByKeyboard\(industry, -1\)/)
+  assert.match(source, /break-words font-sans text-\[12px\] font-bold[\s\S]*?\{industry\}/)
+  assert.match(source, /↑\{breadth\.up\}[\s\S]*?=\{breadth\.unchanged\}[\s\S]*?↓\{breadth\.down\}/)
 })
 
 test("row tones scale monotonically with percent and only use actual provider ceiling/floor metadata", () => {
