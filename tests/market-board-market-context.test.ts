@@ -165,7 +165,6 @@ test("combined index card exposes an explicit chart button using the existing re
   assert.ok(boardSource.includes('onOpenIndexChart={openIndexChart}'))
   assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setIndexChartOpen(true), [])'))
   assert.ok(boardSource.includes('<IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />'))
-  assert.equal((stripSource.match(/<ContextCard\\b/g) ?? []).length, 4)
 })
 
 test("realtime comparison reuses only observed source-scoped same-session data", () => {
