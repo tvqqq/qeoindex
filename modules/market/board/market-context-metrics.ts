@@ -1,4 +1,4 @@
-import { isVietnamSecuritiesTradingDateKey } from "../calendar"
+import { isVietnamSecuritiesTradingDateKey } from "../calendar.ts"
 
 export type IntradayValuePoint = { minute: number; value: number }
 export type IntradayForeignPoint = { minute: number; buy: number; sell: number }
