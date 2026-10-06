@@ -296,13 +296,14 @@ function ComparisonLineChart({
 
   return (
     <div className="relative min-w-0">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-[69px] w-full touch-pan-y"
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[69px] w-full touch-pan-y"
         role="img"
         aria-label={zeroReference ? "Giá trị mua ròng lũy kế trong phiên hôm nay, trục 0 thể hiện cân bằng mua bán" : "So sánh thanh khoản lũy kế hôm nay và phiên giao dịch trước tại cùng giờ Việt Nam"}
         onPointerMove={(event) => {
           const bounds = event.currentTarget.getBoundingClientRect()
           if (!bounds.width) return
-          const minute = Math.round(540 + Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) * 360)
+          const localX = (event.clientX - bounds.left) * width / bounds.width
+          const minute = Math.round(540 + Math.max(0, Math.min(1, (localX - left) / (width - left - right))) * 360)
           setHoveredMinute(minute)
         }}
         onPointerLeave={() => setHoveredMinute(null)}

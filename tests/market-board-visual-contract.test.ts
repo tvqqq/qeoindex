@@ -61,6 +61,8 @@ test("classic Bảng điện remains the default with the original six sector gr
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))
+  assert.ok(contextStripSource.includes('preserveAspectRatio="none"'))
+  assert.ok(contextStripSource.includes("(localX - left) / (width - left - right)"))
   assert.ok(contextStripSource.includes('label: "Nay"'))
   assert.ok(contextStripSource.includes('label: "Trước"'))
   assert.ok(contextStripSource.includes('label: "Ròng"'))
