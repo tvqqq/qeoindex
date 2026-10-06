@@ -74,6 +74,14 @@ export interface FinhayIndexLiquidity {
   sourceUpdatedAt: string
 }
 
+export interface FinhayIndexBreadth {
+  symbol: string
+  advances: number
+  declines: number
+  unchanged: number
+  sourceUpdatedAt: string
+}
+
 function bearerResourceMetadata(header: string | null) {
   if (!header) return ""
   const match = header.match(/resource_metadata="([^"]+)"/i)
@@ -438,10 +446,34 @@ function normalizeFinhayIndexLiquidity(raw: any, symbol: string): FinhayIndexLiq
   }
 }
 
+/** Parse full index membership breadth, not the board's Top-200 stock sample. */
+export function normalizeFinhayIndexBreadth(raw: unknown, symbol: string): FinhayIndexBreadth | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const data = raw as Record<string, unknown>
+  const items = Array.isArray(data.items) ? data.items : Array.isArray(data.data) ? data.data : []
+  const normalized = symbol.trim().toUpperCase()
+  const row = items.find((item): item is Record<string, unknown> =>
+    Boolean(item) && typeof item === "object" && !Array.isArray(item)
+      && String((item as Record<string, unknown>).index ?? (item as Record<string, unknown>).symbol ?? "").trim().toUpperCase() === normalized,
+  )
+  if (!row) return null
+  const values = [row.advancers, row.decliners, row.unchanged]
+  if (!values.every((value) => typeof value === "number" && Number.isInteger(value) && value >= 0)) return null
+  const sourceUpdatedAt = typeof data.updated_at === "string" ? data.updated_at : ""
+  if (!sourceUpdatedAt || !Number.isFinite(Date.parse(sourceUpdatedAt))) return null
+  return {
+    symbol: normalized,
+    advances: values[0] as number,
+    declines: values[1] as number,
+    unchanged: values[2] as number,
+    sourceUpdatedAt,
+  }
+}
+
 const FINHAY_INDEX_LIQUIDITY_ARGS = {
   exchange: "HOSE",
   window: "1D",
-  fields: "index,volume,trading_value,constituent_count",
+  fields: "index,volume,trading_value,constituent_count,advancers,decliners,unchanged",
   page: 1,
   page_size: 50,
 } as const
@@ -470,6 +502,10 @@ export async function getFinhayIndexMarketContext(accessToken: string, symbol = 
   return {
     foreign: normalizeFinhayIndexForeignTrading(foreignRaw, symbol),
     liquidity: normalizeFinhayIndexLiquidity(liquidityRaw, symbol),
+    breadth: {
+      VNINDEX: normalizeFinhayIndexBreadth(liquidityRaw, "VNINDEX"),
+      VN30: normalizeFinhayIndexBreadth(liquidityRaw, "VN30"),
+    },
   }
 }
 

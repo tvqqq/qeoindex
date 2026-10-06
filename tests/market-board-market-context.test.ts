@@ -2,6 +2,8 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
+import { parseVpsIndexBreadth } from "../modules/market/providers/tradingview/index.ts"
+
 import {
   coveredTop200ForeignTotals,
   currentSessionIndexMetrics,
@@ -17,6 +19,7 @@ const contractSource = readFileSync(new URL("../modules/market/board/market-cont
 const routeSource = readFileSync(new URL("../app/api/market/board-context/route.ts", import.meta.url), "utf8")
 const finhayProviderSource = readFileSync(new URL("../modules/market/providers/finhay/live.ts", import.meta.url), "utf8")
 const finhayRouteSource = readFileSync(new URL("../app/api/finhay/market-context/route.ts", import.meta.url), "utf8")
+const tradingviewSource = readFileSync(new URL("../modules/market/providers/tradingview/index.ts", import.meta.url), "utf8")
 
 test("VNINDEX impact uses provider basketInfluence, keeps only finite rows, and totals only displayed bars", () => {
   const baseSeconds = Math.floor(Date.parse("2026-10-02T07:00:00.000Z") / 1000)
@@ -152,8 +155,44 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.doesNotMatch(stripSource, /MarketDepthCard|MARKET_DEPTH_BUCKETS|buildMarketDepthSnapshot|data-market-context-depth-card/)
   assert.doesNotMatch(stripSource, /ContextLineChart|IndexContextCard|DualLineChart|overflow-x-auto|min-w-\[570px\]/)
   assert.match(stripSource, /currentSessionIndexMetrics\(quote, day\)/)
-  assert.match(stripSource, /quote\?\.advances/)
-  assert.match(stripSource, /quote\?\.declines/)
+  assert.match(stripSource, /sourceBreadth\?\.advances/)
+  assert.match(stripSource, /sourceBreadth\?\.declines/)
+})
+
+test("VNINDEX/VN30 breadth uses same-day full universe data and refreshes without overwriting websocket price", () => {
+  assert.ok(finhayProviderSource.includes("advancers,decliners,unchanged"))
+  assert.ok(finhayProviderSource.includes('VNINDEX: normalizeFinhayIndexBreadth(liquidityRaw, "VNINDEX")'))
+  assert.ok(finhayProviderSource.includes('VN30: normalizeFinhayIndexBreadth(liquidityRaw, "VN30")'))
+  assert.ok(finhayRouteSource.includes("foreign, liquidity, breadth"))
+  assert.ok(finhayRouteSource.includes("      breadth,"))
+  assert.ok(stripSource.includes('fetch("/api/market/indexes"'))
+  assert.ok(stripSource.includes("window.setInterval(() => void loadBreadth(), 30_000)"))
+  assert.ok(stripSource.includes('setFinhayBreadth(data.breadth ?? {})'))
+  assert.ok(stripSource.includes("vietnamDateKey(value.sourceUpdatedAt) !== sessionDay"))
+  assert.ok(stripSource.includes('source: "Finhay"'))
+  assert.ok(stripSource.includes('source: "VPS snapshot"'))
+  assert.ok(stripSource.includes('breadth={pickBreadth("VNINDEX")}'))
+  assert.ok(stripSource.includes('breadth={pickBreadth("VN30")}'))
+  assert.ok(stripSource.includes("Number.isSafeInteger(count) && count >= 0"))
+  assert.doesNotMatch(stripSource, /canonicalUniverse.*advances|Top.?200.*advances/)
+  assert.ok(tradingviewSource.includes("parseVpsIndexBreadth"))
+})
+
+test("VPS ot parser retains genuine zero counts and rejects missing, negative and malformed values", () => {
+  assert.deepEqual(parseVpsIndexBreadth("a|b|c|120|0|80"), { advances: 120, declines: 0, unchanged: 80 })
+  assert.deepEqual(parseVpsIndexBreadth("a|b|c|0|0|0"), { advances: 0, declines: 0, unchanged: 0 })
+  assert.equal(parseVpsIndexBreadth("a|b|c|1||5"), null)
+  assert.equal(parseVpsIndexBreadth("a|b|c|1|-1|5"), null)
+  assert.equal(parseVpsIndexBreadth("a|b|c|1|NaN|5"), null)
+  assert.equal(parseVpsIndexBreadth(null), null)
+  assert.equal(parseVpsIndexBreadth("x"), null)
+})
+
+test("positive VNINDEX impact labels sit near the shared X axis instead of above the bars", () => {
+  assert.ok(stripSource.includes('entry.contribution > 0'))
+  assert.ok(stripSource.includes('max(0px, calc(${zeroPct}% - 12px))'))
+  assert.ok(stripSource.includes('zeroPct * 0.55 - 12'))
+  assert.ok(stripSource.includes('impactTooltip(entry, quotes[entry.symbol], day)'))
 })
 
 test("combined index card exposes an explicit chart button using the existing realtime modal", () => {

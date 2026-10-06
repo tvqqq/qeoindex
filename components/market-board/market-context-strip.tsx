@@ -86,6 +86,15 @@ type FinhayLiquiditySnapshot = {
   sourceUpdatedAt: string
 }
 
+type IndexBreadthSnapshot = {
+  advances: number
+  unchanged: number
+  declines: number
+  sourceUpdatedAt: string
+}
+
+type SelectedBreadth = IndexBreadthSnapshot & { source: "Finhay" | "VPS snapshot" }
+
 type FinhayMarketContextResponse = {
   ok?: boolean
   state?: string
@@ -93,6 +102,17 @@ type FinhayMarketContextResponse = {
   sampledAt?: string
   foreign?: FinhayForeignSnapshot
   liquidity?: FinhayLiquiditySnapshot
+  breadth?: Record<string, IndexBreadthSnapshot | null>
+}
+
+type MarketIndexesResponse = {
+  ok?: boolean
+  quotes?: Record<string, {
+    advances?: number
+    unchanged?: number
+    declines?: number
+    updatedAt?: string
+  }>
 }
 
 
@@ -183,6 +203,15 @@ function formatCompactVolume(value?: number) {
   if (value >= 1_000_000) return `${VALUE_FORMATTER.format(value / 1_000_000)} triệu`
   if (value >= 1_000) return `${VALUE_FORMATTER.format(value / 1_000)} nghìn`
   return VALUE_FORMATTER.format(value)
+}
+
+function validIndexBreadth(value: IndexBreadthSnapshot | null | undefined, sessionDay: string): value is IndexBreadthSnapshot {
+  if (!value || !sessionDay || vietnamDateKey(value.sourceUpdatedAt) !== sessionDay) return false
+  const timestamp = Date.parse(value.sourceUpdatedAt)
+  return Number.isFinite(timestamp)
+    && timestamp <= Date.now() + 5_000
+    && [value.advances, value.unchanged, value.declines]
+      .every((count) => Number.isSafeInteger(count) && count >= 0)
 }
 
 function formatAsOf(value?: string | null) {
@@ -393,13 +422,14 @@ function MarketSessionClock() {
   )
 }
 
-function IndexedSummary({ label, quote, day, onOpen }: { label: string; quote?: MarketContextIndexQuote; day: string; onOpen?: () => void }) {
+function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void }) {
   const value = finite(quote?.value) && quote!.value > 0 ? quote!.value : undefined
   const color = marketColor(quote?.changePercent)
   const change = quote?.change
   const metrics = currentSessionIndexMetrics(quote, day)
-  const breadth = [quote?.advances, quote?.unchanged, quote?.declines]
-  const hasBreadth = breadth.every((number) => finite(number) && number >= 0)
+  const breadth = [sourceBreadth?.advances, sourceBreadth?.unchanged, sourceBreadth?.declines]
+  const hasBreadth = Boolean(sourceBreadth)
+  // An index may have untraded constituents; the colored shares apply only to classified stocks.
   const total = hasBreadth ? breadth.reduce<number>((sum, number) => sum + (number ?? 0), 0) : 0
   return (
     <div className="min-w-0 flex-1 px-2.5 py-1.5">
@@ -417,7 +447,10 @@ function IndexedSummary({ label, quote, day, onOpen }: { label: string; quote?: 
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
-      <div className="mt-1 flex h-1 overflow-hidden rounded-full bg-zinc-800" aria-label="Mã tăng, đứng, giảm theo dữ liệu chỉ số">
+      <div className="mt-1 flex h-1 overflow-hidden rounded-full bg-zinc-800"
+        aria-label="Mã tăng, đứng, giảm theo dữ liệu chỉ số"
+        title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}>
+
         {hasBreadth && total > 0 ? <>
           <span className="bg-[#22c98a]" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
           <span className="bg-amber-400" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
@@ -533,7 +566,9 @@ function ImpactChart({ impact, live, sessionOpen, quotes, day }: { impact: Marke
                   />
                   <span
                     className="absolute inset-x-0 z-20 truncate text-center font-ticker text-[9px] font-bold tabular-nums text-zinc-200"
-                    style={{ top: `${Math.max(0, (entry.contribution > 0 ? barTop : zeroPct) * 0.55 - 12)}px` }}
+                    style={{ top: entry.contribution > 0
+                      ? `max(0px, calc(${zeroPct}% - 12px))`
+                      : `${Math.max(0, zeroPct * 0.55 - 12)}px` }}
                     title={impactTooltip(entry, quotes[entry.symbol], day)}
                   >
                     {entry.contribution > 0 ? "+" : ""}{entry.contribution.toFixed(2)}
@@ -576,6 +611,8 @@ export function MarketContextStrip({
   const [loadError, setLoadError] = useState("")
   const [finhayForeign, setFinhayForeign] = useState<(FinhayForeignSnapshot & { sampledAt: string }) | null>(null)
   const [finhayLiquidity, setFinhayLiquidity] = useState<FinhayLiquiditySnapshot | null>(null)
+  const [finhayBreadth, setFinhayBreadth] = useState<Record<string, IndexBreadthSnapshot | null>>({})
+  const [vpsBreadth, setVpsBreadth] = useState<Record<string, IndexBreadthSnapshot>>({})
   const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
   const [liquiditySamples, setLiquiditySamples] = useState<{ key: string; points: MetricPoint[] }>({ key: "", points: [] })
   const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
@@ -649,6 +686,57 @@ export function MarketContextStrip({
     if (realtimeImpact?.asOf) setObservedAtMs(Date.now())
   }, [realtimeImpact])
 
+  // Reuse the cached authenticated market-index snapshot only for breadth, never to overwrite DNSE live index price.
+  useEffect(() => {
+    let disposed = false
+    let inFlight = false
+    const loadBreadth = async () => {
+      if (disposed || inFlight || document.visibilityState === "hidden") return
+      inFlight = true
+      try {
+        const response = await fetch("/api/market/indexes", {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: AbortSignal.timeout(12_000),
+        })
+        if (!response.ok) return
+        const data = await response.json() as MarketIndexesResponse
+        if (disposed || !data.ok) return
+        const next: Record<string, IndexBreadthSnapshot> = {}
+        for (const symbol of ["VNINDEX", "VN30"]) {
+          const quote = data.quotes?.[symbol]
+          const snapshot = quote?.updatedAt
+            ? {
+                advances: quote.advances ?? Number.NaN,
+                unchanged: quote.unchanged ?? Number.NaN,
+                declines: quote.declines ?? Number.NaN,
+                sourceUpdatedAt: quote.updatedAt,
+              }
+            : null
+          if (snapshot && validIndexBreadth(snapshot, vietnamDateKey(new Date().toISOString()) ?? "")) {
+            next[symbol] = snapshot
+          }
+        }
+        setVpsBreadth(next)
+      } catch {
+        // Keep same-day last observed source snapshot; never invent breadth.
+      } finally {
+        inFlight = false
+      }
+    }
+    void loadBreadth()
+    const timer = window.setInterval(() => void loadBreadth(), 30_000)
+    const refresh = () => { if (document.visibilityState === "visible") void loadBreadth() }
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [])
+
   useEffect(() => {
     let disposed = false
     let stopped = false
@@ -669,6 +757,7 @@ export function MarketContextStrip({
 
         const data = await response.json() as FinhayMarketContextResponse
         if (disposed) return
+        if (response.ok && data.ok) setFinhayBreadth(data.breadth ?? {})
         const foreign = data.foreign
         const liquidity = data.liquidity
         const buy = foreign?.buy?.value
@@ -709,6 +798,19 @@ export function MarketContextStrip({
   const quoteSessionDate = vietnamDateKey(indexQuotes.VNINDEX?.sourceAsOf ?? indexQuotes.VNINDEX?.updatedAt ?? "")
   const liveImpactDate = vietnamDateKey(realtimeImpact?.asOf ?? "") ?? ""
   const contextSessionDate = [quoteSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
+  const pickBreadth = (symbol: "VNINDEX" | "VN30"): SelectedBreadth | undefined => {
+    const provider = finhayBreadth[symbol]
+    if (validIndexBreadth(provider, contextSessionDate)) return { ...provider, source: "Finhay" }
+    const fallback = vpsBreadth[symbol]
+    // VPS timestamps are snapshot-receipt times; never present a pre-open prior-session snapshot as today's live breadth.
+    const now = new Date()
+    const displayAfterOpen = getMarketSessionStatus(now).isLiveSession || (() => {
+      const currentSession = getMarketSessionDisplay(now)
+      return currentSession.label === "Đã đóng cửa" || currentSession.label.startsWith("Nghỉ trưa")
+    })()
+    if (displayAfterOpen && validIndexBreadth(fallback, contextSessionDate)) return { ...fallback, source: "VPS snapshot" }
+    return undefined
+  }
   const vnindexQuote = indexQuotes.VNINDEX
   const indexLiquidity = currentSessionIndexMetrics(vnindexQuote, contextSessionDate)
   const fallbackLiquidityValue = indexLiquidity.valueTraded
@@ -859,8 +961,8 @@ export function MarketContextStrip({
             </button>
           }>
           <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
-            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} onOpen={onOpenIndexChart} />
-            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} />
+            <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={pickBreadth("VNINDEX")} onOpen={onOpenIndexChart} />
+            <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={pickBreadth("VN30")} />
           </div>
           <MarketSessionClock />
         </ContextCard>
