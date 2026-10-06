@@ -622,6 +622,15 @@
       "replacement": "tests/market-insight-validation-base.test.ts"
     },
     {
+      "path": "tests/market-realtime-activity.test.ts",
+      "owner": "market",
+      "invariant": "Market LIVE animation requires provider timestamps from the current trading session; stale/lunch/EOD/holiday data cannot pulse.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-session.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market session contract.",

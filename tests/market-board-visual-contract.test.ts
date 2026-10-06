@@ -71,6 +71,23 @@ test("intraday hour ticks use undistorted CSS-pixel sans font in both compact ch
   assert.ok(contextStripSource.includes('<ComparisonLineChart zeroReference series={['))
 })
 
+test("market context numbers, chart traces, and headers honor motion reduction", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
+  assert.ok(css.includes("@keyframes market-header-fresh-tick"))
+  assert.ok(css.includes("@keyframes market-realtime-value-tick"))
+  assert.ok(css.includes("@keyframes market-chart-latest-segment"))
+  assert.ok(css.includes(".market-header-sheen"))
+  assert.ok(css.includes(".market-realtime-number"))
+  assert.ok(css.includes(".market-chart-trace"))
+  assert.ok(css.includes("@media (prefers-reduced-motion: reduce)"))
+  assert.ok(contextStripSource.includes('pathLength={1}'))
+  assert.ok(contextStripSource.includes('strokeDasharray="1"'))
+  assert.ok(contextStripSource.includes('motion-safe:animate-pulse'))
+  assert.ok(contextStripSource.includes('motion-safe:transition-[width]'))
+  assert.ok(contextStripSource.includes('role="img"'))
+  assert.equal(contextStripSource.includes('cursor-help'), false)
+})
+
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))
@@ -83,6 +100,19 @@ test("compact intraday flow charts keep accessible timestamps and fit original c
   assert.ok(contextStripSource.includes('onPointerLeave={() => setHoveredMinute(null)}'))
   assert.ok(contextStripSource.includes("Mua "))
   assert.ok(contextStripSource.includes("Bán "))
+})
+
+test("market context places ICT next to the title and removes all four bottom annotation strips", () => {
+  assert.ok(contextStripSource.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(contextStripSource.includes('data-market-session-status'))
+  assert.ok(contextStripSource.includes('title={`Thị trường: ${marketStatus}'))
+  assert.equal(contextStripSource.includes('DNSE basketInfluence ·'), false)
+  assert.equal(contextStripSource.includes('━ Hôm nay　┄ Phiên trước'), false)
+  assert.equal(contextStripSource.includes('━ Ròng hôm nay'), false)
+  assert.ok(contextStripSource.includes('Top 200 partial</span>'))
+  assert.ok(contextStripSource.includes('xl:h-[156px]'))
+  assert.ok(contextStripSource.includes("getMarketCardActivity({"))
+  assert.equal(contextStripSource.includes("function LivePulse("), false)
 })
 
 test("market context fits one desktop row and preserves the board-view controls", () => {
