@@ -102,6 +102,19 @@ test("compact intraday flow charts keep accessible timestamps and fit original c
   assert.ok(contextStripSource.includes("Bán "))
 })
 
+test("market context places ICT next to the title and removes all four bottom annotation strips", () => {
+  assert.ok(contextStripSource.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(contextStripSource.includes('data-market-session-status'))
+  assert.ok(contextStripSource.includes('title={`Thị trường: ${marketStatus}'))
+  assert.equal(contextStripSource.includes('DNSE basketInfluence ·'), false)
+  assert.equal(contextStripSource.includes('━ Hôm nay　┄ Phiên trước'), false)
+  assert.equal(contextStripSource.includes('━ Ròng hôm nay'), false)
+  assert.ok(contextStripSource.includes('Top 200 partial</span>'))
+  assert.ok(contextStripSource.includes('xl:h-[156px]'))
+  assert.ok(contextStripSource.includes("getMarketCardActivity({"))
+  assert.equal(contextStripSource.includes("function LivePulse("), false)
+})
+
 test("market context fits one desktop row and preserves the board-view controls", () => {
   assert.match(contextStripSource, /data-market-context-single-row/)
   assert.match(contextStripSource, /sm:grid-cols-2 xl:grid-cols-\[/)

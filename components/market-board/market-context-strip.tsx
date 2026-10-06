@@ -472,16 +472,17 @@ function MarketSessionClock() {
     : display?.tone === "paused"
       ? "text-amber-300"
       : "text-zinc-400"
+  const marketStatus = display?.label ?? "Đang xác định…"
 
   return (
-    <div className="mt-0.5 flex h-[20px] min-w-0 shrink-0 items-center gap-1.5 border-t border-white/[0.07] pt-1 font-ticker text-[10px] tabular-nums"
+    <span
       data-market-session-status
-      title="Lịch phiên giao dịch theo giờ Việt Nam (ICT, UTC+7), độc lập với trạng thái kết nối dữ liệu realtime"
+      className={`inline-flex shrink-0 items-center whitespace-nowrap font-sans text-[10px] font-semibold tabular-nums ${color}`}
+      title={`Thị trường: ${marketStatus} · Giờ Việt Nam (ICT, UTC+7)`}
+      aria-label={`${display?.time ?? "--:--"} ICT · Thị trường: ${marketStatus}`}
     >
-      <span className="shrink-0 text-zinc-400">{display?.time ?? "--:--"} ICT</span>
-      <span className="text-zinc-600">·</span>
-      <span className={`min-w-0 truncate font-semibold ${color}`}>Thị trường: {display?.label ?? "Đang xác định…"}</span>
-    </div>
+      {display?.time ?? "--:--"} ICT
+    </span>
   )
 }
 
@@ -587,6 +588,7 @@ function ContextCard({
   className = "",
   titleHint,
   headerRight,
+  headerInfo,
   activitySources,
   activitySessionDay = "",
   activityCanStream = true,
@@ -598,6 +600,7 @@ function ContextCard({
   className?: string
   titleHint?: string
   headerRight?: ReactNode
+  headerInfo?: ReactNode
   activitySources?: readonly (string | null | undefined)[]
   activitySessionDay?: string
   activityCanStream?: boolean
@@ -617,6 +620,7 @@ function ContextCard({
       <header className="relative flex min-h-[31px] items-center gap-1.5 overflow-hidden border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
         <span className="shrink-0 text-emerald-400">{icon}</span>
         <span className="min-w-0 truncate">{title}</span>
+        {headerInfo ? <span className="inline-flex min-w-0 shrink items-center">{headerInfo}</span> : null}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {activitySources ? <MarketHeaderActivity sources={activitySources} sessionDay={activitySessionDay} canStream={activityCanStream} /> : null}
           {headerRight ? <span className="shrink-0 text-right">{headerRight}</span> : null}
@@ -630,17 +634,7 @@ function ContextCard({
 }
 
 
-function LivePulse({ active, sessionOpen }: { active: boolean; sessionOpen: boolean }) {
-  if (active) return (
-    <span className="inline-flex items-center gap-1 text-emerald-300">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
-      LIVE
-    </span>
-  )
-  return sessionOpen ? <span className="text-amber-300">Chậm</span> : null
-}
-
-function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapshot; live: boolean; sessionOpen: boolean }) {
+function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boolean }) {
   const entries = orderedImpactBars(impact)
   const maxUp = Math.max(0.2, ...impact.positive.map((entry) => entry.contribution)) * 1.15
   const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
@@ -677,15 +671,14 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
                     style={{ top: `${barTop}%`, height: `${Math.max(1, barHeight)}%` }}
                   />
                   <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center"
-                    style={{ top: `max(0px, calc(${zeroPct}% - 25px))` }}
+                    style={{ top: `max(0px, calc(${zeroPct}% - 17px))` }}
                   >
                     <span
-                      className={`inline-flex max-w-full flex-col items-center rounded-[4px] border px-0.5 py-[2px] font-sans text-[10px] font-extrabold leading-none tracking-tight tabular-nums shadow-sm sm:text-[11px] ${entry.contribution > 0
+                      className={`inline-flex max-w-full items-center rounded-[4px] border px-0.5 py-[2px] font-sans text-[10px] font-extrabold leading-none tracking-tight tabular-nums shadow-sm sm:text-[11px] ${entry.contribution > 0
                         ? "border-emerald-400/45 bg-[#102e29]/95 text-emerald-200"
                         : "border-rose-400/45 bg-[#351d24]/95 text-rose-200"}`}
                     >
                       <span key={entry.contribution} className={live ? "market-realtime-number" : ""}>{entry.contribution > 0 ? "+" : "−"}{Math.abs(entry.contribution).toFixed(2)}</span>
-                      <span className="pt-0.5 text-[8px] font-medium leading-none opacity-90">điểm</span>
                     </span>
                   </div>
                 </div>
@@ -707,10 +700,6 @@ function ImpactChart({ impact, live, sessionOpen }: { impact: MarketImpactSnapsh
           <span key={negativeTotal} className={live ? "market-realtime-number" : ""}>−{negativeTotal.toFixed(2)}</span>
         </div>
       </div>
-      <p className="mt-0.5 flex items-center justify-end gap-2 truncate font-ticker text-[8px] text-zinc-500">
-        <LivePulse active={live} sessionOpen={sessionOpen} />
-        <span>DNSE basketInfluence · {formatAsOf(impact.asOf)}</span>
-      </p>
     </div>
   )
 }
@@ -986,9 +975,6 @@ export function MarketContextStrip({
   const foreignSeriesSource = hasFinhayForeign ? "finhay-vnindex" : "top200-partial"
   const displayedForeignBuy = hasFinhayForeign ? finhayForeign?.buy.value : top200ForeignTotals?.buy
   const displayedForeignSell = hasFinhayForeign ? finhayForeign?.sell.value : top200ForeignTotals?.sell
-  const displayedForeignCoverage = hasFinhayForeign
-    ? finhayForeign?.constituentCount
-    : foreignSnapshot.covered
   const displayedForeignNet = hasFinhayForeign
     ? finite(finhayForeign?.net.value)
       ? finhayForeign!.net.value
@@ -1052,6 +1038,7 @@ export function MarketContextStrip({
         <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full xl:h-[156px]"
           activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
           activitySessionDay={contextSessionDate}
+          headerInfo={<MarketSessionClock />}
           headerRight={
             <button
               type="button"
@@ -1068,7 +1055,6 @@ export function MarketContextStrip({
             <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={selectMarketBreadth("VNINDEX", contextSessionDate, finhayBreadth, vpsBreadth)} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} />
             <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} />
           </div>
-          <MarketSessionClock />
         </ContextCard>
         <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
           activitySources={[liquidityUpdatedAt]}
@@ -1083,15 +1069,12 @@ export function MarketContextStrip({
             { label: "Nay", points: todayLiquidityPoints, color: PLATINUM },
             { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#eb6f6f", previous: true },
           ]} animate={isTodaySession && isFresh(liquidityUpdatedAt)} /></div>
-          <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
-            <span className="truncate">{hasFinhayLiquidity ? "Finhay full HOSE" : "Index realtime"}</span>
-            <span className="shrink-0">━ Hôm nay　┄ Phiên trước</span>
-          </div>
         </ContextCard>
         <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
           activitySources={[hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf]}
           activitySessionDay={contextSessionDate}
           titleHint={hasFinhayForeign ? "Finhay full HOSE" : finhayForeignState === "UNAVAILABLE" ? "DNSE Top 200 partial" : "Finhay / DNSE Top 200 partial"}
+          headerInfo={!hasFinhayForeign ? <span className="truncate text-[8px] font-medium text-amber-300/90" title={`DNSE Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}>Top 200 partial</span> : null}
           headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] tabular-nums">
             <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
@@ -1100,10 +1083,6 @@ export function MarketContextStrip({
           <div className="mt-auto min-w-0"><ComparisonLineChart zeroReference series={[
             { label: "Ròng", points: todayForeignNetPoints, color: finite(todayForeignNet) && todayForeignNet < 0 ? RED : GREEN },
           ]} animate={isTodaySession && isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf)} /></div>
-          <div className="flex justify-between gap-1 text-[9px] text-zinc-500">
-            <span className="truncate">{hasFinhayForeign ? `Finhay full HOSE · ${displayedForeignCoverage ?? "—"} mã` : `Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length}`}</span>
-            <span className="shrink-0">━ Ròng hôm nay</span>
-          </div>
         </ContextCard>
         <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
           activitySources={[impact?.asOf]}
@@ -1111,7 +1090,7 @@ export function MarketContextStrip({
           activityCanStream={impactSelection.source === "websocket"}
           headerRight={impact && (impact.positive.length || impact.negative.length) ? <span key={impact.displayedNetTotal} className={`text-[10px] font-bold tabular-nums text-zinc-300 ${impactLive ? "market-realtime-number" : ""}`}>Top 5 ± · {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)}đ</span> : null}>
           {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
-            <ImpactChart impact={impact} live={impactLive} sessionOpen={sessionOpen} />
+            <ImpactChart impact={impact} live={impactLive} />
           ) : (
             <div className="flex min-h-[75px] flex-1 items-center justify-center gap-2 text-[10px] text-zinc-500">
               <Activity className="h-4 w-4" /> Chưa có provider contribution snapshot
