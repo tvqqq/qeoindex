@@ -515,23 +515,20 @@ function MarketHeaderActivity({
     canStream,
   })
   const revision = sources.map((source) => source ?? "").join("|")
-  const label = state === "live" ? "LIVE" : state === "delayed" ? "Chậm" : state === "closed" ? "Nghỉ" : "—"
+  // Keep realtime motion, not a competing LIVE/Chậm badge or misleading stale indicator.
+  // A hidden/non-live marker never pulses; the existing numeric/chart animations remain source-gated.
   return (
     <span
       data-market-live-state={state}
-      className={`relative inline-flex h-[17px] shrink-0 items-center gap-1 overflow-hidden rounded-full border px-1.5 font-sans text-[9px] font-bold tracking-wide tabular-nums ${state === "live"
-        ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
-        : state === "delayed" ? "border-amber-400/20 text-amber-300"
-          : "border-white/10 text-zinc-500"}`}
-      aria-label={state === "live" ? "Dữ liệu có timestamp provider mới trong phiên" : state === "delayed" ? "Dữ liệu nguồn chậm" : state === "closed" ? "Ngoài phiên giao dịch" : "Chưa xác nhận dữ liệu realtime"}
+      aria-hidden="true"
+      className={state === "live" ? "relative inline-flex h-2 w-2 shrink-0 items-center justify-center" : "hidden"}
     >
       {state === "live" && (
         <>
-          <span key={revision} className="pointer-events-none absolute inset-0 market-header-sheen" aria-hidden="true" />
-          <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" aria-hidden="true" />
+          <span key={revision} className="pointer-events-none absolute inset-0 rounded-full market-header-sheen" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
         </>
       )}
-      <span className="relative">{label}</span>
     </span>
   )
 }
@@ -545,36 +542,48 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   const hasBreadth = Boolean(sourceBreadth)
   // An index may have untraded constituents; the colored shares apply only to classified stocks.
   const total = hasBreadth ? breadth.reduce<number>((sum, number) => sum + (number ?? 0), 0) : 0
+  const percent = quote?.changePercent
+  const pillTone = !finite(percent)
+    ? "border-zinc-600/40 bg-zinc-500/10 text-zinc-400"
+    : percent > 0
+      ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
+      : percent < 0
+        ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
+        : "border-amber-400/35 bg-amber-400/10 text-amber-300"
   return (
     <div className="min-w-0 flex-1 px-2.5 py-1.5">
       <div className="flex items-center justify-between gap-1.5">
         {onOpen ? (
           <button type="button" onClick={onOpen} className="truncate text-[11px] font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
         ) : <span className="truncate text-[11px] font-bold text-zinc-200">{label}</span>}
-        <span key={`${quote?.changePercent ?? "missing"}`} className={`text-[9px] font-bold tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{formatChange(quote?.changePercent)}</span>
+        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[10px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
       <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
-        <strong key={finite(value) ? value : "missing"} className={`text-[clamp(13px,1.35vw,22px)] font-black leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
-        <span key={finite(change) ? change : "missing"} className={`text-[10px] font-extrabold tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
+        <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
+        <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-zinc-400">
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
-      <div className="mt-1 flex h-1 overflow-hidden rounded-full bg-zinc-800"
-        aria-label="Mã tăng, đứng, giảm theo dữ liệu chỉ số"
-        title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}>
-
-        {hasBreadth && total > 0 ? <>
-          <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
-          <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
-          <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[2] ?? 0) / total}%` }} />
-        </> : null}
-      </div>
-      <div className="mt-0.5 flex justify-between gap-1 text-[9px] font-semibold tabular-nums">
-        <span className="text-emerald-400">▲ {hasBreadth ? breadth[0] : "—"}</span>
-        <span className="text-amber-300">– {hasBreadth ? breadth[1] : "—"}</span>
-        <span className="text-red-400">▼ {hasBreadth ? breadth[2] : "—"}</span>
+      <div
+        className="mt-1 flex min-w-0 items-center gap-1.5"
+        aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
+        title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
+        data-index-breadth-inline
+      >
+        <div className="flex shrink-0 items-center gap-1 font-sans text-[9px] font-bold leading-none tabular-nums">
+          <span className="text-emerald-400">▲{hasBreadth ? breadth[0] : "—"}</span>
+          <span className="text-amber-300">–{hasBreadth ? breadth[1] : "—"}</span>
+          <span className="text-red-400">▼{hasBreadth ? breadth[2] : "—"}</span>
+        </div>
+        <div className="flex h-[7px] min-w-[12px] flex-1 overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
+          {hasBreadth && total > 0 ? <>
+            <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[0] ?? 0) / total}%` }} />
+            <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[1] ?? 0) / total}%` }} />
+            <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${100 * (breadth[2] ?? 0) / total}%` }} />
+          </> : null}
+        </div>
       </div>
     </div>
   )
@@ -640,16 +649,13 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
   const maxDown = Math.max(0.2, ...impact.negative.map((entry) => -entry.contribution)) * 1.15
   const totalRange = maxUp + maxDown
   const zeroPct = (100 * maxUp) / totalRange
-  const positiveTotal = Math.max(0, impact.displayedPositiveTotal)
-  const negativeTotal = Math.max(0, -impact.displayedNegativeTotal)
-  const sumAbs = positiveTotal + negativeTotal
   const columns = { gridTemplateColumns: `repeat(${entries.length},minmax(0,1fr))` }
   return (
     <div className="min-w-0">
       <div className="min-w-0">
         <div className="min-w-0">
           <div
-            className="relative grid h-[55px] border-b-0"
+            className="relative grid h-[80px] border-b-0"
             style={columns}
             role="group"
             aria-label="Tác động VNINDEX: cột xanh kéo tăng ở trái, cột đỏ kéo giảm ở phải; mã âm mạnh nhất đứng ngoài cùng bên phải, chung trục 0"
@@ -692,14 +698,6 @@ function ImpactChart({ impact, live }: { impact: MarketImpactSnapshot; live: boo
           </div>
         </div>
       </div>
-      <div className="mt-1 flex h-[15px] overflow-hidden rounded font-ticker text-[10px] font-extrabold tabular-nums text-white" aria-label="Tổng điểm kéo tăng và kéo giảm của các mã hiển thị">
-        <div className="flex items-center justify-center bg-[#269f91] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * positiveTotal / sumAbs : 50}%` }}>
-          <span key={positiveTotal} className={live ? "market-realtime-number" : ""}>+{positiveTotal.toFixed(2)}</span>
-        </div>
-        <div className="flex items-center justify-center bg-[#ed5056] motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none" style={{ width: `${sumAbs > 0 ? 100 * negativeTotal / sumAbs : 50}%` }}>
-          <span key={negativeTotal} className={live ? "market-realtime-number" : ""}>−{negativeTotal.toFixed(2)}</span>
-        </div>
-      </div>
     </div>
   )
 }
@@ -717,7 +715,6 @@ export function MarketContextStrip({
   const [finhayLiquidity, setFinhayLiquidity] = useState<FinhayLiquiditySnapshot | null>(null)
   const [finhayBreadth, setFinhayBreadth] = useState<Record<string, IndexBreadthSnapshot | null>>({})
   const [vpsBreadth, setVpsBreadth] = useState<Record<string, IndexBreadthSnapshot>>({})
-  const [finhayForeignState, setFinhayForeignState] = useState<"UNKNOWN" | "AVAILABLE" | "UNAVAILABLE">("UNKNOWN")
   const [liquiditySamples, setLiquiditySamples] = useState<{ key: string; points: MetricPoint[] }>({ key: "", points: [] })
   const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
   const [previousLiquidity, setPreviousLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
@@ -855,7 +852,6 @@ export function MarketContextStrip({
         })
         if (response.status === 401 || response.status === 403) {
           stopped = true
-          if (!disposed) setFinhayForeignState("UNAVAILABLE")
           return
         }
 
@@ -879,15 +875,13 @@ export function MarketContextStrip({
           || !finite(liquidityValue)
           || !Number.isFinite(Date.parse(liquidity.sourceUpdatedAt))
         ) {
-          setFinhayForeignState("UNAVAILABLE")
           return
         }
 
         setFinhayForeign({ ...foreign, sampledAt })
         setFinhayLiquidity(liquidity)
-        setFinhayForeignState("AVAILABLE")
       } catch {
-        if (!disposed) setFinhayForeignState("UNAVAILABLE")
+        // Optional Finhay data is unavailable; verified DNSE snapshots remain eligible.
       }
     }
 
@@ -1073,8 +1067,9 @@ export function MarketContextStrip({
         <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
           activitySources={[hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf]}
           activitySessionDay={contextSessionDate}
-          titleHint={hasFinhayForeign ? "Finhay full HOSE" : finhayForeignState === "UNAVAILABLE" ? "DNSE Top 200 partial" : "Finhay / DNSE Top 200 partial"}
-          headerInfo={!hasFinhayForeign ? <span className="truncate text-[8px] font-medium text-amber-300/90" title={`DNSE Top 200 partial · ${foreignSnapshot.covered}/${canonicalUniverse.length} mã`}>Top 200 partial</span> : null}
+          titleHint={hasFinhayForeign
+            ? "Finhay: giao dịch nước ngoài toàn HOSE"
+            : `DNSE: chỉ ${foreignSnapshot.covered}/${canonicalUniverse.length} mã Top 200; không phải tổng toàn HOSE`}
           headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
           <div className="flex justify-between gap-1 text-[10px] tabular-nums">
             <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(hasFinhayForeign ? finhayForeign?.sourceUpdatedAt : foreignSnapshot.asOf) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
@@ -1088,7 +1083,16 @@ export function MarketContextStrip({
           activitySources={[impact?.asOf]}
           activitySessionDay={contextSessionDate}
           activityCanStream={impactSelection.source === "websocket"}
-          headerRight={impact && (impact.positive.length || impact.negative.length) ? <span key={impact.displayedNetTotal} className={`text-[10px] font-bold tabular-nums text-zinc-300 ${impactLive ? "market-realtime-number" : ""}`}>Top 5 ± · {impact.displayedNetTotal > 0 ? "+" : ""}{impact.displayedNetTotal.toFixed(2)}đ</span> : null}>
+          headerRight={impact && (impact.positive.length || impact.negative.length) ? (
+            <span
+              className="inline-flex items-center gap-1.5 font-sans text-[10px] font-extrabold tabular-nums"
+              aria-label={`Tổng 5 mã kéo tăng ${impact.displayedPositiveTotal.toFixed(2)} điểm và 5 mã kéo giảm ${Math.abs(impact.displayedNegativeTotal).toFixed(2)} điểm`}
+              title="Tổng đóng góp của 5 mã tăng và 5 mã giảm hiển thị, tính bằng điểm VNINDEX"
+            >
+              <span key={impact.displayedPositiveTotal} className={`text-emerald-300 ${impactLive ? "market-realtime-number" : ""}`}>+{Math.max(0, impact.displayedPositiveTotal).toFixed(2)}</span>
+              <span key={impact.displayedNegativeTotal} className={`text-rose-300 ${impactLive ? "market-realtime-number" : ""}`}>−{Math.max(0, -impact.displayedNegativeTotal).toFixed(2)}</span>
+            </span>
+          ) : null}>
           {impact && (impact.positive.length > 0 || impact.negative.length > 0) ? (
             <ImpactChart impact={impact} live={impactLive} />
           ) : (
