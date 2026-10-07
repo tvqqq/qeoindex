@@ -455,7 +455,7 @@ test("realtime comparison reuses only observed source-scoped same-session data",
 test("HOSE chart compares exactly the preceding session at matching ICT minutes", () => {
   assert.ok(stripSource.includes("previousTradingSessionDateKey(day)"))
   assert.ok(stripSource.includes("days.includes(previous)"))
-  assert.ok(stripSource.includes("observedValueAtMinute(line.points, hoveredMinute)"))
+  assert.ok(stripSource.includes("observedValueAtMinute(line.points, hoveredMinute, 3)"))
   assert.ok(stripSource.includes("vietnamSessionMinute(point.minute)"))
   assert.ok(stripSource.includes("So với ${verifiedPreviousLiquidity.day}"))
   assert.ok(stripSource.includes("verifiedPreviousLiquidity?.points ?? []"))
