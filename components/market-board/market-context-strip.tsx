@@ -774,6 +774,7 @@ export function MarketContextStrip({
   const [liquiditySamples, setLiquiditySamples] = useState<{ key: string; points: MetricPoint[] }>({ key: "", points: [] })
   const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
   const [previousLiquidity, setPreviousLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
+  const [previousIndexLiquidity, setPreviousIndexLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
   const [serverReplay, setServerReplay] = useState<MarketBoardMetricReplay | null>(null)
   const [observedAtMs, setObservedAtMs] = useState(0)
   const [retainedFlow, setRetainedFlow] = useState<RetainedFlow>(() => ({
@@ -1050,6 +1051,11 @@ export function MarketContextStrip({
   const liquiditySampleKey = `${liquidityHistoryKey}:${metricDisplayDay}`
   const liquidityPoints = liquiditySamples.key === liquiditySampleKey ? liquiditySamples.points : []
   useEffect(() => {
+    setPreviousIndexLiquidity(previousMetricHistory<MetricPoint>(
+      metricHistoryPrefix("liquidity", "index-quote"), metricDisplayDay,
+    ))
+  }, [metricDisplayDay])
+  useEffect(() => {
     setLiquiditySamples({ key: liquiditySampleKey, points: readMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay) })
     setPreviousLiquidity(previousMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay))
   }, [metricDisplayDay, liquidityHistoryKey, liquiditySampleKey])
@@ -1175,7 +1181,7 @@ export function MarketContextStrip({
   const verifiedPreviousLiquidity = isDisplaySession
     ? useServerLiquidity && replay?.previousDay === previousTradingSessionDateKey(metricDisplayDay)
       ? replay.liquidity.previous.length >= 2
-        ? { day: replay.previousDay!, points: replay.liquidity.previous } : null
+        ? { day: replay.previousDay!, points: replay.liquidity.previous } : previousIndexLiquidity
       : previousLiquidity
     : null
   // Full-HOSE foreign totals depend on a browser Finhay OAuth cookie, so the
