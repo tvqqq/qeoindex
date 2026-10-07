@@ -24,6 +24,8 @@ test("intraday value comparison aligns Vietnam-local minutes and does not extrap
   assert.equal(vietnamSessionMinute(points[1].minute), 570)
   assert.equal(observedValueAtMinute(points, 540), 50_000_000_000)
   assert.equal(observedValueAtMinute(points, 580), 150_000_000_000)
+  assert.equal(observedValueAtMinute(points, 580, 3), undefined) // stale through an outage
+  assert.equal(observedValueAtMinute(points, 572, 3), 150_000_000_000)
   assert.equal(observedValueAtMinute(points, 539), undefined)
   assert.equal(observedValueAtMinute(points, 630), undefined)
   assert.equal(observedValueAtMinute([], 570), undefined)
