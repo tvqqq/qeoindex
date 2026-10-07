@@ -42,10 +42,7 @@ func (r *marketFrameRouter) PushIndexImpact(frame map[string]any) {
 
 func (r *marketFrameRouter) pushMarket(frame realtime.Frame) {
 	typ, _ := frame["T"].(string)
-	indexName, _ := frame["indexName"].(string)
-	symbol, _ := frame["symbol"].(string)
-	retainVNINDEX := typ == "mi" && (strings.EqualFold(strings.TrimSpace(indexName), "VNINDEX") || strings.EqualFold(strings.TrimSpace(symbol), "VNINDEX"))
-	if typ == "f" || typ == "index-impact" || retainVNINDEX {
+	if typ == "f" || typ == "index-impact" {
 		if !r.context.Accepts(frame) {
 			return
 		}
