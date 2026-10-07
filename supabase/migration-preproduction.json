@@ -199,6 +199,14 @@
       "state": "MAPPED",
       "evidence": "QEO-289 production privilege readback after migration 20260928032619",
       "rationale": "Production readback after the base notes migration exposed default authenticated table privileges beyond CRUD. This follow-up explicitly revokes all anon/authenticated table privileges then grants only SELECT/INSERT/UPDATE/DELETE to authenticated, with RLS still enabled and owner policies unchanged. Supabase assigned production version 20260928032619 while repository replay keeps reviewed version 20260928033000."
+    },
+    {
+      "logicalName": "qeo332_server_market_board_metric_replay",
+      "repositoryVersion": "20261007094500",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-332 regression: production screenshot 2026-10-07, unattended realtime worker checkpoint; review/CI/DB promotion pending",
+      "rationale": "Unattended per-minute verified HOSE liquidity and DNSE Top200 foreign replay from current worker checkpoint, bounded three-session retention, authenticated same-source chart reads. Keep production-only activation gated on exact-head DB replay and readback."
     }
   ]
 }
