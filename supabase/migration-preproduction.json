@@ -207,6 +207,14 @@
       "state": "REPO_AHEAD",
       "evidence": "QEO-332 regression: production screenshot 2026-10-07, unattended realtime worker checkpoint; review/CI/DB promotion pending",
       "rationale": "Unattended per-minute verified HOSE liquidity and DNSE Top200 foreign replay from current worker checkpoint, bounded three-session retention, authenticated same-source chart reads. Keep production-only activation gated on exact-head DB replay and readback."
+    },
+    {
+      "logicalName": "qeo332_capture_transient_index_frames",
+      "repositoryVersion": "20261007113000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "QEO-332: observed production pg_cron 03:28 UTC collected foreign but missed transient VNINDEX MI; DB-trigger-only capture, no UpCloud deployment required",
+      "rationale": "Capture validated actual VNINDEX grossTradeAmount on existing server-owned checkpoint writes, protecting minute-level liquidity recording despite 1Hz checkpoint versus 1-minute pg_cron sampling race. Bounded same-source/upsert, no new external socket or remote host changes; production promotion after exact-head CI replay."
     }
   ]
 }
