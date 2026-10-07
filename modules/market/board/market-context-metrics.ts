@@ -39,6 +39,32 @@ export function observedValueAtMinute(
   return minute - observedMinute <= maxAgeMinutes ? observed : undefined
 }
 
+/** Pure SVG geometry from observed samples only: joining is visual, not a missing-minute backfill.
+ * The area closes exactly at the first/last real sample, never at market open/close.
+ */
+export function observedAreaPaths(
+  points: readonly IntradayValuePoint[],
+  x: (vietnamMinute: number) => number,
+  y: (value: number) => number,
+  baselineY: number,
+): { line: string; area: string } {
+  const vertices = [...points]
+    .filter((point) => Number.isFinite(point.minute) && Number.isFinite(point.value))
+    .sort((a, b) => a.minute - b.minute)
+    .map((point) => ({ x: x(vietnamSessionMinute(point.minute)), y: y(point.value) }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+  if (!vertices.length) return { line: "", area: "" }
+  const coord = (point: { x: number; y: number }) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`
+  const line = vertices.map((point, position) => `${position ? "L" : "M"}${coord(point)}`).join(" ")
+  if (vertices.length < 2 || !Number.isFinite(baselineY)) return { line, area: "" }
+  const first = vertices[0]
+  const last = vertices[vertices.length - 1]
+  return {
+    line,
+    area: `${line} L${last.x.toFixed(1)},${baselineY.toFixed(1)} L${first.x.toFixed(1)},${baselineY.toFixed(1)} Z`,
+  }
+}
+
 export function intradayForeignNet(points: readonly IntradayForeignPoint[]): IntradayValuePoint[] {
   return points
     .filter((point) => Number.isFinite(point.minute)
