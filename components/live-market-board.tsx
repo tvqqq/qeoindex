@@ -28,6 +28,8 @@ import {
   VolumeX,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
+import { BOARD_RELOAD_REQUIRED_EVENT } from "@/modules/market/board/resume-reload"
+import { createBoundedFrameQueue } from "@/modules/market/board/bounded-frame-queue"
 import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
 import { marketToneFromChange } from "@/modules/market/tone"
 import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
@@ -1176,13 +1178,13 @@ export function LiveMarketBoard({
     }
 
     let disposed = false
-    let messageQueue: string[] = []
+    const messageQueue = createBoundedFrameQueue<string>()
     let messageFrame: number | null = null
+    let overflowNotified = false
 
     const flushMessageQueue = () => {
       messageFrame = null
-      const queued = messageQueue
-      messageQueue = []
+      const queued = messageQueue.drain()
       for (const raw of queued) {
         if (disposed) return
         let data: Record<string, unknown>
@@ -1354,14 +1356,24 @@ export function LiveMarketBoard({
     }
 
     const scheduleMessage = (raw: string) => {
-      messageQueue.push(raw)
+      if (!messageQueue.push(raw)) {
+        if (messageQueue.overflowed && !overflowNotified) {
+          // Partial replay can lose cumulative foreign/index and 5m history state.
+          // Discard the whole batch and let the page controller rebootstrap once.
+          overflowNotified = true
+          if (messageFrame !== null) window.cancelAnimationFrame(messageFrame)
+          messageFrame = null
+          window.dispatchEvent(new Event(BOARD_RELOAD_REQUIRED_EVENT))
+        }
+        return
+      }
       if (messageFrame === null) messageFrame = window.requestAnimationFrame(flushMessageQueue)
     }
 
     const clearMessageQueue = () => {
       if (messageFrame !== null) window.cancelAnimationFrame(messageFrame)
       messageFrame = null
-      messageQueue = []
+      messageQueue.clear()
     }
 
     const unsubscribeFrames = subscribeDnseMarketFrames((frame) => {

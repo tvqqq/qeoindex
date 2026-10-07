@@ -264,8 +264,8 @@ test("after-close fallback still feeds both visible price and mini chart", () =>
   assert.match(stockSource, /formatBoardPrice\(quote\?\.price\)/)
 })
 
-test("Supabase realtime frames use animation-frame buffering without retaining closures", () => {
-  assert.match(boardSource, /let messageQueue: string\[\] = \[\]/)
+test("Supabase realtime frames use bounded animation-frame buffering without retaining closures", () => {
+  assert.match(boardSource, /const messageQueue = createBoundedFrameQueue<string>\(\)/)
   assert.match(boardSource, /window\.requestAnimationFrame\(flushMessageQueue\)/)
   assert.match(boardSource, /window\.cancelAnimationFrame\(messageFrame\)/)
   assert.match(boardSource, /subscribeDnseMarketFrames\(\(frame\) =>[\s\S]*?scheduleMessage\(JSON\.stringify\(frame\)\)/)
