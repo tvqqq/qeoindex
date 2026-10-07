@@ -33,7 +33,7 @@ begin
     select f, public.qeo_board_frame_asof(f, 'transactTime') as source_time
     from pg_catalog.jsonb_array_elements(NEW.frames) as j(f)
     where f ->> 'T' = 'mi'
-      and pg_catalog.upper(pg_catalog.coalesce(f ->> 'indexName', f ->> 'symbol', '')) = 'VNINDEX'
+      and pg_catalog.upper(coalesce(f ->> 'indexName', f ->> 'symbol', '')) = 'VNINDEX'
   ) as observed
   where source_time is not null
     and (source_time at time zone 'Asia/Ho_Chi_Minh')::date = v_day
