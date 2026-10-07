@@ -31,7 +31,8 @@ function validRecordedMinute(row: PersistedBoardMetric, today: string, previous:
   const minute = Date.parse(row.minute_at)
   const source = Date.parse(row.source_as_of)
   if (!Number.isFinite(minute) || !Number.isFinite(source) || minute > nowMs + 60_000
-    || source > minute + 5_000 || minute - source > 120_000) return false
+    || source > nowMs + 5_000 || source > minute + 60_000
+    || minute - source > 120_000) return false
   const time = new Date(minute)
   const sourceTime = new Date(source)
   if (vietnamDateKey(time) !== row.session_date || vietnamDateKey(sourceTime) !== row.session_date) return false
