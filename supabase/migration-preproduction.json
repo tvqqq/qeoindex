@@ -199,6 +199,22 @@
       "state": "MAPPED",
       "evidence": "QEO-289 production privilege readback after migration 20260928032619",
       "rationale": "Production readback after the base notes migration exposed default authenticated table privileges beyond CRUD. This follow-up explicitly revokes all anon/authenticated table privileges then grants only SELECT/INSERT/UPDATE/DELETE to authenticated, with RLS still enabled and owner policies unchanged. Supabase assigned production version 20260928032619 while repository replay keeps reviewed version 20260928033000."
+    },
+    {
+      "logicalName": "qeo332_server_market_board_metric_replay",
+      "repositoryVersion": "20261007094500",
+      "productionVersion": "20261007032700",
+      "state": "MAPPED",
+      "evidence": "QEO-332 Verify/DB Drift success, managed production apply 2026-10-07; cron job exactly once, RLS table and live unattended foreign rows checked",
+      "rationale": "Unattended per-minute verified HOSE liquidity and DNSE Top200 foreign replay from current worker checkpoint, bounded three-session retention, authenticated same-source chart reads. Keep production-only activation gated on exact-head DB replay and readback. Production readback completed; version assigned by Supabase is 20261007032700."
+    },
+    {
+      "logicalName": "qeo332_capture_transient_index_frames",
+      "repositoryVersion": "20261007113000",
+      "productionVersion": "20261007033548",
+      "state": "MAPPED",
+      "evidence": "QEO-332 Verify and zero-to-latest DB Drift success, managed production apply 2026-10-07; trigger exactly once and real live 4.293T VND VNINDEX liquidity row at 10:35:50 ICT verified",
+      "rationale": "Capture validated actual VNINDEX grossTradeAmount on existing server-owned checkpoint writes, protecting minute-level liquidity recording despite 1Hz checkpoint versus 1-minute pg_cron sampling race. Bounded same-source/upsert, no new external socket or remote host changes; production promotion after exact-head CI replay. Production readback completed; version assigned by Supabase is 20261007033548."
     }
   ]
 }

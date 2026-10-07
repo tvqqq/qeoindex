@@ -9,6 +9,7 @@ import { coveredTop200ForeignTotals, currentSessionIndexMetrics, indexBreadthPro
 import { intradayForeignNet, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
 import { displayedMarketMetricDay, readRetainedMetric, validSessionMetricTimestamp, writeRetainedMetric } from "@/modules/market/board/market-context-retention"
 import type { RetainedLiquidity, RetainedForeign } from "@/modules/market/board/market-context-retention"
+import { preferObservedReplay, type MarketBoardMetricReplay } from "@/modules/market/board/metric-replay"
 import type {
   MarketBoardContextBootstrap,
   MarketImpactSnapshot,
@@ -383,7 +384,7 @@ function ComparisonLineChart({
   const chartAt = hoveredMinute === null ? [] : series.map((line) => ({
     label: line.label,
     color: line.color,
-    value: observedValueAtMinute(line.points, hoveredMinute),
+    value: observedValueAtMinute(line.points, hoveredMinute, 3),
   }))
   const timeLabel = hoveredMinute === null ? "" : `${String(Math.floor(hoveredMinute / 60)).padStart(2, "0")}:${String(hoveredMinute % 60).padStart(2, "0")}`
   const ticks = [
@@ -418,12 +419,13 @@ function ComparisonLineChart({
         )}
         {valid.map((line, index) => {
           const ordered = [...line.points].sort((a, b) => a.minute - b.minute)
+          // Disconnected observations are never interpolated across outages or lunch.
           const path = ordered.map((point, position) =>
-            `${position ? "L" : "M"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
+            `${!position || point.minute - ordered[position - 1].minute > 180_000 ? "M" : "L"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
           ).join(" ")
           const latest = ordered.at(-1)
           const prior = ordered.at(-2)
-          const lastSegment = prior && latest
+          const lastSegment = prior && latest && latest.minute - prior.minute <= 180_000
             ? `M${x(vietnamSessionMinute(prior.minute)).toFixed(1)},${y(prior.value).toFixed(1)} L${x(vietnamSessionMinute(latest.minute)).toFixed(1)},${y(latest.value).toFixed(1)}`
             : ""
           return <g key={index}>
@@ -772,6 +774,8 @@ export function MarketContextStrip({
   const [liquiditySamples, setLiquiditySamples] = useState<{ key: string; points: MetricPoint[] }>({ key: "", points: [] })
   const [foreignSamples, setForeignSamples] = useState<{ key: string; points: ForeignMetricPoint[] }>({ key: "", points: [] })
   const [previousLiquidity, setPreviousLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
+  const [previousIndexLiquidity, setPreviousIndexLiquidity] = useState<SessionHistory<MetricPoint> | null>(null)
+  const [serverReplay, setServerReplay] = useState<MarketBoardMetricReplay | null>(null)
   const [observedAtMs, setObservedAtMs] = useState(0)
   const [retainedFlow, setRetainedFlow] = useState<RetainedFlow>(() => ({
     day: "", liquidityFull: null, liquidityIndex: null, foreignFull: null, foreignPartial: null,
@@ -962,6 +966,44 @@ export function MarketContextStrip({
   const liveImpactDate = vietnamDateKey(realtimeImpact?.asOf ?? "") ?? ""
   const contextSessionDate = [quoteSessionDate, liveImpactDate].filter(Boolean).sort().at(-1) ?? ""
   const metricDisplayDay = observedAtMs > 0 ? displayedMarketMetricDay(new Date(observedAtMs)) : ""
+  // Server-owned snapshots arrive even after a fully unattended morning.
+  // This read path creates no new market subscriptions or market-data polling.
+  useEffect(() => {
+    let stopped = false
+    let fetching = false
+    const loadReplay = async () => {
+      if (stopped || fetching || document.visibilityState === "hidden") return
+      fetching = true
+      try {
+        const response = await fetch("/api/market/metric-history", {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!response.ok) return
+        const next = await response.json() as MarketBoardMetricReplay & { ok?: boolean }
+        if (!stopped && next.ok && next.day === metricDisplayDay) {
+          setServerReplay(next)
+        }
+      } catch {
+        // Retain the last valid server data and observed browser points.
+      } finally {
+        fetching = false
+      }
+    }
+    void loadReplay()
+    const timer = window.setInterval(() => void loadReplay(), 60_000)
+    const onVisible = () => { if (document.visibilityState === "visible") void loadReplay() }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+  }, [metricDisplayDay])
+
   const retention = retainedFlow.day === metricDisplayDay ? retainedFlow : null
   useEffect(() => {
     setRetainedFlow(loadRetainedFlow(metricDisplayDay))
@@ -1008,6 +1050,11 @@ export function MarketContextStrip({
   const liquidityHistoryKey = metricHistoryPrefix("liquidity", liquiditySeriesSource)
   const liquiditySampleKey = `${liquidityHistoryKey}:${metricDisplayDay}`
   const liquidityPoints = liquiditySamples.key === liquiditySampleKey ? liquiditySamples.points : []
+  useEffect(() => {
+    setPreviousIndexLiquidity(previousMetricHistory<MetricPoint>(
+      metricHistoryPrefix("liquidity", "index-quote"), metricDisplayDay,
+    ))
+  }, [metricDisplayDay])
   useEffect(() => {
     setLiquiditySamples({ key: liquiditySampleKey, points: readMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay) })
     setPreviousLiquidity(previousMetricHistory<MetricPoint>(liquidityHistoryKey, metricDisplayDay))
@@ -1122,9 +1169,29 @@ export function MarketContextStrip({
   // At 09:00 on the next trading day it switches and does NOT reuse yesterday's
   // totals or primary chart as if they were current-session observations.
   const isDisplaySession = metricDisplayDay !== ""
-  const todayLiquidityPoints = isDisplaySession ? liquidityPoints : []
-  const verifiedPreviousLiquidity = isDisplaySession ? previousLiquidity : null
-  const todayForeignNetPoints = isDisplaySession ? intradayForeignNet(foreignPoints) : []
+  const replay = isDisplaySession && serverReplay?.day === metricDisplayDay ? serverReplay : null
+  const serverLiquidityPoints = replay?.liquidity.today ?? []
+  const serverForeignPoints = replay?.foreign.today ?? []
+  const useServerLiquidity = serverLiquidityPoints.length >= 2
+    || (!liquidityPoints.length && serverLiquidityPoints.length > 0)
+  // Index-quote and Finhay cover the same full-HOSE liquidity, but individual
+  // series are never spliced; previous day must match this chart's source.
+  const todayLiquidityPoints = isDisplaySession
+    ? preferObservedReplay(serverLiquidityPoints, liquidityPoints) : []
+  const verifiedPreviousLiquidity = isDisplaySession
+    ? useServerLiquidity && replay?.previousDay === previousTradingSessionDateKey(metricDisplayDay)
+      ? replay.liquidity.previous.length >= 2
+        ? { day: replay.previousDay!, points: replay.liquidity.previous } : previousIndexLiquidity
+      : previousLiquidity
+    : null
+  // Full-HOSE foreign totals depend on a browser Finhay OAuth cookie, so the
+  // unattended DNSE series is explicitly Top-200 partial, not the same scope.
+  const hasFullObservedForeign = foreignSeriesSource === "finhay-vnindex" && foreignPoints.length >= 2
+  const useServerForeign = !hasFullObservedForeign && serverForeignPoints.length >= 2
+  const foreignChartPartial = foreignSeriesSource === "top200-partial" || useServerForeign
+  const chartForeignPoints = !isDisplaySession ? []
+    : foreignChartPartial ? preferObservedReplay(serverForeignPoints, foreignPoints) : foreignPoints
+  const todayForeignNetPoints = intradayForeignNet(chartForeignPoints)
   const todayForeignBuy = isDisplaySession ? displayedForeignBuy : undefined
   const todayForeignSell = isDisplaySession ? displayedForeignSell : undefined
   const todayForeignNet = isDisplaySession ? displayedForeignNet : undefined
@@ -1188,7 +1255,9 @@ export function MarketContextStrip({
           activitySources={[foreignUpdatedAt]}
           activitySessionDay={contextSessionDate}
           titleHint={foreignSeriesSource === "finhay-vnindex"
-            ? "Finhay: giao dịch nước ngoài toàn HOSE"
+            ? foreignChartPartial
+              ? "Tiêu đề: Finhay toàn HOSE. Biểu đồ: DNSE chỉ Top 200, không phải tổng toàn HOSE"
+              : "Finhay: giao dịch nước ngoài toàn HOSE"
             : foreignSnapshot.covered > 0 && foreignPartialSnapshot?.asOf === foreignUpdatedAt
               ? `DNSE: chỉ ${foreignSnapshot.covered}/${canonicalUniverse.length} mã Top 200; không phải tổng toàn HOSE`
               : "DNSE: dữ liệu Top 200 partial; không phải tổng toàn HOSE"}
@@ -1197,9 +1266,14 @@ export function MarketContextStrip({
             <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
             <span className="truncate text-red-300">Bán <span key={finite(todayForeignSell) ? todayForeignSell : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignSell)}</span></span>
           </div>
-          <div className="mt-auto min-w-0"><ComparisonLineChart zeroReference series={[
-            { label: "Ròng", points: todayForeignNetPoints, color: finite(todayForeignNet) && todayForeignNet < 0 ? RED : GREEN },
-          ]} animate={isDisplaySession && isFresh(foreignUpdatedAt)} /></div>
+          <div className="relative mt-auto min-w-0">
+            {foreignChartPartial && foreignSeriesSource === "finhay-vnindex" && (
+              <span data-market-foreign-chart-scope className="pointer-events-none absolute left-1 top-0 z-10 rounded bg-[#111511]/90 px-1 font-sans text-[9px] text-zinc-400">Chart: Top 200</span>
+            )}
+            <ComparisonLineChart zeroReference series={[
+              { label: "Ròng", points: todayForeignNetPoints, color: (todayForeignNetPoints.at(-1)?.value ?? 0) < 0 ? RED : GREEN },
+            ]} animate={isDisplaySession && (useServerForeign ? false : isFresh(foreignUpdatedAt))} />
+          </div>
         </ContextCard>
         <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
           activitySources={[impact?.asOf]}

@@ -495,6 +495,15 @@
       ]
     },
     {
+      "path": "tests/market-board-server-metric-replay.test.ts",
+      "owner": "market",
+      "invariant": "Unattended pg_cron and bounded DB trigger capture real source-timestamped DNSE liquidity and Top-200 foreign evidence from the existing server checkpoint; replay rejects missing, stale or synthetic observations.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-board-stock-filter-api.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market board stock filter api contract.",

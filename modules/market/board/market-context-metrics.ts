@@ -18,18 +18,25 @@ export function vietnamSessionMinute(timestampMs: number): number {
   return ((Math.floor(timestampMs / 60_000) + 420) % 1440 + 1440) % 1440
 }
 
-/** No forward extrapolation: values exist only between real recorded samples. */
-export function observedValueAtMinute(points: readonly IntradayValuePoint[], minute: number): number | undefined {
+/** No forward extrapolation; compact charts can also reject stale points inside observed gaps. */
+export function observedValueAtMinute(
+  points: readonly IntradayValuePoint[], minute: number, maxAgeMinutes = Infinity,
+): number | undefined {
   if (!points.length || !Number.isFinite(minute)) return undefined
   const first = vietnamSessionMinute(points[0].minute)
   const last = vietnamSessionMinute(points[points.length - 1].minute)
   if (minute < first || minute > last) return undefined
   let observed: number | undefined
+  let observedMinute = -Infinity
   for (const point of points) {
-    if (vietnamSessionMinute(point.minute) > minute) break
-    if (Number.isFinite(point.value)) observed = point.value
+    const clock = vietnamSessionMinute(point.minute)
+    if (clock > minute) break
+    if (Number.isFinite(point.value)) {
+      observed = point.value
+      observedMinute = clock
+    }
   }
-  return observed
+  return minute - observedMinute <= maxAgeMinutes ? observed : undefined
 }
 
 export function intradayForeignNet(points: readonly IntradayForeignPoint[]): IntradayValuePoint[] {

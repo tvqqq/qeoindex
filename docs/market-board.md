@@ -76,6 +76,24 @@ The authenticated market board displays exactly **four cards in one non-scrollab
 
 The impact-only `/api/market/board-context` endpoint keeps its `market_board` authorization, 10-second live cache TTL, stale/retry safeguards and source-time checks; cache namespace advances to `market-board-context-v3` to exclude old chart history payloads. The Finhay market-context API remains separately authorized using `finhay_live` and Finhay OAuth, with 30-second polling. Browser storage is optional, bounded and stores no personal information.
 
+## Unattended intraday replay — QEO-332 follow-up (2026-10-07)
+
+The existing server-owned Go worker independently ingests DNSE during trading hours without any browser session. It already persists the latest DNSE index updates and complete same-session foreign frames to the bounded `dnse-market` Supabase checkpoint. QEO-332 uses **two database-owned capture paths**, neither requiring a new websocket, browser, Finhay OAuth cookie, or redeploy of the running UpCloud worker:
+
+- A lightweight database trigger `qeo_board_capture_liquidity_checkpoint` captures a verified VNINDEX MI frame **as soon as the existing checkpoint is updated**. This avoids missing transient MI frames when the once-per-minute cron tick falls between index events. Each source-backed frame records its own minute and provider timestamp; same-minute upserts are throttled to no more than one every 15 seconds.
+- Supabase `pg_cron` invokes `qeo_capture_market_board_minute()` once per minute during 09:15–11:30 and 13:00–14:50 ICT, storing **DNSE Top-200 partial foreign buy/sell** from recent complete checkpoints. Its index read remains an opportunistic fallback. Missing source frames remain **missing**, never forward-filled, and the provider timestamp/session is validated.
+
+The authenticated endpoint `/api/market/metric-history` reads only the displayed trading date and immediately previous trading date, with read-only RLS, same-source safeguards, and no-store responses. On browser mount and every 60 seconds (when visible), charts hydrate from actual observed history. The existing browser localStorage remains a fallback. A full-HOSE Finhay foreign header is **never** mislabeled as Top-200 foreign chart: when the historic plot comes from DNSE, a visible "Chart: Top 200" scope label appears. Lines break across market/lunch outages rather than drawing invented price-volume continuity.
+
+Minute samples are retained for the last three recorded sessions. Historical minutes before migration activation cannot be recovered from daily OHLCV.
+
+### Production acceptance
+
+1. Apply `20261007094500_qeo332_server_market_board_metric_replay.sql` then `20261007113000_qeo332_capture_transient_index_frames.sql` in managed Supabase and confirm **exactly one** capture cron and one checkpoint trigger. Neither step requires direct host access.
+2. Verify that production writes `market_board_intraday_minutes` contain both real `liquidity/index-quote` and `foreign/top200-partial` rows during active trading, with matching source date/timestamp. A feed outage produces a gap; do not claim data for hours before rollout.
+3. Validate exact-head GitHub Actions Verify, DB Drift and database type parity. Merge once into `main`, triggering one Vercel Git deployment; do not manually deploy Vercel a second time.
+4. In a new authenticated browser opened late in the morning with no preceding visitors, verify that charts replay accumulated real samples, prior-day comparison exists only for the immediately preceding trading date, and no full-HOSE/Top-200 foreign series are blended.
+
 ## Browser realtime path
 
 - DNSE WebSocket messages are queued and flushed on `requestAnimationFrame` instead of creating one React update per raw socket callback.

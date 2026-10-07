@@ -1699,6 +1699,45 @@ export type Database = {
         }
         Relationships: []
       }
+      market_board_intraday_minutes: {
+        Row: {
+          buy_value: number | null
+          covered_symbols: number | null
+          kind: string
+          minute_at: string
+          sell_value: number | null
+          session_date: string
+          source: string
+          source_as_of: string
+          traded_value: number | null
+          volume: number | null
+        }
+        Insert: {
+          buy_value?: number | null
+          covered_symbols?: number | null
+          kind: string
+          minute_at: string
+          sell_value?: number | null
+          session_date: string
+          source: string
+          source_as_of: string
+          traded_value?: number | null
+          volume?: number | null
+        }
+        Update: {
+          buy_value?: number | null
+          covered_symbols?: number | null
+          kind?: string
+          minute_at?: string
+          sell_value?: number | null
+          session_date?: string
+          source?: string
+          source_as_of?: string
+          traded_value?: number | null
+          volume?: number | null
+        }
+        Relationships: []
+      }
       market_insight_daily: {
         Row: {
           above_ma10_pct: number | null
@@ -4845,6 +4884,11 @@ export type Database = {
         Args: { p_job_key: string; p_request_id: string; p_sync_run_id: string }
         Returns: Json
       }
+      qeo_board_frame_asof: {
+        Args: { p_field: string; p_frame: Json }
+        Returns: string
+      }
+      qeo_capture_market_board_minute: { Args: never; Returns: undefined }
       qeo_claim_chart_universe_bootstrap_transition: {
         Args: { p_dispatch_id: string; p_transition_id: string }
         Returns: Json
