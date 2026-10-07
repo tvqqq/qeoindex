@@ -384,7 +384,7 @@ function ComparisonLineChart({
   const chartAt = hoveredMinute === null ? [] : series.map((line) => ({
     label: line.label,
     color: line.color,
-    value: observedValueAtMinute(line.points, hoveredMinute),
+    value: observedValueAtMinute(line.points, hoveredMinute, 3),
   }))
   const timeLabel = hoveredMinute === null ? "" : `${String(Math.floor(hoveredMinute / 60)).padStart(2, "0")}:${String(hoveredMinute % 60).padStart(2, "0")}`
   const ticks = [
