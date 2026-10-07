@@ -6,7 +6,7 @@ import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/marke
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
 import { coveredTop200ForeignTotals, currentSessionIndexMetrics, indexBreadthProgress, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
-import { intradayForeignNet, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
+import { intradayForeignNet, observedAreaPaths, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
 import { displayedMarketMetricDay, readRetainedMetric, validSessionMetricTimestamp, writeRetainedMetric } from "@/modules/market/board/market-context-retention"
 import type { RetainedLiquidity, RetainedForeign } from "@/modules/market/board/market-context-retention"
 import { preferObservedReplay, type MarketBoardMetricReplay } from "@/modules/market/board/metric-replay"
@@ -362,6 +362,8 @@ function ComparisonLineChart({
 }) {
   const [hoveredMinute, setHoveredMinute] = useState<number | null>(null)
   const valid = series.filter((line) => line.points.length)
+  // Render the previous-day fill beneath today's highlighted area and trace.
+  const plotted = [...valid].sort((a, b) => Number(Boolean(b.previous)) - Number(Boolean(a.previous)))
   if (!valid.length) {
     return <div className="flex h-[69px] items-center justify-center text-[9px] text-zinc-500">Chưa có mẫu realtime trong phiên</div>
   }
@@ -399,7 +401,7 @@ function ComparisonLineChart({
     <div className="relative min-w-0">
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[69px] w-full touch-pan-y"
         role="img"
-        aria-label={zeroReference ? "Giá trị mua ròng lũy kế trong phiên hôm nay, trục 0 thể hiện cân bằng mua bán" : "So sánh thanh khoản lũy kế hôm nay và phiên giao dịch trước tại cùng giờ Việt Nam"}
+        aria-label={zeroReference ? "Giá trị mua ròng lũy kế từ các mẫu thực trong phiên, trục 0 thể hiện cân bằng mua bán" : "So sánh thanh khoản lũy kế từ các mẫu thực hôm nay và phiên giao dịch trước tại cùng giờ Việt Nam"}
         onPointerMove={(event) => {
           const bounds = event.currentTarget.getBoundingClientRect()
           if (!bounds.width) return
@@ -417,25 +419,29 @@ function ComparisonLineChart({
           <line x1={left} x2={width - right} y1={zeroY} y2={zeroY}
             stroke="#a1a1aa" strokeOpacity="0.8" strokeDasharray="3 3" />
         )}
-        {valid.map((line, index) => {
+        {plotted.map((line) => {
           const ordered = [...line.points].sort((a, b) => a.minute - b.minute)
-          // Disconnected observations are never interpolated across outages or lunch.
-          const path = ordered.map((point, position) =>
-            `${!position || point.minute - ordered[position - 1].minute > 180_000 ? "M" : "L"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
-          ).join(" ")
+          // The path connects observed samples only. Missing minutes do not create points,
+          // and the shaded area ends at the exact last observed source timestamp.
+          const paths = observedAreaPaths(ordered, x, y, zeroY)
           const latest = ordered.at(-1)
           const prior = ordered.at(-2)
           const lastSegment = prior && latest && latest.minute - prior.minute <= 180_000
             ? `M${x(vietnamSessionMinute(prior.minute)).toFixed(1)},${y(prior.value).toFixed(1)} L${x(vietnamSessionMinute(latest.minute)).toFixed(1)},${y(latest.value).toFixed(1)}`
             : ""
-          return <g key={index}>
-            {ordered.length > 1 && (
-              <path d={path} fill="none" stroke={line.color} strokeDasharray={line.previous ? "5 4" : undefined}
-                strokeWidth={line.previous ? 1.8 : 2.4} strokeOpacity={line.previous ? 0.85 : 1} strokeLinecap="round" strokeLinejoin="round" />
+          return <g key={line.label}>
+            {paths.area && (
+              <path d={paths.area} fill={line.color} fillOpacity={line.previous ? 0.13 : 0.21}
+                stroke="none" pointerEvents="none" aria-hidden="true" />
             )}
-            {animate && !line.previous && prior && latest && (
+            {ordered.length > 1 && (
+              <path d={paths.line} fill="none" stroke={line.color}
+                strokeWidth={line.previous ? 2 : 2.6} strokeOpacity={line.previous ? 0.92 : 1}
+                strokeLinecap="round" strokeLinejoin="round" />
+            )}
+            {animate && !line.previous && lastSegment && (
               <path
-                key={`${latest.minute}:${latest.value}`}
+                key={`${latest?.minute}:${latest?.value}`}
                 d={lastSegment}
                 pathLength={1}
                 strokeDasharray="1"
@@ -1247,8 +1253,8 @@ export function MarketContextStrip({
             <span className="truncate">{verifiedPreviousLiquidity ? `So với ${verifiedPreviousLiquidity.day}` : "Chưa ghi nhận phiên trước"}</span>
           </div>
           <div className="mt-auto min-w-0"><ComparisonLineChart series={[
-            { label: "Nay", points: todayLiquidityPoints, color: PLATINUM },
-            { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#eb6f6f", previous: true },
+            { label: "Nay", points: todayLiquidityPoints, color: "#8fbac1" },
+            { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#e87974", previous: true },
           ]} animate={isDisplaySession && isFresh(liquidityUpdatedAt)} /></div>
         </ContextCard>
         <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
