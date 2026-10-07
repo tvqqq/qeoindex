@@ -439,9 +439,9 @@ function ComparisonLineChart({
                 strokeWidth={line.previous ? 2 : 2.6} strokeOpacity={line.previous ? 0.92 : 1}
                 strokeLinecap="round" strokeLinejoin="round" />
             )}
-            {animate && !line.previous && lastSegment && (
+            {animate && !line.previous && prior && latest && lastSegment && (
               <path
-                key={`${latest?.minute}:${latest?.value}`}
+                key={`${latest.minute}:${latest.value}`}
                 d={lastSegment}
                 pathLength={1}
                 strokeDasharray="1"
