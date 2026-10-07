@@ -419,12 +419,13 @@ function ComparisonLineChart({
         )}
         {valid.map((line, index) => {
           const ordered = [...line.points].sort((a, b) => a.minute - b.minute)
+          // Disconnected observations are never interpolated across outages or lunch.
           const path = ordered.map((point, position) =>
-            `${position ? "L" : "M"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
+            `${!position || point.minute - ordered[position - 1].minute > 180_000 ? "M" : "L"}${x(vietnamSessionMinute(point.minute)).toFixed(1)},${y(point.value).toFixed(1)}`,
           ).join(" ")
           const latest = ordered.at(-1)
           const prior = ordered.at(-2)
-          const lastSegment = prior && latest
+          const lastSegment = prior && latest && latest.minute - prior.minute <= 180_000
             ? `M${x(vietnamSessionMinute(prior.minute)).toFixed(1)},${y(prior.value).toFixed(1)} L${x(vietnamSessionMinute(latest.minute)).toFixed(1)},${y(latest.value).toFixed(1)}`
             : ""
           return <g key={index}>
