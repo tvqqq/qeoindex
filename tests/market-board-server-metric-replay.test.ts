@@ -29,7 +29,7 @@ test("fresh mid-session browser hydrates real unattended 09:15-to-now liquidity 
   const rows = [
     row(today, "09:15", "liquidity", { traded_value: 10 }),
     row(today, "09:30", "liquidity", { traded_value: 20 }),
-    row(today, "09:40", "liquidity", { traded_value: 30 }),
+    row(today, "09:40", "liquidity", { traded_value: 30, source_as_of: new Date(time(today, "09:40")).toISOString().replace(":00.000Z", ":30.000Z") }),
     row(today, "09:15", "foreign", { buy_value: 1, sell_value: 2 }),
     row(today, "09:40", "foreign", { buy_value: 4, sell_value: 7 }),
     row(previous, "09:15", "liquidity", { traded_value: 50 }),
@@ -91,6 +91,8 @@ test("unattended capture is a database cron reading worker checkpoint, never a b
   assert.match(api, /requireApiFeature\("market_board"\)/)
   assert.match(ui, /fetch\("\/api\/market\/metric-history"/)
   assert.match(ui, /foreignChartPartial/)
+  assert.match(ui, /previousIndexLiquidity/)
+  assert.match(ui, /180_000/)
   assert.match(ui, /Biểu đồ: DNSE chỉ Top 200/)
   assert.doesNotMatch(api, /FINHAY_OAUTH|DNSE_API_KEY/)
 })
