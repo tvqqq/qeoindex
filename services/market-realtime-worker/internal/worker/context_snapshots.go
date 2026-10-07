@@ -11,7 +11,7 @@ import (
 
 const (
 	maxContextSnapshotSymbols = 200
-	maxContextSnapshotFrames  = maxContextSnapshotSymbols + 1
+	maxContextSnapshotFrames  = maxContextSnapshotSymbols + 2 // foreign, impact, VNINDEX
 	maxContextSnapshotBytes   = 256 * 1024
 )
 
@@ -61,6 +61,10 @@ func (b *contextSnapshotBuffer) Push(frame realtime.Frame) bool {
 	typ = strings.TrimSpace(typ)
 	symbol, _ := frame["symbol"].(string)
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	if typ == "mi" && symbol == "" {
+		symbol, _ = frame["indexName"].(string)
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !b.acceptsLocked(frame, typ, symbol) || (typ == "f" && !hasForeignSnapshotAmounts(frame)) {
@@ -109,6 +113,10 @@ func (b *contextSnapshotBuffer) Accepts(frame realtime.Frame) bool {
 	defer b.mu.Unlock()
 	typ = strings.TrimSpace(typ)
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	if typ == "mi" && symbol == "" {
+		symbol, _ = frame["indexName"].(string)
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	}
 	if !b.acceptsLocked(frame, typ, symbol) {
 		return false
 	}
@@ -126,7 +134,7 @@ func (b *contextSnapshotBuffer) Accepts(frame realtime.Frame) bool {
 }
 
 func (b *contextSnapshotBuffer) acceptsLocked(frame realtime.Frame, typ, symbol string) bool {
-	if symbol == "" || (typ != "f" && typ != "index-impact") {
+	if symbol == "" || (typ != "f" && typ != "index-impact" && typ != "mi") {
 		return false
 	}
 	providerDate, ok := contextFrameSessionDate(frame, typ)
@@ -227,8 +235,12 @@ func contextFrameSessionDate(frame realtime.Frame, typ string) (string, bool) {
 
 func contextFrameSourceTime(frame realtime.Frame, typ string) (time.Time, bool) {
 	var sourceTime time.Time
-	if typ == "f" {
-		providerTime, ok := parseProviderImpactTime(frame["multicastReceiveTime"])
+	if typ == "f" || typ == "mi" {
+		field := "multicastReceiveTime"
+		if typ == "mi" {
+			field = "transactTime"
+		}
+		providerTime, ok := parseProviderImpactTime(frame[field])
 		if !ok {
 			return time.Time{}, false
 		}
