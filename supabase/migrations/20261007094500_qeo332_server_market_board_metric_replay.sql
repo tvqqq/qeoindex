@@ -18,13 +18,15 @@ create table if not exists public.market_board_intraday_minutes (
   primary key (session_date, kind, source, minute_at),
   constraint qeo_board_metrics_scope_check check (
     (kind = 'liquidity' and source = 'index-quote'
-      and traded_value >= 0 and (volume is null or volume >= 0)
+      and traded_value is not null and traded_value >= 0
+      and (volume is null or volume >= 0)
       and buy_value is null and sell_value is null and covered_symbols is null)
     or
     (kind = 'foreign' and source = 'top200-partial'
       and traded_value is null and volume is null
+      and buy_value is not null and sell_value is not null
       and buy_value >= 0 and sell_value >= 0
-      and covered_symbols between 1 and 200)
+      and covered_symbols is not null and covered_symbols between 1 and 200)
   ),
   constraint qeo_board_metrics_date_check check (
     (minute_at at time zone 'Asia/Ho_Chi_Minh')::date = session_date
