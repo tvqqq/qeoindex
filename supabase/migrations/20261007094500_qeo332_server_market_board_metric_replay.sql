@@ -115,7 +115,166 @@ begin
   if v_mi is not null and (v_mi ->> 'grossTradeAmount') ~ '^[0-9]+([.][0-9]+)?$'
     then
     v_value := (v_mi ->> 'grossTradeAmount')::double precision * 1000000000;
-    v_volume := case when (v_mi ->> 'totalVolumeTraded') ~ '^[0-9]+([.][0-9]+)?
+    v_volume := case when (v_mi ->> 'totalVolumeTraded') ~ '^[0-9]+([.][0-9]+)?    if v_value between 0 and 10000000000000000
+      and (v_volume is null or v_volume between 0 and 1000000000000) then
+      insert into public.market_board_intraday_minutes
+        (session_date, minute_at, kind, source, source_as_of, traded_value, volume)
+      values (v_day, v_minute, 'liquidity', 'index-quote', v_mi_asof, v_value, v_volume)
+      on conflict (session_date, kind, source, minute_at) do update
+        set source_as_of = excluded.source_as_of,
+          traded_value = excluded.traded_value, volume = excluded.volume
+      where excluded.source_as_of >= market_board_intraday_minutes.source_as_of;
+    end if;
+  end if;
+
+  -- Cumulative foreign frames are maintained by the unattended worker, with
+  -- validated canonical Top-200 membership. Sum only *complete* same-day
+  -- buy/sell frame pairs; do not treat missing amounts as verified zero.
+  with parsed as (
+    select f ->> 'symbol' as symbol,
+      public.qeo_board_frame_asof(f, 'multicastReceiveTime') as asof,
+      coalesce(f ->> 'totalBuyTradedAmount', f ->> 'buyTradedAmount') as buy,
+      coalesce(f ->> 'totalSellTradedAmount', f ->> 'sellTradedAmount') as sell
+    from jsonb_array_elements(v_frames) as e(f) where f ->> 'T' = 'f'
+  ), valid as (
+    select symbol, asof, buy::double precision as buy, sell::double precision as sell
+    from parsed
+    where symbol ~ '^[A-Z0-9]{2,12}$'
+      and buy ~ '^[0-9]+([.][0-9]+)?$' and sell ~ '^[0-9]+([.][0-9]+)?$'
+      and asof between ((v_day::timestamp + interval '9 hours') at time zone 'Asia/Ho_Chi_Minh')
+        and v_now + interval '5 seconds'
+  ), latest as (
+    select distinct on (symbol) symbol, asof, buy, sell
+    from valid where buy between 0 and 1000000000000000
+      and sell between 0 and 1000000000000000
+    order by symbol, asof desc
+  )
+  select sum(buy), sum(sell), count(*)::integer, max(asof)
+    into v_buy, v_sell, v_coverage, v_foreign_asof from latest;
+
+  if v_coverage between 1 and 200
+    and v_foreign_asof >= v_now - interval '120 seconds' then
+    insert into public.market_board_intraday_minutes
+      (session_date, minute_at, kind, source, source_as_of, buy_value, sell_value, covered_symbols)
+    values (v_day, v_minute, 'foreign', 'top200-partial',
+      v_foreign_asof, v_buy, v_sell, v_coverage)
+    on conflict (session_date, kind, source, minute_at) do update
+      set source_as_of = excluded.source_as_of, buy_value = excluded.buy_value,
+        sell_value = excluded.sell_value, covered_symbols = excluded.covered_symbols
+    where excluded.source_as_of >= market_board_intraday_minutes.source_as_of;
+  end if;
+
+  -- Three actual *recorded* sessions, not three calendar days (Tết/weekends).
+  if extract(hour from v_local) = 9 and extract(minute from v_local) = 15 then
+    select session_date into v_keep from (
+      select distinct session_date from public.market_board_intraday_minutes
+      order by session_date desc offset 2 limit 1
+    ) as sessions;
+    if v_keep is not null then
+      delete from public.market_board_intraday_minutes where session_date < v_keep;
+    end if;
+  end if;
+end;
+$body$;
+
+revoke all on function public.qeo_board_frame_asof(jsonb, text)
+  from public, anon, authenticated;
+revoke all on function public.qeo_capture_market_board_minute()
+  from public, anon, authenticated;
+
+create extension if not exists pg_cron with schema extensions;
+do $schedule$
+begin
+  if exists (select 1 from cron.job where jobname = 'qeo-board-intraday-minute') then
+    perform cron.unschedule('qeo-board-intraday-minute');
+  end if;
+  perform cron.schedule('qeo-board-intraday-minute', '* 2-7 * * 1-5',
+    $cron$select public.qeo_capture_market_board_minute();$cron$);
+end;
+$schedule$;
+commit;
+
+      then (v_mi ->> 'totalVolumeTraded')::double precision else null end;
+    if v_value between 0 and 10000000000000000
+      and v_volume between 0 and 1000000000000 then
+      insert into public.market_board_intraday_minutes
+        (session_date, minute_at, kind, source, source_as_of, traded_value, volume)
+      values (v_day, v_minute, 'liquidity', 'index-quote', v_mi_asof, v_value, v_volume)
+      on conflict (session_date, kind, source, minute_at) do update
+        set source_as_of = excluded.source_as_of,
+          traded_value = excluded.traded_value, volume = excluded.volume
+      where excluded.source_as_of >= market_board_intraday_minutes.source_as_of;
+    end if;
+  end if;
+
+  -- Cumulative foreign frames are maintained by the unattended worker, with
+  -- validated canonical Top-200 membership. Sum only *complete* same-day
+  -- buy/sell frame pairs; do not treat missing amounts as verified zero.
+  with parsed as (
+    select f ->> 'symbol' as symbol,
+      public.qeo_board_frame_asof(f, 'multicastReceiveTime') as asof,
+      coalesce(f ->> 'totalBuyTradedAmount', f ->> 'buyTradedAmount') as buy,
+      coalesce(f ->> 'totalSellTradedAmount', f ->> 'sellTradedAmount') as sell
+    from jsonb_array_elements(v_frames) as e(f) where f ->> 'T' = 'f'
+  ), valid as (
+    select symbol, asof, buy::double precision as buy, sell::double precision as sell
+    from parsed
+    where symbol ~ '^[A-Z0-9]{2,12}$'
+      and buy ~ '^[0-9]+([.][0-9]+)?$' and sell ~ '^[0-9]+([.][0-9]+)?$'
+      and asof between ((v_day::timestamp + interval '9 hours') at time zone 'Asia/Ho_Chi_Minh')
+        and v_now + interval '5 seconds'
+  ), latest as (
+    select distinct on (symbol) symbol, asof, buy, sell
+    from valid where buy between 0 and 1000000000000000
+      and sell between 0 and 1000000000000000
+    order by symbol, asof desc
+  )
+  select sum(buy), sum(sell), count(*)::integer, max(asof)
+    into v_buy, v_sell, v_coverage, v_foreign_asof from latest;
+
+  if v_coverage between 1 and 200
+    and v_foreign_asof >= v_now - interval '120 seconds' then
+    insert into public.market_board_intraday_minutes
+      (session_date, minute_at, kind, source, source_as_of, buy_value, sell_value, covered_symbols)
+    values (v_day, v_minute, 'foreign', 'top200-partial',
+      v_foreign_asof, v_buy, v_sell, v_coverage)
+    on conflict (session_date, kind, source, minute_at) do update
+      set source_as_of = excluded.source_as_of, buy_value = excluded.buy_value,
+        sell_value = excluded.sell_value, covered_symbols = excluded.covered_symbols
+    where excluded.source_as_of >= market_board_intraday_minutes.source_as_of;
+  end if;
+
+  -- Three actual *recorded* sessions, not three calendar days (Tết/weekends).
+  if extract(hour from v_local) = 9 and extract(minute from v_local) = 15 then
+    select session_date into v_keep from (
+      select distinct session_date from public.market_board_intraday_minutes
+      order by session_date desc offset 2 limit 1
+    ) as sessions;
+    if v_keep is not null then
+      delete from public.market_board_intraday_minutes where session_date < v_keep;
+    end if;
+  end if;
+end;
+$body$;
+
+revoke all on function public.qeo_board_frame_asof(jsonb, text)
+  from public, anon, authenticated;
+revoke all on function public.qeo_capture_market_board_minute()
+  from public, anon, authenticated;
+
+create extension if not exists pg_cron with schema extensions;
+do $schedule$
+begin
+  if exists (select 1 from cron.job where jobname = 'qeo-board-intraday-minute') then
+    perform cron.unschedule('qeo-board-intraday-minute');
+  end if;
+  perform cron.schedule('qeo-board-intraday-minute', '* 2-7 * * 1-5',
+    $cron$select public.qeo_capture_market_board_minute();$cron$);
+end;
+$schedule$;
+commit;
+
+      then (v_mi ->> 'totalVolumeTraded')::double precision else null end;
     if v_value between 0 and 10000000000000000
       and (v_volume is null or v_volume between 0 and 1000000000000) then
       insert into public.market_board_intraday_minutes
