@@ -90,13 +90,16 @@ test("market card cleanup preserves one-row desktop fit, visible breadth and exp
   assert.ok(contextStripSource.includes("market-header-sheen"))
 })
 
-test("combined index breadth is anchored at card bottom without decorative trend icons", () => {
+test("combined index breadth stays bottom-aligned with direction icon before the level", () => {
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes('flex min-h-0 min-w-0 flex-1 flex-col'))
   assert.ok(summary.includes('mt-auto min-w-0 pt-1'))
   assert.ok(summary.includes('text-[12px] font-extrabold leading-none'))
   assert.ok(summary.includes('INDEX_FORMATTER.format(value)'))
-  assert.equal(summary.includes("trendIcon"), false)
+  assert.ok(summary.includes("trendIcon"))
+  assert.ok(summary.includes("<ArrowUpRight"))
+  assert.ok(summary.includes("<ArrowDownRight"))
+  assert.ok(summary.includes("<ArrowRight"))
   assert.ok(summary.includes('market-breadth-count-tick'))
   assert.ok(summary.includes('data-index-breadth-progress'))
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))

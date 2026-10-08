@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { Activity, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
@@ -597,6 +597,12 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   const progress = indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])
   const total = hasBreadth ? progress.total : 0
   const percent = quote?.changePercent
+  const trend = finite(change) ? change : finite(percent) ? percent : undefined
+  const trendColor = !finite(trend) ? "text-zinc-500" : trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"
+  const trendIcon = !finite(trend) ? <Activity className="h-[13px] w-[13px]" aria-hidden="true" />
+    : trend > 0 ? <ArrowUpRight className="h-[13px] w-[13px]" aria-hidden="true" />
+      : trend < 0 ? <ArrowDownRight className="h-[13px] w-[13px]" aria-hidden="true" />
+        : <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
   const pillTone = !finite(percent)
     ? "border-zinc-600/40 bg-zinc-500/10 text-zinc-400"
     : percent > 0
@@ -613,6 +619,7 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
+        <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
         <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
       </div>

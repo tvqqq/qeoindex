@@ -279,12 +279,14 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.equal(summary.includes('mt-0.5 flex justify-between gap-1 text-[9px]'), false)
 })
 
-test("index levels have no leading dash/icon; real count revisions animate, values preserve signs", () => {
+test("index levels use direction icons; real count revisions animate and values preserve signs", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes('className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5"'))
   assert.ok(summary.includes('className="mt-auto min-w-0 pt-1"'))
-  assert.doesNotMatch(stripSource, /ArrowUpRight|ArrowDownRight|<ArrowRight/)
-  assert.doesNotMatch(summary, /trendIcon|trendColor|aria-label=\{!finite\(trend\)/)
+  assert.match(stripSource, /ArrowUpRight|ArrowDownRight|<ArrowRight/)
+  assert.ok(summary.includes("const trend = finite(change) ? change : finite(percent) ? percent : undefined"))
+  assert.ok(summary.includes('trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"'))
+  assert.ok(summary.includes('aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}'))
   assert.ok(summary.includes('INDEX_FORMATTER.format(value)'))
   assert.ok(summary.includes('change > 0 ? "+" : ""'))
   assert.ok(summary.includes('font-sans text-[12px] font-extrabold'))
