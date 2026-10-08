@@ -650,9 +650,9 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
       >
         <div className="relative flex h-[8px] w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
           {hasBreadth && total > 0 ? <>
-            <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" style={{ width: `${progress.shares[0]}%` }} />
-            <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" style={{ width: `${progress.shares[1]}%` }} />
-            <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" style={{ width: `${progress.shares[2]}%` }} />
+            <span className={`bg-[#22c98a] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[0]}%` }} />
+            <span className={`bg-amber-400 ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[1]}%` }} />
+            <span className={`bg-[#ff4757] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[2]}%` }} />
           </> : null}
           {breadthSweepRevision > 0 ? <span key={breadthSweepRevision} className="market-breadth-change-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3" /> : null}
         </div>

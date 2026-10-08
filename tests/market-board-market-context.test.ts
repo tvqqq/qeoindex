@@ -275,6 +275,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes("progress.centers[2]"))
   assert.ok(summary.includes("motion-safe:transition-[left]"))
   assert.ok(summary.includes("motion-safe:duration-700 motion-safe:ease-in-out"))
+  assert.ok(summary.includes('breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""'))
   assert.ok(summary.includes("relative flex h-[8px] w-full"))
   assert.ok(summary.includes('hasBreadth ? breadth[0] : "—"'))
   assert.equal(summary.includes('data-index-breadth-inline'), false)
