@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
@@ -596,6 +596,21 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
   // An index may have untraded constituents; the colored shares apply only to classified stocks.
   const progress = indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])
   const total = hasBreadth ? progress.total : 0
+  const breadthSignature = hasBreadth && total > 0 ? `${breadth[0]}:${breadth[1]}:${breadth[2]}` : null
+  const previousBreadth = useRef<{ day: string; signature: string } | null>(null)
+  const [breadthSweepRevision, setBreadthSweepRevision] = useState(0)
+  useEffect(() => {
+    if (!day || !breadthSignature) {
+      previousBreadth.current = null
+      return
+    }
+    const previous = previousBreadth.current
+    previousBreadth.current = { day, signature: breadthSignature }
+    // Revisions only: skip initial hydration, same counts, previous sessions and stale snapshots.
+    if (previous && previous.day === day && previous.signature !== breadthSignature && breadthFresh) {
+      setBreadthSweepRevision((revision) => revision + 1)
+    }
+  }, [breadthSignature, breadthFresh, day])
   const percent = quote?.changePercent
   const trend = finite(change) ? change : finite(percent) ? percent : undefined
   const trendColor = !finite(trend) ? "text-zinc-500" : trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"
@@ -620,10 +635,10 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
         <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
-        <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "—"}</strong>
-        <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "—"}</span>
+        <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "N/A"}</strong>
+        <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "N/A"}</span>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-zinc-400">
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums text-zinc-400">
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
@@ -633,17 +648,18 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
         data-index-breadth-progress
       >
-        <div className="flex h-[8px] w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
+        <div className="relative flex h-[8px] w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
           {hasBreadth && total > 0 ? <>
-            <span className="bg-[#22c98a] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progress.shares[0]}%` }} />
-            <span className="bg-amber-400 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progress.shares[1]}%` }} />
-            <span className="bg-[#ff4757] motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${progress.shares[2]}%` }} />
+            <span className={`bg-[#22c98a] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[0]}%` }} />
+            <span className={`bg-amber-400 ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[1]}%` }} />
+            <span className={`bg-[#ff4757] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[2]}%` }} />
           </> : null}
+          {breadthSweepRevision > 0 ? <span key={breadthSweepRevision} className="market-breadth-change-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3" /> : null}
         </div>
         <div className="relative mt-1 h-[14px] w-full font-sans text-[9px] font-bold leading-[14px] tabular-nums" aria-hidden="true">
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-300" style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
+          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
         </div>
       </div>
     </div>
