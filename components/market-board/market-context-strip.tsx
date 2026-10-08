@@ -635,8 +635,12 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
         <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
-        <strong key={finite(value) ? value : "missing"} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{finite(value) ? INDEX_FORMATTER.format(value) : "N/A"}</strong>
-        <span key={finite(change) ? change : "missing"} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{finite(change) ? `${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}` : "N/A"}</span>
+        {finite(value) ? (
+          <strong key={value} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
+        ) : null}
+        {finite(change) ? (
+          <span key={change} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
+        ) : null}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums text-zinc-400">
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
