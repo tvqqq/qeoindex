@@ -48,9 +48,21 @@ test("orderbook popup centers activity tabs under depth and keeps trade filters 
   assert.ok(depthBar >= 0 && depthBar < tabs && tabs < activityContent)
   assert.ok(activityContent < tradesGrid && tradesGrid < tradeCard)
   assert.ok(tradeCard < filters && filters < tradeHeading && tradeHeading < tradeRows && tradeRows < foreignCard)
-  assert.match(orderbookSource, /<nav aria-label="Loại giao dịch" className="mt-3 flex justify-center">/)
-  assert.match(orderbookSource, /data-orderbook-activity-tabs className="flex max-w-full flex-wrap items-center justify-center/)
-  assert.match(orderbookSource, /data-orderbook-trade-filters className="flex flex-wrap items-center/)
+  assert.match(orderbookSource, /<nav aria-label="Loại giao dịch" className="mt-1\.5 flex min-w-0 justify-center">/)
+  assert.match(orderbookSource, /data-orderbook-activity-tabs className="flex max-w-full flex-nowrap items-center gap-0\.5 overflow-x-auto whitespace-nowrap/)
+  assert.match(orderbookSource, /data-orderbook-trade-filters className="flex min-w-0 flex-nowrap items-center gap-0\.5 overflow-x-auto whitespace-nowrap/)
+  const filterContent = orderbookSource.slice(filters, tradeHeading)
+  for (const label of ["Tất cả", "Cá con", "Cá mập"]) {
+    assert.ok(filterContent.includes(`<span>${label}</span>`))
+  }
+  for (const count of ["clusteredTrades.length", "largeTradeCount", "whaleTradeCount"]) {
+    assert.ok(filterContent.includes(`>{${count}}</span>`))
+  }
+  assert.match(filterContent, /title=\{`Cá con ≥10K:/)
+  assert.match(filterContent, /title=\{`Cá mập \$\{whaleLabel\}:/)
+  assert.doesNotMatch(filterContent, /<span>Tất cả \(/)
+  assert.doesNotMatch(filterContent, /<span>Cá con ≥10K<\/span>/)
+  assert.doesNotMatch(filterContent, /<span>Cá mập \{whaleLabel\}<\/span>/)
   assert.match(orderbookSource, /\{visibleTrades\.length \? <div[\s\S]*?"Không có lệnh thỏa mãn bộ lọc\."/)
   for (const marker of ["data-orderbook-activity-tabs", "data-orderbook-trade-card", "data-orderbook-trade-filters"]) {
     assert.equal(orderbookSource.split(marker).length - 1, 1)
