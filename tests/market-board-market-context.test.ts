@@ -150,7 +150,7 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.match(stripSource, /title="VN-Index \/ VN30"/)
   assert.match(stripSource, /<IndexedSummary label="VN-Index"/)
   assert.match(stripSource, /<IndexedSummary label="VN30"/)
-  assert.match(stripSource, /title="Thanh khoản HOSE"/)
+  assert.match(stripSource, /title="Thanh khoản"/)
   assert.match(stripSource, /title="Mua bán nước ngoài"/)
   assert.match(stripSource, /title="Tác động VNINDEX"/)
   assert.doesNotMatch(stripSource, /MarketDepthCard|MARKET_DEPTH_BUCKETS|buildMarketDepthSnapshot|data-market-context-depth-card/)
@@ -366,7 +366,7 @@ test("all four market cards animate only source-backed ticks, not polling or idl
 
 test("market cards remove bottom annotation rows but preserve source integrity", () => {
   const stripSection = stripSource.split('title="VN-Index / VN30"')[1] ?? ""
-  const liquidity = stripSection.split('title="Thanh khoản HOSE"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
+  const liquidity = stripSection.split('title="Thanh khoản"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
   const foreign = stripSection.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
   const impactChart = stripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
   assert.ok(stripSource.includes("headerInfo={<MarketSessionClock />}"))
@@ -379,6 +379,8 @@ test("market cards remove bottom annotation rows but preserve source integrity",
   assert.equal(stripSource.includes('headerDetails='), false)
   assert.ok(liquidity.includes('formatVndValue(liquidityValue)'))
   assert.ok(liquidity.includes('formatCompactVolume(liquidityVolume)'))
+  assert.ok(liquidity.includes('data-market-liquidity-value'))
+  assert.ok(liquidity.includes('finite(liquidityValue) && liquidityValue >= 0'))
   assert.equal(foreign.includes('formatVndValue(todayForeignBuy)'), false)
   assert.equal(foreign.includes('formatVndValue(todayForeignSell)'), false)
   assert.equal(foreign.includes("Top 200 partial</span>"), false)

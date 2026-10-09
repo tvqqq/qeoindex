@@ -1273,16 +1273,22 @@ export function MarketContextStrip({
             <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={vn30Breadth} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)} />
           </div>
         </ContextCard>
-        <ContextCard title="Thanh khoản HOSE" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
+        <ContextCard title="Thanh khoản" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
           activitySources={[liquidityUpdatedAt]}
           activitySessionDay={contextSessionDate}
           bodyClassName="px-2.5 pb-1 pt-0.5"
           titleHint={`${hasFinhayLiquidity ? "Finhay VNINDEX trading_value · VND verified" : "Dữ liệu VNINDEX theo timestamp provider"} · ${verifiedPreviousLiquidity ? `So với ${verifiedPreviousLiquidity.day}` : "Chưa ghi nhận phiên trước"}`}
           headerRight={<span className="inline-flex items-baseline gap-1 whitespace-nowrap tabular-nums">
-            <strong key={finite(liquidityValue) ? liquidityValue : "missing"} className={`font-ticker text-[11px] font-extrabold text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatVndValue(liquidityValue)}</strong>
-            <span className="text-zinc-500">/</span>
-            <span className="font-sans text-[10px] text-zinc-400">KL</span>
-            <strong key={finite(liquidityVolume) ? liquidityVolume : "missing"} className={`font-ticker text-[11px] font-extrabold text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatCompactVolume(liquidityVolume)}</strong>
+            {finite(liquidityValue) && liquidityValue >= 0 && (
+              <strong key={liquidityValue} data-market-liquidity-value className={`font-ticker text-[11px] font-extrabold text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatVndValue(liquidityValue)}</strong>
+            )}
+            {finite(liquidityVolume) && liquidityVolume > 0 && (
+              <>
+                {finite(liquidityValue) && liquidityValue >= 0 && <span className="text-zinc-500">/</span>}
+                <span className="font-sans text-[10px] text-zinc-400">KL</span>
+                <strong key={liquidityVolume} className={`font-ticker text-[11px] font-extrabold text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatCompactVolume(liquidityVolume)}</strong>
+              </>
+            )}
           </span>}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col"><ComparisonLineChart series={[
             { label: "Nay", points: todayLiquidityPoints, color: "#8fbac1" },
