@@ -33,6 +33,30 @@ const priceboardSource = readFileSync(new URL("../components/market-board/indust
 const contextStripSource = readFileSync(new URL("../components/market-board/market-context-strip.tsx", import.meta.url), "utf8")
 const screenshotSource = readFileSync(new URL("../modules/shared/media/screenshot.ts", import.meta.url), "utf8")
 
+
+test("orderbook popup centers activity tabs under depth and keeps trade filters within left card", () => {
+  const depthBar = orderbookSource.indexOf("data-orderbook-depth-progress")
+  const tabs = orderbookSource.indexOf("data-orderbook-activity-tabs")
+  const activityContent = orderbookSource.indexOf('className="px-4 py-3 flex-1 flex flex-col"', tabs)
+  const tradesGrid = orderbookSource.indexOf("grid grid-cols-[1.18fr_1fr]", activityContent)
+  const tradeCard = orderbookSource.indexOf("data-orderbook-trade-card", tradesGrid)
+  const filters = orderbookSource.indexOf("data-orderbook-trade-filters", tradeCard)
+  const tradeHeading = orderbookSource.indexOf("<span>Thời gian</span>", filters)
+  const tradeRows = orderbookSource.indexOf("{visibleTrades.length ? <div", tradeHeading)
+  const foreignCard = orderbookSource.indexOf("<ForeignRealtimeCard foreign=", tradeRows)
+
+  assert.ok(depthBar >= 0 && depthBar < tabs && tabs < activityContent)
+  assert.ok(activityContent < tradesGrid && tradesGrid < tradeCard)
+  assert.ok(tradeCard < filters && filters < tradeHeading && tradeHeading < tradeRows && tradeRows < foreignCard)
+  assert.match(orderbookSource, /<nav aria-label="Loại giao dịch" className="mt-3 flex justify-center">/)
+  assert.match(orderbookSource, /data-orderbook-activity-tabs className="flex max-w-full flex-wrap items-center justify-center/)
+  assert.match(orderbookSource, /data-orderbook-trade-filters className="flex flex-wrap items-center/)
+  assert.match(orderbookSource, /\{visibleTrades\.length \? <div[\s\S]*?"Không có lệnh thỏa mãn bộ lọc\."/)
+  for (const marker of ["data-orderbook-activity-tabs", "data-orderbook-trade-card", "data-orderbook-trade-filters"]) {
+    assert.equal(orderbookSource.split(marker).length - 1, 1)
+  }
+})
+
 test("compact priceboard keeps fixed anchors, packs industries into lanes, and exposes a stable row hover", () => {
   assert.match(priceboardSource, /data-industry-column="watchlist" data-market-board-industry-column/)
   assert.match(priceboardSource, /data-industry-column="vn30" data-market-board-industry-column/)
