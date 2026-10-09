@@ -18,6 +18,53 @@ export function vietnamSessionMinute(timestampMs: number): number {
   return ((Math.floor(timestampMs / 60_000) + 420) % 1440 + 1440) % 1440
 }
 
+// Market Board chart coordinates represent *trading* minutes, not wall-clock minutes.
+// These helpers affect display geometry only; raw source timestamps and values stay intact.
+export const MARKET_SESSION_OPEN_MINUTE = 9 * 60
+export const MARKET_LUNCH_START_MINUTE = 11 * 60 + 30
+export const MARKET_AFTERNOON_OPEN_MINUTE = 13 * 60
+export const MARKET_SESSION_CLOSE_MINUTE = 15 * 60
+export const MARKET_COMPACT_DURATION_MINUTES =
+  MARKET_LUNCH_START_MINUTE - MARKET_SESSION_OPEN_MINUTE
+  + MARKET_SESSION_CLOSE_MINUTE - MARKET_AFTERNOON_OPEN_MINUTE
+
+export function marketTradingSession(minute: number): "morning" | "afternoon" | null {
+  if (!Number.isFinite(minute)) return null
+  if (minute >= MARKET_SESSION_OPEN_MINUTE && minute < MARKET_LUNCH_START_MINUTE) return "morning"
+  if (minute >= MARKET_AFTERNOON_OPEN_MINUTE && minute <= MARKET_SESSION_CLOSE_MINUTE) return "afternoon"
+  return null
+}
+
+export function compactMarketMinute(minute: number): number {
+  if (!Number.isFinite(minute)) return NaN
+  const morning = Math.min(minute, MARKET_LUNCH_START_MINUTE) - MARKET_SESSION_OPEN_MINUTE
+  const afternoon = Math.max(0, minute - MARKET_AFTERNOON_OPEN_MINUTE)
+  return Math.max(0, Math.min(MARKET_COMPACT_DURATION_MINUTES, morning + afternoon))
+}
+
+/** Inverse of compactMarketMinute for pointer/crosshair hit testing; never returns a lunch minute. */
+export function tradingMinuteAtCompactOffset(offset: number): number {
+  if (!Number.isFinite(offset)) return NaN
+  const elapsed = Math.max(0, Math.min(MARKET_COMPACT_DURATION_MINUTES, offset))
+  const morningDuration = MARKET_LUNCH_START_MINUTE - MARKET_SESSION_OPEN_MINUTE
+  return elapsed < morningDuration
+    ? MARKET_SESSION_OPEN_MINUTE + elapsed
+    : MARKET_AFTERNOON_OPEN_MINUTE + elapsed - morningDuration
+}
+
+/** Separate source observations by live session so no flat/interpolated line crosses lunch. */
+export function splitTradingSessionObservations(points: readonly IntradayValuePoint[]): IntradayValuePoint[][] {
+  const morning: IntradayValuePoint[] = []
+  const afternoon: IntradayValuePoint[] = []
+  for (const point of points) {
+    if (!Number.isFinite(point.minute) || !Number.isFinite(point.value)) continue
+    const session = marketTradingSession(vietnamSessionMinute(point.minute))
+    if (session === "morning") morning.push(point)
+    else if (session === "afternoon") afternoon.push(point)
+  }
+  return [morning, afternoon].filter((part) => part.length > 0)
+}
+
 /** No forward extrapolation; compact charts can also reject stale points inside observed gaps. */
 export function observedValueAtMinute(
   points: readonly IntradayValuePoint[], minute: number, maxAgeMinutes = Infinity,

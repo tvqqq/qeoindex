@@ -586,3 +586,22 @@ test("central realtime bus preserves the provider budget and tick-driven mini ch
   assert.doesNotMatch(marketStreamSource, /postgres_changes|\.channel\(/)
   assert.match(marketStreamSource, /synthesizeDnseOhlcFromTickMessage/)
 })
+
+test("HOSE liquidity and foreign mini-charts compress lunch to one dashed boundary", () => {
+  const plot = contextStripSource.split("function ComparisonLineChart(")[1]?.split("function MarketSessionClock(")[0] ?? ""
+  assert.ok(plot.includes("compactMarketMinute(minute) / MARKET_COMPACT_DURATION_MINUTES"))
+  assert.ok(plot.includes("tradingMinuteAtCompactOffset(compactOffset)"))
+  assert.ok(plot.includes("marketTradingSession(vietnamSessionMinute(point.minute))"))
+  assert.ok(plot.includes("splitTradingSessionObservations(ordered)"))
+  assert.ok(plot.includes("const paths = observedAreaPaths(sessionPoints, x, y, zeroY)"))
+  assert.equal((plot.match(/data-market-session-divider/g) ?? []).length, 1)
+  assert.ok(plot.includes('strokeDasharray="2 3" pointerEvents="none"'))
+  assert.ok(plot.includes('{ minute: 780, label: "13:00" }'))
+  assert.equal(plot.includes('label: "12:00"'), false)
+  assert.equal(plot.includes('(minute - 540) / 360'), false)
+  assert.ok(plot.includes('aria-hidden="true"'))
+  const liquidity = contextStripSource.split('title="Thanh khoản"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
+  const foreign = contextStripSource.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
+  assert.ok(liquidity.includes("<ComparisonLineChart series={["))
+  assert.ok(foreign.includes("<ComparisonLineChart zeroReference series={["))
+})
