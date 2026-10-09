@@ -375,7 +375,12 @@ test("market cards remove bottom annotation rows but preserve source integrity",
   assert.equal(stripSource.includes('border-t border-white/[0.07] pt-1 font-ticker'), false)
   assert.equal(liquidity.includes("━ Hôm nay"), false)
   assert.equal(foreign.includes("━ Ròng hôm nay"), false)
-  assert.ok(liquidity.includes("So với ${verifiedPreviousLiquidity.day}"))
+  assert.ok(liquidity.includes("So với ${verifiedPreviousLiquidity.day}")) // Tooltip only; no visible comparison subline.
+  assert.equal(stripSource.includes('headerDetails='), false)
+  assert.ok(liquidity.includes('formatVndValue(liquidityValue)'))
+  assert.ok(liquidity.includes('formatCompactVolume(liquidityVolume)'))
+  assert.equal(foreign.includes('formatVndValue(todayForeignBuy)'), false)
+  assert.equal(foreign.includes('formatVndValue(todayForeignSell)'), false)
   assert.equal(foreign.includes("Top 200 partial</span>"), false)
   assert.ok(foreign.includes("mã Top 200; không phải tổng toàn HOSE"))
   assert.ok(foreign.includes("${foreignSnapshot.covered}/${canonicalUniverse.length}"))

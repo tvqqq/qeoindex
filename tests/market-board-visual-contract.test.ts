@@ -167,8 +167,16 @@ test("compact intraday flow charts keep accessible timestamps and fit original c
   assert.equal(plot.includes('h-[69px]'), false)
   const liquidityCard = contextStripSource.split('title="Thanh khoản HOSE"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
   const foreignCard = contextStripSource.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
-  assert.ok(liquidityCard.includes('headerDetails={<>'))
-  assert.ok(foreignCard.includes('headerDetails={<>'))
+  assert.equal(contextStripSource.includes('headerDetails='), false)
+  assert.ok(liquidityCard.includes('formatVndValue(liquidityValue)'))
+  assert.ok(liquidityCard.includes('formatCompactVolume(liquidityVolume)'))
+  assert.ok(liquidityCard.includes('>KL</span>'))
+  assert.ok(liquidityCard.includes('So với ${verifiedPreviousLiquidity.day}'))
+  assert.ok(foreignCard.includes('formatSignedVndValue(todayForeignNet)'))
+  assert.equal(foreignCard.includes('formatVndValue(todayForeignBuy)'), false)
+  assert.equal(foreignCard.includes('formatVndValue(todayForeignSell)'), false)
+  assert.ok(liquidityCard.includes('bodyClassName="px-2.5 pb-1 pt-0.5"'))
+  assert.ok(foreignCard.includes('bodyClassName="px-2.5 pb-1 pt-0.5"'))
   assert.ok(liquidityCard.includes('flex min-h-0 min-w-0 flex-1 flex-col'))
   assert.ok(foreignCard.includes('relative flex min-h-0 min-w-0 flex-1 flex-col'))
   assert.equal(liquidityCard.includes('mt-auto'), false)
@@ -180,8 +188,9 @@ test("compact intraday flow charts keep accessible timestamps and fit original c
   assert.ok(contextStripSource.includes('label: "Ròng"'))
   assert.ok(contextStripSource.includes('onPointerMove={(event) =>'))
   assert.ok(contextStripSource.includes('onPointerLeave={() => setHoveredMinute(null)}'))
-  assert.ok(contextStripSource.includes("Mua "))
-  assert.ok(contextStripSource.includes("Bán "))
+  assert.ok(contextStripSource.includes('displayedForeignBuy - displayedForeignSell'))
+  assert.equal(foreignCard.includes('>Mua '), false)
+  assert.equal(foreignCard.includes('>Bán '), false)
 })
 
 test("market context places ICT next to the title and removes all four bottom annotation strips", () => {
