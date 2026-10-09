@@ -113,6 +113,17 @@ export function candleDateKey(time: number) {
   return vietnamTimeParts(time).dateKey
 }
 
+// Lightweight Charts uses logical bar positions; omitting lunch-only rows
+// closes the visual gap while preserving all valid morning/afternoon OHLCV.
+export function isIndexChartLunchBreak(time: number): boolean {
+  const minuteOfDay = vietnamTimeParts(time).minuteOfDay
+  return minuteOfDay >= 11 * 60 + 30 && minuteOfDay < 13 * 60
+}
+
+export function hideIndexChartLunchBars(bars: CandleBar[], resolution: IndexChartResolution): CandleBar[] {
+  return resolution === "1D" ? bars : bars.filter((bar) => !isIndexChartLunchBreak(bar.time))
+}
+
 export function timeframeBucketKey(time: number, symbol: IndexChartSymbol, resolution: IndexChartResolution) {
   const { dateKey, minuteOfDay } = vietnamTimeParts(time)
   if (resolution === "1D") return dateKey
