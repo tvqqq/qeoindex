@@ -159,7 +159,20 @@ test("after 15:00 and before 09:00 metrics retain exact last trading session obs
 
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
   assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
-  assert.ok(contextStripSource.includes('className="h-[69px] w-full touch-pan-y"'))
+  assert.ok(contextStripSource.includes('className="absolute inset-0 h-full w-full touch-pan-y"'))
+  const plot = contextStripSource.split("function ComparisonLineChart(")[1]?.split("function MarketSessionClock(")[0] ?? ""
+  assert.ok(plot.includes('className="relative flex min-h-[72px] min-w-0 flex-1 flex-col"'))
+  assert.ok(plot.includes('className="relative min-h-0 flex-1"'))
+  assert.ok(plot.includes('className="pointer-events-none relative h-[14px] shrink-0'))
+  assert.equal(plot.includes('h-[69px]'), false)
+  const liquidityCard = contextStripSource.split('title="Thanh khoản HOSE"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
+  const foreignCard = contextStripSource.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
+  assert.ok(liquidityCard.includes('headerDetails={<>'))
+  assert.ok(foreignCard.includes('headerDetails={<>'))
+  assert.ok(liquidityCard.includes('flex min-h-0 min-w-0 flex-1 flex-col'))
+  assert.ok(foreignCard.includes('relative flex min-h-0 min-w-0 flex-1 flex-col'))
+  assert.equal(liquidityCard.includes('mt-auto'), false)
+  assert.equal(foreignCard.includes('mt-auto'), false)
   assert.ok(contextStripSource.includes('preserveAspectRatio="none"'))
   assert.ok(contextStripSource.includes("(localX - left) / (width - left - right)"))
   assert.ok(contextStripSource.includes('label: "Nay"'))

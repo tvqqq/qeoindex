@@ -365,15 +365,16 @@ function ComparisonLineChart({
   // Render the previous-day fill beneath today's highlighted area and trace.
   const plotted = [...valid].sort((a, b) => Number(Boolean(b.previous)) - Number(Boolean(a.previous)))
   if (!valid.length) {
-    return <div className="flex h-[69px] items-center justify-center text-[9px] text-zinc-500">Chưa có mẫu realtime trong phiên</div>
+    return <div className="flex min-h-[72px] min-w-0 flex-1 items-center justify-center text-[9px] text-zinc-500">Chưa có mẫu realtime trong phiên</div>
   }
 
   const width = 320
-  const height = 69
+  // Logical SVG units only; CSS flex layout owns the actual responsive plot height.
+  const height = 56
   const left = 7
   const right = 5
   const top = 3
-  const bottom = 16
+  const bottom = 3
   const plotHeight = height - top - bottom
   const values = valid.flatMap((line) => line.points.map((point) => point.value))
   // Include zero for truthful signed net flow; keep a comparable zero-based cumulative liquidity scale.
@@ -398,8 +399,9 @@ function ComparisonLineChart({
   ]
 
   return (
-    <div className="relative min-w-0">
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[69px] w-full touch-pan-y"
+    <div className="relative flex min-h-[72px] min-w-0 flex-1 flex-col">
+      <div className="relative min-h-0 flex-1">
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full touch-pan-y"
         role="img"
         aria-label={zeroReference ? "Giá trị mua ròng lũy kế từ các mẫu thực trong phiên, trục 0 thể hiện cân bằng mua bán" : "So sánh thanh khoản lũy kế từ các mẫu thực hôm nay và phiên giao dịch trước tại cùng giờ Việt Nam"}
         onPointerMove={(event) => {
@@ -473,10 +475,19 @@ function ComparisonLineChart({
             ))}
           </g>
         )}
-      </svg>
-      {/* SVG paths stretch to card width; CSS-pixel ticks remain crisp and undistorted. */}
+        </svg>
+        {hoveredMinute !== null && (
+          <div className="pointer-events-none absolute inset-x-1 top-0 z-20 flex flex-wrap justify-center gap-x-1 rounded bg-[#101410]/95 px-1 py-0.5 font-ticker text-[9px] tabular-nums">
+            <span className="text-zinc-300">{timeLabel}</span>
+            {chartAt.map((point, index) => (
+              <span key={index} style={{ color: point.color }}>{point.label} {point.value === undefined ? "—" : formatSignedVndValue(point.value)}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* SVG uses all available height; the CSS-pixel time axis stays crisp. */}
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[14px] font-sans text-[11px] font-medium leading-none tracking-normal tabular-nums text-zinc-400"
+        className="pointer-events-none relative h-[14px] shrink-0 font-sans text-[11px] font-medium leading-none tracking-normal tabular-nums text-zinc-400"
         aria-hidden="true"
         data-market-intraday-time-axis
       >
@@ -491,14 +502,6 @@ function ComparisonLineChart({
           >{tick.label}</span>
         ))}
       </div>
-      {hoveredMinute !== null && (
-        <div className="pointer-events-none absolute inset-x-1 top-0 z-20 flex flex-wrap justify-center gap-x-1 rounded bg-[#101410]/95 px-1 py-0.5 font-ticker text-[9px] tabular-nums">
-          <span className="text-zinc-300">{timeLabel}</span>
-          {chartAt.map((point, index) => (
-            <span key={index} style={{ color: point.color }}>{point.label} {point.value === undefined ? "—" : formatSignedVndValue(point.value)}</span>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -679,6 +682,7 @@ function ContextCard({
   titleHint,
   headerRight,
   headerInfo,
+  headerDetails,
   activitySources,
   activitySessionDay = "",
   activityCanStream = true,
@@ -691,6 +695,7 @@ function ContextCard({
   titleHint?: string
   headerRight?: ReactNode
   headerInfo?: ReactNode
+  headerDetails?: ReactNode
   activitySources?: readonly (string | null | undefined)[]
   activitySessionDay?: string
   activityCanStream?: boolean
@@ -707,14 +712,17 @@ function ContextCard({
       title={titleHint}
       data-market-context-card
     >
-      <header className="relative flex min-h-[31px] items-center gap-1.5 overflow-hidden border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
-        <span className="shrink-0 text-emerald-400">{icon}</span>
-        <span className="min-w-0 truncate">{title}</span>
-        {headerInfo ? <span className="inline-flex min-w-0 shrink items-center">{headerInfo}</span> : null}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          {activitySources ? <MarketHeaderActivity sources={activitySources} sessionDay={activitySessionDay} canStream={activityCanStream} /> : null}
-          {headerRight ? <span className="shrink-0 text-right">{headerRight}</span> : null}
-        </span>
+      <header className="relative flex min-h-[31px] flex-col justify-center overflow-hidden border-b border-white/[0.09] px-3 py-1 text-[11px] font-bold text-zinc-200">
+        <div className="flex min-h-[22px] min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-emerald-400">{icon}</span>
+          <span className="min-w-0 truncate">{title}</span>
+          {headerInfo ? <span className="inline-flex min-w-0 shrink items-center">{headerInfo}</span> : null}
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {activitySources ? <MarketHeaderActivity sources={activitySources} sessionDay={activitySessionDay} canStream={activityCanStream} /> : null}
+            {headerRight ? <span className="shrink-0 text-right">{headerRight}</span> : null}
+          </span>
+        </div>
+        {headerDetails ? <div className="flex min-w-0 items-center justify-between gap-1 pt-0.5 font-sans text-[10px] font-normal leading-tight">{headerDetails}</div> : null}
       </header>
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-1.5">
         {children}
@@ -1274,12 +1282,12 @@ export function MarketContextStrip({
           activitySources={[liquidityUpdatedAt]}
           activitySessionDay={contextSessionDate}
           titleHint={hasFinhayLiquidity ? "Finhay VNINDEX trading_value · VND verified" : "Dữ liệu VNINDEX theo timestamp provider"}
-          headerRight={<span key={finite(liquidityValue) ? liquidityValue : "missing"} className={`font-ticker text-[12px] font-extrabold tabular-nums text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatVndValue(liquidityValue)}</span>}>
-          <div className="flex justify-between gap-1 text-[10px] text-zinc-400">
-            <span>KL <strong key={finite(liquidityVolume) ? liquidityVolume : "missing"} className={`text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatCompactVolume(liquidityVolume)}</strong></span>
-            <span className="truncate">{verifiedPreviousLiquidity ? `So với ${verifiedPreviousLiquidity.day}` : "Chưa ghi nhận phiên trước"}</span>
-          </div>
-          <div className="mt-auto min-w-0"><ComparisonLineChart series={[
+          headerRight={<span key={finite(liquidityValue) ? liquidityValue : "missing"} className={`font-ticker text-[12px] font-extrabold tabular-nums text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatVndValue(liquidityValue)}</span>}
+          headerDetails={<>
+            <span className="shrink-0 text-zinc-400">KL <strong key={finite(liquidityVolume) ? liquidityVolume : "missing"} className={`text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatCompactVolume(liquidityVolume)}</strong></span>
+            <span className="min-w-0 truncate text-zinc-400">{verifiedPreviousLiquidity ? `So với ${verifiedPreviousLiquidity.day}` : "Chưa ghi nhận phiên trước"}</span>
+          </>}>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col"><ComparisonLineChart series={[
             { label: "Nay", points: todayLiquidityPoints, color: "#8fbac1" },
             { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#e87974", previous: true },
           ]} animate={isDisplaySession && isFresh(liquidityUpdatedAt)} /></div>
@@ -1294,12 +1302,12 @@ export function MarketContextStrip({
             : foreignSnapshot.covered > 0 && foreignPartialSnapshot?.asOf === foreignUpdatedAt
               ? `DNSE: chỉ ${foreignSnapshot.covered}/${canonicalUniverse.length} mã Top 200; không phải tổng toàn HOSE`
               : "DNSE: dữ liệu Top 200 partial; không phải tổng toàn HOSE"}
-          headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}>
-          <div className="flex justify-between gap-1 text-[10px] tabular-nums">
-            <span className="truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
-            <span className="truncate text-red-300">Bán <span key={finite(todayForeignSell) ? todayForeignSell : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignSell)}</span></span>
-          </div>
-          <div className="relative mt-auto min-w-0">
+          headerRight={<span key={finite(todayForeignNet) ? todayForeignNet : "missing"} className={`text-[11px] font-bold tabular-nums ${isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""} ${finite(todayForeignNet) && todayForeignNet > 0 ? "text-emerald-300" : finite(todayForeignNet) && todayForeignNet < 0 ? "text-red-300" : "text-zinc-300"}`}>{formatSignedVndValue(todayForeignNet)}</span>}
+          headerDetails={<>
+            <span className="min-w-0 truncate text-emerald-300">Mua <span key={finite(todayForeignBuy) ? todayForeignBuy : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignBuy)}</span></span>
+            <span className="min-w-0 truncate text-red-300">Bán <span key={finite(todayForeignSell) ? todayForeignSell : "missing"} className={isFresh(foreignUpdatedAt) ? "market-realtime-number" : ""}>{formatVndValue(todayForeignSell)}</span></span>
+          </>}>
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {foreignChartPartial && foreignSeriesSource === "finhay-vnindex" && (
               <span data-market-foreign-chart-scope className="pointer-events-none absolute left-1 top-0 z-10 rounded bg-[#111511]/90 px-1 font-sans text-[9px] text-zinc-400">Chart: Top 200</span>
             )}
