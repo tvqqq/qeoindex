@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   EMPTY_VNINDEX_ACCUMULATOR,
+  hideIndexChartLunchBars,
+  isIndexChartLunchBreak,
   INDEX_CHART_SYMBOLS,
   accumulateVnindexFrame,
   mergeMinuteIntoTimeframeSeries,
@@ -56,6 +58,7 @@ export function useIndexCandles(open: boolean, resolution: IndexChartResolution)
 
   const applyLiveMinuteBar = useCallback((symbol: IndexChartSymbol, bar: CandleBar, partialMinute: boolean) => {
     const activeResolution = resolutionRef.current
+    if (activeResolution !== "1D" && isIndexChartLunchBreak(bar.time)) return
     liveBucketKeysRef.current[symbol].add(timeframeBucketKey(bar.time, symbol, activeResolution))
     const current = candlesRef.current
     const next = {
@@ -94,9 +97,12 @@ export function useIndexCandles(open: boolean, resolution: IndexChartResolution)
       const current = candlesRef.current
       const next: CandleMap = { ...current }
       for (const symbol of INDEX_CHART_SYMBOLS) {
-        const restBars = (payload.candles?.[symbol] ?? [])
-          .map((value) => normalizeCandleBar(value))
-          .filter((value): value is CandleBar => value !== null)
+        const restBars = hideIndexChartLunchBars(
+          (payload.candles?.[symbol] ?? [])
+            .map((value) => normalizeCandleBar(value))
+            .filter((value): value is CandleBar => value !== null),
+          requestedResolution,
+        )
         if (!restBars.length) continue
 
         const liveKeys = liveBucketKeysRef.current[symbol]

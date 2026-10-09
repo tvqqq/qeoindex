@@ -6,6 +6,8 @@ import { parseTradingViewIndexes } from "../modules/market/providers/tradingview
 import {
   EMPTY_VNINDEX_ACCUMULATOR,
   accumulateVnindexFrame,
+  hideIndexChartLunchBars,
+  isIndexChartLunchBreak,
   mergeCandleSeries,
   mergePartialCandle,
   normalizeDnseOhlcFrame,
@@ -15,6 +17,7 @@ import {
 
 const modalSource = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
 const minuteChartSource = readFileSync(new URL("../components/index-chart/index-minute-chart.tsx", import.meta.url), "utf8")
+const candleHookSource = readFileSync(new URL("../components/index-chart/use-index-candles.ts", import.meta.url), "utf8")
 const historySource = readFileSync(new URL("../modules/market/providers/dnse/index-candles.ts", import.meta.url), "utf8")
 const routeSource = readFileSync(new URL("../app/api/market/index-candles/route.ts", import.meta.url), "utf8")
 
@@ -194,4 +197,41 @@ test("index charts retain readable initial windows while loading deeper timefram
   assert.match(historySource, /chart-api\/v2\/ohlcs/)
   assert.match(minuteChartSource, /INITIAL_VISIBLE_BARS/)
   assert.match(minuteChartSource, /setVisibleLogicalRange/)
+})
+
+test("intraday chart excludes the 11:30–12:59 ICT lunch gap but retains real OHLCV and Daily", () => {
+  const stamps = [
+    "2026-10-09T04:29:00Z", // 11:29
+    "2026-10-09T04:30:00Z", // 11:30
+    "2026-10-09T05:00:00Z", // 12:00
+    "2026-10-09T05:59:00Z", // 12:59
+    "2026-10-09T06:00:00Z", // 13:00
+  ]
+  const bars = stamps.map((stamp, index) => ({
+    time: epoch(stamp),
+    open: 1700 + index,
+    high: 1701 + index,
+    low: 1699 + index,
+    close: 1700 + index,
+    volume: index * 100 + 1,
+  }))
+
+  assert.equal(isIndexChartLunchBreak(bars[0].time), false)
+  assert.equal(isIndexChartLunchBreak(bars[1].time), true)
+  assert.equal(isIndexChartLunchBreak(bars[3].time), true)
+  assert.equal(isIndexChartLunchBreak(bars[4].time), false)
+  assert.deepEqual(hideIndexChartLunchBars(bars, "1"), [bars[0], bars[4]])
+  assert.deepEqual(hideIndexChartLunchBars(bars, "5"), [bars[0], bars[4]])
+  assert.deepEqual(hideIndexChartLunchBars(bars, "1H"), [bars[0], bars[4]])
+  assert.equal(hideIndexChartLunchBars(bars, "1D"), bars)
+})
+
+test("popup chart removes REST/live lunch rows and has independent accessible zoom controls", () => {
+  assert.match(candleHookSource, /hideIndexChartLunchBars\(/)
+  assert.match(candleHookSource, /isIndexChartLunchBreak\(bar\.time\)/)
+  assert.match(minuteChartSource, /getVisibleLogicalRange\(\)/)
+  assert.match(minuteChartSource, /onClick=\{\(\) => zoom\(0\.75\)\}/)
+  assert.match(minuteChartSource, /onClick=\{\(\) => zoom\(1\.25\)\}/)
+  assert.match(minuteChartSource, /aria-label=\{`Phóng to nến \$\{symbol\}`\}/)
+  assert.match(minuteChartSource, /aria-label=\{`Thu nhỏ nến \$\{symbol\}`\}/)
 })

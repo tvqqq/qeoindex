@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { ZoomIn, ZoomOut } from "lucide-react"
 import { loadLightweightCharts, type LightweightChartApi, type LightweightSeriesApi } from "@/modules/shared/charts/lightweight-charts-runtime"
 import {
   candleDateKey,
@@ -169,6 +170,20 @@ export function IndexMinuteChart({
     })
   }, [renderDayMarkers])
 
+  const zoom = useCallback((factor: number) => {
+    const scale = chartRef.current?.timeScale()
+    const range = scale?.getVisibleLogicalRange()
+    if (!scale || !range || dataRef.current.length < 2) return
+
+    const visible = range.to - range.from
+    if (!Number.isFinite(visible) || visible <= 0) return
+    const nextVisible = Math.min(Math.max(10, dataRef.current.length + 8), Math.max(10, visible * factor))
+    if (Math.abs(visible - nextVisible) < 0.1) return
+
+    const center = (range.from + range.to) / 2
+    scale.setVisibleLogicalRange({ from: center - nextVisible / 2, to: center + nextVisible / 2 })
+  }, [])
+
   const anchorLatest = useCallback((bars: CandleBar[]) => {
     const chart = chartRef.current
     if (!chart || !bars.length) return
@@ -334,6 +349,30 @@ export function IndexMinuteChart({
     <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
       <div ref={containerRef} className="absolute inset-0" />
       <div ref={markerLayerRef} className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" aria-hidden="true" />
+      {!runtimeError ? (
+        <div className="absolute right-[76px] top-2 z-[3] flex gap-1 rounded-lg border border-white/[0.1] bg-[#10171d]/95 p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => zoom(0.75)}
+            disabled={data.length < 2}
+            aria-label={`Phóng to nến ${symbol}`}
+            title="Phóng to nến"
+            className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-white/[0.09] hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => zoom(1.25)}
+            disabled={data.length < 2}
+            aria-label={`Thu nhỏ nến ${symbol}`}
+            title="Thu nhỏ nến"
+            className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-white/[0.09] hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
       {runtimeError ? (
         <div className="absolute inset-0 z-10 grid place-items-center bg-[#080c10]/95 p-6 text-center">
           <div className="max-w-sm rounded-xl border border-rose-500/25 bg-rose-500/5 px-4 py-3 text-xs leading-relaxed text-rose-300">
