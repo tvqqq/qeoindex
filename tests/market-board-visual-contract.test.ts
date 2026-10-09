@@ -165,11 +165,16 @@ test("compact intraday flow charts keep accessible timestamps and fit original c
   assert.ok(plot.includes('className="relative min-h-0 flex-1"'))
   assert.ok(plot.includes('className="pointer-events-none relative h-[14px] shrink-0'))
   assert.equal(plot.includes('h-[69px]'), false)
-  const liquidityCard = contextStripSource.split('title="Thanh khoản HOSE"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
+  const liquidityCard = contextStripSource.split('title="Thanh khoản"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
   const foreignCard = contextStripSource.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
   assert.equal(contextStripSource.includes('headerDetails='), false)
   assert.ok(liquidityCard.includes('formatVndValue(liquidityValue)'))
   assert.ok(liquidityCard.includes('formatCompactVolume(liquidityVolume)'))
+  assert.ok(liquidityCard.includes('data-market-liquidity-value'))
+  assert.ok(liquidityCard.includes('finite(liquidityValue) && liquidityValue >= 0'))
+  assert.ok(liquidityCard.includes('finite(liquidityVolume) && liquidityVolume > 0'))
+  assert.equal(liquidityCard.includes('>—</span>'), false)
+  assert.equal(contextStripSource.includes('title="Thanh khoản HOSE"'), false)
   assert.ok(liquidityCard.includes('>KL</span>'))
   assert.ok(liquidityCard.includes('So với ${verifiedPreviousLiquidity.day}'))
   assert.ok(foreignCard.includes('formatSignedVndValue(todayForeignNet)'))
