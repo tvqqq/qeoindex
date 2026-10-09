@@ -1,5 +1,6 @@
 import { LandingLogin } from "@/components/auth/landing-login"
 import { MarketBoardFilterShell, type FilterBoardUniverseStock } from "@/components/market-board/market-board-filter-shell"
+import { BoardResumeReload } from "@/components/market-board/board-resume-reload"
 import type { IndexQuote } from "@/components/live-market-board"
 import { MarketUniverseVersionRefresh } from "@/components/market-universe-version-refresh"
 import { OrderBookProvider } from "@/components/orderbook/orderbook-context"
@@ -153,6 +154,7 @@ export default async function BoardPage() {
   return (
     <OrderBookProvider>
       <div data-market-board className={`${styles.performanceSurface} flex h-screen flex-col overflow-hidden bg-background`}>
+        <BoardResumeReload />
         <MarketUniverseVersionRefresh universeRunId={canonical.runId} />
         <TopNav />
         <main className="min-h-0 flex-1">

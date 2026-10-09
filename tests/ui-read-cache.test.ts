@@ -95,7 +95,7 @@ test("P2 Singapore runtime and bounded DNSE UI batching remain enabled", () => {
   assert.match(board, /const MARKET_UI_COMMIT_MS = 250/)
   assert.match(board, /const MARKET_ORDERING_REFRESH_MS = 1000/)
   assert.match(board, /const updateLiveQuote = useCallback/)
-  assert.match(board, /let messageQueue: string\[\] = \[\]/)
+  assert.match(board, /const messageQueue = createBoundedFrameQueue<string>\(\)/)
   assert.match(board, /window\.requestAnimationFrame\(flushMessageQueue\)/)
   assert.match(board, /window\.cancelAnimationFrame\(messageFrame\)/)
 })

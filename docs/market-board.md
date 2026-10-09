@@ -15,6 +15,8 @@ The SSR model is cached through the QeoIndex UI cache with a short session-aware
 
 When SSR already provides usable multi-point history for at least 95% of the canonical universe, the browser does not immediately call `/api/market/intraday` again on first mount. A session rollover still increments the reload key and forces a fresh browser history bootstrap.
 
+The authenticated `/board` page also owns a one-shot browser resume guard. If the tab has been hidden or suspended for at least 10 minutes, it reloads the full document when visible and online. A 15-second watchdog detects an actual execution gap of at least 10 minutes (for example after device sleep). `visibilitychange`, `pageshow`, `focus`, and page lifecycle events share the same guard. Normal short tab switches keep their in-memory board and ordered frame delivery. The board's pending animation-frame queue is capped at 1,024 frames; on overflow it discards the incomplete queue and requests the same full document reload on visible/online return. Reload re-runs authenticated SSR bootstrap, current-session market checkpoint and WebSocket setup. The URL and persisted board preferences remain intact. Browser JavaScript uses document `location.reload()`; it cannot invoke Chrome's cache-bypass Hard Reload command.
+
 ## Filter CP
 
 `Filter CP` is injected beside the existing `Tất cả` and `Top movers` controls without duplicating the market-board realtime store. It filters only the current canonical board universe (currently capped at Top 200). The filter editor may group raw sector labels into its six selection buckets, while the priceboard renders every distinct raw `kfspSector` label as its own industry column.

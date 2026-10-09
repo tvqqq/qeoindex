@@ -513,6 +513,15 @@
       ]
     },
     {
+      "path": "tests/market-board-resume-reload.test.ts",
+      "owner": "market",
+      "invariant": "Reload the board once after long tab absence or bounded frame overflow while preserving short-switch FIFO delivery.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/market-board-stock-filter-ui.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market board stock filter ui contract.",
