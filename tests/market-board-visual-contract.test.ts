@@ -53,7 +53,7 @@ test("orderbook popup centers activity tabs under depth and keeps trade filters 
   assert.ok(depthCard >= 0 && depthCard < depthBar && depthBar < attachedNav && attachedNav < tabs)
   assert.match(orderbookSource, /data-orderbook-activity-nav aria-label="Loại giao dịch" className="-mx-2 -mb-2 mt-2 border-t/)
   assert.match(orderbookSource, /data-orderbook-activity-tabs className="grid w-full grid-cols-4 gap-1 p-1"/)
-  assert.ok(orderbookSource.includes("className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-md px-1.5 py-2 text-xs sm:text-sm font-bold"))
+  assert.ok(orderbookSource.includes("className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-md px-1.5 py-2 text-[11px] sm:text-[13px] font-bold"))
   assert.match(orderbookSource, /data-orderbook-trade-filters className="grid w-full grid-cols-3 gap-0\.5 border-b/)
   assert.equal((orderbookSource.slice(filters, tradeHeading).match(/flex min-w-0 w-full items-center justify-center/g) ?? []).length, 3)
   assert.match(orderbookSource, /data-orderbook-depth-progress className="relative h-1\.5 w-full/)
