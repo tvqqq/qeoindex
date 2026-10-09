@@ -3,6 +3,12 @@ import assert from "node:assert/strict"
 import {
   previousTradingSessionDateKey,
   vietnamSessionMinute,
+  MARKET_AFTERNOON_OPEN_MINUTE,
+  MARKET_COMPACT_DURATION_MINUTES,
+  compactMarketMinute,
+  tradingMinuteAtCompactOffset,
+  marketTradingSession,
+  splitTradingSessionObservations,
   observedValueAtMinute,
   observedAreaPaths,
   intradayForeignNet,
@@ -72,4 +78,64 @@ test("signed foreign flow shades to zero; a single dot has no fabricated filled 
   assert.deepEqual(observedAreaPaths([first], x, y, 100), { line: "M15.0,120.0", area: "" })
   assert.deepEqual(observedAreaPaths([], x, y, 100), { line: "", area: "" })
   assert.deepEqual(observedAreaPaths([{ minute: NaN, value: 10 }], x, y, 100), { line: "", area: "" })
+})
+
+test("compact trading axis removes all 90 lunch minutes and round-trips session clocks", () => {
+  assert.equal(MARKET_COMPACT_DURATION_MINUTES, 270)
+  assert.equal(compactMarketMinute(540), 0)
+  assert.equal(compactMarketMinute(630), 90)
+  assert.equal(compactMarketMinute(689), 149)
+  assert.equal(compactMarketMinute(690), 150)
+  assert.equal(compactMarketMinute(720), 150)
+  assert.equal(compactMarketMinute(779), 150)
+  assert.equal(compactMarketMinute(780), 150)
+  assert.equal(compactMarketMinute(840), 210)
+  assert.equal(compactMarketMinute(900), 270)
+  assert.equal(MARKET_AFTERNOON_OPEN_MINUTE, 780)
+  assert.equal(tradingMinuteAtCompactOffset(149), 689)
+  assert.equal(tradingMinuteAtCompactOffset(150), 780)
+  assert.equal(tradingMinuteAtCompactOffset(210), 840)
+  assert.equal(tradingMinuteAtCompactOffset(270), 900)
+  assert.equal(marketTradingSession(689), "morning")
+  assert.equal(marketTradingSession(690), null)
+  assert.equal(marketTradingSession(779), null)
+  assert.equal(marketTradingSession(780), "afternoon")
+  assert.equal(marketTradingSession(900), "afternoon")
+  for (const minute of [540, 600, 689, 780, 805, 900]) {
+    assert.equal(tradingMinuteAtCompactOffset(compactMarketMinute(minute)), minute)
+  }
+})
+
+test("realtime and prior-session chart paths do not interpolate lunch or fabricate observations", () => {
+  const sample = (day: string, hhmm: string, value: number) => ({
+    minute: Date.parse(`${day}T${hhmm}:00+07:00`), value,
+  })
+  const points = [
+    sample("2026-10-08", "09:00", 10),
+    sample("2026-10-08", "11:29", 20),
+    sample("2026-10-08", "12:30", 999), // lunch snapshot must not render
+    sample("2026-10-08", "13:00", 25),
+    sample("2026-10-08", "14:59", 40),
+  ]
+  const original = [...points]
+  const sessions = splitTradingSessionObservations(points)
+  assert.deepEqual(sessions, [
+    [points[0], points[1]],
+    [points[3], points[4]],
+  ])
+  assert.deepEqual(points, original) // render-only: never mutate samples or persistence
+  const x = (minute: number) => compactMarketMinute(minute)
+  const y = (value: number) => 100 - value
+  const paths = sessions.map((session) => observedAreaPaths(session, x, y, 100))
+  assert.deepEqual(paths.map((path) => path.line), [
+    "M0.0,90.0 L149.0,80.0",
+    "M150.0,75.0 L269.0,60.0",
+  ])
+  assert.deepEqual(paths.map((path) => path.area), [
+    "M0.0,90.0 L149.0,80.0 L149.0,100.0 L0.0,100.0 Z",
+    "M150.0,75.0 L269.0,60.0 L269.0,100.0 L150.0,100.0 Z",
+  ])
+  assert.equal(paths.some((path) => path.line.includes("999")), false)
+  assert.deepEqual(splitTradingSessionObservations([points[3]]), [[points[3]]])
+  assert.deepEqual(splitTradingSessionObservations([points[2]]), [])
 })

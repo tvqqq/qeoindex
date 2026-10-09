@@ -6,7 +6,7 @@ import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/marke
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
 import { coveredTop200ForeignTotals, currentSessionIndexMetrics, indexBreadthProgress, orderedImpactBars, selectCurrentSessionImpact } from "@/modules/market/board/market-context-contract"
-import { intradayForeignNet, observedAreaPaths, observedValueAtMinute, previousTradingSessionDateKey, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
+import { MARKET_AFTERNOON_OPEN_MINUTE, MARKET_COMPACT_DURATION_MINUTES, compactMarketMinute, intradayForeignNet, marketTradingSession, observedAreaPaths, observedValueAtMinute, previousTradingSessionDateKey, splitTradingSessionObservations, tradingMinuteAtCompactOffset, vietnamSessionMinute } from "@/modules/market/board/market-context-metrics"
 import { displayedMarketMetricDay, readRetainedMetric, validSessionMetricTimestamp, writeRetainedMetric } from "@/modules/market/board/market-context-retention"
 import type { RetainedLiquidity, RetainedForeign } from "@/modules/market/board/market-context-retention"
 import { preferObservedReplay, type MarketBoardMetricReplay } from "@/modules/market/board/metric-replay"
@@ -361,7 +361,12 @@ function ComparisonLineChart({
   animate?: boolean
 }) {
   const [hoveredMinute, setHoveredMinute] = useState<number | null>(null)
-  const valid = series.filter((line) => line.points.length)
+  const valid = series
+    .map((line) => ({
+      ...line,
+      points: line.points.filter((point) => marketTradingSession(vietnamSessionMinute(point.minute)) !== null),
+    }))
+    .filter((line) => line.points.length)
   // Render the previous-day fill beneath today's highlighted area and trace.
   const plotted = [...valid].sort((a, b) => Number(Boolean(b.previous)) - Number(Boolean(a.previous)))
   if (!valid.length) {
@@ -382,9 +387,9 @@ function ComparisonLineChart({
   const maxValue = Math.max(0, ...values)
   const padding = Math.max((maxValue - minValue) * 0.08, Math.max(Math.abs(maxValue), Math.abs(minValue)) * 0.002, 1)
   const y = (value: number) => top + (maxValue + padding - value) / (maxValue - minValue + 2 * padding) * plotHeight
-  const x = (minute: number) => left + Math.max(0, Math.min(1, (minute - 540) / 360)) * (width - left - right)
+  const x = (minute: number) => left + compactMarketMinute(minute) / MARKET_COMPACT_DURATION_MINUTES * (width - left - right)
   const zeroY = y(0)
-  const chartAt = hoveredMinute === null ? [] : series.map((line) => ({
+  const chartAt = hoveredMinute === null ? [] : valid.map((line) => ({
     label: line.label,
     color: line.color,
     value: observedValueAtMinute(line.points, hoveredMinute, 3),
@@ -393,8 +398,8 @@ function ComparisonLineChart({
   const ticks = [
     { minute: 540, label: "09:00" },
     { minute: 630, label: "10:30" },
-    { minute: 720, label: "12:00" },
-    { minute: 810, label: "13:30" },
+    { minute: 780, label: "13:00" },
+    { minute: 840, label: "14:00" },
     { minute: 900, label: "15:00" },
   ]
 
@@ -408,7 +413,8 @@ function ComparisonLineChart({
           const bounds = event.currentTarget.getBoundingClientRect()
           if (!bounds.width) return
           const localX = (event.clientX - bounds.left) * width / bounds.width
-          const minute = Math.round(540 + Math.max(0, Math.min(1, (localX - left) / (width - left - right))) * 360)
+          const compactOffset = Math.max(0, Math.min(1, (localX - left) / (width - left - right))) * MARKET_COMPACT_DURATION_MINUTES
+          const minute = Math.round(tradingMinuteAtCompactOffset(compactOffset))
           setHoveredMinute(minute)
         }}
         onPointerLeave={() => setHoveredMinute(null)}
@@ -421,26 +427,34 @@ function ComparisonLineChart({
           <line x1={left} x2={width - right} y1={zeroY} y2={zeroY}
             stroke="#a1a1aa" strokeOpacity="0.8" strokeDasharray="3 3" />
         )}
+        <line data-market-session-divider x1={x(MARKET_AFTERNOON_OPEN_MINUTE)} x2={x(MARKET_AFTERNOON_OPEN_MINUTE)}
+          y1={top} y2={top + plotHeight} stroke="#a1a1aa" strokeOpacity="0.5"
+          strokeWidth="0.8" strokeDasharray="2 3" pointerEvents="none" aria-hidden="true" />
         {plotted.map((line) => {
           const ordered = [...line.points].sort((a, b) => a.minute - b.minute)
-          // The path connects observed samples only. Missing minutes do not create points,
-          // and the shaded area ends at the exact last observed source timestamp.
-          const paths = observedAreaPaths(ordered, x, y, zeroY)
+          // Don't draw an artificial flat/jump from the morning close into the afternoon.
+          // Each path/area ends at its own last real observation.
+          const sessions = splitTradingSessionObservations(ordered)
           const latest = ordered.at(-1)
           const prior = ordered.at(-2)
           const lastSegment = prior && latest && latest.minute - prior.minute <= 180_000
             ? `M${x(vietnamSessionMinute(prior.minute)).toFixed(1)},${y(prior.value).toFixed(1)} L${x(vietnamSessionMinute(latest.minute)).toFixed(1)},${y(latest.value).toFixed(1)}`
             : ""
           return <g key={line.label}>
-            {paths.area && (
-              <path d={paths.area} fill={line.color} fillOpacity={line.previous ? 0.13 : 0.21}
-                stroke="none" pointerEvents="none" aria-hidden="true" />
-            )}
-            {ordered.length > 1 && (
-              <path d={paths.line} fill="none" stroke={line.color}
-                strokeWidth={line.previous ? 2 : 2.6} strokeOpacity={line.previous ? 0.92 : 1}
-                strokeLinecap="round" strokeLinejoin="round" />
-            )}
+            {sessions.map((sessionPoints, sessionIndex) => {
+              const paths = observedAreaPaths(sessionPoints, x, y, zeroY)
+              return <g key={sessionIndex}>
+                {paths.area && (
+                  <path d={paths.area} fill={line.color} fillOpacity={line.previous ? 0.13 : 0.21}
+                    stroke="none" pointerEvents="none" aria-hidden="true" />
+                )}
+                {sessionPoints.length > 1 && (
+                  <path d={paths.line} fill="none" stroke={line.color}
+                    strokeWidth={line.previous ? 2 : 2.6} strokeOpacity={line.previous ? 0.92 : 1}
+                    strokeLinecap="round" strokeLinejoin="round" />
+                )}
+              </g>
+            })}
             {animate && !line.previous && prior && latest && lastSegment && (
               <path
                 key={`${latest.minute}:${latest.value}`}
