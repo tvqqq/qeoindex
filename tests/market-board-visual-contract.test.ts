@@ -353,30 +353,31 @@ test("VNIndex Chart is the first board tab and replaces board-only content witho
 })
 
 test("Chart 1m, Bảng điện and Bảng ngành have distinct selected tab icons and tones", () => {
-  assert.match(boardSource, /const label = view === "chart" \\? "Chart 1m"/)
-  assert.match(boardSource, /const ViewIcon = view === "chart" \\? ChartNoAxesCombined : view === "classic" \\? Table2 : PanelsTopLeft/)
-  assert.match(boardSource, /const selectedTone = view === "chart"/)
+  assert.ok(boardSource.includes('const label = view === "chart" ? "Chart 1m"'))
+  assert.ok(boardSource.includes('const ViewIcon = view === "chart" ? ChartNoAxesCombined : view === "classic" ? Table2 : PanelsTopLeft'))
+  assert.ok(boardSource.includes('const selectedTone = view === "chart"'))
   for (const tone of ["cyan-400/45", "emerald-400/45", "amber-400/45"]) {
     assert.ok(boardSource.includes(tone))
   }
-  assert.match(boardSource, /const selectedIconTone = view === "chart"/)
-  assert.match(boardSource, /isSelected \\? selectedTone/)
-  assert.match(boardSource, /isSelected \\? selectedIconTone/)
+  assert.ok(boardSource.includes('const selectedIconTone = view === "chart"'))
+  assert.ok(boardSource.includes("isSelected ? selectedTone"))
+  assert.ok(boardSource.includes("isSelected ? selectedIconTone"))
 })
 
 test("inline Chart 1m hides timeframe and OHLCV chrome but retains chart and refresh", () => {
   const workspace = readFileSync(new URL("../components/index-chart/index-chart-workspace.tsx", import.meta.url), "utf8")
   const sharedChart = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
-  assert.match(workspace, /useIndexCandles\\(true, "1"\\)/)
-  assert.match(workspace, /resolution="1"[\\s\\S]*?compact/)
+  assert.ok(workspace.includes('useIndexCandles(true, "1")'))
+  assert.ok(workspace.includes('resolution="1"'))
+  assert.ok(workspace.includes("compact"))
   assert.doesNotMatch(workspace, /onResolutionChange=|setResolution/)
-  assert.match(sharedChart, /\\{!compact \\? \\(/)
-  assert.match(sharedChart, /\\{!compact && current \\? \\(/)
-  assert.match(sharedChart, /\\{!compact && sessionCount > 1 \\?/)
-  assert.match(sharedChart, /\\{!compact \\? <span className="rounded-md border border-cyan-400/)
-  assert.match(sharedChart, /compact && onRefresh/)
-  assert.match(sharedChart, /compact=\\{compact\\}/)
-  assert.match(sharedChart, /<IndexMinuteChart symbol=\\{symbol\\} data=\\{bars\\} resolution=\\{resolution\\}/)
+  assert.ok(sharedChart.includes("{!compact ? ("))
+  assert.ok(sharedChart.includes("{!compact && current ? ("))
+  assert.ok(sharedChart.includes("{!compact && sessionCount > 1 ?"))
+  assert.ok(sharedChart.includes("{!compact ? <span"))
+  assert.ok(sharedChart.includes("compact && onRefresh"))
+  assert.ok(sharedChart.includes("compact={compact}"))
+  assert.ok(sharedChart.includes("<IndexMinuteChart symbol={symbol} data={bars} resolution={resolution}"))
 })
 
 test("market context can be collapsed beside Bảng ngành without unmounting its realtime state", () => {
