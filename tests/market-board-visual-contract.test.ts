@@ -226,7 +226,7 @@ test("combined index breadth stays bottom-aligned with direction icon before the
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes('flex min-h-0 min-w-0 flex-1 flex-col'))
   assert.ok(summary.includes('mt-auto min-w-0'))
-  assert.ok(summary.includes('text-[12px] font-extrabold leading-none'))
+  assert.ok(summary.includes('font-extrabold leading-none tabular-nums'))
   assert.ok(summary.includes('INDEX_FORMATTER.format(value)'))
   assert.ok(summary.includes("trendIcon"))
   assert.ok(summary.includes('{finite(value) ? ('))
