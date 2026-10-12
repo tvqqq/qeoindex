@@ -151,7 +151,7 @@ test("orderbook popup places vertical activity navigation beside responsive cont
 test("orderbook large trades use a bounded two-second lightweight notice without row tags or Lottie", () => {
   assert.match(orderbookSource, /import \{ useLargeTradeNotice, LargeTradeNotice \} from "@\/components\/orderbook\/large-trade-notice"/)
   assert.match(orderbookSource, /<LargeTradeNotice notice=\{largeTradeNotice\.notice\} \/>/)
-  assert.match(orderbookSource, /const isRecentLarge = largeTradeNotice\.notice\?\.tradeId === trade\.id/)
+  assert.match(orderbookSource, /isRecentLarge = largeTradeNotice\.notice\?\.tradeId === trade\.id/)
   assert.match(orderbookSource, /\$\{isRecentLarge \|\| isAto \|\| isAtc \?/)
   assert.doesNotMatch(orderbookSource, /10K\+|30K\+|50K\+|🐋|tagBadgeClass|isWhaleGlow|ConfettiOverlay|useWhaleConfetti/)
   assert.match(orderbookSource, /if \(!newest\) newest = t/)
