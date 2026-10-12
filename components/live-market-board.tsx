@@ -28,7 +28,7 @@ import {
   VolumeX,
 } from "lucide-react"
 import { MarketChangePill } from "@/components/market-change-pill"
-import { IndexChartModal } from "@/components/index-chart/index-chart-modal"
+import { IndexChartWorkspace } from "@/components/index-chart/index-chart-workspace"
 import { marketToneFromChange } from "@/modules/market/tone"
 import { BOARD_SECTOR_GROUPS } from "@/modules/market/sectors"
 import { useOrderBooks } from "@/components/orderbook/orderbook-context"
@@ -82,7 +82,8 @@ export type IndexQuote = {
   updatedAt: string
 }
 type BoardMode = "sector" | "movers"
-type BoardView = "classic" | "industry"
+type BoardView = "chart" | "classic" | "industry"
+const BOARD_VIEW_TABS: readonly BoardView[] = ["chart", "classic", "industry"]
 
 const MARKET_UI_COMMIT_MS = 250
 const MARKET_ORDERING_REFRESH_MS = 1000
@@ -472,7 +473,6 @@ export function LiveMarketBoard({
 }) {
   const [sessionOpen, setSessionOpen] = useState<boolean>(() => isSessionOpen ?? isTradingSessionOpen())
   const [isLunch, setIsLunch] = useState<boolean>(() => isLunchBreak())
-  const [indexChartOpen, setIndexChartOpen] = useState(false)
   const [realtimeImpact, setRealtimeImpact] = useState<MarketImpactSnapshot | null>(null)
   const { open: openOrderBook } = useOrderBooks()
   const [quotes, setQuotes] = useState<Record<string, LiveStockQuote | IndexQuote>>(() => {
@@ -520,7 +520,7 @@ export function LiveMarketBoard({
   useEffect(() => {
     try {
       const stored = localStorage.getItem(boardViewStorageKey)
-      setBoardView(stored === "industry" ? "industry" : "classic")
+      setBoardView(stored === "chart" || stored === "industry" ? stored : "classic")
     } catch {
       setBoardView("classic")
     } finally {
@@ -1505,7 +1505,7 @@ export function LiveMarketBoard({
     void restartDnseMarketStream()
     setReconnectKey((key) => key + 1)
   }, [])
-  const openIndexChart = useCallback(() => setIndexChartOpen(true), [])
+  const openIndexChart = useCallback(() => setBoardView("chart"), [])
 
   const indexQuotes = useMemo<Record<string, IndexQuote | undefined>>(() => ({
     VNINDEX: quotes.VNINDEX as IndexQuote | undefined,
@@ -1525,16 +1525,15 @@ export function LiveMarketBoard({
           onOpenIndexChart={openIndexChart}
         />
       </div>
-      <IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#090d12] px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <div role="tablist" aria-label="Kiểu bảng giá" className="flex items-center rounded-xl border border-white/[0.10] bg-[#0b0f14] p-0.5">
-            {(["classic", "industry"] as const).map((view) => {
+          <div role="tablist" aria-label="Chế độ xem thị trường" className="flex items-center rounded-xl border border-white/[0.10] bg-[#0b0f14] p-0.5">
+            {BOARD_VIEW_TABS.map((view) => {
               const isSelected = boardView === view
-              const label = view === "classic" ? "Bảng điện" : "Bảng ngành"
+              const label = view === "chart" ? "VNIndex Chart" : view === "classic" ? "Bảng điện" : "Bảng ngành"
               const targetId = `market-board-view-${view}-tab`
-              const ViewIcon = view === "classic" ? Table2 : PanelsTopLeft
+              const ViewIcon = view === "chart" ? ChartNoAxesCombined : view === "classic" ? Table2 : PanelsTopLeft
               return (
                 <button
                   key={view}
@@ -1548,10 +1547,11 @@ export function LiveMarketBoard({
                   onClick={() => setBoardView(view)}
                   onKeyDown={(event) => {
                     let nextView: BoardView | null = null
-                    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = view === "classic" ? "industry" : "classic"
-                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = view === "industry" ? "classic" : "industry"
-                    else if (event.key === "Home") nextView = "classic"
-                    else if (event.key === "End") nextView = "industry"
+                    const index = BOARD_VIEW_TABS.indexOf(view)
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextView = BOARD_VIEW_TABS[(index + 1) % BOARD_VIEW_TABS.length]
+                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextView = BOARD_VIEW_TABS[(index + BOARD_VIEW_TABS.length - 1) % BOARD_VIEW_TABS.length]
+                    else if (event.key === "Home") nextView = BOARD_VIEW_TABS[0]
+                    else if (event.key === "End") nextView = BOARD_VIEW_TABS[BOARD_VIEW_TABS.length - 1]
                     if (!nextView) return
                     event.preventDefault()
                     setBoardView(nextView)
@@ -1607,7 +1607,7 @@ export function LiveMarketBoard({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        {boardView !== "chart" ? <div className="flex flex-wrap items-center justify-end gap-2">
           {boardView === "classic" ? (
             <button
               type="button"
@@ -1649,9 +1649,9 @@ export function LiveMarketBoard({
               <span>Top movers</span>
             </button>
           </div>
-        </div>
+        </div> : null}
       </div>
-      {streamState !== "LIVE" && streamError ? (
+      {boardView !== "chart" && streamState !== "LIVE" && streamError ? (
         <div className="flex items-center gap-2 border-b border-ref/30 bg-[#0b0f14] px-3.5 py-1.5 text-xs text-ref">
           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-ref" />
           <span>{streamError}</span>
@@ -1661,11 +1661,15 @@ export function LiveMarketBoard({
       <div
         id="market-board-view-panel"
         role="tabpanel"
-        aria-labelledby={boardView === "classic" ? "market-board-view-classic-tab" : "market-board-view-industry-tab"}
+        aria-labelledby={`market-board-view-${boardView}-tab`}
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-auto bg-[#06080a] px-2 py-2"
+        className={`min-h-0 flex-1 overflow-auto bg-[#06080a] ${boardView === "chart" ? "p-0" : "px-2 py-2"}`}
         data-market-board-screenshot-scroll
       >
+        {boardView === "chart" ? (
+          <IndexChartWorkspace />
+        ) : (
+          <>
         {boardView === "classic" && showWatchlist && watchedStocks.length > 0 ? (
           <WatchlistSection
             watchedStocks={watchedStocks}
@@ -1764,6 +1768,8 @@ export function LiveMarketBoard({
             ))}
           </div>
         )}
+          </>
+        )}
       </div>
 
       {showSessionOpenAlert ? (
@@ -1777,7 +1783,7 @@ export function LiveMarketBoard({
         </div>
       ) : null}
 
-      <FloatingMarketStatus
+      {boardView !== "chart" ? <FloatingMarketStatus
         streamState={streamState}
         streamError={streamError}
         liveCount={liveCount}
@@ -1795,7 +1801,7 @@ export function LiveMarketBoard({
         onCaptureScreenshot={handleCaptureScreenshot}
         isCapturing={isCapturing}
         copiedToast={copiedToast}
-      />
+      /> : null}
 
       {showFlash && (
         <div
