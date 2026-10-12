@@ -176,12 +176,16 @@ export function IndexChartContent({
   candles,
   isLoading,
   errors,
+  onRefresh,
+  isRefreshing = false,
 }: {
   resolution: IndexChartResolution
   onResolutionChange: (resolution: IndexChartResolution) => void
   candles: Record<IndexChartSymbol, CandleBar[]>
   isLoading: boolean
   errors: Partial<Record<IndexChartSymbol, string>>
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }) {
   return (
     <>
@@ -208,6 +212,18 @@ export function IndexChartContent({
         <span className="ml-auto hidden text-[9px] text-slate-600 md:inline">
           Intraday: giờ trên trục X · ngày đánh dấu tại đầu phiên
         </span>
+        {onRefresh ? (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="Làm mới dữ liệu biểu đồ"
+            title="Làm mới history snapshot"
+            className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.09] bg-white/[0.035] text-slate-400 transition hover:border-cyan-400/25 hover:bg-cyan-400/8 hover:text-cyan-300 disabled:opacity-50 md:ml-0"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+          </button>
+        ) : null}
       </div>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
