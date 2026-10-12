@@ -323,7 +323,7 @@ test("market context places ICT next to the title and removes all four bottom an
 
 test("market context fits one desktop row and preserves the board-view controls", () => {
   assert.match(contextStripSource, /data-market-context-single-row/)
-  assert.match(contextStripSource, /sm:grid-cols-2 md:grid-cols-\[/)
+  assert.match(contextStripSource, /sm:grid-cols-2.*md:grid-cols-3 xl:grid-cols-\[/)
   assert.match(contextStripSource, /min-h-\[31px\]/)
   assert.match(contextStripSource, /minmax\(0,2\.15fr\)/)
   assert.match(contextStripSource, /title="VN-Index \/ VN30"/)
