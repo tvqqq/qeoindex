@@ -1817,7 +1817,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
       didInitializeLargeBaselineRef.current = true
       return
     }
-    let newest: StreamTrade | null = null
+    let newest: (typeof realtimeLargeTrades)[number] | null = null
     for (const t of realtimeLargeTrades) {
       if (t.volume < LARGE_TRADE_MIN_VOLUME || isAtoTradeTime(t.time) || isAtcTradeTime(t.time) || seenLargeIdsRef.current.has(t.id)) continue
       seenLargeIdsRef.current.add(t.id)
