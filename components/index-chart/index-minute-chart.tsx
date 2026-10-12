@@ -170,7 +170,7 @@ export function IndexMinuteChart({
     })
   }, [renderDayMarkers])
 
-  const zoom = useCallback((factor: number) => {
+  const zoom = useCallback((factor: number, anchorRatio = 0.5) => {
     const scale = chartRef.current?.timeScale()
     const range = scale?.getVisibleLogicalRange()
     if (!scale || !range || dataRef.current.length < 2) return
@@ -180,8 +180,12 @@ export function IndexMinuteChart({
     const nextVisible = Math.min(Math.max(10, dataRef.current.length + 8), Math.max(10, visible * factor))
     if (Math.abs(visible - nextVisible) < 0.1) return
 
-    const center = (range.from + range.to) / 2
-    scale.setVisibleLogicalRange({ from: center - nextVisible / 2, to: center + nextVisible / 2 })
+    const ratio = Math.max(0, Math.min(1, anchorRatio))
+    const anchor = range.from + visible * ratio
+    scale.setVisibleLogicalRange({
+      from: anchor - nextVisible * ratio,
+      to: anchor + nextVisible * (1 - ratio),
+    })
   }, [])
 
   const anchorLatest = useCallback((bars: CandleBar[]) => {
@@ -245,6 +249,7 @@ export function IndexMinuteChart({
     let disposed = false
     let resizeObserver: ResizeObserver | null = null
     let rangeHandler: ((range: { from: number; to: number } | null) => void) | null = null
+    let wheelHandler: ((event: WheelEvent) => void) | null = null
 
     void (async () => {
       try {
@@ -290,8 +295,8 @@ export function IndexMinuteChart({
             vertLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
             horzLine: { color: "rgba(148,163,184,0.35)", labelBackgroundColor: "#334155" },
           },
-          handleScroll: true,
-          handleScale: true,
+          handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+          handleScale: { mouseWheel: false, axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: true, pinch: true },
         })
         const candles = chart.addSeries(lwc.CandlestickSeries, {
           upColor: UP_COLOR,
@@ -314,6 +319,17 @@ export function IndexMinuteChart({
         volumeSeriesRef.current = volume
         setRuntimeError("")
 
+        // Handle vertical wheel and trackpad gestures explicitly, independent of scrollable parents.
+        wheelHandler = (event) => {
+          if (!chartRef.current || dataRef.current.length < 2 || !Number.isFinite(event.deltaY) || event.deltaY === 0) return
+          event.preventDefault()
+          event.stopPropagation()
+          const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1)
+          const factor = Math.exp(Math.sign(pixels) * Math.min(Math.abs(pixels), 120) * 0.0018)
+          const rect = container.getBoundingClientRect()
+          zoom(factor, rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5)
+        }
+        container.addEventListener("wheel", wheelHandler, { capture: true, passive: false })
         rangeHandler = () => scheduleDayMarkers()
         chart.timeScale().subscribeVisibleLogicalRangeChange(rangeHandler)
         if (typeof ResizeObserver !== "undefined") {
@@ -333,6 +349,7 @@ export function IndexMinuteChart({
         markerRafRef.current = null
       }
       resizeObserver?.disconnect()
+      if (wheelHandler) container.removeEventListener("wheel", wheelHandler, true)
       if (rangeHandler && chartRef.current) {
         chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler)
       }
@@ -343,7 +360,7 @@ export function IndexMinuteChart({
       renderedRef.current = null
       markerLayerRef.current?.replaceChildren()
     }
-  }, [symbol, resolution, scheduleDayMarkers, syncData])
+  }, [symbol, resolution, scheduleDayMarkers, syncData, zoom])
 
   return (
     <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
