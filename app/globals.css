@@ -483,17 +483,3 @@ body::after {
     transition: none !important;
   }
 }
-
-/* Compositor-only Orderbook dragging: disable paint-heavy effects only while moving. */
-[data-orderbook-dragging="true"] {
-  background-color: #0b0f14 !important;
-  box-shadow: none !important;
-}
-[data-orderbook-dragging="true"],
-[data-orderbook-dragging="true"] * {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  filter: none !important;
-  animation-play-state: paused !important;
-  transition: none !important;
-}

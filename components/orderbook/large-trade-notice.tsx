@@ -53,7 +53,7 @@ export function LargeTradeNotice({ notice }: { notice: LargeTradeAlert | null })
       data-orderbook-large-trade-notice
       role="status"
       aria-live="polite"
-      className={`pointer-events-none absolute right-3 top-16 z-40 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] font-semibold ${tone}`}
+      className={`pointer-events-none inline-flex max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[10px] font-semibold ${tone}`}
     >
       <span>{notice.isWhale ? "Lệnh cá mập" : "Lệnh lớn"}</span>
       <span className="font-mono font-bold tabular-nums">{notice.volume.toLocaleString("vi-VN")} cp</span>
