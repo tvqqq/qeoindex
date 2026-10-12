@@ -187,7 +187,11 @@ test("intraday x-axis uses time-only ticks with day labels and separators throug
   assert.match(minuteChartSource, /dayStartTimes/)
   assert.match(minuteChartSource, /timeToCoordinate/)
   assert.match(minuteChartSource, /isSessionSeparatorResolution\(resolution\)/)
-  assert.match(minuteChartSource, /bottom-\[3px\]/)
+  assert.match(minuteChartSource, /bottom-\\[30px\\]/)
+  assert.match(minuteChartSource, /label\\.textContent = FULL_DATE_FORMATTER\\.format/)
+  assert.match(minuteChartSource, /line\\.className = "absolute top-0 bottom-\\[26px\\] w-px bg-cyan-400\\/35"/)
+  assert.match(minuteChartSource, /if \\(index > 0\\)/)
+  assert.match(minuteChartSource, /subscribeVisibleLogicalRangeChange\\(rangeHandler\\)/)
   assert.match(minuteChartSource, /resolution === "1D" \? DATE_ONLY_FORMATTER/)
 })
 
@@ -240,12 +244,11 @@ test("index charts use cursor-centered wheel zoom while preventing parent scroll
   assert.match(minuteChartSource, /to: anchor \+ nextVisible \* \(1 - ratio\)/)
 })
 
-test("popup chart removes REST/live lunch rows and has independent accessible zoom controls", () => {
+test("index charts keep pan and wheel zoom without floating zoom buttons", () => {
   assert.match(candleHookSource, /hideIndexChartLunchBars\(/)
   assert.match(candleHookSource, /isIndexChartLunchBreak\(bar\.time\)/)
   assert.match(minuteChartSource, /getVisibleLogicalRange\(\)/)
-  assert.match(minuteChartSource, /onClick=\{\(\) => zoom\(0\.75\)\}/)
-  assert.match(minuteChartSource, /onClick=\{\(\) => zoom\(1\.25\)\}/)
-  assert.match(minuteChartSource, /aria-label=\{`Phóng to nến \$\{symbol\}`\}/)
-  assert.match(minuteChartSource, /aria-label=\{`Thu nhỏ nến \$\{symbol\}`\}/)
+  assert.doesNotMatch(minuteChartSource, /<ZoomIn|<ZoomOut|Phóng to nến|Thu nhỏ nến/)
+  assert.match(minuteChartSource, /pressedMouseMove: true/)
+  assert.match(minuteChartSource, /pinch: true/)
 })
