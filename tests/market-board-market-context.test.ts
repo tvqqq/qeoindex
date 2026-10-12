@@ -146,10 +146,12 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.match(boardSource, /<MarketContextStrip/)
   assert.match(boardSource, /useState<BoardView>\("classic"\)/)
   assert.match(stripSource, /data-market-context-single-row/)
-  assert.match(stripSource, /grid-cols-1 items-stretch.*sm:grid-cols-2.*md:grid-cols-3 xl:grid-cols-/)
+  assert.ok(stripSource.includes('grid-cols-1 items-stretch'))
+  assert.ok(stripSource.includes('md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)]'))
   assert.match(stripSource, /title="VN-Index \/ VN30"/)
-  assert.match(stripSource, /<IndexedSummary label="VN-Index"/)
-  assert.match(stripSource, /<IndexedSummary label="VN30"/)
+  assert.ok(stripSource.includes('const vnindexSummary = ('))
+  assert.ok(stripSource.includes('label="VN-Index"'))
+  assert.ok(stripSource.includes('label={moveIndexSummary ? "VN30 (cơ sở)" : "VN30"}'))
   assert.match(stripSource, /title="Thanh khoản"/)
   assert.match(stripSource, /title="Mua bán nước ngoài"/)
   assert.match(stripSource, /title="Tác động VNINDEX"/)
@@ -284,7 +286,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
 
 test("index levels use direction icons; real count revisions animate and values preserve signs", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
-  assert.ok(summary.includes('className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5"'))
+  assert.ok(summary.includes('chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"'))
   assert.ok(summary.includes('className="mt-auto min-w-0 pt-1"'))
   assert.match(stripSource, /ArrowUpRight|ArrowDownRight|<ArrowRight/)
   assert.ok(summary.includes("const trend = finite(change) ? change : finite(percent) ? percent : undefined"))
@@ -395,12 +397,14 @@ test("market cards remove bottom annotation rows but preserve source integrity",
   assert.ok(stripSource.includes('animate={isDisplaySession && (useServerForeign ? false : isFresh(foreignUpdatedAt))}'))
 })
 
-test("combined index card routes its chart action to the VNIndex Chart board tab", () => {
-  assert.ok(stripSource.includes('headerRight={'))
-  assert.ok(stripSource.includes('onClick={onOpenIndexChart}'))
-  assert.ok(stripSource.includes('aria-label="Mở biểu đồ realtime VN-Index và VN30F1M"'))
-  assert.ok(stripSource.includes('<ChartNoAxesCombined'))
-  assert.ok(stripSource.includes('onOpen={onOpenIndexChart}'))
+test("combined index card has no redundant Chart header button, while label still selects Chart 1m", () => {
+  const card = stripSource.split("const indexSummaryCard = (")[1]?.split("  return (")[0] ?? ""
+  assert.ok(card.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(stripSource.includes("onOpen={onOpenIndexChart}"))
+  assert.equal(card.includes("headerRight="), false)
+  assert.equal(card.includes("onClick={onOpenIndexChart}"), false)
+  assert.equal(stripSource.includes('aria-label="Mở biểu đồ realtime VN-Index và VN30F1M"'), false)
+  assert.equal(stripSource.includes("<ChartNoAxesCombined"), false)
   assert.ok(boardSource.includes('onOpenIndexChart={openIndexChart}'))
   assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setBoardView("chart"), [])'))
   assert.ok(boardSource.includes("<IndexChartWorkspace showContextSummary={showMarketContext} />"))
@@ -423,7 +427,7 @@ test("VN-Index / VN30 shows a client-only ICT market status without new data req
   assert.ok(stripSource.includes("headerInfo={<MarketSessionClock />}"))
   assert.ok(stripSource.includes('title={`Thị trường: ${marketStatus}'))
   assert.ok(stripSource.includes("inline-flex shrink-0 items-center whitespace-nowrap"))
-  assert.ok(stripSource.includes("onClick={onOpenIndexChart}"))
+  assert.ok(stripSource.includes("onOpen={onOpenIndexChart}"))
   const clockComponent = stripSource.split("function MarketSessionClock()")[1]?.split("function IndexedSummary")[0] ?? ""
   assert.equal(clockComponent.includes("fetch("), false)
 })

@@ -346,7 +346,7 @@ test("market context places ICT next to the title and removes all four bottom an
 
 test("market context fits one desktop row and preserves the board-view controls", () => {
   assert.match(contextStripSource, /data-market-context-single-row/)
-  assert.match(contextStripSource, /sm:grid-cols-2.*md:grid-cols-3 xl:grid-cols-\[/)
+  assert.match(contextStripSource, /sm:grid-cols-2.*md:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)_minmax\(0,1\.8fr\)\] xl:grid-cols-\[/)
   assert.match(contextStripSource, /min-h-\[31px\]/)
   assert.match(contextStripSource, /minmax\(0,2\.15fr\)/)
   assert.match(contextStripSource, /title="VN-Index \/ VN30"/)
@@ -394,22 +394,46 @@ test("VNIndex Chart is the first board tab and replaces board-only content witho
   assert.match(modalSource, /<ChartCard symbol="VN30F1M"/)
 })
 
-test("compact Chart 1m moves the original VNINDEX/VN30 context card into the chart body", () => {
+test("compact Chart 1m places each source-backed market summary in its chart header", () => {
   const workspace = readFileSync(new URL("../components/index-chart/index-chart-workspace.tsx", import.meta.url), "utf8")
   const sharedChart = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
+  const card = contextStripSource.split("const indexSummaryCard = (")[1]?.split("  return (")[0] ?? ""
   assert.ok(boardSource.includes('chartActive={boardView === "chart"}'))
   assert.ok(boardSource.includes("showContext={showMarketContext}"))
   assert.ok(boardSource.includes("<IndexChartWorkspace showContextSummary={showMarketContext} />"))
   assert.ok(contextStripSource.includes('window.matchMedia("(max-width: 1279px)")'))
   assert.ok(contextStripSource.includes("chartActive && showContext && compactScreen && chartSummaryTarget !== null"))
-  assert.ok(contextStripSource.includes("createPortal(indexSummaryCard, chartSummaryTarget)"))
-  assert.ok(contextStripSource.includes("md:grid-cols-3 xl:grid-cols-["))
+  assert.ok(contextStripSource.includes('document.getElementById("market-board-chart-vnindex-header")'))
+  assert.ok(contextStripSource.includes('document.getElementById("market-board-chart-vn30-header")'))
+  assert.ok(contextStripSource.includes("createPortal(vn30Summary, chartSummaryTarget.vn30)"))
+  assert.ok(contextStripSource.includes("chartSummaryTarget.vnindex"))
+  assert.ok(contextStripSource.includes('label={moveIndexSummary ? "VN30 (cơ sở)" : "VN30"}'))
+  assert.ok(contextStripSource.includes("chartHeader={moveIndexSummary}"))
+  assert.ok(contextStripSource.includes("const vnindexSummary = ("))
+  assert.ok(contextStripSource.includes("const vn30Summary = ("))
+  assert.ok(card.includes("{vnindexSummary}") && card.includes("{vn30Summary}"))
+  assert.ok(card.includes("headerInfo={<MarketSessionClock />}"))
   assert.ok(workspace.includes("showContextSummary={showContextSummary}"))
-  assert.ok(sharedChart.includes('id="market-board-chart-index-summary"'))
-  assert.ok(sharedChart.includes('className="col-span-full empty:hidden xl:hidden"'))
+  assert.ok(sharedChart.includes('market-board-chart-vnindex-header'))
+  assert.ok(sharedChart.includes('market-board-chart-vn30-header'))
   assert.ok(sharedChart.includes('compact && showContextSummary ? "hidden xl:flex" : "flex"'))
-  assert.ok(sharedChart.includes('compact && showContextSummary && onRefresh'))
+  assert.ok(sharedChart.includes('data-market-chart-spot-summary'))
   assert.ok(sharedChart.includes('showContextSummary={showContextSummary}'))
+  assert.ok(sharedChart.includes('min-h-[144px]'))
+  assert.ok(sharedChart.includes("onClick={onRefresh}"))
+  assert.equal(sharedChart.includes('id="market-board-chart-index-summary"'), false)
+})
+
+test("compact Chart 1m widens impact while retaining the original four-card desktop row", () => {
+  const card = contextStripSource.split("const indexSummaryCard = (")[1]?.split("  return (")[0] ?? ""
+  assert.ok(contextStripSource.includes("chartActive && showContext ?"))
+  assert.ok(contextStripSource.includes("md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)]"))
+  assert.ok(contextStripSource.includes("xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"))
+  assert.ok(contextStripSource.includes("moveIndexSummary && chartSummaryTarget ?"))
+  assert.ok(contextStripSource.includes("createPortal("))
+  assert.ok(card.includes("headerInfo={<MarketSessionClock />}"))
+  assert.equal(card.includes("headerRight="), false)
+  assert.equal(card.includes("ChartNoAxesCombined"), false)
 })
 
 test("Chart 1m, Bảng điện and Bảng ngành have distinct selected tab icons and tones", () => {
