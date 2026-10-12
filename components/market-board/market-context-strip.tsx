@@ -646,28 +646,33 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
         : "border-amber-400/35 bg-amber-400/10 text-amber-300"
   return (
-    <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${chartHeader ? "h-[160px] px-4 py-3" : "px-2.5 py-1.5"}`}>
-      <div className="flex items-center justify-between gap-1.5">
+    <div className={chartHeader
+      ? "grid h-[132px] min-w-0 grid-cols-1 gap-y-1 px-3 py-2 sm:h-[96px] sm:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] sm:items-center sm:gap-x-3 sm:px-4"
+      : "flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5"}>
+      <div className={chartHeader ? "min-w-0" : "contents"}>
+      <div className={`flex min-w-0 items-center ${chartHeader ? "justify-start gap-2" : "justify-between gap-1.5"}`}>
         {onOpen ? (
           <button type="button" onClick={onOpen} className={`${chartHeader ? "text-base" : "text-[11px]"} truncate font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand`} aria-label="Mở biểu đồ VN-Index">{label}</button>
         ) : <span className={`${chartHeader ? "text-base" : "text-[11px]"} truncate font-bold text-zinc-200`}>{label}</span>}
-        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-2 py-1 font-sans ${chartHeader ? "text-base" : "text-[12px]"} font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
+        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border font-sans font-extrabold leading-none tabular-nums ${chartHeader ? "px-1.5 py-0.5 text-sm" : "px-2 py-1 text-[12px]"} ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
       <div className={`flex items-center gap-1.5 whitespace-nowrap ${chartHeader ? "mt-1" : "mt-0.5"}`}>
         <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         {finite(value) ? (
-          <strong key={value} className={`${chartHeader ? "text-[clamp(20px,2vw,27px)]" : "text-[clamp(12px,1.05vw,17px)]"} font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
+          <strong key={value} className={`${chartHeader ? "text-[clamp(18px,1.8vw,24px)]" : "text-[clamp(12px,1.05vw,17px)]"} font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
         ) : null}
         {finite(change) ? (
-          <span key={change} className={`font-sans ${chartHeader ? "text-[clamp(16px,1.45vw,20px)]" : "text-[clamp(12px,1.05vw,15px)]"} font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
+          <span key={change} className={`font-sans ${chartHeader ? "text-[clamp(14px,1.3vw,18px)]" : "text-[clamp(12px,1.05vw,15px)]"} font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
         ) : null}
       </div>
-      <div className={`flex flex-wrap items-center gap-x-3 gap-y-0.5 tabular-nums text-zinc-400 ${chartHeader ? "mt-2 text-xs" : "mt-1 text-[10px]"}`}>
+      </div>
+      <div className={chartHeader ? "min-w-0" : "contents"}>
+      <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums text-zinc-400 ${chartHeader ? "justify-end text-xs" : "mt-1 text-[10px]"}`}>
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
       <div
-        className={`mt-auto min-w-0 ${chartHeader ? "pt-2" : "pt-1"}`}
+        className={`min-w-0 ${chartHeader ? "mt-1.5" : "mt-auto pt-1"}`}
         aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
         data-index-breadth-progress
@@ -680,11 +685,12 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
           </> : null}
           {breadthSweepRevision > 0 ? <span key={breadthSweepRevision} className="market-breadth-change-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3" /> : null}
         </div>
-        <div className={`relative mt-1 w-full font-sans font-bold tabular-nums ${chartHeader ? "h-[18px] text-xs leading-[18px]" : "h-[14px] text-[9px] leading-[14px]"}`} aria-hidden="true">
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
-          <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
+        <div className={`mt-1 w-full font-sans font-bold tabular-nums ${chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]" : "relative h-[14px] text-[9px] leading-[14px]"}`} aria-hidden="true">
+          <span className={`whitespace-nowrap text-emerald-400 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
+          <span className={`whitespace-nowrap text-amber-300 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
+          <span className={`whitespace-nowrap text-red-400 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
         </div>
+      </div>
       </div>
     </div>
   )
