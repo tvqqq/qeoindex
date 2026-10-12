@@ -646,33 +646,33 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
         : "border-amber-400/35 bg-amber-400/10 text-amber-300"
   return (
-    <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"}`}>
+    <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${chartHeader ? "h-[160px] px-4 py-3" : "px-2.5 py-1.5"}`}>
       <div className="flex items-center justify-between gap-1.5">
         {onOpen ? (
-          <button type="button" onClick={onOpen} className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand`} aria-label="Mở biểu đồ VN-Index">{label}</button>
-        ) : <span className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200`}>{label}</span>}
-        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
+          <button type="button" onClick={onOpen} className={`${chartHeader ? "text-base" : "text-[11px]"} truncate font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand`} aria-label="Mở biểu đồ VN-Index">{label}</button>
+        ) : <span className={`${chartHeader ? "text-base" : "text-[11px]"} truncate font-bold text-zinc-200`}>{label}</span>}
+        <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-2 py-1 font-sans ${chartHeader ? "text-base" : "text-[12px]"} font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
-      <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
+      <div className={`flex items-center gap-1.5 whitespace-nowrap ${chartHeader ? "mt-1" : "mt-0.5"}`}>
         <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         {finite(value) ? (
-          <strong key={value} className={`${chartHeader ? "text-lg" : "text-[clamp(12px,1.05vw,17px)]"} font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
+          <strong key={value} className={`${chartHeader ? "text-[clamp(20px,2vw,27px)]" : "text-[clamp(12px,1.05vw,17px)]"} font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
         ) : null}
         {finite(change) ? (
-          <span key={change} className={`font-sans ${chartHeader ? "text-sm" : "text-[clamp(12px,1.05vw,15px)]"} font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
+          <span key={change} className={`font-sans ${chartHeader ? "text-[clamp(16px,1.45vw,20px)]" : "text-[clamp(12px,1.05vw,15px)]"} font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
         ) : null}
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums text-zinc-400">
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-0.5 tabular-nums text-zinc-400 ${chartHeader ? "mt-2 text-xs" : "mt-1 text-[10px]"}`}>
         <span>KL <b className="text-zinc-200">{formatCompactVolume(metrics.volume)}</b></span>
         <span>GT <b className="text-zinc-200">{formatVndValue(metrics.valueTraded)}</b></span>
       </div>
       <div
-        className="mt-auto min-w-0 pt-1"
+        className={`mt-auto min-w-0 ${chartHeader ? "pt-2" : "pt-1"}`}
         aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
         data-index-breadth-progress
       >
-        <div className="relative flex h-[8px] w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
+        <div className={`relative flex w-full overflow-hidden rounded-full bg-zinc-800 ${chartHeader ? "h-[9px]" : "h-[8px]"}`} aria-hidden="true">
           {hasBreadth && total > 0 ? <>
             <span className={`bg-[#22c98a] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[0]}%` }} />
             <span className={`bg-amber-400 ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[1]}%` }} />
@@ -680,7 +680,7 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
           </> : null}
           {breadthSweepRevision > 0 ? <span key={breadthSweepRevision} className="market-breadth-change-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3" /> : null}
         </div>
-        <div className="relative mt-1 h-[14px] w-full font-sans text-[9px] font-bold leading-[14px] tabular-nums" aria-hidden="true">
+        <div className={`relative mt-1 w-full font-sans font-bold tabular-nums ${chartHeader ? "h-[18px] text-xs leading-[18px]" : "h-[14px] text-[9px] leading-[14px]"}`} aria-hidden="true">
           <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
           <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
           <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
@@ -822,7 +822,7 @@ export function MarketContextStrip({
   chartActive,
   showContext,
 }: MarketContextStripProps) {
-  const [chartSummaryTarget, setChartSummaryTarget] = useState<{ vnindex: HTMLElement; vn30: HTMLElement } | null>(null)
+  const [chartSummaryTarget, setChartSummaryTarget] = useState<{ vnindex: HTMLElement; vn30: HTMLElement; clock: HTMLElement } | null>(null)
   const [compactScreen, setCompactScreen] = useState(false)
 
   useEffect(() => {
@@ -832,7 +832,8 @@ export function MarketContextStrip({
       setCompactScreen(media.matches)
       const vnindex = document.getElementById("market-board-chart-vnindex-header")
       const vn30 = document.getElementById("market-board-chart-vn30-header")
-      setChartSummaryTarget(vnindex && vn30 ? { vnindex, vn30 } : null)
+      const clock = document.getElementById("market-board-chart-ict-clock")
+      setChartSummaryTarget(vnindex && vn30 && clock ? { vnindex, vn30, clock } : null)
     }
     update()
     media.addEventListener("change", update)
@@ -1319,7 +1320,7 @@ export function MarketContextStrip({
       className="h-full md:h-[156px]"
       activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
       activitySessionDay={contextSessionDate}
-      headerInfo={<MarketSessionClock />}
+      headerInfo={chartActive ? null : <MarketSessionClock />}
     >
       <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
         {vnindexSummary}
@@ -1333,18 +1334,11 @@ export function MarketContextStrip({
       <div className={`grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 ${chartActive && showContext ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)] xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]" : "md:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"}`} data-market-context-single-row>
         {moveIndexSummary && chartSummaryTarget ? (
           <>
-            {createPortal(
-              <div className="flex min-h-[144px] min-w-0 flex-col">
-                <div className="flex justify-end border-b border-white/[0.05] px-3 pt-1">
-                  <MarketSessionClock />
-                </div>
-                {vnindexSummary}
-              </div>,
-              chartSummaryTarget.vnindex,
-            )}
+            {createPortal(vnindexSummary, chartSummaryTarget.vnindex)}
             {createPortal(vn30Summary, chartSummaryTarget.vn30)}
           </>
         ) : indexSummaryCard}
+        {chartActive && chartSummaryTarget ? createPortal(<MarketSessionClock />, chartSummaryTarget.clock) : null}
         <ContextCard title="Thanh khoản" className="h-full md:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
           activitySources={[liquidityUpdatedAt]}
           activitySessionDay={contextSessionDate}
