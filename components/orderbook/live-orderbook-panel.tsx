@@ -28,7 +28,7 @@ import { marketToneFromPrice, marketToneHex, marketToneText } from "@/modules/ma
 import { normalizeEpochSeconds, normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
 import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/modules/shared/ui/use-flash-animation"
-import { useWhaleConfetti, ConfettiOverlay } from "@/components/orderbook/confetti"
+import { useLargeTradeNotice, LargeTradeNotice } from "@/components/orderbook/large-trade-notice"
 import { playWhaleSound, unlockAudioContext } from "@/modules/shared/ui/sound-engine"
 import { calculateSessionCountdown } from "@/modules/market/realtime/session-countdown"
 import { calculateForeignRoomPercent, getEodForeignRoom } from "@/modules/eod/shares"
@@ -145,8 +145,8 @@ const MAX_SESSION_TRADES = 30_000
 
 /** 
  * Quy tắc phân loại lệnh cá mập:
- * - Nếu spread giá là 0.05 (hoặc giá < 50k) → Filter & Tag Cá mập ≥50K ("50K+")
- * - Nếu spread giá là 0.1 (hoặc giá ≥ 50k) → Filter & Tag Cá mập ≥30K ("30K+")
+ * - Nếu spread giá là 0.05 (hoặc giá < 50k) → ngưỡng lọc Cá mập ≥50.000 cp.
+ * - Nếu spread giá là 0.1 (hoặc giá ≥ 50k) → ngưỡng lọc Cá mập ≥30.000 cp.
  */
 function getWhaleThreshold(price?: number | null, spread?: number | null): number {
   if (spread !== null && spread !== undefined && spread > 0) {
@@ -1728,8 +1728,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const quote = stream.quote
   const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
 
-  const confetti = useWhaleConfetti()
-  const [isWhaleGlow, setIsWhaleGlow] = useState(false)
+  const largeTradeNotice = useLargeTradeNotice()
   const sessionCountdown = useSessionCountdown()
   const activeAuctionExpected = sessionCountdown && stream.auctionExpected?.phase === sessionCountdown.type
     ? stream.auctionExpected
@@ -1795,28 +1794,42 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const rows = useMemo(() => Array.from({ length: 3 }, (_, i) => ({ bid: stream.bids[i], ask: stream.asks[i] })), [stream.bids, stream.asks])
 
   const clusteredTrades = useMemo(() => clusterTrades(stream.trades), [stream.trades])
-  const realtimeWhaleTrades = useMemo(() => clusteredTrades.filter((t) => t.source === "DNSE_LIVE"), [clusteredTrades])
+  const realtimeLargeTrades = useMemo(() => clusteredTrades.filter((t) => t.source === "DNSE_LIVE"), [clusteredTrades])
   const bestBidPrice = stream.bids[0]?.price
   const bestAskPrice = stream.asks[0]?.price
   const spread = bestBidPrice && bestAskPrice ? Number((bestAskPrice - bestBidPrice).toFixed(2)) : null
   const whaleThreshold = useMemo(() => getWhaleThreshold(quote?.price, spread), [quote?.price, spread])
   const whaleLabel = useMemo(() => getWhaleLabel(quote?.price, spread), [quote?.price, spread])
 
-  // Only live DNSE executions from the centralized fanout can create realtime whale behavior.
-  const seenWhaleIdsRef = useRef<Set<string>>(new Set())
-  const didInitializeWhaleBaselineRef = useRef(false)
-  useEffect(() => { seenWhaleIdsRef.current.clear(); didInitializeWhaleBaselineRef.current = false }, [symbol])
+  // Only new live DNSE executions (never history/snapshot replay) can trigger a short notice.
+  const seenLargeIdsRef = useRef<Set<string>>(new Set())
+  const didInitializeLargeBaselineRef = useRef(false)
   useEffect(() => {
-    if (!didInitializeWhaleBaselineRef.current) { for (const t of realtimeWhaleTrades) seenWhaleIdsRef.current.add(t.id); didInitializeWhaleBaselineRef.current = true; return }
-    for (const t of realtimeWhaleTrades) {
-      if (isAtoTradeTime(t.time) || isAtcTradeTime(t.time)) continue
-      if (t.volume < whaleThreshold || seenWhaleIdsRef.current.has(t.id)) continue
-      seenWhaleIdsRef.current.add(t.id)
-      const side: "BUY" | "SELL" | "REF" = t.side === "SELL" ? "SELL" : "BUY"
-      confetti.fire(side, t.volume, t.price); playWhaleSound(side); setIsWhaleGlow(true); setTimeout(() => setIsWhaleGlow(false), 2800)
+    seenLargeIdsRef.current.clear()
+    didInitializeLargeBaselineRef.current = false
+    largeTradeNotice.clear()
+  }, [symbol, largeTradeNotice.clear])
+  useEffect(() => {
+    if (!didInitializeLargeBaselineRef.current) {
+      for (const t of realtimeLargeTrades) {
+        if (t.volume >= LARGE_TRADE_MIN_VOLUME && !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time)) seenLargeIdsRef.current.add(t.id)
+      }
+      didInitializeLargeBaselineRef.current = true
+      return
     }
-  }, [realtimeWhaleTrades, whaleThreshold, confetti])
-
+    let newest: (typeof realtimeLargeTrades)[number] | null = null
+    for (const t of realtimeLargeTrades) {
+      if (t.volume < LARGE_TRADE_MIN_VOLUME || isAtoTradeTime(t.time) || isAtcTradeTime(t.time) || seenLargeIdsRef.current.has(t.id)) continue
+      seenLargeIdsRef.current.add(t.id)
+      if (!newest) newest = t
+    }
+    if (!newest) return
+    const side: "BUY" | "SELL" | "REF" = newest.side === "SELL" ? "SELL" : newest.side === "BUY" ? "BUY" : "REF"
+    const isWhale = newest.volume >= whaleThreshold
+    if (largeTradeNotice.fire({ tradeId: newest.id, side, volume: newest.volume, isWhale }) && isWhale && side !== "REF") {
+      playWhaleSound(side)
+    }
+  }, [realtimeLargeTrades, whaleThreshold, largeTradeNotice.fire])
   const visibleTrades = useMemo(() => {
     if (tradeFilter === "large") return clusteredTrades.filter((t) => t.volume >= LARGE_TRADE_MIN_VOLUME)
     if (tradeFilter === "whale") return clusteredTrades.filter((t) => !isAtoTradeTime(t.time) && !isAtcTradeTime(t.time) && t.volume >= whaleThreshold)
@@ -1887,8 +1900,8 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`, zIndex: z }
 
   return (
-    <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border bg-[#0b0f14]/94 backdrop-blur-2xl will-change-[width,height,left,top] ${isWhaleGlow ? "border-amber-400/90 shadow-[0_0_40px_rgba(251,191,36,0.35),0_25px_70px_rgba(0,0,0,0.95)] ring-2 ring-amber-400/60" : "border-white/[0.12] shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)]"} ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
-      <ConfettiOverlay active={confetti.active} side={confetti.side} volume={confetti.alert?.volume} />
+    <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] will-change-[width,height,left,top] ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
+      <LargeTradeNotice notice={largeTradeNotice.notice} />
       <header className="relative flex cursor-grab select-none items-center justify-between gap-3 overflow-hidden border-b border-white/[0.14] bg-gradient-to-b from-[#182330]/95 via-[#101824]/90 to-[#0c121b]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),inset_0_-1px_0_0_rgba(0,0,0,0.4),0_6px_24px_-4px_rgba(0,0,0,0.6)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/35 before:to-transparent" onPointerDown={onHeaderPointerDown}>
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
           <GripVertical className="h-4 w-4 text-white/30 hover:text-white/60 shrink-0 transition-colors" />
@@ -1983,11 +1996,10 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
                       </div>
                       <div className="shrink-0 grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 border-b border-white/[0.08] bg-[#11161d] px-3.5 py-2.5 text-xs font-bold text-slate-400"><span>Thời gian</span><span className="text-right">Khối lượng</span><span className="text-right">Giá</span></div>
                       {visibleTrades.length ? <div className="overflow-y-auto px-3.5 divide-y divide-white/[0.04] max-h-[555px] min-h-[555px]">{visibleTrades.map((trade) => {
-                      const isAto = isAtoTradeTime(trade.time), isAtc = isAtcTradeTime(trade.time), isLarge = !isAto && !isAtc && trade.volume >= LARGE_TRADE_MIN_VOLUME, isWhale = !isAto && !isAtc && trade.volume >= whaleThreshold, pill = sidePillMeta(trade.side)
+                      const isAto = isAtoTradeTime(trade.time), isAtc = isAtcTradeTime(trade.time), isRecentLarge = largeTradeNotice.notice?.tradeId === trade.id, pill = sidePillMeta(trade.side)
                       const sideColorClass = trade.side === "BUY" ? "text-up" : trade.side === "SELL" ? "text-down" : "text-foreground"
                       const sideBgClass = isAto ? "bg-blue-950/20" : isAtc ? "bg-purple-950/20" : trade.side === "BUY" ? "bg-up/10" : trade.side === "SELL" ? "bg-down/10" : "bg-ref/10"
-                      const tagBadgeClass = trade.side === "BUY" ? "bg-up/25 text-up border-up/30" : trade.side === "SELL" ? "bg-down/25 text-down border-down/30" : "bg-ref/25 text-ref border-ref/30"
-                      return <div key={trade.id} className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${isWhale || isLarge || isAto || isAtc ? `${sideBgClass} font-bold -mx-3.5 px-3.5` : "text-foreground"}`}><div className="flex items-center gap-1.5 min-w-0"><span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>{trade.count > 1 ? <span className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0">x{trade.count}</span> : null}{isAto ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-blue-400/50 bg-blue-950/70 text-blue-300">ATO</span> : isAtc ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-purple-400/50 bg-purple-950/70 text-purple-300">ATC</span> : isWhale ? <span className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}><span>🐋</span><span>{trade.volume >= 50_000 ? "50K+" : "30K+"}</span></span> : isLarge ? <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 border ${tagBadgeClass}`}>10K+</span> : null}</div><span className={`text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5 ${isWhale || isLarge ? sideColorClass : "text-foreground"}`}><span>{formatVolume(trade.volume)}</span><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}>{pill.label}</span></span><span className={`text-right font-bold text-sm sm:text-[14px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>{formatPrice(trade.price)}</span></div>
+                      return <div key={trade.id} className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${isRecentLarge || isAto || isAtc ? `${sideBgClass} font-bold -mx-3.5 px-3.5` : "text-foreground"}`}><div className="flex items-center gap-1.5 min-w-0"><span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>{trade.count > 1 ? <span className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0">x{trade.count}</span> : null}{isAto ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-blue-400/50 bg-blue-950/70 text-blue-300">ATO</span> : isAtc ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-purple-400/50 bg-purple-950/70 text-purple-300">ATC</span> : null}</div><span className={`text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5 ${isRecentLarge ? sideColorClass : "text-foreground"}`}><span>{formatVolume(trade.volume)}</span><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}>{pill.label}</span></span><span className={`text-right font-bold text-sm sm:text-[14px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>{formatPrice(trade.price)}</span></div>
                     })}</div> : <div className="flex min-h-[555px] items-center justify-center px-4 py-8 text-center text-xs text-slate-400">{stream.historyState === "LOADING" ? "Đang tải dữ liệu khớp lệnh..." : tradeFilter !== "all" ? "Không có lệnh thỏa mãn bộ lọc." : "Chờ dữ liệu khớp lệnh mới..."}</div>}
                     </div>
                     <div className="flex flex-col gap-2.5"><ForeignRealtimeCard foreign={stream.foreign} quotePrice={activePrice} foreignNetVolume={foreignNetVolume} foreignNetValue={foreignNetValue} roomPercentage={roomPercentage} latestTradeTime={stream.trades[0]?.time} /><TradeInitiativeAndMarketStatsCard symbol={symbol} tradeStats={tradeStats} quote={quote} spread={spread} /></div>

@@ -26,6 +26,7 @@ const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "
 const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/route.ts", import.meta.url), "utf8")
 const boardTransitionSource = readFileSync(new URL("../components/smoothui/market-board-transition/index.tsx", import.meta.url), "utf8")
 const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
+const largeTradeNoticeSource = readFileSync(new URL("../components/orderbook/large-trade-notice.tsx", import.meta.url), "utf8")
 const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", import.meta.url), "utf8")
 const marketStreamSource = readFileSync(new URL("../modules/market/providers/dnse/market-stream.ts", import.meta.url), "utf8")
 const marketRuntimeSource = readFileSync(new URL("../modules/market/providers/dnse/market-runtime.ts", import.meta.url), "utf8")
@@ -147,6 +148,23 @@ test("orderbook popup places vertical activity navigation beside responsive cont
   }
 })
 
+test("orderbook large trades use a bounded two-second lightweight notice without row tags or Lottie", () => {
+  assert.match(orderbookSource, /import \{ useLargeTradeNotice, LargeTradeNotice \} from "@\/components\/orderbook\/large-trade-notice"/)
+  assert.match(orderbookSource, /<LargeTradeNotice notice=\{largeTradeNotice\.notice\} \/>/)
+  assert.match(orderbookSource, /isRecentLarge = largeTradeNotice\.notice\?\.tradeId === trade\.id/)
+  assert.match(orderbookSource, /\$\{isRecentLarge \|\| isAto \|\| isAtc \?/)
+  assert.doesNotMatch(orderbookSource, /10K\+|30K\+|50K\+|🐋|tagBadgeClass|isWhaleGlow|ConfettiOverlay|useWhaleConfetti/)
+  assert.match(orderbookSource, /if \(!newest\) newest = t/)
+  assert.match(orderbookSource, /if \(largeTradeNotice\.fire\(/)
+  assert.match(orderbookSource, /if \(t\.volume < LARGE_TRADE_MIN_VOLUME \|\| isAtoTradeTime/)
+  assert.match(largeTradeNoticeSource, /const NOTICE_DURATION_MS = 2_000/)
+  assert.match(largeTradeNoticeSource, /if \(timerRef\.current !== null\) return false/)
+  assert.match(largeTradeNoticeSource, /window\.setTimeout\(\(\) => \{[\s\S]*?setNotice\(null\)[\s\S]*?\}, NOTICE_DURATION_MS\)/)
+  assert.match(largeTradeNoticeSource, /window\.clearTimeout\(timerRef\.current\)/)
+  assert.match(largeTradeNoticeSource, /data-orderbook-large-trade-notice/)
+  assert.match(largeTradeNoticeSource, /pointer-events-none absolute/)
+  assert.doesNotMatch(largeTradeNoticeSource, /Lottie|lottie-react|animate-|backdrop-blur|transition-all|requestAnimationFrame/)
+})
 test("compact priceboard keeps fixed anchors, packs industries into lanes, and exposes a stable row hover", () => {
   assert.match(priceboardSource, /data-industry-column="watchlist" data-market-board-industry-column/)
   assert.match(priceboardSource, /data-industry-column="vn30" data-market-board-industry-column/)
