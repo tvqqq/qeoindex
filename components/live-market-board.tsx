@@ -1531,9 +1531,15 @@ export function LiveMarketBoard({
           <div role="tablist" aria-label="Chế độ xem thị trường" className="flex items-center rounded-xl border border-white/[0.10] bg-[#0b0f14] p-0.5">
             {BOARD_VIEW_TABS.map((view) => {
               const isSelected = boardView === view
-              const label = view === "chart" ? "VNIndex Chart" : view === "classic" ? "Bảng điện" : "Bảng ngành"
+              const label = view === "chart" ? "Chart 1m" : view === "classic" ? "Bảng điện" : "Bảng ngành"
               const targetId = `market-board-view-${view}-tab`
               const ViewIcon = view === "chart" ? ChartNoAxesCombined : view === "classic" ? Table2 : PanelsTopLeft
+              const selectedTone = view === "chart"
+                ? "border border-cyan-400/45 bg-cyan-400/[0.14] text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                : view === "classic"
+                  ? "border border-emerald-400/45 bg-emerald-400/[0.14] text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  : "border border-amber-400/45 bg-amber-400/[0.14] text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              const selectedIconTone = view === "chart" ? "text-cyan-300" : view === "classic" ? "text-emerald-300" : "text-amber-300"
               return (
                 <button
                   key={view}
@@ -1557,9 +1563,9 @@ export function LiveMarketBoard({
                     setBoardView(nextView)
                     document.getElementById(`market-board-view-${nextView}-tab`)?.focus()
                   }}
-                  className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? "border border-brand/40 bg-brand/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
+                  className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${isSelected ? selectedTone : "text-muted-2 hover:bg-white/[0.04] hover:text-foreground"}`}
                 >
-                  <ViewIcon className={`h-3.5 w-3.5 ${isSelected ? "text-brand" : "text-muted-2"}`} />
+                  <ViewIcon className={`h-3.5 w-3.5 ${isSelected ? selectedIconTone : "text-muted-2"}`} />
                   <span>{label}</span>
                 </button>
               )
