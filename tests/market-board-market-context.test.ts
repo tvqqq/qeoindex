@@ -300,7 +300,7 @@ test("index levels use direction icons; real count revisions animate and values 
   assert.ok(summary.includes('change > 0 ? "+" : ""'))
   assert.ok(summary.includes('INDEX_FORMATTER.format(change)'))
   assert.doesNotMatch(summary, /N\/A|INDEX_FORMATTER\.format\(value\) : "—"/)
-  assert.ok(summary.includes('gap-x-2 gap-y-0.5 text-[10px]'))
+  assert.ok(summary.includes('gap-x-3 gap-y-0.5 tabular-nums text-zinc-400'))
   assert.ok(summary.includes('const breadthSignature = hasBreadth && total > 0'))
   assert.ok(summary.includes("const previous = previousBreadth.current"))
   assert.ok(summary.includes("previous.day === day && previous.signature !== breadthSignature && breadthFresh"))
