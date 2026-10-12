@@ -226,6 +226,20 @@ test("intraday chart excludes the 11:30–12:59 ICT lunch gap but retains real O
   assert.equal(hideIndexChartLunchBars(bars, "1D"), bars)
 })
 
+test("index charts use cursor-centered wheel zoom while preventing parent scrolling", () => {
+  assert.match(minuteChartSource, /handleScroll: \{ mouseWheel: false, pressedMouseMove: true/)
+  assert.match(minuteChartSource, /handleScale: \{ mouseWheel: false/)
+  assert.match(minuteChartSource, /container\.addEventListener\("wheel", wheelHandler, \{ capture: true, passive: false \}\)/)
+  assert.match(minuteChartSource, /container\.removeEventListener\("wheel", wheelHandler, true\)/)
+  assert.match(minuteChartSource, /event\.preventDefault\(\)/)
+  assert.match(minuteChartSource, /event\.stopPropagation\(\)/)
+  assert.match(minuteChartSource, /event\.deltaMode === 1/)
+  assert.match(minuteChartSource, /zoom\(factor, rect\.width > 0 \?/)
+  assert.match(minuteChartSource, /anchorRatio = 0\.5/)
+  assert.match(minuteChartSource, /from: anchor - nextVisible \* ratio/)
+  assert.match(minuteChartSource, /to: anchor \+ nextVisible \* \(1 - ratio\)/)
+})
+
 test("popup chart removes REST/live lunch rows and has independent accessible zoom controls", () => {
   assert.match(candleHookSource, /hideIndexChartLunchBars\(/)
   assert.match(candleHookSource, /isIndexChartLunchBreak\(bar\.time\)/)

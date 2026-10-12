@@ -176,7 +176,7 @@ test("market card cleanup preserves one-row desktop fit, visible breadth and exp
   assert.equal(impact.includes('Tổng điểm kéo tăng và kéo giảm của các mã hiển thị'), false)
   assert.equal(contextStripSource.includes("Top 200 partial</span>"), false)
   assert.ok(contextStripSource.includes('không phải tổng toàn HOSE'))
-  assert.ok(contextStripSource.includes('xl:h-[156px]'))
+  assert.ok(contextStripSource.includes('min-[1100px]:h-[156px]'))
   assert.ok(contextStripSource.includes("market-header-sheen"))
 })
 
@@ -198,7 +198,7 @@ test("combined index breadth stays bottom-aligned with direction icon before the
   assert.ok(summary.includes("<ArrowRight"))
   assert.ok(summary.includes('market-breadth-count-tick'))
   assert.ok(summary.includes('data-index-breadth-progress'))
-  assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
+  assert.ok(contextStripSource.includes('className="h-full min-[1100px]:h-[156px]"'))
 })
 
 test("market context numbers, chart traces, and headers honor motion reduction", () => {
@@ -248,7 +248,7 @@ test("after 15:00 and before 09:00 metrics retain exact last trading session obs
 })
 
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
-  assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
+  assert.ok(contextStripSource.includes('className="h-full min-[1100px]:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="absolute inset-0 h-full w-full touch-pan-y"'))
   const plot = contextStripSource.split("function ComparisonLineChart(")[1]?.split("function MarketSessionClock(")[0] ?? ""
   assert.ok(plot.includes('className="relative flex min-h-[72px] min-w-0 flex-1 flex-col"'))
@@ -297,16 +297,16 @@ test("market context places ICT next to the title and removes all four bottom an
   assert.equal(contextStripSource.includes('━ Ròng hôm nay'), false)
   assert.equal(contextStripSource.includes('Top 200 partial</span>'), false)
   assert.ok(contextStripSource.includes('không phải tổng toàn HOSE'))
-  assert.ok(contextStripSource.includes('xl:h-[156px]'))
+  assert.ok(contextStripSource.includes('min-[1100px]:h-[156px]'))
   assert.ok(contextStripSource.includes("getMarketCardActivity({"))
   assert.equal(contextStripSource.includes("function LivePulse("), false)
 })
 
 test("market context fits one desktop row and preserves the board-view controls", () => {
   assert.match(contextStripSource, /data-market-context-single-row/)
-  assert.match(contextStripSource, /sm:grid-cols-2 xl:grid-cols-\[/)
+  assert.match(contextStripSource, /sm:grid-cols-2 min-\[1100px\]:grid-cols-\[/)
   assert.match(contextStripSource, /min-h-\[31px\]/)
-  assert.match(contextStripSource, /minmax\(0,1.35fr\)/)
+  assert.match(contextStripSource, /minmax\(0,1\.5fr\)/)
   assert.match(contextStripSource, /title="VN-Index \/ VN30"/)
   assert.match(contextStripSource, /Tác động VNINDEX/)
   assert.match(contextStripSource, /<ImpactChart impact=\{impact\}/)
@@ -316,6 +316,14 @@ test("market context fits one desktop row and preserves the board-view controls"
   assert.doesNotMatch(boardSource, />Tổng KL</)
   assert.doesNotMatch(boardSource, />Tổng GT</)
   assert.doesNotMatch(boardSource, />Khối ngoại</)
+})
+
+test("laptop market context uses four non-overflowing columns at 1100px", () => {
+  const layout = contextStripSource.split('data-market-context-strip')[1]?.split('data-market-context-single-row')[0] ?? ""
+  assert.ok(layout.includes("sm:grid-cols-2"))
+  assert.ok(layout.includes("min-[1100px]:grid-cols-["))
+  assert.ok(layout.includes("minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_minmax(0,1.65fr)"))
+  assert.equal((contextStripSource.match(/min-\[1100px\]:h-\[156px\]/g) ?? []).length, 4)
 })
 
 test("VNIndex Chart is the first board tab and replaces board-only content without a modal", () => {
@@ -334,7 +342,11 @@ test("VNIndex Chart is the first board tab and replaces board-only content witho
   assert.match(workspaceSource, /useIndexCandles\(true, resolution\)/)
   assert.match(workspaceSource, /<IndexChartContent/)
   assert.match(workspaceSource, /data-market-board-index-chart/)
-  assert.match(workspaceSource, /DNSE LIVE/)
+  assert.doesNotMatch(workspaceSource, /VN Market · Multi-timeframe|DNSE HISTORY|DNSE LIVE|<header/)
+  assert.match(workspaceSource, /onRefresh=\{refresh\}/)
+  assert.match(workspaceSource, /isRefreshing=\{isRefreshing\}/)
+  assert.match(modalSource, /onRefresh\?: \(\) => void/)
+  assert.match(modalSource, /aria-label="Làm mới dữ liệu biểu đồ"/)
   assert.match(modalSource, /export function IndexChartContent\(/)
   assert.match(modalSource, /<ChartCard symbol="VNINDEX"/)
   assert.match(modalSource, /<ChartCard symbol="VN30F1M"/)
