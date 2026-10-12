@@ -1908,27 +1908,27 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
           <div className="border-b border-border/80 bg-[#151616] px-3 py-2">
             <div data-orderbook-depth-card className="overflow-hidden rounded-lg border border-border/80 bg-[#121313] p-2 shadow-inner">
               <div data-orderbook-depth-sides className="relative">
-                <div className="grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span aria-hidden="true" /><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
-                <div className="mt-0.5 space-y-0.5 font-mono text-[13px]">{rows.map(({ bid, ask }, rowIndex) => <OrderBookDepthRow key={rowIndex} bid={bid} ask={ask} maxDepthVolume={maxDepthVolume} quote={quote} />)}</div>
-                <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex w-[104px] -translate-x-1/2 flex-col items-center justify-between gap-1 bg-[#121313] px-1 py-0.5 text-center">
-                  <div data-orderbook-buy-metrics className="flex shrink-0 flex-col items-center gap-0.5 whitespace-nowrap">
-                    <span className="font-ticker text-[11px] font-extrabold leading-none text-emerald-400">Mua {buyPct.toFixed(1)}%</span>
-                    <span className="font-mono text-[10px] font-medium leading-none text-emerald-400/90">KL {formatCompactVolume(bidTotal)}</span>
-                  </div>
-                  <div
-                    data-orderbook-depth-progress
-                    role="progressbar"
-                    aria-label="Tỷ lệ khối lượng Mua và Bán"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(buyPct)}
-                    aria-valuetext={`Mua ${buyPct.toFixed(1)}%, Bán ${sellPct.toFixed(1)}%`}
-                    className="min-h-5 w-1.5 flex-1 overflow-hidden rounded-full border border-white/20"
-                    style={{ background: `linear-gradient(to bottom, #22c98a 0%, #22c98a ${Math.max(0, buyPct - 1)}%, #ffffff ${buyPct}%, #ff4757 ${Math.min(100, buyPct + 1)}%, #ff4757 100%)` }}
-                  />
-                  <div data-orderbook-sell-metrics className="flex shrink-0 flex-col items-center gap-0.5 whitespace-nowrap">
-                    <span className="font-ticker text-[11px] font-extrabold leading-none text-rose-400">Bán {sellPct.toFixed(1)}%</span>
-                    <span className="font-mono text-[10px] font-medium leading-none text-rose-400/90">KL {formatCompactVolume(askTotal)}</span>
+                <div className="grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span data-orderbook-balance-label className="text-center text-[10px] font-semibold tracking-wide text-slate-400">Tỷ lệ</span><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
+                <div className="relative mt-0.5 space-y-0.5 font-mono text-[13px]">
+                  {rows.map(({ bid, ask }, rowIndex) => <OrderBookDepthRow key={rowIndex} bid={bid} ask={ask} maxDepthVolume={maxDepthVolume} quote={quote} />)}
+                  <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex w-[104px] -translate-x-1/2 items-center justify-center gap-1 bg-[#121313] px-1 text-center">
+                    <div data-orderbook-buy-metrics className="flex min-w-0 flex-1 items-center justify-end">
+                      <span className="whitespace-nowrap rounded bg-emerald-500/10 px-0.5 font-ticker text-[10px] font-extrabold leading-5 tabular-nums text-emerald-400"><span className="sr-only">Mua </span>{buyPct.toFixed(1)}%</span>
+                    </div>
+                    <div
+                      data-orderbook-depth-progress
+                      role="progressbar"
+                      aria-label="Tỷ lệ khối lượng Mua và Bán"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(buyPct)}
+                      aria-valuetext={`Mua ${buyPct.toFixed(1)}%, Bán ${sellPct.toFixed(1)}%`}
+                      className="h-full w-1.5 shrink-0 overflow-hidden rounded-full border border-white/20"
+                      style={{ background: `linear-gradient(to bottom, #22c98a 0%, #22c98a ${Math.max(0, buyPct - 1)}%, #ffffff ${buyPct}%, #ff4757 ${Math.min(100, buyPct + 1)}%, #ff4757 100%)` }}
+                    />
+                    <div data-orderbook-sell-metrics className="flex min-w-0 flex-1 items-center justify-start">
+                      <span className="whitespace-nowrap rounded bg-rose-500/10 px-0.5 font-ticker text-[10px] font-extrabold leading-5 tabular-nums text-rose-400"><span className="sr-only">Bán </span>{sellPct.toFixed(1)}%</span>
+                    </div>
                   </div>
                 </div>
               </div>
