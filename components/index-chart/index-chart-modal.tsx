@@ -105,6 +105,28 @@ function ChartCard({
 
   return (
     <section className="flex min-h-[390px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c10] shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.06)]">
+      {compact && showContextSummary ? (
+        <div className="relative min-h-[144px] min-w-0 border-b border-emerald-400/20 bg-[#111511] xl:hidden">
+          <div
+            id={symbol === "VNINDEX" ? "market-board-chart-vnindex-header" : "market-board-chart-vn30-header"}
+            className="min-h-[144px] min-w-0"
+            data-market-chart-spot-summary={symbol === "VNINDEX" ? "VNINDEX" : "VN30"}
+          />
+          {onRefresh ? (
+            <button
+              type="button"
+              data-chart-action
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              aria-label="Làm mới dữ liệu biểu đồ"
+              title="Làm mới history snapshot"
+              className="absolute left-3 top-1 z-[3] flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.09] bg-[#10171d]/90 text-slate-400 transition hover:text-cyan-300 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className={`${compact && showContextSummary ? "hidden xl:flex" : "flex"} flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] bg-white/[0.025] px-4 py-3`}>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -157,19 +179,6 @@ function ChartCard({
           <span className="pointer-events-none absolute left-3 top-3 z-[3] rounded-md border border-white/[0.08] bg-[#10171d]/85 px-2 py-1 font-ticker text-[10px] font-bold tracking-wide text-slate-300 xl:hidden">
             {title}
           </span>
-        ) : null}
-        {compact && showContextSummary && onRefresh ? (
-          <button
-            type="button"
-            data-chart-action
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            aria-label="Làm mới dữ liệu biểu đồ"
-            title="Làm mới history snapshot"
-            className="absolute right-14 top-2 z-[3] flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.1] bg-[#10171d]/95 text-slate-400 transition hover:text-cyan-300 disabled:opacity-50 xl:hidden"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-          </button>
         ) : null}
         {bars.length ? (
           <IndexMinuteChart symbol={symbol} data={bars} resolution={resolution} />
@@ -273,7 +282,6 @@ export function IndexChartContent({
       ) : null}
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
-        {compact ? <div id="market-board-chart-index-summary" className="col-span-full empty:hidden xl:hidden" /> : null}
         <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} compact={compact} showContextSummary={showContextSummary} onRefresh={compact ? onRefresh : undefined} isRefreshing={isRefreshing} />
         <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} compact={compact} showContextSummary={showContextSummary} />
       </main>
