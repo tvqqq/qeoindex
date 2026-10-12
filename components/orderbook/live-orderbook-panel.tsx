@@ -1701,6 +1701,15 @@ function OrderBookDepthRow({ bid, ask, maxDepthVolume, quote }: { bid?: DepthLev
   )
 }
 
+// During a drag, keep the existing heavy tape/depth DOM unchanged.
+// WebSocket state continues receiving new ticks and catches up on pointer release.
+const OrderBookDragFreeze = React.memo(
+  function OrderBookDragFreeze({ children }: { children: React.ReactNode; frozen: boolean; stockKey: string }) {
+    return <>{children}</>
+  },
+  (previous, next) => next.frozen && previous.stockKey === next.stockKey,
+)
+
 export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, onClose, onFocus }: { stockKey: string; symbol: string; initialMeta?: StockInitialMeta; index: number; z: number; onClose: () => void; onFocus: () => void }) {
   const [minimized, setMinimized] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
@@ -1722,9 +1731,15 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const panelRef = useRef<HTMLElement>(null)
   const isInteractingRef = useRef(false)
   const [isInteracting, setIsInteracting] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragSnapshot, setDragSnapshot] = useState<{ stockKey: string; data: ReturnType<typeof useDnseOrderBookStream> } | null>(null)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
   const closeRequested = useRef(false)
 
-  const stream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
+  const liveStream = useDnseOrderBookStream(symbol, reconnectKey, initialMeta)
+  const stream = isDragging && dragSnapshot?.stockKey === stockKey ? dragSnapshot.data : liveStream
+
+  useEffect(() => () => { dragCleanupRef.current?.() }, [])
   const quote = stream.quote
   const isWsReady = stream.state === "LIVE" || stream.historyState === "READY" || stream.trades.length > 0 || stream.bids.length > 0 || stream.quote !== null
 
@@ -1738,27 +1753,62 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
 
   const onHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const target = event.target instanceof HTMLElement ? event.target : null
-    if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
+    if (event.button !== 0 || isInteractingRef.current || target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
     if (isMaximized) return
     onFocus()
     const startX = event.clientX, startY = event.clientY, startPosX = pos.x, startPosY = pos.y
+    const pointerId = event.pointerId
     let curX = startPosX, curY = startPosY, rafId: number | null = null
     isInteractingRef.current = true
+    setDragSnapshot({ stockKey, data: liveStream })
+    setIsDragging(true)
     setIsInteracting(true)
+
+    const paintTransform = () => {
+      rafId = null
+      if (panelRef.current) {
+        panelRef.current.style.transform = `translate3d(${curX - startPosX}px, ${curY - startPosY}px, 0)`
+      }
+    }
     const handlePointerMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
       curX = Math.max(0, Math.min(window.innerWidth - 200, startPosX + ev.clientX - startX))
       curY = Math.max(0, Math.min(window.innerHeight - 50, startPosY + ev.clientY - startY))
-      if (rafId) cancelAnimationFrame(rafId)
-      rafId = requestAnimationFrame(() => { if (panelRef.current) { panelRef.current.style.left = `${curX}px`; panelRef.current.style.top = `${curY}px` } })
+      if (rafId === null) rafId = requestAnimationFrame(paintTransform)
     }
-    const handlePointerUp = () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      window.removeEventListener("pointermove", handlePointerMove); window.removeEventListener("pointerup", handlePointerUp); window.removeEventListener("pointercancel", handlePointerUp)
-      isInteractingRef.current = false; setIsInteracting(false); setPos({ x: curX, y: curY })
+    const removeDragListeners = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      rafId = null
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+      window.removeEventListener("blur", handleWindowBlur)
+      dragCleanupRef.current = null
     }
-    window.addEventListener("pointermove", handlePointerMove, { passive: true }); window.addEventListener("pointerup", handlePointerUp); window.addEventListener("pointercancel", handlePointerUp)
-  }, [onFocus, pos.x, pos.y, isMaximized])
-
+    const finishDrag = () => {
+      removeDragListeners()
+      // Update layout only once on release; avoid a transform-to-left/top jump.
+      if (panelRef.current) {
+        panelRef.current.style.left = `${curX}px`
+        panelRef.current.style.top = `${curY}px`
+        panelRef.current.style.transform = ""
+      }
+      isInteractingRef.current = false
+      setPos({ x: curX, y: curY })
+      setIsDragging(false)
+      setIsInteracting(false)
+      setDragSnapshot(null)
+    }
+    const handlePointerUp = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) finishDrag()
+    }
+    const handleWindowBlur = () => finishDrag()
+    dragCleanupRef.current = removeDragListeners
+    window.addEventListener("pointermove", handlePointerMove, { passive: true })
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerUp)
+    window.addEventListener("blur", handleWindowBlur)
+  }, [onFocus, pos.x, pos.y, isMaximized, liveStream, stockKey])
   const startResize = useCallback((e: React.PointerEvent, handle: "se" | "e" | "s") => {
     e.preventDefault(); e.stopPropagation(); onFocus()
     const startX = e.clientX, startY = e.clientY, startW = size.width, startH = size.height
@@ -1900,7 +1950,8 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`, zIndex: z }
 
   return (
-    <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] will-change-[width,height,left,top] ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
+    <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] ${isDragging ? "will-change-transform" : ""} ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey} data-orderbook-dragging={isDragging ? "true" : undefined}>
+      <OrderBookDragFreeze frozen={isDragging} stockKey={stockKey}>
       <LargeTradeNotice notice={largeTradeNotice.notice} />
       <header className="relative flex cursor-grab select-none items-center justify-between gap-3 overflow-hidden border-b border-white/[0.14] bg-gradient-to-b from-[#182330]/95 via-[#101824]/90 to-[#0c121b]/95 px-4 py-2.5 active:cursor-grabbing touch-none backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),inset_0_-1px_0_0_rgba(0,0,0,0.4),0_6px_24px_-4px_rgba(0,0,0,0.6)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/35 before:to-transparent" onPointerDown={onHeaderPointerDown}>
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
@@ -2035,6 +2086,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
       ) : null}
 
       {!minimized && !isMaximized && <><div onPointerDown={(e) => startResize(e, "se")} className="absolute bottom-0 right-0 h-6 w-6 cursor-se-resize flex items-end justify-end p-1 z-30 group touch-none select-none rounded-br-2xl" title="Kéo để phóng to / thu nhỏ"><svg width="10" height="10" viewBox="0 0 10 10" className="text-white/25 group-hover:text-emerald-400 group-active:text-emerald-400 transition-colors"><path d="M8.5 1.5 L1.5 8.5 M8.5 5 L5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg></div><div onPointerDown={(e) => startResize(e, "e")} className="absolute top-0 right-0 bottom-6 w-2 cursor-e-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none" title="Kéo ngang" /><div onPointerDown={(e) => startResize(e, "s")} className="absolute bottom-0 left-0 right-6 h-2 cursor-s-resize z-20 hover:bg-emerald-400/20 active:bg-emerald-400/30 transition-colors touch-none select-none" title="Kéo dọc" /></>}
+      </OrderBookDragFreeze>
     </section>
   )
 }
