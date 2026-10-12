@@ -145,8 +145,8 @@ const MAX_SESSION_TRADES = 30_000
 
 /** 
  * Quy tắc phân loại lệnh cá mập:
- * - Nếu spread giá là 0.05 (hoặc giá < 50k) → Filter & Tag Cá mập ≥50K ("50K+")
- * - Nếu spread giá là 0.1 (hoặc giá ≥ 50k) → Filter & Tag Cá mập ≥30K ("30K+")
+ * - Nếu spread giá là 0.05 (hoặc giá < 50k) → ngưỡng lọc Cá mập ≥50.000 cp.
+ * - Nếu spread giá là 0.1 (hoặc giá ≥ 50k) → ngưỡng lọc Cá mập ≥30.000 cp.
  */
 function getWhaleThreshold(price?: number | null, spread?: number | null): number {
   if (spread !== null && spread !== undefined && spread > 0) {
