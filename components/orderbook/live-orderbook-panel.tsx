@@ -65,6 +65,12 @@ type AuctionExpected = {
 }
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type ActivityTab = "trades" | "foreign" | "profile" | "putthrough"
+const ACTIVITY_TAB_STYLES: Record<ActivityTab, { border: string; selected: string; icon: string }> = {
+  trades: { border: "border-emerald-400/60", selected: "text-emerald-300", icon: "text-emerald-400/70" },
+  foreign: { border: "border-sky-400/60", selected: "text-sky-300", icon: "text-sky-400/70" },
+  profile: { border: "border-violet-400/60", selected: "text-violet-300", icon: "text-violet-400/70" },
+  putthrough: { border: "border-amber-400/60", selected: "text-amber-300", icon: "text-amber-400/70" },
+}
 type HistoryState = "LOADING" | "READY" | "PARTIAL" | "ERROR"
 
 type ForeignSnapshot = {
@@ -1933,17 +1939,34 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
             </div>
           </div>
 
-          <div data-orderbook-activity-layout className="flex min-h-0 flex-1 gap-2 px-2 py-2">
-              <nav data-orderbook-activity-nav aria-label="Loại giao dịch" className="sticky top-0 w-[88px] shrink-0 self-start rounded-lg border border-white/[0.08] bg-[#0c1015]/90 p-1">
-                <div data-orderbook-activity-tabs className="flex flex-col gap-1">
-                  {([[
-                    "trades", BarChart3, "Khớp lệnh", "emerald"
-                  ], ["foreign", PieChart, "Khối ngoại", "blue"], ["profile", Layers, "Bước giá", "purple"], ["putthrough", Handshake, "Thỏa thuận", "amber"]] as const).map(([tab, Icon, label, theme]) => (
-                    <button key={tab} type="button" aria-pressed={activityTab === tab} title={label} disabled={!isWsReady} onClick={() => setActivityTab(tab)} className={`relative flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-[11px] font-bold leading-tight transition-colors duration-150 ${activityTab === tab ? `bg-${theme}-500/20 text-${theme}-300 border border-${theme}-400/30` : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"} ${!isWsReady ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}><Icon className="size-4 shrink-0" /><span className="whitespace-nowrap">{label}</span>{tab === "putthrough" && stream.putThroughDeals.length > 0 ? <span className="absolute right-0.5 top-0.5 rounded-full bg-amber-500/30 px-1 font-mono text-[9px] font-bold leading-4 text-amber-300">{stream.putThroughDeals.length}</span> : null}</button>
-                  ))}
-                </div>
-              </nav>
-            <div data-orderbook-activity-pane className="@container flex min-w-0 flex-1 flex-col">
+          <div data-orderbook-activity-layout className="flex min-h-0 flex-1 px-2 py-2">
+            <nav data-orderbook-activity-nav aria-label="Loại giao dịch" className={`relative z-10 w-[88px] shrink-0 self-stretch rounded-l-xl border border-r-0 bg-[#0c1015] py-1 pl-1 ${ACTIVITY_TAB_STYLES[activityTab].border}`}>
+              <div data-orderbook-activity-tabs className="flex flex-col gap-1">
+                {([
+                  ["trades", BarChart3, "Khớp lệnh"],
+                  ["foreign", PieChart, "Khối ngoại"],
+                  ["profile", Layers, "Bước giá"],
+                  ["putthrough", Handshake, "Thỏa thuận"],
+                ] as const).map(([tab, Icon, label]) => (
+                  <button
+                    key={tab}
+                    data-orderbook-activity-tab={tab}
+                    type="button"
+                    aria-pressed={activityTab === tab}
+                    title={label}
+                    disabled={!isWsReady}
+                    onClick={() => setActivityTab(tab)}
+                    className={`relative flex min-h-14 w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-bold leading-tight transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white/80 ${activityTab === tab ? `z-20 -mr-px rounded-l-md rounded-r-none border border-r-0 bg-[#0c1015] ${ACTIVITY_TAB_STYLES[tab].border} ${ACTIVITY_TAB_STYLES[tab].selected}` : "rounded-md border border-transparent text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"} ${!isWsReady ? "cursor-not-allowed opacity-50 pointer-events-none" : ""}`}
+                  >
+                    <Icon className={`size-4 shrink-0 ${activityTab === tab ? "" : ACTIVITY_TAB_STYLES[tab].icon}`} />
+                    <span className="whitespace-nowrap">{label}</span>
+                    {tab === "putthrough" && stream.putThroughDeals.length > 0 ? <span className="absolute right-0.5 top-0.5 rounded-full bg-amber-500/30 px-1 font-mono text-[9px] font-bold leading-4 text-amber-300">{stream.putThroughDeals.length}</span> : null}
+                    {activityTab === tab ? <span data-orderbook-selected-seam aria-hidden="true" className="pointer-events-none absolute -right-[2px] inset-y-px w-[3px] bg-[#0c1015]" /> : null}
+                  </button>
+                ))}
+              </div>
+            </nav>
+            <div data-orderbook-activity-pane className={`@container relative z-0 flex min-w-0 flex-1 flex-col rounded-r-xl border bg-[#0c1015] p-2 ${ACTIVITY_TAB_STYLES[activityTab].border}`}>
             {!isWsReady ? (
               stream.state === "ERROR" ? (
                 <div className="flex flex-col items-center justify-center flex-1 rounded-lg border border-down/40 bg-down/5 p-6 text-center text-xs"><AlertCircle className="h-7 w-7 text-down mb-2" /><span className="font-bold text-foreground">Không thể kết nối realtime tập trung</span><span className="text-muted text-[11px] mt-1 mb-3">{stream.error || "Lỗi kết nối tới dịch vụ dữ liệu"}</span><button type="button" onClick={() => setReconnectKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md bg-panel-2 border border-border px-3 py-1.5 font-bold text-foreground hover:bg-border transition-colors"><RefreshCw className="h-3.5 w-3.5" />Thử lại kết nối</button></div>
