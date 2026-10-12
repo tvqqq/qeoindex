@@ -198,7 +198,7 @@ test("combined index breadth stays bottom-aligned with direction icon before the
   assert.ok(summary.includes("<ArrowRight"))
   assert.ok(summary.includes('market-breadth-count-tick'))
   assert.ok(summary.includes('data-index-breadth-progress'))
-  assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
+  assert.ok(contextStripSource.includes('className="h-full min-[1100px]:h-[156px]"'))
 })
 
 test("market context numbers, chart traces, and headers honor motion reduction", () => {
@@ -248,7 +248,7 @@ test("after 15:00 and before 09:00 metrics retain exact last trading session obs
 })
 
 test("compact intraday flow charts keep accessible timestamps and fit original cards", () => {
-  assert.ok(contextStripSource.includes('className="h-full xl:h-[156px]"'))
+  assert.ok(contextStripSource.includes('className="h-full min-[1100px]:h-[156px]"'))
   assert.ok(contextStripSource.includes('className="absolute inset-0 h-full w-full touch-pan-y"'))
   const plot = contextStripSource.split("function ComparisonLineChart(")[1]?.split("function MarketSessionClock(")[0] ?? ""
   assert.ok(plot.includes('className="relative flex min-h-[72px] min-w-0 flex-1 flex-col"'))
