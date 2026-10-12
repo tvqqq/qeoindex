@@ -328,7 +328,7 @@ test("market context places ICT next to the title and removes all four bottom an
 
 test("market context fits one desktop row and preserves the board-view controls", () => {
   assert.match(contextStripSource, /data-market-context-single-row/)
-  assert.match(contextStripSource, /sm:grid-cols-2.*md:grid-cols-3 xl:grid-cols-\[/)
+  assert.match(contextStripSource, /sm:grid-cols-2.*md:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)_minmax\(0,1\.8fr\)\] xl:grid-cols-\[/)
   assert.match(contextStripSource, /min-h-\[31px\]/)
   assert.match(contextStripSource, /minmax\(0,2\.15fr\)/)
   assert.match(contextStripSource, /title="VN-Index \/ VN30"/)
@@ -392,6 +392,18 @@ test("compact Chart 1m moves the original VNINDEX/VN30 context card into the cha
   assert.ok(sharedChart.includes('compact && showContextSummary ? "hidden xl:flex" : "flex"'))
   assert.ok(sharedChart.includes('compact && showContextSummary && onRefresh'))
   assert.ok(sharedChart.includes('showContextSummary={showContextSummary}'))
+})
+
+test("compact Chart 1m widens impact only while index card is portaled below", () => {
+  const card = contextStripSource.split("const indexSummaryCard = (")[1]?.split("  return (\\n    <div className=")[0] ?? ""
+  assert.ok(contextStripSource.includes("chartActive && showContext ?"))
+  assert.ok(contextStripSource.includes("md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)]"))
+  assert.ok(contextStripSource.includes("xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"))
+  assert.ok(contextStripSource.includes("createPortal(indexSummaryCard, chartSummaryTarget)"))
+  assert.ok(card.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(card.includes("onOpen={onOpenIndexChart}"))
+  assert.equal(card.includes("headerRight="), false)
+  assert.equal(card.includes("ChartNoAxesCombined"), false)
 })
 
 test("Chart 1m, Bảng điện and Bảng ngành have distinct selected tab icons and tones", () => {
