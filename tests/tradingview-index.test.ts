@@ -182,16 +182,16 @@ test("index chart exposes 1m 5m 30m 1H 4H 1D selectors and timeframe-aware histo
   assert.match(routeSource, /new Map<IndexChartResolution, CachedPayload>/)
 })
 
-test("intraday x-axis uses time-only ticks with day labels and separators through 1H", () => {
-  assert.match(minuteChartSource, /TIME_ONLY_FORMATTER/)
-  assert.match(minuteChartSource, /dayStartTimes/)
-  assert.match(minuteChartSource, /timeToCoordinate/)
-  assert.match(minuteChartSource, /isSessionSeparatorResolution\(resolution\)/)
-  assert.match(minuteChartSource, /bottom-\\[30px\\]/)
-  assert.match(minuteChartSource, /label\\.textContent = FULL_DATE_FORMATTER\\.format/)
-  assert.match(minuteChartSource, /line\\.className = "absolute top-0 bottom-\\[26px\\] w-px bg-cyan-400\\/35"/)
-  assert.match(minuteChartSource, /if \\(index > 0\\)/)
-  assert.match(minuteChartSource, /subscribeVisibleLogicalRangeChange\\(rangeHandler\\)/)
+test("intraday x-axis marks real day transitions with full Vietnam dates and vertical lines", () => {
+  assert.ok(minuteChartSource.includes("TIME_ONLY_FORMATTER"))
+  assert.ok(minuteChartSource.includes("dayStartTimes(dataRef.current)"))
+  assert.ok(minuteChartSource.includes("timeToCoordinate(time)"))
+  assert.ok(minuteChartSource.includes("isSessionSeparatorResolution(resolution)"))
+  assert.ok(minuteChartSource.includes("bottom-[30px]"))
+  assert.ok(minuteChartSource.includes("label.textContent = FULL_DATE_FORMATTER.format(new Date(time * 1000))"))
+  assert.ok(minuteChartSource.includes('line.className = "absolute top-0 bottom-[26px] w-px bg-cyan-400/35"'))
+  assert.ok(minuteChartSource.includes("if (index > 0)"))
+  assert.ok(minuteChartSource.includes("subscribeVisibleLogicalRangeChange(rangeHandler)"))
   assert.match(minuteChartSource, /resolution === "1D" \? DATE_ONLY_FORMATTER/)
 })
 
