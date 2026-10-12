@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ZoomIn, ZoomOut } from "lucide-react"
 import { loadLightweightCharts, type LightweightChartApi, type LightweightSeriesApi } from "@/modules/shared/charts/lightweight-charts-runtime"
 import {
   candleDateKey,
@@ -149,15 +148,15 @@ export function IndexMinuteChart({
 
       if (index > 0) {
         const line = document.createElement("div")
-        line.className = "absolute top-0 bottom-[26px] w-px bg-slate-400/[0.18]"
+        line.className = "absolute top-0 bottom-[26px] w-px bg-cyan-400/35"
         line.style.left = `${Math.round(x)}px`
         layer.appendChild(line)
       }
 
       const label = document.createElement("span")
-      label.className = "absolute bottom-[3px] -translate-x-1/2 rounded bg-[#080c10]/95 px-1 font-mono text-[9px] font-semibold text-slate-500"
+      label.className = "absolute bottom-[30px] z-[2] -translate-x-1/2 whitespace-nowrap rounded border border-cyan-400/20 bg-[#080c10]/95 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300"
       label.style.left = `${Math.round(x)}px`
-      label.textContent = DATE_ONLY_FORMATTER.format(new Date(time * 1000))
+      label.textContent = FULL_DATE_FORMATTER.format(new Date(time * 1000))
       layer.appendChild(label)
     })
   }, [resolution])
@@ -366,30 +365,6 @@ export function IndexMinuteChart({
     <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
       <div ref={containerRef} className="absolute inset-0" />
       <div ref={markerLayerRef} className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" aria-hidden="true" />
-      {!runtimeError ? (
-        <div className="absolute right-[76px] top-2 z-[3] flex gap-1 rounded-lg border border-white/[0.1] bg-[#10171d]/95 p-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => zoom(0.75)}
-            disabled={data.length < 2}
-            aria-label={`Phóng to nến ${symbol}`}
-            title="Phóng to nến"
-            className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-white/[0.09] hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => zoom(1.25)}
-            disabled={data.length < 2}
-            aria-label={`Thu nhỏ nến ${symbol}`}
-            title="Thu nhỏ nến"
-            className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-white/[0.09] hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </button>
-        </div>
-      ) : null}
       {runtimeError ? (
         <div className="absolute inset-0 z-10 grid place-items-center bg-[#080c10]/95 p-6 text-center">
           <div className="max-w-sm rounded-xl border border-rose-500/25 bg-rose-500/5 px-4 py-3 text-xs leading-relaxed text-rose-300">

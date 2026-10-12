@@ -1523,6 +1523,8 @@ export function LiveMarketBoard({
           canonicalUniverse={fullCanonicalUniverse}
           realtimeImpact={realtimeImpact}
           onOpenIndexChart={openIndexChart}
+          chartActive={boardView === "chart"}
+          showContext={showMarketContext}
         />
       </div>
 
@@ -1673,7 +1675,7 @@ export function LiveMarketBoard({
         data-market-board-screenshot-scroll
       >
         {boardView === "chart" ? (
-          <IndexChartWorkspace />
+          <IndexChartWorkspace showContextSummary={showMarketContext} />
         ) : (
           <>
         {boardView === "classic" && showWatchlist && watchedStocks.length > 0 ? (

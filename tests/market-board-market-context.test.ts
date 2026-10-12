@@ -146,7 +146,7 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.match(boardSource, /<MarketContextStrip/)
   assert.match(boardSource, /useState<BoardView>\("classic"\)/)
   assert.match(stripSource, /data-market-context-single-row/)
-  assert.match(stripSource, /grid-cols-1 items-stretch.*sm:grid-cols-2 md:grid-cols-/)
+  assert.match(stripSource, /grid-cols-1 items-stretch.*sm:grid-cols-2.*md:grid-cols-3 xl:grid-cols-/)
   assert.match(stripSource, /title="VN-Index \/ VN30"/)
   assert.match(stripSource, /<IndexedSummary label="VN-Index"/)
   assert.match(stripSource, /<IndexedSummary label="VN30"/)
@@ -403,7 +403,7 @@ test("combined index card routes its chart action to the VNIndex Chart board tab
   assert.ok(stripSource.includes('onOpen={onOpenIndexChart}'))
   assert.ok(boardSource.includes('onOpenIndexChart={openIndexChart}'))
   assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setBoardView("chart"), [])'))
-  assert.ok(boardSource.includes('<IndexChartWorkspace />'))
+  assert.ok(boardSource.includes("<IndexChartWorkspace showContextSummary={showMarketContext} />"))
   assert.equal(boardSource.includes('<IndexChartModal'), false)
 })
 
