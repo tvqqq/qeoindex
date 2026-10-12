@@ -354,7 +354,7 @@ test("VNIndex Chart is the first board tab and replaces board-only content witho
   assert.match(boardSource, /const label = view === "chart" \? "Chart 1m"/)
   assert.match(boardSource, /BOARD_VIEW_TABS\[\(index \+ 1\) % BOARD_VIEW_TABS\.length\]/)
   assert.match(boardSource, /aria-labelledby={`market-board-view-\$\{boardView\}-tab`}/)
-  assert.match(boardSource, /boardView === "chart" \? \(\s*<IndexChartWorkspace \/>/)
+  assert.match(boardSource, /boardView === "chart" \? \(\s*<IndexChartWorkspace showContextSummary=\{showMarketContext\} \/>/)
   assert.match(boardSource, /boardView !== "chart" \? <div className="flex flex-wrap items-center justify-end/)
   assert.match(boardSource, /boardView !== "chart" && streamState !== "LIVE"/)
   assert.doesNotMatch(boardSource, /<IndexChartModal|setIndexChartOpen/)
@@ -369,6 +369,24 @@ test("VNIndex Chart is the first board tab and replaces board-only content witho
   assert.match(modalSource, /export function IndexChartContent\(/)
   assert.match(modalSource, /<ChartCard symbol="VNINDEX"/)
   assert.match(modalSource, /<ChartCard symbol="VN30F1M"/)
+})
+
+test("compact Chart 1m moves the original VNINDEX/VN30 context card into the chart body", () => {
+  const workspace = readFileSync(new URL("../components/index-chart/index-chart-workspace.tsx", import.meta.url), "utf8")
+  const sharedChart = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
+  assert.ok(boardSource.includes('chartActive={boardView === "chart"}'))
+  assert.ok(boardSource.includes("showContext={showMarketContext}"))
+  assert.ok(boardSource.includes("<IndexChartWorkspace showContextSummary={showMarketContext} />"))
+  assert.ok(contextStripSource.includes('window.matchMedia("(max-width: 1279px)")'))
+  assert.ok(contextStripSource.includes("chartActive && showContext && compactScreen && chartSummaryTarget !== null"))
+  assert.ok(contextStripSource.includes("createPortal(indexSummaryCard, chartSummaryTarget)"))
+  assert.ok(contextStripSource.includes("md:grid-cols-3 xl:grid-cols-["))
+  assert.ok(workspace.includes("showContextSummary={showContextSummary}"))
+  assert.ok(sharedChart.includes('id="market-board-chart-index-summary"'))
+  assert.ok(sharedChart.includes('className="col-span-full empty:hidden xl:hidden"'))
+  assert.ok(sharedChart.includes('compact && showContextSummary ? "hidden xl:flex" : "flex"'))
+  assert.ok(sharedChart.includes('compact && showContextSummary && onRefresh'))
+  assert.ok(sharedChart.includes('showContextSummary={showContextSummary}'))
 })
 
 test("Chart 1m, Bảng điện and Bảng ngành have distinct selected tab icons and tones", () => {
