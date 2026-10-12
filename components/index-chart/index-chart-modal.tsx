@@ -106,7 +106,7 @@ function ChartCard({
   return (
     <section className="flex min-h-[390px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c10] shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.06)]">
       {compact && showContextSummary ? (
-        <div className="relative h-[160px] min-w-0 border-b border-emerald-400/20 bg-[#111511] xl:hidden">
+        <div className="relative h-[132px] min-w-0 border-b border-emerald-400/20 bg-[#111511] sm:h-[96px] xl:hidden">
           <div
             id={symbol === "VNINDEX" ? "market-board-chart-vnindex-header" : "market-board-chart-vn30-header"}
             className="h-full min-w-0"
