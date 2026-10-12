@@ -649,7 +649,7 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
     <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"}`}>
       <div className="flex items-center justify-between gap-1.5">
         {onOpen ? (
-          <button type="button" onClick={onOpen} className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
+          <button type="button" onClick={onOpen} className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand`} aria-label="Mở biểu đồ VN-Index">{label}</button>
         ) : <span className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200`}>{label}</span>}
         <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
