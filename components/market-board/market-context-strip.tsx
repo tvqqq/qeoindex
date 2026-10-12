@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChartNoAxesCombined, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Globe2, Landmark, Scale, WalletCards } from "lucide-react"
 import { getMarketSessionDisplay, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { getMarketCardActivity } from "@/modules/market/board/market-realtime-activity"
 
@@ -1289,19 +1289,7 @@ export function MarketContextStrip({
     <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full md:h-[156px]"
               activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
               activitySessionDay={contextSessionDate}
-              headerInfo={<MarketSessionClock />}
-              headerRight={
-                <button
-                  type="button"
-                  onClick={onOpenIndexChart}
-                  aria-label="Mở biểu đồ realtime VN-Index và VN30F1M"
-                  title="Biểu đồ realtime VN-Index / VN30F1M"
-                  className="inline-flex h-6 items-center gap-1 rounded-md border border-emerald-400/25 bg-emerald-400/[0.08] px-2 text-[10px] font-semibold text-emerald-300 transition-colors hover:bg-emerald-400/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-                >
-                  <ChartNoAxesCombined className="h-3.5 w-3.5" aria-hidden="true" />
-                  Chart
-                </button>
-              }>
+              headerInfo={<MarketSessionClock />}>
               <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
                 <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={vnindexBreadth} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} breadthFresh={isFresh(vnindexBreadth?.sourceUpdatedAt)} />
                 <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={vn30Breadth} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)} />
@@ -1311,7 +1299,7 @@ export function MarketContextStrip({
 
   return (
     <div className="border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
-      <div className={`grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 ${chartActive && showContext ? "md:grid-cols-3 xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]" : "md:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"}`} data-market-context-single-row>
+      <div className={`grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 ${chartActive && showContext ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)] xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]" : "md:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"}`} data-market-context-single-row>
         {moveIndexSummary && chartSummaryTarget
           ? createPortal(indexSummaryCard, chartSummaryTarget)
           : indexSummaryCard}
