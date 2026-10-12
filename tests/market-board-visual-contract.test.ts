@@ -436,6 +436,33 @@ test("compact Chart 1m widens impact while retaining the original four-card desk
   assert.equal(card.includes("ChartNoAxesCombined"), false)
 })
 
+test("Chart 1m compact headers are equal-height and footer owns ICT and one refresh", () => {
+  const chart = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
+  const header = chart.split('data-market-chart-spot-summary={symbol === "VNINDEX" ? "VNINDEX" : "VN30"}')[0] ?? ""
+  const footer = chart.split('<footer className="flex shrink-0')[1]?.split("</footer>")[0] ?? ""
+  const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
+
+  assert.ok(chart.includes('id={symbol === "VNINDEX" ? "market-board-chart-vnindex-header" : "market-board-chart-vn30-header"}'))
+  assert.ok(chart.includes('className="relative h-[160px] min-w-0 border-b border-emerald-400/20 bg-[#111511] xl:hidden"'))
+  assert.ok(chart.includes('className="h-full min-w-0"'))
+  assert.ok(summary.includes('chartHeader ? "h-[160px] px-4 py-3"'))
+  assert.ok(summary.includes('chartHeader ? "text-base"'))
+  assert.ok(summary.includes('chartHeader ? "text-[clamp(20px,2vw,27px)]"'))
+  assert.ok(summary.includes('chartHeader ? "text-[clamp(16px,1.45vw,20px)]"'))
+  assert.ok(summary.includes('chartHeader ? "mt-2 text-xs"'))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
+  assert.ok(footer.includes('id="market-board-chart-ict-clock"'))
+  assert.ok(footer.includes('onClick={onRefresh}'))
+  assert.ok(footer.includes('disabled={isRefreshing}'))
+  assert.ok(footer.includes("Làm mới hai biểu đồ realtime"))
+  assert.ok(footer.includes("<span>Refresh</span>"))
+  assert.ok(contextStripSource.includes('document.getElementById("market-board-chart-ict-clock")'))
+  assert.ok(contextStripSource.includes('chartActive && chartSummaryTarget ? createPortal(<MarketSessionClock />, chartSummaryTarget.clock)'))
+  assert.ok(contextStripSource.includes('headerInfo={chartActive ? null : <MarketSessionClock />}'))
+  assert.equal(header.includes("onClick={onRefresh}"), false)
+  assert.equal(chart.includes("History theo timeframe từ DNSE"), false)
+})
+
 test("Chart 1m, Bảng điện and Bảng ngành have distinct selected tab icons and tones", () => {
   assert.ok(boardSource.includes('const label = view === "chart" ? "Chart 1m"'))
   assert.ok(boardSource.includes('const ViewIcon = view === "chart" ? ChartNoAxesCombined : view === "classic" ? Table2 : PanelsTopLeft'))
