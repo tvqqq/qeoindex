@@ -14,7 +14,7 @@ const NOTICE_DURATION_MS = 2_000
 
 export function useLargeTradeNotice() {
   const [notice, setNotice] = useState<LargeTradeAlert | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerRef = useRef<number | null>(null)
 
   const fire = useCallback((next: LargeTradeAlert): boolean => {
     if (timerRef.current !== null) return false
