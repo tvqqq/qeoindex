@@ -151,8 +151,18 @@ test("orderbook popup places vertical activity navigation beside responsive cont
 test("orderbook large trades use a bounded two-second lightweight notice without row tags or Lottie", () => {
   assert.match(orderbookSource, /import \{ useLargeTradeNotice, LargeTradeNotice \} from "@\/components\/orderbook\/large-trade-notice"/)
   assert.match(orderbookSource, /<LargeTradeNotice notice=\{largeTradeNotice\.notice\} \/>/)
-  assert.match(orderbookSource, /isRecentLarge = largeTradeNotice\.notice\?\.tradeId === trade\.id/)
-  assert.match(orderbookSource, /\$\{isRecentLarge \|\| isAto \|\| isAtc \?/)
+  // Keep the original full-row highlight for EVERY qualifying visible execution,
+  // not only the newest execution while the 2-second notice is displayed.
+  assert.match(orderbookSource, /isLarge = !isAto && !isAtc && trade\.volume >= LARGE_TRADE_MIN_VOLUME/)
+  assert.match(orderbookSource, /isWhale = !isAto && !isAtc && trade\.volume >= whaleThreshold/)
+  assert.match(orderbookSource, /\$\{isWhale \|\| isLarge \|\| isAto \|\| isAtc \? `\$\{sideBgClass\} font-bold -mx-3\.5 px-3\.5`/)
+  assert.match(orderbookSource, /\$\{isWhale \|\| isLarge \? sideColorClass : "text-foreground"\}/)
+  assert.doesNotMatch(orderbookSource, /isRecentLarge = largeTradeNotice\.notice\?\.tradeId === trade\.id/)
+  const renderedRows = orderbookSource.slice(orderbookSource.indexOf("{visibleTrades.length ? <div"), orderbookSource.indexOf("{visibleTrades.length ? <div") + 2800)
+  assert.doesNotMatch(renderedRows, /10K\+|30K\+|50K\+|🐋|tagBadgeClass/)
+  assert.match(renderedRows, /trade\.count > 1 \? <span/)
+  assert.match(renderedRows, /isAto \? <span/)
+  assert.match(renderedRows, /isAtc \? <span/)
   assert.doesNotMatch(orderbookSource, /10K\+|30K\+|50K\+|🐋|tagBadgeClass|isWhaleGlow|ConfettiOverlay|useWhaleConfetti/)
   assert.match(orderbookSource, /if \(!newest\) newest = t/)
   assert.match(orderbookSource, /if \(largeTradeNotice\.fire\(/)
