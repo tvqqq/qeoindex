@@ -80,6 +80,7 @@ function ChartCard({
   loading,
   error,
   compact = false,
+  showContextSummary = false,
   onRefresh,
   isRefreshing = false,
 }: {
@@ -89,6 +90,7 @@ function ChartCard({
   loading: boolean
   error?: string
   compact?: boolean
+  showContextSummary?: boolean
   onRefresh?: () => void
   isRefreshing?: boolean
 }) {
@@ -103,7 +105,7 @@ function ChartCard({
 
   return (
     <section className="flex min-h-[390px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c10] shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.06)]">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] bg-white/[0.025] px-4 py-3">
+      <div className={`${compact && showContextSummary ? "hidden xl:flex" : "flex"} flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] bg-white/[0.025] px-4 py-3`}>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-ticker text-sm font-extrabold tracking-wide text-white">{title}</span>
@@ -151,6 +153,24 @@ function ChartCard({
       </div>
 
       <div className="relative min-h-[300px] flex-1">
+        {compact && showContextSummary ? (
+          <span className="pointer-events-none absolute left-3 top-3 z-[3] rounded-md border border-white/[0.08] bg-[#10171d]/85 px-2 py-1 font-ticker text-[10px] font-bold tracking-wide text-slate-300 xl:hidden">
+            {title}
+          </span>
+        ) : null}
+        {compact && showContextSummary && onRefresh ? (
+          <button
+            type="button"
+            data-chart-action
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="Làm mới dữ liệu biểu đồ"
+            title="Làm mới history snapshot"
+            className="absolute right-14 top-2 z-[3] flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.1] bg-[#10171d]/95 text-slate-400 transition hover:text-cyan-300 disabled:opacity-50 xl:hidden"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+          </button>
+        ) : null}
         {bars.length ? (
           <IndexMinuteChart symbol={symbol} data={bars} resolution={resolution} />
         ) : loading ? (
@@ -198,6 +218,7 @@ export function IndexChartContent({
   onRefresh,
   isRefreshing = false,
   compact = false,
+  showContextSummary = false,
 }: {
   resolution: IndexChartResolution
   onResolutionChange?: (resolution: IndexChartResolution) => void
@@ -207,6 +228,7 @@ export function IndexChartContent({
   onRefresh?: () => void
   isRefreshing?: boolean
   compact?: boolean
+  showContextSummary?: boolean
 }) {
   return (
     <>
@@ -251,8 +273,9 @@ export function IndexChartContent({
       ) : null}
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
-        <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} compact={compact} onRefresh={compact ? onRefresh : undefined} isRefreshing={isRefreshing} />
-        <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} compact={compact} />
+        {compact ? <div id="market-board-chart-index-summary" className="col-span-full empty:hidden xl:hidden" /> : null}
+        <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} compact={compact} showContextSummary={showContextSummary} onRefresh={compact ? onRefresh : undefined} isRefreshing={isRefreshing} />
+        <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} compact={compact} showContextSummary={showContextSummary} />
       </main>
 
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[9px] text-slate-600 sm:px-5">
