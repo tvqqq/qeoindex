@@ -257,7 +257,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
-  assert.ok(summary.includes("rounded-full border px-1.5 py-0.5"))
+  assert.ok(summary.includes("rounded-full border px-2 py-1"))
   assert.ok(summary.includes('font-sans text-[12px] font-extrabold'))
   assert.ok(summary.includes("pillTone"))
   assert.ok(summary.includes("border-emerald-400/35"))
@@ -265,20 +265,20 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes("border-amber-400/35"))
   assert.ok(summary.includes('data-index-breadth-progress'))
   assert.ok(summary.includes("Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}"))
-  assert.ok(summary.includes("h-[8px] w-full"))
+  assert.ok(summary.includes("w-full overflow-hidden rounded-full bg-zinc-800"))
   assert.ok(summary.includes("total > 0"))
   assert.ok(summary.includes("indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])"))
   assert.ok(summary.includes("progress.shares[0]"))
   assert.ok(summary.includes("progress.shares[1]"))
   assert.ok(summary.includes("progress.shares[2]"))
-  assert.ok(summary.includes("relative mt-1 h-[14px]"))
+  assert.ok(summary.includes("relative mt-1 w-full font-sans font-bold tabular-nums"))
   assert.ok(summary.includes("progress.centers[0]"))
   assert.ok(summary.includes("progress.centers[1]"))
   assert.ok(summary.includes("progress.centers[2]"))
   assert.ok(summary.includes("motion-safe:transition-[left]"))
   assert.ok(summary.includes("motion-safe:duration-700 motion-safe:ease-in-out"))
   assert.ok(summary.includes('breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""'))
-  assert.ok(summary.includes("relative flex h-[8px] w-full"))
+  assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
   assert.ok(summary.includes('hasBreadth ? breadth[0] : "—"'))
   assert.equal(summary.includes('data-index-breadth-inline'), false)
   assert.equal(summary.includes('mt-0.5 flex justify-between gap-1 text-[9px]'), false)
@@ -287,7 +287,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
 test("index levels use direction icons; real count revisions animate and values preserve signs", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes('chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"'))
-  assert.ok(summary.includes('className="mt-auto min-w-0 pt-1"'))
+  assert.ok(summary.includes('mt-auto min-w-0'))
   assert.match(stripSource, /ArrowUpRight|ArrowDownRight|<ArrowRight/)
   assert.ok(summary.includes("const trend = finite(change) ? change : finite(percent) ? percent : undefined"))
   assert.ok(summary.includes('trend > 0 ? "text-emerald-400" : trend < 0 ? "text-rose-400" : "text-amber-300"'))
@@ -371,7 +371,7 @@ test("market cards remove bottom annotation rows but preserve source integrity",
   const liquidity = stripSection.split('title="Thanh khoản"')[1]?.split('title="Mua bán nước ngoài"')[0] ?? ""
   const foreign = stripSection.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
   const impactChart = stripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
-  assert.ok(stripSource.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(stripSource.includes("headerInfo={chartActive ? null : <MarketSessionClock />}"))
   assert.ok(stripSource.includes('title={`Thị trường: ${marketStatus} · Giờ Việt Nam (ICT, UTC+7)`}'))
   assert.equal(stripSource.includes('className="mt-0.5 flex h-[20px]'), false)
   assert.equal(stripSource.includes('border-t border-white/[0.07] pt-1 font-ticker'), false)
@@ -399,7 +399,7 @@ test("market cards remove bottom annotation rows but preserve source integrity",
 
 test("combined index card has no redundant Chart header button, while label still selects Chart 1m", () => {
   const card = stripSource.split("const indexSummaryCard = (")[1]?.split("  return (")[0] ?? ""
-  assert.ok(card.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(card.includes("headerInfo={chartActive ? null : <MarketSessionClock />}"))
   assert.ok(stripSource.includes("onOpen={onOpenIndexChart}"))
   assert.equal(card.includes("headerRight="), false)
   assert.equal(card.includes("onClick={onOpenIndexChart}"), false)
@@ -424,7 +424,7 @@ test("VN-Index / VN30 shows a client-only ICT market status without new data req
   assert.ok(stripSource.includes('document.addEventListener("visibilitychange", refresh)'))
   assert.ok(stripSource.includes("useState<number | null>(null)"))
   assert.ok(stripSource.includes("Giờ Việt Nam (ICT, UTC+7)"))
-  assert.ok(stripSource.includes("headerInfo={<MarketSessionClock />}"))
+  assert.ok(stripSource.includes("headerInfo={chartActive ? null : <MarketSessionClock />}"))
   assert.ok(stripSource.includes('title={`Thị trường: ${marketStatus}'))
   assert.ok(stripSource.includes("inline-flex shrink-0 items-center whitespace-nowrap"))
   assert.ok(stripSource.includes("onOpen={onOpenIndexChart}"))
