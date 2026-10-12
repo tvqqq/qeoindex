@@ -34,33 +34,41 @@ const contextStripSource = readFileSync(new URL("../components/market-board/mark
 const screenshotSource = readFileSync(new URL("../modules/shared/media/screenshot.ts", import.meta.url), "utf8")
 
 
-test("orderbook popup centers activity tabs under depth and keeps trade filters within left card", () => {
+
+test("orderbook popup places vertical activity navigation beside responsive content", () => {
+  const depthCard = orderbookSource.indexOf("data-orderbook-depth-card")
   const depthBar = orderbookSource.indexOf("data-orderbook-depth-progress")
-  const tabs = orderbookSource.indexOf("data-orderbook-activity-tabs")
-  const activityContent = orderbookSource.indexOf('className="px-4 py-3 flex-1 flex flex-col"', tabs)
-  const tradesGrid = orderbookSource.indexOf("grid grid-cols-[1.18fr_1fr]", activityContent)
+  const layout = orderbookSource.indexOf("data-orderbook-activity-layout")
+  const nav = orderbookSource.indexOf("data-orderbook-activity-nav", layout)
+  const tabs = orderbookSource.indexOf("data-orderbook-activity-tabs", nav)
+  const pane = orderbookSource.indexOf("data-orderbook-activity-pane", tabs)
+  const tradesGrid = orderbookSource.indexOf("@min-[620px]:grid-cols-[1.18fr_1fr]", pane)
   const tradeCard = orderbookSource.indexOf("data-orderbook-trade-card", tradesGrid)
   const filters = orderbookSource.indexOf("data-orderbook-trade-filters", tradeCard)
   const tradeHeading = orderbookSource.indexOf("<span>Thời gian</span>", filters)
   const tradeRows = orderbookSource.indexOf("{visibleTrades.length ? <div", tradeHeading)
   const foreignCard = orderbookSource.indexOf("<ForeignRealtimeCard foreign=", tradeRows)
 
-  assert.ok(depthBar >= 0 && depthBar < tabs && tabs < activityContent)
-  assert.ok(activityContent < tradesGrid && tradesGrid < tradeCard)
-  assert.ok(tradeCard < filters && filters < tradeHeading && tradeHeading < tradeRows && tradeRows < foreignCard)
-  const depthCard = orderbookSource.indexOf("data-orderbook-depth-card")
-  const attachedNav = orderbookSource.indexOf("data-orderbook-activity-nav")
-  assert.ok(depthCard >= 0 && depthCard < depthBar && depthBar < attachedNav && attachedNav < tabs)
-  assert.match(orderbookSource, /data-orderbook-activity-nav aria-label="Loại giao dịch" className="-mx-2 -mb-2 mt-2 border-t/)
-  assert.match(orderbookSource, /data-orderbook-activity-tabs className="grid w-full grid-cols-4 gap-1 p-1"/)
-  assert.ok(orderbookSource.includes("className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-md px-1.5 py-2 text-[11px] sm:text-[13px] font-bold"))
+  assert.ok(depthCard >= 0 && depthCard < depthBar && depthBar < layout)
+  assert.ok(layout < nav && nav < tabs && tabs < pane && pane < tradesGrid)
+  assert.ok(tradesGrid < tradeCard && tradeCard < filters && filters < tradeHeading && tradeHeading < tradeRows && tradeRows < foreignCard)
+  assert.match(orderbookSource, /data-orderbook-activity-layout className="flex min-h-0 flex-1 gap-2 px-2 py-2"/)
+  assert.match(orderbookSource, /data-orderbook-activity-nav aria-label="Loại giao dịch" className="sticky top-0 w-\[88px\] shrink-0 self-start/)
+  assert.match(orderbookSource, /data-orderbook-activity-tabs className="flex flex-col gap-1"/)
+  assert.match(orderbookSource, /data-orderbook-activity-pane className="@container flex min-w-0 flex-1 flex-col"/)
+  assert.match(orderbookSource, /grid grid-cols-1 items-start gap-2\.5 @min-\[620px\]:grid-cols-\[1\.18fr_1fr\]/)
+  assert.match(orderbookSource, /grid grid-cols-2 gap-2\.5 @min-\[580px\]:grid-cols-4/)
+  assert.match(orderbookSource, /relative flex min-h-14 w-full flex-col items-center justify-center gap-1/)
+  assert.match(orderbookSource, /<Icon className="size-4 shrink-0" \/><span className="whitespace-nowrap">\{label\}<\/span>/)
+  assert.match(orderbookSource, /aria-pressed=\{activityTab === tab\} title=\{label\}/)
+  assert.match(orderbookSource, /tab === "putthrough" && stream\.putThroughDeals\.length > 0/)
+  assert.doesNotMatch(orderbookSource.slice(depthCard, layout), /data-orderbook-activity-nav/)
   assert.match(orderbookSource, /data-orderbook-trade-filters className="grid w-full grid-cols-3 gap-0\.5 border-b/)
   assert.equal((orderbookSource.slice(filters, tradeHeading).match(/flex min-w-0 w-full items-center justify-center/g) ?? []).length, 3)
   assert.match(orderbookSource, /data-orderbook-depth-progress className="relative h-1\.5 w-full/)
   assert.match(orderbookSource, /text-xs sm:text-\[13px\] text-emerald-400/)
   assert.match(orderbookSource, /text-xs sm:text-\[13px\] text-rose-400/)
   assert.match(orderbookSource, /mt-1\.5 border-t border-white\/\[0\.08\] pt-1\.5/)
-  assert.ok(orderbookSource.includes("aria-pressed={activityTab === tab}"))
   for (const filter of ["all", "large", "whale"]) {
     assert.ok(orderbookSource.includes(`aria-pressed={tradeFilter === "${filter}"}`))
   }
@@ -77,7 +85,7 @@ test("orderbook popup centers activity tabs under depth and keeps trade filters 
   assert.doesNotMatch(filterContent, /<span>Cá con ≥10K<\/span>/)
   assert.doesNotMatch(filterContent, /<span>Cá mập \{whaleLabel\}<\/span>/)
   assert.match(orderbookSource, /\{visibleTrades\.length \? <div[\s\S]*?"Không có lệnh thỏa mãn bộ lọc\."/)
-  for (const marker of ["data-orderbook-activity-tabs", "data-orderbook-trade-card", "data-orderbook-trade-filters"]) {
+  for (const marker of ["data-orderbook-activity-nav", "data-orderbook-activity-tabs", "data-orderbook-activity-layout", "data-orderbook-activity-pane", "data-orderbook-trade-card", "data-orderbook-trade-filters"]) {
     assert.equal(orderbookSource.split(marker).length - 1, 1)
   }
 })
