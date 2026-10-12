@@ -426,7 +426,7 @@ test("VN-Index / VN30 shows a client-only ICT market status without new data req
   assert.ok(stripSource.includes("headerInfo={<MarketSessionClock />}"))
   assert.ok(stripSource.includes('title={`Thị trường: ${marketStatus}'))
   assert.ok(stripSource.includes("inline-flex shrink-0 items-center whitespace-nowrap"))
-  assert.ok(stripSource.includes("onClick={onOpenIndexChart}"))
+  assert.ok(stripSource.includes("onOpen={onOpenIndexChart}"))
   const clockComponent = stripSource.split("function MarketSessionClock()")[1]?.split("function IndexedSummary")[0] ?? ""
   assert.equal(clockComponent.includes("fetch("), false)
 })
