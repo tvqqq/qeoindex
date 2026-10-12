@@ -23,9 +23,12 @@ export function IndexChartWorkspace() {
 
   useEffect(() => {
     const updateClock = () => setLiveClock(Date.now())
-    updateClock()
+    const initialTimer = window.setTimeout(updateClock, 0)
     const interval = window.setInterval(updateClock, 5_000)
-    return () => window.clearInterval(interval)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(interval)
+    }
   }, [])
 
   return (
