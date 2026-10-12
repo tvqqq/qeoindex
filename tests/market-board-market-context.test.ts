@@ -258,7 +258,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
   assert.ok(summary.includes("rounded-full border px-2 py-1"))
-  assert.ok(summary.includes('font-sans text-[12px] font-extrabold'))
+  assert.ok(summary.includes('font-sans ${chartHeader ? "text-base" : "text-[12px]"} font-extrabold'))
   assert.ok(summary.includes("pillTone"))
   assert.ok(summary.includes("border-emerald-400/35"))
   assert.ok(summary.includes("border-rose-400/35"))
@@ -286,7 +286,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
 
 test("index levels use direction icons; real count revisions animate and values preserve signs", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
-  assert.ok(summary.includes('chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"'))
+  assert.ok(summary.includes('chartHeader ? "h-[160px] px-4 py-3" : "px-2.5 py-1.5"'))
   assert.ok(summary.includes('mt-auto min-w-0'))
   assert.match(stripSource, /ArrowUpRight|ArrowDownRight|<ArrowRight/)
   assert.ok(summary.includes("const trend = finite(change) ? change : finite(percent) ? percent : undefined"))
@@ -306,7 +306,7 @@ test("index levels use direction icons; real count revisions animate and values 
   assert.ok(summary.includes("previous.day === day && previous.signature !== breadthSignature && breadthFresh"))
   assert.ok(summary.includes('key={breadthSweepRevision}'))
   assert.ok(summary.includes('market-breadth-change-sweep'))
-  assert.ok(summary.includes('font-sans text-[12px] font-extrabold'))
+  assert.ok(summary.includes('font-sans ${chartHeader ? "text-base" : "text-[12px]"} font-extrabold'))
   assert.ok(summary.includes("data-index-breadth-progress"))
   assert.ok(summary.includes("progress.centers[0]"))
   assert.ok(summary.includes("progress.centers[2]"))
