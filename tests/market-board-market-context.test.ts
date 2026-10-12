@@ -403,7 +403,7 @@ test("combined index card routes its chart action to the VNIndex Chart board tab
   assert.ok(stripSource.includes('onOpen={onOpenIndexChart}'))
   assert.ok(boardSource.includes('onOpenIndexChart={openIndexChart}'))
   assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setBoardView("chart"), [])'))
-  assert.ok(boardSource.includes('<IndexChartWorkspace />'))
+  assert.ok(boardSource.includes("<IndexChartWorkspace showContextSummary={showMarketContext} />"))
   assert.equal(boardSource.includes('<IndexChartModal'), false)
 })
 
