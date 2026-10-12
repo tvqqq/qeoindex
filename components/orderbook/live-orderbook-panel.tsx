@@ -66,10 +66,10 @@ type AuctionExpected = {
 type StreamState = "CONNECTING" | "LIVE" | "ERROR" | "CLOSED"
 type ActivityTab = "trades" | "foreign" | "profile" | "putthrough"
 const ACTIVITY_TAB_STYLES: Record<ActivityTab, { border: string; selected: string; icon: string }> = {
-  trades: { border: "border-emerald-400/60", selected: "text-emerald-300", icon: "text-emerald-400/70" },
-  foreign: { border: "border-sky-400/60", selected: "text-sky-300", icon: "text-sky-400/70" },
-  profile: { border: "border-violet-400/60", selected: "text-violet-300", icon: "text-violet-400/70" },
-  putthrough: { border: "border-amber-400/60", selected: "text-amber-300", icon: "text-amber-400/70" },
+  trades: { border: "border-emerald-400/60", selected: "bg-emerald-500/20 text-emerald-300", icon: "text-emerald-400/70" },
+  foreign: { border: "border-sky-400/60", selected: "bg-sky-500/20 text-sky-300", icon: "text-sky-400/70" },
+  profile: { border: "border-violet-400/60", selected: "bg-violet-500/20 text-violet-300", icon: "text-violet-400/70" },
+  putthrough: { border: "border-amber-400/60", selected: "bg-amber-500/20 text-amber-300", icon: "text-amber-400/70" },
 }
 type HistoryState = "LOADING" | "READY" | "PARTIAL" | "ERROR"
 
@@ -1940,7 +1940,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
           </div>
 
           <div data-orderbook-activity-layout className="flex min-h-0 flex-1 px-2 py-2">
-            <nav data-orderbook-activity-nav aria-label="Loại giao dịch" className={`relative z-10 w-[88px] shrink-0 self-stretch rounded-l-xl border border-r-0 bg-[#0c1015] py-1 pl-1 ${ACTIVITY_TAB_STYLES[activityTab].border}`}>
+            <nav data-orderbook-activity-nav aria-label="Loại giao dịch" className="relative z-10 w-[88px] shrink-0 self-stretch rounded-l-xl bg-[#0c1015] py-1 pl-1">
               <div data-orderbook-activity-tabs className="flex flex-col gap-1">
                 {([
                   ["trades", BarChart3, "Khớp lệnh"],
@@ -1956,12 +1956,12 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
                     title={label}
                     disabled={!isWsReady}
                     onClick={() => setActivityTab(tab)}
-                    className={`relative flex min-h-14 w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-bold leading-tight transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white/80 ${activityTab === tab ? `z-20 -mr-px rounded-l-md rounded-r-none border border-r-0 bg-[#0c1015] ${ACTIVITY_TAB_STYLES[tab].border} ${ACTIVITY_TAB_STYLES[tab].selected}` : "rounded-md border border-transparent text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"} ${!isWsReady ? "cursor-not-allowed opacity-50 pointer-events-none" : ""}`}
+                    className={`relative flex min-h-14 w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-bold leading-tight transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white/80 ${activityTab === tab ? `z-20 -mr-px rounded-l-md rounded-r-none ${ACTIVITY_TAB_STYLES[tab].selected}` : "rounded-md text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"} ${!isWsReady ? "cursor-not-allowed opacity-50 pointer-events-none" : ""}`}
                   >
                     <Icon className={`size-4 shrink-0 ${activityTab === tab ? "" : ACTIVITY_TAB_STYLES[tab].icon}`} />
                     <span className="whitespace-nowrap">{label}</span>
                     {tab === "putthrough" && stream.putThroughDeals.length > 0 ? <span className="absolute right-0.5 top-0.5 rounded-full bg-amber-500/30 px-1 font-mono text-[9px] font-bold leading-4 text-amber-300">{stream.putThroughDeals.length}</span> : null}
-                    {activityTab === tab ? <span data-orderbook-selected-seam aria-hidden="true" className="pointer-events-none absolute -right-[2px] inset-y-px w-[3px] bg-[#0c1015]" /> : null}
+                    {activityTab === tab ? <span data-orderbook-selected-seam aria-hidden="true" className="pointer-events-none absolute -right-[2px] inset-y-0 w-[3px] bg-inherit" /> : null}
                   </button>
                 ))}
               </div>
