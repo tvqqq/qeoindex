@@ -136,8 +136,8 @@ test("orderbook realtime behavior is explicitly gated to DNSE live provenance", 
   )
   assert.match(
     source,
-    /for \(const t of realtimeWhaleTrades\)/,
-    "confetti/sound/glow evaluation must iterate only DNSE live candidates",
+    /for \(const t of realtimeLargeTrades\)/,
+    "2-second lightweight notice must scan only DNSE live candidates",
   )
 })
 
