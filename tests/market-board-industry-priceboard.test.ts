@@ -119,7 +119,7 @@ test("board view is user-scoped, classic by default, and persists only after mat
   assert.match(boardSource, /const boardViewStorageKey = `\$\{BOARD_VIEW_KEY\}:\$\{userId\}`/)
   assert.match(boardSource, /const \[boardView, setBoardView\] = useState<BoardView>\("classic"\)/)
   assert.match(boardSource, /boardViewHydratedKey !== boardViewStorageKey/)
-  assert.match(boardSource, /aria-label="Kiểu bảng giá"[\s\S]*?role="tab"[\s\S]*?aria-selected=\{isSelected\}/)
+  assert.match(boardSource, /aria-label="Chế độ xem thị trường"[\s\S]*?role="tab"[\s\S]*?aria-selected=\{isSelected\}/)
   assert.doesNotMatch(boardSource, /key=\{boardView\}[\s\S]*?LiveMarketBoard/)
 })
 

@@ -170,6 +170,62 @@ function initialPosition(size: { width: number; height: number }) {
   }
 }
 
+export function IndexChartContent({
+  resolution,
+  onResolutionChange,
+  candles,
+  isLoading,
+  errors,
+}: {
+  resolution: IndexChartResolution
+  onResolutionChange: (resolution: IndexChartResolution) => void
+  candles: Record<IndexChartSymbol, CandleBar[]>
+  isLoading: boolean
+  errors: Partial<Record<IndexChartSymbol, string>>
+}) {
+  return (
+    <>
+      <div data-chart-action className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/[0.06] bg-white/[0.018] px-3 py-2 sm:px-4">
+        <span className="mr-1 hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600 sm:inline">Timeframe</span>
+        {INDEX_CHART_RESOLUTIONS.map((value) => {
+          const active = value === resolution
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onResolutionChange(value)}
+              aria-pressed={active}
+              className={`min-w-11 rounded-lg border px-2.5 py-1.5 font-mono text-[10px] font-bold transition ${
+                active
+                  ? "border-emerald-400/35 bg-emerald-400/12 text-emerald-300 shadow-[0_0_16px_rgba(34,201,138,0.08)]"
+                  : "border-white/[0.08] bg-white/[0.025] text-slate-500 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-slate-300"
+              }`}
+            >
+              {INDEX_CHART_RESOLUTION_LABELS[value]}
+            </button>
+          )
+        })}
+        <span className="ml-auto hidden text-[9px] text-slate-600 md:inline">
+          Intraday: giờ trên trục X · ngày đánh dấu tại đầu phiên
+        </span>
+      </div>
+
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
+        <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} />
+        <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} />
+      </main>
+
+      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[9px] text-slate-600 sm:px-5">
+        <span>History theo timeframe từ DNSE; realtime được hợp nhất từ luồng 1m. Kéo chart sang trái để xem lịch sử.</span>
+        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="transition hover:text-slate-400">
+          TradingView Lightweight Charts™ · Copyright © 2025 TradingView, Inc.
+        </a>
+      </footer>
+
+    </>
+  )
+}
+
 export function IndexChartModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [resolution, setResolution] = useState<IndexChartResolution>("1")
   const { candles, isLoading, isRefreshing, errors, generatedAt, lastLiveAt, refresh } = useIndexCandles(open, resolution)
@@ -411,43 +467,13 @@ export function IndexChartModal({ open, onOpenChange }: { open: boolean; onOpenC
 
             {!isMinimized ? (
               <>
-                <div data-chart-action className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/[0.06] bg-white/[0.018] px-3 py-2 sm:px-4">
-                  <span className="mr-1 hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600 sm:inline">Timeframe</span>
-                  {INDEX_CHART_RESOLUTIONS.map((value) => {
-                    const active = value === resolution
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setResolution(value)}
-                        aria-pressed={active}
-                        className={`min-w-11 rounded-lg border px-2.5 py-1.5 font-mono text-[10px] font-bold transition ${
-                          active
-                            ? "border-emerald-400/35 bg-emerald-400/12 text-emerald-300 shadow-[0_0_16px_rgba(34,201,138,0.08)]"
-                            : "border-white/[0.08] bg-white/[0.025] text-slate-500 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-slate-300"
-                        }`}
-                      >
-                        {INDEX_CHART_RESOLUTION_LABELS[value]}
-                      </button>
-                    )
-                  })}
-                  <span className="ml-auto hidden text-[9px] text-slate-600 md:inline">
-                    Intraday: giờ trên trục X · ngày đánh dấu tại đầu phiên
-                  </span>
-                </div>
-
-                <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
-                  <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} />
-                  <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} />
-                </main>
-
-                <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[9px] text-slate-600 sm:px-5">
-                  <span>History theo timeframe từ DNSE; realtime được hợp nhất từ luồng 1m. Kéo chart sang trái để xem lịch sử.</span>
-                  <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="transition hover:text-slate-400">
-                    TradingView Lightweight Charts™ · Copyright © 2025 TradingView, Inc.
-                  </a>
-                </footer>
-
+                <IndexChartContent
+                  resolution={resolution}
+                  onResolutionChange={setResolution}
+                  candles={candles}
+                  isLoading={isLoading}
+                  errors={errors}
+                />
                 {!isMaximized ? (
                   <>
                     <div

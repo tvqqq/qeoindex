@@ -395,15 +395,16 @@ test("market cards remove bottom annotation rows but preserve source integrity",
   assert.ok(stripSource.includes('animate={isDisplaySession && (useServerForeign ? false : isFresh(foreignUpdatedAt))}'))
 })
 
-test("combined index card exposes an explicit chart button using the existing realtime modal", () => {
+test("combined index card routes its chart action to the VNIndex Chart board tab", () => {
   assert.ok(stripSource.includes('headerRight={'))
   assert.ok(stripSource.includes('onClick={onOpenIndexChart}'))
   assert.ok(stripSource.includes('aria-label="Mở biểu đồ realtime VN-Index và VN30F1M"'))
   assert.ok(stripSource.includes('<ChartNoAxesCombined'))
   assert.ok(stripSource.includes('onOpen={onOpenIndexChart}'))
   assert.ok(boardSource.includes('onOpenIndexChart={openIndexChart}'))
-  assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setIndexChartOpen(true), [])'))
-  assert.ok(boardSource.includes('<IndexChartModal open={indexChartOpen} onOpenChange={setIndexChartOpen} />'))
+  assert.ok(boardSource.includes('const openIndexChart = useCallback(() => setBoardView("chart"), [])'))
+  assert.ok(boardSource.includes('<IndexChartWorkspace />'))
+  assert.equal(boardSource.includes('<IndexChartModal'), false)
 })
 
 
