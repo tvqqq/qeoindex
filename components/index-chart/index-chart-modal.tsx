@@ -79,12 +79,18 @@ function ChartCard({
   resolution,
   loading,
   error,
+  compact = false,
+  onRefresh,
+  isRefreshing = false,
 }: {
   symbol: IndexChartSymbol
   bars: CandleBar[]
   resolution: IndexChartResolution
   loading: boolean
   error?: string
+  compact?: boolean
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }) {
   const current = bars.at(-1)
   const { open: sessionOpen, sessionCount } = useMemo(() => sessionMeta(bars), [bars])
@@ -101,10 +107,23 @@ function ChartCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-ticker text-sm font-extrabold tracking-wide text-white">{title}</span>
-            <span className="rounded-md border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-300">{timeframeLabel}</span>
+            {!compact ? <span className="rounded-md border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-300">{timeframeLabel}</span> : null}
+            {compact && onRefresh ? (
+              <button
+                type="button"
+                data-chart-action
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                aria-label="Làm mới dữ liệu biểu đồ"
+                title="Làm mới history snapshot"
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.09] bg-white/[0.035] text-slate-400 transition hover:text-cyan-300 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+              </button>
+            ) : null}
           </div>
           <div className="mt-0.5 text-[10px] text-slate-500">
-            {subtitle}{sessionCount > 1 ? ` · ${sessionCount} phiên lịch sử` : ""}
+            {subtitle}{!compact && sessionCount > 1 ? ` · ${sessionCount} phiên lịch sử` : ""}
           </div>
         </div>
 
@@ -117,7 +136,7 @@ function ChartCard({
           ) : null}
         </div>
 
-        {current ? (
+        {!compact && current ? (
           <div className="basis-full flex flex-wrap gap-x-3 gap-y-1 border-t border-white/[0.05] pt-2 font-mono text-[9.5px] text-slate-500">
             <span>O <b className="text-slate-300">{formatPrice(current.open)}</b></span>
             <span>H <b className="text-slate-300">{formatPrice(current.high)}</b></span>
@@ -178,6 +197,7 @@ export function IndexChartContent({
   errors,
   onRefresh,
   isRefreshing = false,
+  compact = false,
 }: {
   resolution: IndexChartResolution
   onResolutionChange: (resolution: IndexChartResolution) => void
@@ -186,9 +206,11 @@ export function IndexChartContent({
   errors: Partial<Record<IndexChartSymbol, string>>
   onRefresh?: () => void
   isRefreshing?: boolean
+  compact?: boolean
 }) {
   return (
     <>
+      {!compact ? (
       <div data-chart-action className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/[0.06] bg-white/[0.018] px-3 py-2 sm:px-4">
         <span className="mr-1 hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600 sm:inline">Timeframe</span>
         {INDEX_CHART_RESOLUTIONS.map((value) => {
@@ -226,9 +248,11 @@ export function IndexChartContent({
         ) : null}
       </div>
 
+      ) : null}
+
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 sm:p-4 lg:grid-cols-2 lg:gap-4">
-        <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} />
-        <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} />
+        <ChartCard symbol="VNINDEX" bars={candles.VNINDEX} resolution={resolution} loading={isLoading} error={errors.VNINDEX} compact={compact} onRefresh={compact ? onRefresh : undefined} isRefreshing={isRefreshing} />
+        <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} compact={compact} />
       </main>
 
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[9px] text-slate-600 sm:px-5">
