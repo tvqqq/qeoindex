@@ -385,7 +385,7 @@ test("compact Chart 1m moves the original VNINDEX/VN30 context card into the cha
   assert.ok(contextStripSource.includes('window.matchMedia("(max-width: 1279px)")'))
   assert.ok(contextStripSource.includes("chartActive && showContext && compactScreen && chartSummaryTarget !== null"))
   assert.ok(contextStripSource.includes("createPortal(indexSummaryCard, chartSummaryTarget)"))
-  assert.ok(contextStripSource.includes("md:grid-cols-3 xl:grid-cols-["))
+  assert.ok(contextStripSource.includes("md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)] xl:grid-cols-["))
   assert.ok(workspace.includes("showContextSummary={showContextSummary}"))
   assert.ok(sharedChart.includes('id="market-board-chart-index-summary"'))
   assert.ok(sharedChart.includes('className="col-span-full empty:hidden xl:hidden"'))
@@ -395,7 +395,7 @@ test("compact Chart 1m moves the original VNINDEX/VN30 context card into the cha
 })
 
 test("compact Chart 1m widens impact only while index card is portaled below", () => {
-  const card = contextStripSource.split("const indexSummaryCard = (")[1]?.split("  return (\\n    <div className=")[0] ?? ""
+  const card = contextStripSource.split("const indexSummaryCard = (")[1]?.split("  return (")[0] ?? ""
   assert.ok(contextStripSource.includes("chartActive && showContext ?"))
   assert.ok(contextStripSource.includes("md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)]"))
   assert.ok(contextStripSource.includes("xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"))
