@@ -3,7 +3,7 @@
 import { IndexChartContent } from "@/components/index-chart/index-chart-modal"
 import { useIndexCandles } from "@/components/index-chart/use-index-candles"
 
-export function IndexChartWorkspace() {
+export function IndexChartWorkspace({ showContextSummary }: { showContextSummary: boolean }) {
   const { candles, isLoading, isRefreshing, errors, refresh } = useIndexCandles(true, "1")
 
   return (
@@ -15,6 +15,7 @@ export function IndexChartWorkspace() {
       <IndexChartContent
         resolution="1"
         compact
+        showContextSummary={showContextSummary}
         candles={candles}
         isLoading={isLoading}
         errors={errors}
