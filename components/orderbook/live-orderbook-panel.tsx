@@ -1683,11 +1683,12 @@ function OrderBookDepthRow({ bid, ask, maxDepthVolume, quote }: { bid?: DepthLev
   const askPriceFlash = usePriceFlashAnimation(ask?.price, quote?.reference)
   const askVolFlash = useFlashAnimation(ask?.volume, 1)
   return (
-    <div className="relative grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 items-center py-1 rounded hover:bg-panel-2/40">
+    <div className="relative grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 items-center py-1 rounded hover:bg-panel-2/40">
       {bid?.volume ? <div className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25 transition-all duration-300" style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }} aria-hidden="true" /> : null}
       {ask?.volume ? <div className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25 transition-all duration-300" style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }} aria-hidden="true" /> : null}
       <span className={`relative font-bold text-foreground text-left px-2 rounded transition-colors ${bidVolFlash === "up" ? "flash-up text-up font-black" : bidVolFlash === "down" ? "flash-down text-down font-black" : ""}`}>{formatVolume(bid?.volume)}</span>
       <span className={`relative text-right font-bold px-2 rounded transition-colors ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${bidPriceFlash === "up" ? "flash-text-up" : bidPriceFlash === "down" ? "flash-text-down" : bidPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(bid?.price)}</span>
+      <span aria-hidden="true" className="relative" />
       <span className={`relative text-left font-bold px-2 rounded transition-colors ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${askPriceFlash === "up" ? "flash-text-up" : askPriceFlash === "down" ? "flash-text-down" : askPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(ask?.price)}</span>
       <span className={`relative text-right font-bold text-foreground px-2 rounded transition-colors ${askVolFlash === "up" ? "flash-up text-up font-black" : askVolFlash === "down" ? "flash-down text-down font-black" : ""}`}>{formatVolume(ask?.volume)}</span>
     </div>
@@ -1907,28 +1908,31 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
           <div className="border-b border-border/80 bg-[#151616] px-3 py-2">
             <div data-orderbook-depth-card className="overflow-hidden rounded-lg border border-border/80 bg-[#121313] p-2 shadow-inner">
               <div data-orderbook-depth-sides className="relative">
-                <div className="grid grid-cols-[1fr_80px_80px_1fr] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
+                <div className="grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span aria-hidden="true" /><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
                 <div className="mt-0.5 space-y-0.5 font-mono text-[13px]">{rows.map(({ bid, ask }, rowIndex) => <OrderBookDepthRow key={rowIndex} bid={bid} ask={ask} maxDepthVolume={maxDepthVolume} quote={quote} />)}</div>
-                <div
-                  data-orderbook-depth-progress
-                  role="progressbar"
-                  aria-label="Tỷ lệ khối lượng Mua và Bán"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(buyPct)}
-                  aria-valuetext={`Mua ${buyPct.toFixed(1)}%, Bán ${sellPct.toFixed(1)}%`}
-                  className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-1.5 -translate-x-1/2 overflow-hidden rounded-full border border-white/20"
-                  style={{ background: `linear-gradient(to bottom, #22c98a 0%, #22c98a ${Math.max(0, buyPct - 1)}%, #ffffff ${buyPct}%, #ff4757 ${Math.min(100, buyPct + 1)}%, #ff4757 100%)` }}
-                />
-              </div>
-              <div className="mt-1.5 border-t border-white/[0.08] pt-1.5">
-                <div className="mb-1 flex items-center justify-between gap-1">
-                  <div className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" /><span className="text-[11px] font-bold text-slate-300">Mua</span><span className="font-ticker font-extrabold text-xs sm:text-[13px] text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.35)]">{depthTotal > 0 ? `${buyPct.toFixed(1)}%` : "50.0%"}</span></div>
-                  {sessionCountdown ? <div className="flex flex-col items-center justify-center gap-1"><span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse"><Clock className="h-3.5 w-3.5 text-amber-400" /><span>{sessionCountdown.type}: {sessionCountdown.label}</span></span><span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-black/20 px-2 py-0.5 font-mono text-[10px]"><span className="text-slate-400">Dự khớp</span><span className={activeAuctionExpected ? getPriceColorClass(activeAuctionExpected.price, quote?.reference, quote?.ceiling, quote?.floor) : "font-bold text-slate-500"}>{activeAuctionExpected ? formatPrice(activeAuctionExpected.price) : "—"}</span><span className="text-slate-600">·</span><span className="text-slate-400">KL dự khớp</span><span className="font-bold text-slate-100">{activeAuctionExpected ? formatVolume(activeAuctionExpected.quantity) : "—"}</span></span></div> : null}
-                  <div className="flex items-center gap-1"><span className="font-ticker font-extrabold text-xs sm:text-[13px] text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.35)]">{depthTotal > 0 ? `${sellPct.toFixed(1)}%` : "50.0%"}</span><span className="text-[11px] font-bold text-slate-300">Bán</span><span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)] shrink-0" /></div>
+                <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex w-[104px] -translate-x-1/2 flex-col items-center justify-between gap-1 bg-[#121313] px-1 py-0.5 text-center">
+                  <div data-orderbook-buy-metrics className="flex shrink-0 flex-col items-center gap-0.5 whitespace-nowrap">
+                    <span className="font-ticker text-[11px] font-extrabold leading-none text-emerald-400">Mua {buyPct.toFixed(1)}%</span>
+                    <span className="font-mono text-[10px] font-medium leading-none text-emerald-400/90">KL {formatCompactVolume(bidTotal)}</span>
+                  </div>
+                  <div
+                    data-orderbook-depth-progress
+                    role="progressbar"
+                    aria-label="Tỷ lệ khối lượng Mua và Bán"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(buyPct)}
+                    aria-valuetext={`Mua ${buyPct.toFixed(1)}%, Bán ${sellPct.toFixed(1)}%`}
+                    className="min-h-5 w-1.5 flex-1 overflow-hidden rounded-full border border-white/20"
+                    style={{ background: `linear-gradient(to bottom, #22c98a 0%, #22c98a ${Math.max(0, buyPct - 1)}%, #ffffff ${buyPct}%, #ff4757 ${Math.min(100, buyPct + 1)}%, #ff4757 100%)` }}
+                  />
+                  <div data-orderbook-sell-metrics className="flex shrink-0 flex-col items-center gap-0.5 whitespace-nowrap">
+                    <span className="font-ticker text-[11px] font-extrabold leading-none text-rose-400">Bán {sellPct.toFixed(1)}%</span>
+                    <span className="font-mono text-[10px] font-medium leading-none text-rose-400/90">KL {formatCompactVolume(askTotal)}</span>
+                  </div>
                 </div>
-                <div className="mt-0.5 flex items-center justify-between font-mono text-[10px]"><span className="text-emerald-400/90 font-medium">VOL: +{formatCompactVolume(bidTotal)}</span><span className="text-rose-400/90 font-medium">VOL: -{formatCompactVolume(askTotal)}</span></div>
               </div>
+              {sessionCountdown ? <div data-orderbook-auction-meta className="mt-1.5 flex flex-col items-center justify-center gap-1 border-t border-white/[0.08] pt-1.5"><span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-400/50 bg-amber-500/15 text-amber-300 font-mono font-black text-[11px] shadow-[0_0_12px_rgba(251,191,36,0.3)] animate-pulse"><Clock className="h-3.5 w-3.5 text-amber-400" /><span>{sessionCountdown.type}: {sessionCountdown.label}</span></span><span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-black/20 px-2 py-0.5 font-mono text-[10px]"><span className="text-slate-400">Dự khớp</span><span className={activeAuctionExpected ? getPriceColorClass(activeAuctionExpected.price, quote?.reference, quote?.ceiling, quote?.floor) : "font-bold text-slate-500"}>{activeAuctionExpected ? formatPrice(activeAuctionExpected.price) : "—"}</span><span className="text-slate-600">·</span><span className="text-slate-400">KL dự khớp</span><span className="font-bold text-slate-100">{activeAuctionExpected ? formatVolume(activeAuctionExpected.quantity) : "—"}</span></span></div> : null}
 
             </div>
           </div>
