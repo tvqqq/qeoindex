@@ -1683,13 +1683,13 @@ function OrderBookDepthRow({ bid, ask, maxDepthVolume, quote }: { bid?: DepthLev
   const askPriceFlash = usePriceFlashAnimation(ask?.price, quote?.reference)
   const askVolFlash = useFlashAnimation(ask?.volume, 1)
   return (
-    <div className="relative grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 items-center py-1 rounded hover:bg-panel-2/40">
+    <div className="relative grid grid-cols-[minmax(0,1fr)_80px_60px_80px_minmax(0,1fr)] gap-x-1 items-center py-1 rounded hover:bg-panel-2/40">
       {bid?.volume ? <div className="absolute inset-y-0 left-0 bg-up/15 rounded-l border-r border-up/25 transition-all duration-300" style={{ width: `${(bidWidthPct / 2).toFixed(1)}%` }} aria-hidden="true" /> : null}
       {ask?.volume ? <div className="absolute inset-y-0 right-0 bg-down/15 rounded-r border-l border-down/25 transition-all duration-300" style={{ width: `${(askWidthPct / 2).toFixed(1)}%` }} aria-hidden="true" /> : null}
       <span className={`relative font-bold text-foreground text-left px-2 rounded transition-colors ${bidVolFlash === "up" ? "flash-up text-up font-black" : bidVolFlash === "down" ? "flash-down text-down font-black" : ""}`}>{formatVolume(bid?.volume)}</span>
-      <span className={`relative text-right font-bold px-2 rounded transition-colors ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${bidPriceFlash === "up" ? "flash-text-up" : bidPriceFlash === "down" ? "flash-text-down" : bidPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(bid?.price)}</span>
+      <span className={`relative text-right font-bold px-1 rounded transition-colors ${getPriceColorClass(bid?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${bidPriceFlash === "up" ? "flash-text-up" : bidPriceFlash === "down" ? "flash-text-down" : bidPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(bid?.price)}</span>
       <span aria-hidden="true" className="relative" />
-      <span className={`relative text-left font-bold px-2 rounded transition-colors ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${askPriceFlash === "up" ? "flash-text-up" : askPriceFlash === "down" ? "flash-text-down" : askPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(ask?.price)}</span>
+      <span className={`relative text-left font-bold px-1 rounded transition-colors ${getPriceColorClass(ask?.price, quote?.reference, quote?.ceiling, quote?.floor)} ${askPriceFlash === "up" ? "flash-text-up" : askPriceFlash === "down" ? "flash-text-down" : askPriceFlash === "ref" ? "flash-text-ref" : ""}`}>{formatPrice(ask?.price)}</span>
       <span className={`relative text-right font-bold text-foreground px-2 rounded transition-colors ${askVolFlash === "up" ? "flash-up text-up font-black" : askVolFlash === "down" ? "flash-down text-down font-black" : ""}`}>{formatVolume(ask?.volume)}</span>
     </div>
   )
@@ -1908,10 +1908,10 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
           <div className="border-b border-border/80 bg-[#151616] px-3 py-2">
             <div data-orderbook-depth-card className="overflow-hidden rounded-lg border border-border/80 bg-[#121313] p-2 shadow-inner">
               <div data-orderbook-depth-sides className="relative">
-                <div className="grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span aria-hidden="true" /><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
+                <div className="grid grid-cols-[minmax(0,1fr)_80px_60px_80px_minmax(0,1fr)] gap-x-1 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-1">Giá Mua</span><span aria-hidden="true" /><span className="text-left px-1">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
                 <div className="relative mt-0.5 space-y-0.5 font-mono text-[13px]">
                   {rows.map(({ bid, ask }, rowIndex) => <OrderBookDepthRow key={rowIndex} bid={bid} ask={ask} maxDepthVolume={maxDepthVolume} quote={quote} />)}
-                  <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[104px] -translate-x-1/2 bg-[#121313]">
+                  <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[60px] -translate-x-1/2 bg-[#121313]">
                     <div
                       data-orderbook-depth-progress
                       role="progressbar"
