@@ -106,25 +106,12 @@ function ChartCard({
   return (
     <section className="flex min-h-[390px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080c10] shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.06)]">
       {compact && showContextSummary ? (
-        <div className="relative min-h-[144px] min-w-0 border-b border-emerald-400/20 bg-[#111511] xl:hidden">
+        <div className="relative h-[160px] min-w-0 border-b border-emerald-400/20 bg-[#111511] xl:hidden">
           <div
             id={symbol === "VNINDEX" ? "market-board-chart-vnindex-header" : "market-board-chart-vn30-header"}
-            className="min-h-[144px] min-w-0"
+            className="h-full min-w-0"
             data-market-chart-spot-summary={symbol === "VNINDEX" ? "VNINDEX" : "VN30"}
           />
-          {onRefresh ? (
-            <button
-              type="button"
-              data-chart-action
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              aria-label="Làm mới dữ liệu biểu đồ"
-              title="Làm mới history snapshot"
-              className="absolute left-3 top-1 z-[3] flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.09] bg-[#10171d]/90 text-slate-400 transition hover:text-cyan-300 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            </button>
-          ) : null}
         </div>
       ) : null}
       <div className={`${compact && showContextSummary ? "hidden xl:flex" : "flex"} flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] bg-white/[0.025] px-4 py-3`}>
@@ -132,19 +119,6 @@ function ChartCard({
           <div className="flex items-center gap-2">
             <span className="font-ticker text-sm font-extrabold tracking-wide text-white">{title}</span>
             {!compact ? <span className="rounded-md border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-300">{timeframeLabel}</span> : null}
-            {compact && onRefresh ? (
-              <button
-                type="button"
-                data-chart-action
-                onClick={onRefresh}
-                disabled={isRefreshing}
-                aria-label="Làm mới dữ liệu biểu đồ"
-                title="Làm mới history snapshot"
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.09] bg-white/[0.035] text-slate-400 transition hover:text-cyan-300 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-              </button>
-            ) : null}
           </div>
           <div className="mt-0.5 text-[10px] text-slate-500">
             {subtitle}{!compact && sessionCount > 1 ? ` · ${sessionCount} phiên lịch sử` : ""}
@@ -286,9 +260,27 @@ export function IndexChartContent({
         <ChartCard symbol="VN30F1M" bars={candles.VN30F1M} resolution={resolution} loading={isLoading} error={errors.VN30F1M} compact={compact} showContextSummary={showContextSummary} />
       </main>
 
-      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[9px] text-slate-600 sm:px-5">
-        <span>History theo timeframe từ DNSE; realtime được hợp nhất từ luồng 1m. Kéo chart sang trái để xem lịch sử.</span>
-        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="transition hover:text-slate-400">
+      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] bg-white/[0.015] px-4 py-2 text-[10px] text-slate-500 sm:px-5">
+        {compact ? (
+          <div className="flex min-h-7 items-center gap-3">
+            <span id="market-board-chart-ict-clock" className="inline-flex min-w-[70px] items-center" />
+            {onRefresh ? (
+              <button
+                type="button"
+                data-chart-action
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                aria-label="Làm mới dữ liệu biểu đồ"
+                title="Làm mới hai biểu đồ realtime"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[0.1] bg-white/[0.035] px-2 text-[11px] font-semibold text-slate-300 transition hover:border-emerald-400/30 hover:text-emerald-300 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="ml-auto transition hover:text-slate-400">
           TradingView Lightweight Charts™ · Copyright © 2025 TradingView, Inc.
         </a>
       </footer>
