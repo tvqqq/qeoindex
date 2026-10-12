@@ -1265,8 +1265,8 @@ export function MarketContextStrip({
 
   return (
     <div className="border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
-      <div className="grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)]" data-market-context-single-row>
-        <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full xl:h-[156px]"
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 min-[1100px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_minmax(0,1.65fr)]" data-market-context-single-row>
+        <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full min-[1100px]:h-[156px]"
           activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
           activitySessionDay={contextSessionDate}
           headerInfo={<MarketSessionClock />}
@@ -1287,7 +1287,7 @@ export function MarketContextStrip({
             <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={vn30Breadth} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)} />
           </div>
         </ContextCard>
-        <ContextCard title="Thanh khoản" className="h-full xl:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
+        <ContextCard title="Thanh khoản" className="h-full min-[1100px]:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
           activitySources={[liquidityUpdatedAt]}
           activitySessionDay={contextSessionDate}
           bodyClassName="px-2.5 pb-1 pt-0.5"
@@ -1309,7 +1309,7 @@ export function MarketContextStrip({
             { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#e87974", previous: true },
           ]} animate={isDisplaySession && isFresh(liquidityUpdatedAt)} /></div>
         </ContextCard>
-        <ContextCard title="Mua bán nước ngoài" className="h-full xl:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
+        <ContextCard title="Mua bán nước ngoài" className="h-full min-[1100px]:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
           activitySources={[foreignUpdatedAt]}
           activitySessionDay={contextSessionDate}
           bodyClassName="px-2.5 pb-1 pt-0.5"
@@ -1330,7 +1330,7 @@ export function MarketContextStrip({
             ]} animate={isDisplaySession && (useServerForeign ? false : isFresh(foreignUpdatedAt))} />
           </div>
         </ContextCard>
-        <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full xl:h-[156px]"
+        <ContextCard title="Tác động VNINDEX" icon={<Scale className="h-4 w-4" />} accent="green" className="h-full min-[1100px]:h-[156px]"
           activitySources={[impact?.asOf]}
           activitySessionDay={contextSessionDate}
           activityCanStream={impactSelection.source === "websocket"}
