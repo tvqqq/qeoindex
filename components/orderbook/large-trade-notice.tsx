@@ -9,7 +9,7 @@ export type LargeTradeAlert = {
   isWhale: boolean
 }
 
-// A single non-animated notice replaces the former full-panel Lottie/confetti effect.
+// A single static notice replaces the former full-panel effect.
 const NOTICE_DURATION_MS = 2_000
 
 export function useLargeTradeNotice() {
