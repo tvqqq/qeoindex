@@ -149,8 +149,9 @@ test("single-row responsive layout combines indices, leaves flow realtime, remov
   assert.ok(stripSource.includes('grid-cols-1 items-stretch'))
   assert.ok(stripSource.includes('md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)]'))
   assert.match(stripSource, /title="VN-Index \/ VN30"/)
-  assert.match(stripSource, /<IndexedSummary label="VN-Index"/)
-  assert.match(stripSource, /<IndexedSummary label="VN30"/)
+  assert.ok(stripSource.includes('const vnindexSummary = ('))
+  assert.ok(stripSource.includes('label="VN-Index"'))
+  assert.ok(stripSource.includes('label={moveIndexSummary ? "VN30 (cơ sở)" : "VN30"}'))
   assert.match(stripSource, /title="Thanh khoản"/)
   assert.match(stripSource, /title="Mua bán nước ngoài"/)
   assert.match(stripSource, /title="Tác động VNINDEX"/)
@@ -285,7 +286,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
 
 test("index levels use direction icons; real count revisions animate and values preserve signs", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
-  assert.ok(summary.includes('className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5"'))
+  assert.ok(summary.includes('chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"'))
   assert.ok(summary.includes('className="mt-auto min-w-0 pt-1"'))
   assert.match(stripSource, /ArrowUpRight|ArrowDownRight|<ArrowRight/)
   assert.ok(summary.includes("const trend = finite(change) ? change : finite(percent) ? percent : undefined"))
@@ -399,7 +400,7 @@ test("market cards remove bottom annotation rows but preserve source integrity",
 test("combined index card has no redundant Chart header button, while label still selects Chart 1m", () => {
   const card = stripSource.split("const indexSummaryCard = (")[1]?.split("  return (")[0] ?? ""
   assert.ok(card.includes("headerInfo={<MarketSessionClock />}"))
-  assert.ok(card.includes("onOpen={onOpenIndexChart}"))
+  assert.ok(stripSource.includes("onOpen={onOpenIndexChart}"))
   assert.equal(card.includes("headerRight="), false)
   assert.equal(card.includes("onClick={onOpenIndexChart}"), false)
   assert.equal(stripSource.includes('aria-label="Mở biểu đồ realtime VN-Index và VN30F1M"'), false)
