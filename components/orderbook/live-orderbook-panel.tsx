@@ -1908,13 +1908,10 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
           <div className="border-b border-border/80 bg-[#151616] px-3 py-2">
             <div data-orderbook-depth-card className="overflow-hidden rounded-lg border border-border/80 bg-[#121313] p-2 shadow-inner">
               <div data-orderbook-depth-sides className="relative">
-                <div className="grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span data-orderbook-balance-label className="text-center text-[10px] font-semibold tracking-wide text-slate-400">Tỷ lệ</span><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
+                <div className="grid grid-cols-[minmax(0,1fr)_80px_104px_80px_minmax(0,1fr)] gap-x-2 text-xs font-bold text-muted-2 border-b border-border/60 pb-1"><span className="text-left px-2">KL Mua</span><span className="text-right px-2">Giá Mua</span><span aria-hidden="true" /><span className="text-left px-2">Giá Bán</span><span className="text-right px-2">KL Bán</span></div>
                 <div className="relative mt-0.5 space-y-0.5 font-mono text-[13px]">
                   {rows.map(({ bid, ask }, rowIndex) => <OrderBookDepthRow key={rowIndex} bid={bid} ask={ask} maxDepthVolume={maxDepthVolume} quote={quote} />)}
-                  <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex w-[104px] -translate-x-1/2 items-center justify-center gap-1 bg-[#121313] px-1 text-center">
-                    <div data-orderbook-buy-metrics className="flex min-w-0 flex-1 items-center justify-end">
-                      <span className="whitespace-nowrap rounded bg-emerald-500/10 px-0.5 font-ticker text-[10px] font-extrabold leading-5 tabular-nums text-emerald-400"><span className="sr-only">Mua </span>{buyPct.toFixed(1)}%</span>
-                    </div>
+                  <div data-orderbook-depth-balance className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[104px] -translate-x-1/2 bg-[#121313]">
                     <div
                       data-orderbook-depth-progress
                       role="progressbar"
@@ -1923,12 +1920,11 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
                       aria-valuemax={100}
                       aria-valuenow={Math.round(buyPct)}
                       aria-valuetext={`Mua ${buyPct.toFixed(1)}%, Bán ${sellPct.toFixed(1)}%`}
-                      className="h-full w-1.5 shrink-0 overflow-hidden rounded-full border border-white/20"
+                      className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 overflow-hidden rounded-full border border-white/20"
                       style={{ background: `linear-gradient(to bottom, #22c98a 0%, #22c98a ${Math.max(0, buyPct - 1)}%, #ffffff ${buyPct}%, #ff4757 ${Math.min(100, buyPct + 1)}%, #ff4757 100%)` }}
                     />
-                    <div data-orderbook-sell-metrics className="flex min-w-0 flex-1 items-center justify-start">
-                      <span className="whitespace-nowrap rounded bg-rose-500/10 px-0.5 font-ticker text-[10px] font-extrabold leading-5 tabular-nums text-rose-400"><span className="sr-only">Bán </span>{sellPct.toFixed(1)}%</span>
-                    </div>
+                    <span data-orderbook-buy-metrics className="absolute left-1/2 top-1/4 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center justify-center whitespace-nowrap rounded-[4px] border border-emerald-400/45 bg-[#102e29]/95 px-0.5 py-[2px] font-sans text-[10px] font-extrabold leading-none tracking-tight tabular-nums text-emerald-200 shadow-sm"><span className="sr-only">Mua </span>{buyPct.toFixed(1)}%</span>
+                    <span data-orderbook-sell-metrics className="absolute left-1/2 top-3/4 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center justify-center whitespace-nowrap rounded-[4px] border border-rose-400/45 bg-[#351d24]/95 px-0.5 py-[2px] font-sans text-[10px] font-extrabold leading-none tracking-tight tabular-nums text-rose-200 shadow-sm"><span className="sr-only">Bán </span>{sellPct.toFixed(1)}%</span>
                   </div>
                 </div>
               </div>
