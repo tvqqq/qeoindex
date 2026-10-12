@@ -606,7 +606,7 @@ function MarketHeaderActivity({
   )
 }
 
-function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false, breadthFresh = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean; breadthFresh?: boolean }) {
+function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fresh = false, breadthFresh = false, chartHeader = false }: { label: string; quote?: MarketContextIndexQuote; day: string; breadth?: SelectedBreadth; onOpen?: () => void; fresh?: boolean; breadthFresh?: boolean; chartHeader?: boolean }) {
   const value = finite(quote?.value) && quote!.value > 0 ? quote!.value : undefined
   const color = marketColor(quote?.changePercent)
   const change = quote?.change
@@ -646,20 +646,20 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
         ? "border-rose-400/35 bg-rose-400/10 text-rose-300"
         : "border-amber-400/35 bg-amber-400/10 text-amber-300"
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-1.5">
+    <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${chartHeader ? "min-h-[140px] px-3 py-2" : "px-2.5 py-1.5"}`}>
       <div className="flex items-center justify-between gap-1.5">
         {onOpen ? (
-          <button type="button" onClick={onOpen} className="truncate text-[11px] font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
-        ) : <span className="truncate text-[11px] font-bold text-zinc-200">{label}</span>}
+          <button type="button" onClick={onOpen} className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand" aria-label="Mở biểu đồ VN-Index">{label}</button>
+        ) : <span className={`${chartHeader ? "text-sm" : "text-[11px]"} truncate font-bold text-zinc-200`}>{label}</span>}
         <span key={`${percent ?? "missing"}`} className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-sans text-[12px] font-extrabold leading-none tabular-nums ${pillTone} ${fresh ? "market-realtime-number" : ""}`}>{formatChange(percent)}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
         <span className={`inline-flex shrink-0 items-center justify-center ${trendColor}`} aria-label={!finite(trend) ? "Chưa xác định xu hướng" : trend > 0 ? "Chỉ số tăng" : trend < 0 ? "Chỉ số giảm" : "Chỉ số đi ngang"}>{trendIcon}</span>
         {finite(value) ? (
-          <strong key={value} className={`text-[clamp(12px,1.05vw,17px)] font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
+          <strong key={value} className={`${chartHeader ? "text-lg" : "text-[clamp(12px,1.05vw,17px)]"} font-extrabold leading-tight tabular-nums text-zinc-100 ${fresh ? "market-realtime-number" : ""}`}>{INDEX_FORMATTER.format(value)}</strong>
         ) : null}
         {finite(change) ? (
-          <span key={change} className={`font-sans text-[clamp(12px,1.05vw,15px)] font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
+          <span key={change} className={`font-sans ${chartHeader ? "text-sm" : "text-[clamp(12px,1.05vw,15px)]"} font-black leading-none tabular-nums ${fresh ? "market-realtime-number" : ""}`} style={{ color }}>{`${change > 0 ? "+" : ""}${INDEX_FORMATTER.format(change)}`}</span>
         ) : null}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums text-zinc-400">
@@ -822,7 +822,7 @@ export function MarketContextStrip({
   chartActive,
   showContext,
 }: MarketContextStripProps) {
-  const [chartSummaryTarget, setChartSummaryTarget] = useState<HTMLElement | null>(null)
+  const [chartSummaryTarget, setChartSummaryTarget] = useState<{ vnindex: HTMLElement; vn30: HTMLElement } | null>(null)
   const [compactScreen, setCompactScreen] = useState(false)
 
   useEffect(() => {
@@ -830,14 +830,16 @@ export function MarketContextStrip({
     const media = window.matchMedia("(max-width: 1279px)")
     const update = () => {
       setCompactScreen(media.matches)
-      setChartSummaryTarget(document.getElementById("market-board-chart-index-summary"))
+      const vnindex = document.getElementById("market-board-chart-vnindex-header")
+      const vn30 = document.getElementById("market-board-chart-vn30-header")
+      setChartSummaryTarget(vnindex && vn30 ? { vnindex, vn30 } : null)
     }
     update()
     media.addEventListener("change", update)
     return () => media.removeEventListener("change", update)
   }, [chartActive])
 
-  // Portal the already sourced card; no second context component or provider polling.
+  // Reuse source-backed spot summaries inside chart headers without adding provider polling.
   const moveIndexSummary = chartActive && showContext && compactScreen && chartSummaryTarget !== null
   const [bootstrap, setBootstrap] = useState<MarketContextApiResponse | null>(null)
   const [loadError, setLoadError] = useState("")
@@ -1285,24 +1287,64 @@ export function MarketContextStrip({
   const vn30Breadth = selectMarketBreadth("VN30", contextSessionDate, finhayBreadth, vpsBreadth)
 
 
+  const vnindexSummary = (
+    <IndexedSummary
+      label="VN-Index"
+      quote={indexQuotes.VNINDEX}
+      day={contextSessionDate}
+      breadth={vnindexBreadth}
+      onOpen={onOpenIndexChart}
+      fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)}
+      breadthFresh={isFresh(vnindexBreadth?.sourceUpdatedAt)}
+      chartHeader={moveIndexSummary}
+    />
+  )
+  const vn30Summary = (
+    <IndexedSummary
+      label={moveIndexSummary ? "VN30 (cơ sở)" : "VN30"}
+      quote={indexQuotes.VN30}
+      day={contextSessionDate}
+      breadth={vn30Breadth}
+      fresh={isFresh(indexQuotes.VN30?.sourceAsOf)}
+      breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)}
+      chartHeader={moveIndexSummary}
+    />
+  )
+
   const indexSummaryCard = (
-    <ContextCard title="VN-Index / VN30" icon={<Landmark className="h-3.5 w-3.5" />} accent="green" className="h-full md:h-[156px]"
-              activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
-              activitySessionDay={contextSessionDate}
-              headerInfo={<MarketSessionClock />}>
-              <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
-                <IndexedSummary label="VN-Index" quote={indexQuotes.VNINDEX} day={contextSessionDate} breadth={vnindexBreadth} onOpen={onOpenIndexChart} fresh={isFresh(indexQuotes.VNINDEX?.sourceAsOf)} breadthFresh={isFresh(vnindexBreadth?.sourceUpdatedAt)} />
-                <IndexedSummary label="VN30" quote={indexQuotes.VN30} day={contextSessionDate} breadth={vn30Breadth} fresh={isFresh(indexQuotes.VN30?.sourceAsOf)} breadthFresh={isFresh(vn30Breadth?.sourceUpdatedAt)} />
-              </div>
-            </ContextCard>
+    <ContextCard
+      title="VN-Index / VN30"
+      icon={<Landmark className="h-3.5 w-3.5" />}
+      accent="green"
+      className="h-full md:h-[156px]"
+      activitySources={[indexQuotes.VNINDEX?.sourceAsOf, indexQuotes.VN30?.sourceAsOf]}
+      activitySessionDay={contextSessionDate}
+      headerInfo={<MarketSessionClock />}
+    >
+      <div className="-mx-2.5 -mt-1.5 flex min-w-0 flex-1 divide-x divide-white/10">
+        {vnindexSummary}
+        {vn30Summary}
+      </div>
+    </ContextCard>
   )
 
   return (
     <div className="border-b border-white/[0.08] bg-[#0a0d0b] px-3 py-2" data-market-context-strip title={contextErrors || undefined}>
       <div className={`grid min-w-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-2 ${chartActive && showContext ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)] xl:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]" : "md:grid-cols-[minmax(0,2.15fr)_minmax(0,1.35fr)_minmax(0,1.25fr)_minmax(0,1.75fr)]"}`} data-market-context-single-row>
-        {moveIndexSummary && chartSummaryTarget
-          ? createPortal(indexSummaryCard, chartSummaryTarget)
-          : indexSummaryCard}
+        {moveIndexSummary && chartSummaryTarget ? (
+          <>
+            {createPortal(
+              <div className="flex min-h-[144px] min-w-0 flex-col">
+                <div className="flex justify-end border-b border-white/[0.05] px-3 pt-1">
+                  <MarketSessionClock />
+                </div>
+                {vnindexSummary}
+              </div>,
+              chartSummaryTarget.vnindex,
+            )}
+            {createPortal(vn30Summary, chartSummaryTarget.vn30)}
+          </>
+        ) : indexSummaryCard}
         <ContextCard title="Thanh khoản" className="h-full md:h-[156px]" icon={<WalletCards className="h-3.5 w-3.5" />}
           activitySources={[liquidityUpdatedAt]}
           activitySessionDay={contextSessionDate}
