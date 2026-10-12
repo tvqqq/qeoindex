@@ -200,7 +200,7 @@ export function IndexChartContent({
   compact = false,
 }: {
   resolution: IndexChartResolution
-  onResolutionChange: (resolution: IndexChartResolution) => void
+  onResolutionChange?: (resolution: IndexChartResolution) => void
   candles: Record<IndexChartSymbol, CandleBar[]>
   isLoading: boolean
   errors: Partial<Record<IndexChartSymbol, string>>
@@ -219,7 +219,7 @@ export function IndexChartContent({
             <button
               key={value}
               type="button"
-              onClick={() => onResolutionChange(value)}
+              onClick={() => onResolutionChange?.(value)}
               aria-pressed={active}
               className={`min-w-11 rounded-lg border px-2.5 py-1.5 font-mono text-[10px] font-bold transition ${
                 active
