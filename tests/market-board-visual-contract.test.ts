@@ -234,7 +234,7 @@ test("combined index breadth stays bottom-aligned with direction icon before the
   assert.ok(summary.includes('{finite(change) ? ('))
   assert.ok(summary.includes('<span key={change}'))
   assert.equal(summary.includes("N/A"), false)
-  assert.ok(summary.includes('gap-x-2 gap-y-0.5 text-[10px]'))
+  assert.ok(summary.includes('gap-x-3 gap-y-0.5 tabular-nums text-zinc-400'))
   assert.ok(summary.includes("<ArrowUpRight"))
   assert.ok(summary.includes("<ArrowDownRight"))
   assert.ok(summary.includes("<ArrowRight"))
