@@ -257,7 +257,7 @@ test("combined indices use smaller levels, larger point changes, colored percent
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
-  assert.ok(summary.includes("rounded-full border px-2 py-1"))
+  assert.ok(summary.includes("rounded-full border font-sans font-extrabold"))
   assert.ok(summary.includes('font-sans font-extrabold leading-none tabular-nums'))
   assert.ok(summary.includes("pillTone"))
   assert.ok(summary.includes("border-emerald-400/35"))
