@@ -12,7 +12,7 @@ import {
 
 const UP_COLOR = "#22c98a"
 const DOWN_COLOR = "#ff4757"
-const REFERENCE_COLOR = "#fbbf24"
+const REFERENCE_COLOR = "rgba(251, 191, 36, 0.5)"
 const DASHED_LINE_STYLE = 2 // Lightweight Charts LineStyle.Dashed
 const INITIAL_VISIBLE_BARS: Record<IndexChartResolution, number> = {
   "1": 420,
@@ -157,7 +157,7 @@ export function IndexMinuteChart({
       lineWidth: 1,
       lineStyle: DASHED_LINE_STYLE,
       axisLabelVisible: true,
-      title: symbol === "VNINDEX" ? "TC" : "Đóng trước",
+      title: symbol === "VNINDEX" ? "TC" : "Đóng",
     })
     referenceValueRef.current = valid
   }, [symbol])
