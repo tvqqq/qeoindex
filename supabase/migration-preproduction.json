@@ -215,6 +215,14 @@
       "state": "MAPPED",
       "evidence": "QEO-332 Verify and zero-to-latest DB Drift success, managed production apply 2026-10-07; trigger exactly once and real live 4.293T VND VNINDEX liquidity row at 10:35:50 ICT verified",
       "rationale": "Capture validated actual VNINDEX grossTradeAmount on existing server-owned checkpoint writes, protecting minute-level liquidity recording despite 1Hz checkpoint versus 1-minute pg_cron sampling race. Bounded same-source/upsert, no new external socket or remote host changes; production promotion after exact-head CI replay. Production readback completed; version assigned by Supabase is 20261007033548."
+    },
+    {
+      "logicalName": "qeo408_ex_vic_vhm_vnindex_estimate",
+      "repositoryVersion": "20261013120000",
+      "productionVersion": "20261013054243",
+      "state": "MAPPED",
+      "evidence": "QEO-408 local Verify/build, clean DB replay, generated types and SQL publisher rehearsals passed; production schema and RLS/RPC read back",
+      "rationale": "Supabase assigned production version 20261013054243; repository replay retains reviewed ordering 20261013120000. Forward EOD estimates use immutable same-session evidence and preserve the original provider snapshot."
     }
   ]
 }

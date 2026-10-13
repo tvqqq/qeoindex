@@ -131,7 +131,7 @@ async function runMarketCloseBranch(
   await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
   for (let attempt = 1; attempt <= MARKET_CLOSE_MAX_ATTEMPTS; attempt += 1) {
     try {
-      const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true)
+      const marketClose = await runMarketCloseCollectStep(runId, startedAtIso, true, ratingRefresh.syncRunId)
       await assertFrozenUniverseStillCurrent(ratingRefresh.universe)
       await annotateQeoIndexEodPhaseSummaryStep({
         runId,
@@ -141,6 +141,8 @@ async function runMarketCloseBranch(
           status: marketClose.status,
           sessionDate: marketClose.sessionDate,
           qualityStatus: "qualityStatus" in marketClose ? marketClose.qualityStatus : undefined,
+          qeoExVnindexStatus: "qeoExVnindexStatus" in marketClose ? marketClose.qeoExVnindexStatus : undefined,
+          qeoExVnindexReason: "qeoExVnindexReason" in marketClose ? marketClose.qeoExVnindexReason : undefined,
           syncRunId: "syncRunId" in marketClose ? marketClose.syncRunId : undefined,
           universeRunId: ratingRefresh.universe.runId,
           retrying: false,

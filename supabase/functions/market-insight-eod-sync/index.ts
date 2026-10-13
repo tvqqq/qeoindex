@@ -10,6 +10,12 @@ import {
   normalizeSectorMaSlug,
   type NormalizedIndexRow,
 } from "../_shared/market-close-normalizer.ts"
+import {
+  buildQeoExVnindexEstimate,
+  type QeoCandidateRow,
+  type QeoPreviousEstimate,
+  type QeoRatingRun,
+} from "../_shared/qeo-ex-vic-vhm-valuation.ts"
 
 const PROVIDER_TIMEOUT_MS = 8_000
 const SOCKET_TIMEOUT_MS = 10_000
@@ -256,6 +262,211 @@ function normalizeProviderIndexes(input: unknown, sessionDate: string, asOfIso: 
   return rows
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+async function loadQeoRatingSource(supabase: SupabaseClient, sessionDate: string, requestedRunId: string | null) {
+  if (!requestedRunId || !isUuid(requestedRunId)) return { ratingRun: null, candidates: [] as QeoCandidateRow[] }
+
+  const runResult = await supabase
+    .from("kfsp_rating_sync_runs")
+    .select("id,as_of_date,status,provider_row_count,contract_version,completed_at")
+    .eq("id", requestedRunId)
+    .maybeSingle()
+  if (runResult.error) throw new Error("QEO_RATING_RUN_READ_FAILED")
+  const row = runResult.data
+  if (!row) return { ratingRun: null, candidates: [] as QeoCandidateRow[] }
+
+  const ratingRun: QeoRatingRun = {
+    id: String(row.id),
+    asOfDate: String(row.as_of_date || ""),
+    status: String(row.status || ""),
+    providerRowCount: Number(row.provider_row_count),
+    contractVersion: Number(row.contract_version),
+    completedAt: row.completed_at == null ? null : String(row.completed_at),
+  }
+
+  const countResult = await supabase
+    .from("kfsp_universe_candidate_snapshots")
+    .select("ticker", { count: "exact", head: true })
+    .eq("as_of_date", sessionDate)
+    .eq("sync_run_id", requestedRunId)
+  if (countResult.error) throw new Error("QEO_CANDIDATE_COUNT_READ_FAILED")
+
+  const actualCount = countResult.count || 0
+  if (actualCount > 10_000) throw new Error("QEO_CANDIDATE_COUNT_UNBOUNDED")
+  const candidates: QeoCandidateRow[] = []
+  const pageSize = 500
+  for (let offset = 0; offset < actualCount; offset += pageSize) {
+    const page = await supabase
+      .from("kfsp_universe_candidate_snapshots")
+      .select("as_of_date,ticker,exchange,market_cap_billion,price,price_change_pct,pe_ttm,pb_ttm,sync_run_id,fetched_at")
+      .eq("as_of_date", sessionDate)
+      .eq("sync_run_id", requestedRunId)
+      .order("ticker", { ascending: true })
+      .range(offset, Math.min(offset + pageSize - 1, actualCount - 1))
+    if (page.error) throw new Error("QEO_CANDIDATE_PAGE_READ_FAILED")
+    const pageRows = page.data || []
+    candidates.push(...pageRows.map((candidate) => ({
+      asOfDate: String(candidate.as_of_date || ""),
+      ticker: String(candidate.ticker || ""),
+      exchange: candidate.exchange == null ? null : String(candidate.exchange),
+      marketCapBillion: parseNumeric(candidate.market_cap_billion),
+      price: parseNumeric(candidate.price),
+      priceChangePct: parseNumeric(candidate.price_change_pct),
+      pe: parseNumeric(candidate.pe_ttm),
+      pb: parseNumeric(candidate.pb_ttm),
+      syncRunId: String(candidate.sync_run_id || ""),
+      fetchedAt: String(candidate.fetched_at || ""),
+    })))
+    if (pageRows.length === 0) break
+  }
+
+  return { ratingRun, candidates }
+}
+
+function qeoPreviousEstimate(value: Record<string, unknown> | null): QeoPreviousEstimate | null {
+  if (!value) return null
+  return {
+    sessionDate: String(value.session_date || ""),
+    status: value.status === "available" ? "available" : "unavailable",
+    estimatedVnindexValue: parseNumeric(value.estimated_vnindex_value),
+    baseSessionDate: value.base_session_date == null ? null : String(value.base_session_date),
+    baseVnindexValue: parseNumeric(value.base_vnindex_value),
+    sourceHoseCount: Number(value.source_hose_count || 0),
+  }
+}
+
+function safePositiveNumber(value: number | null): number | null {
+  return value != null && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function safePriceChange(value: number | null): number | null {
+  return value != null && Number.isFinite(value) && value > -100 ? value : null
+}
+
+async function publishQeoEstimate(input: {
+  supabase: SupabaseClient
+  sessionDate: string
+  asOfIso: string
+  sourceMarketSyncRunId: string
+  ratingSyncRunId: string | null
+  providerIndexes: NormalizedIndexRow[]
+}): Promise<{ status: string; reason: string | null }> {
+  const { supabase, sessionDate, asOfIso, sourceMarketSyncRunId, ratingSyncRunId, providerIndexes } = input
+  let estimate: ReturnType<typeof buildQeoExVnindexEstimate> | null = null
+
+  try {
+    const [{ ratingRun, candidates }, currentIndexResult, previousMarketResult, previousEstimateResult] = await Promise.all([
+      loadQeoRatingSource(supabase, sessionDate, ratingSyncRunId),
+      supabase.from("market_insight_indexes").select("value").eq("session_date", sessionDate).eq("index_code", "VNINDEX").maybeSingle(),
+      supabase.from("market_insight_daily").select("session_date").lt("session_date", sessionDate).order("session_date", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("market_insight_qeo_ex_vnindex_daily").select("session_date,status,estimated_vnindex_value,base_session_date,base_vnindex_value,source_hose_count").lt("session_date", sessionDate).order("session_date", { ascending: false }).limit(1).maybeSingle(),
+    ])
+    if (currentIndexResult.error || previousMarketResult.error || previousEstimateResult.error) {
+      throw new Error("QEO_PREVIOUS_OR_PUBLISHED_VALUE_READ_FAILED")
+    }
+
+    const breadthRow = providerIndexes.find((row) => row.index_code === "VNINDEX")
+    const observedBreadth = breadthRow ? breadthRow.advances + breadthRow.unchanged + breadthRow.declines : 0
+    const providerBreadthCount = Number.isFinite(observedBreadth) && observedBreadth > 0 ? observedBreadth : null
+    estimate = buildQeoExVnindexEstimate({
+      sessionDate,
+      ratingRun,
+      candidates,
+      vnindexValue: parseNumeric(currentIndexResult.data?.value),
+      providerBreadthCount,
+      previousMarketSessionDate: previousMarketResult.data?.session_date ? String(previousMarketResult.data.session_date) : null,
+      previousEstimate: qeoPreviousEstimate(previousEstimateResult.data as Record<string, unknown> | null),
+      asOf: asOfIso,
+      sourceMarketSyncRunId,
+    })
+
+    const hoseCandidates = candidates
+      .filter((candidate) => candidate.exchange?.trim().toUpperCase() === "HOSE")
+      .slice()
+      .sort((left, right) => left.ticker.localeCompare(right.ticker))
+    estimate.sourceHoseHash = await sha256Hex(hoseCandidates.map((candidate) => ({
+      asOfDate: candidate.asOfDate,
+      ticker: candidate.ticker.trim().toUpperCase(),
+      exchange: candidate.exchange?.trim().toUpperCase() || null,
+      marketCapBillion: candidate.marketCapBillion,
+      price: candidate.price,
+      priceChangePct: candidate.priceChangePct,
+      pe: candidate.pe,
+      pb: candidate.pb,
+      syncRunId: candidate.syncRunId,
+      fetchedAt: candidate.fetchedAt,
+    })))
+    estimate.retainedMemberHash = await sha256Hex(estimate.members.filter((member) => member.includedInEstimate).map((member) => member.ticker))
+  } catch {
+    const unavailable = buildQeoExVnindexEstimate({
+      sessionDate,
+      ratingRun: null,
+      candidates: [],
+      vnindexValue: null,
+      providerBreadthCount: null,
+      previousMarketSessionDate: null,
+      previousEstimate: null,
+      asOf: asOfIso,
+      sourceMarketSyncRunId,
+    })
+    unavailable.unavailableReason = "OPTIONAL_DERIVATION_FAILED"
+    unavailable.sourceRatingSyncRunId = ratingSyncRunId
+    estimate = unavailable
+  }
+
+  estimate.sourceHoseHash ||= await sha256Hex([])
+  estimate.retainedMemberHash ||= await sha256Hex(estimate.members.filter((member) => member.includedInEstimate).map((member) => member.ticker))
+  estimate.calculationInputHash = await sha256Hex({
+    sessionDate: estimate.sessionDate,
+    calculationVersion: estimate.calculationVersion,
+    sourceMarketSyncRunId: estimate.sourceMarketSyncRunId,
+    sourceRatingSyncRunId: estimate.sourceRatingSyncRunId,
+    sourceContractVersion: estimate.sourceContractVersion,
+    sourceCandidateCount: estimate.sourceCandidateCount,
+    sourceHoseCount: estimate.sourceHoseCount,
+    retainedMemberCount: estimate.retainedMemberCount,
+    sourceHoseHash: estimate.sourceHoseHash,
+    retainedMemberHash: estimate.retainedMemberHash,
+    sourceObservedFrom: estimate.sourceObservedFrom,
+    sourceObservedTo: estimate.sourceObservedTo,
+    providerBreadthCount: estimate.providerBreadthCount,
+    providerBreadthDifference: estimate.providerBreadthDifference,
+    baseSessionDate: estimate.baseSessionDate,
+    baseVnindexValue: estimate.baseVnindexValue,
+    previousMarketSessionDate: estimate.previousMarketSessionDate,
+    previousEstimateSessionDate: estimate.previousEstimateSessionDate,
+    previousEstimatedVnindexValue: estimate.previousEstimatedVnindexValue,
+    estimatedVnindexValue: estimate.estimatedVnindexValue,
+    marketCapBillion: estimate.marketCapBillion,
+    referenceMarketCapBillion: estimate.referenceMarketCapBillion,
+    pe: estimate.pe,
+    pb: estimate.pb,
+  })
+
+  const memberPayload = estimate.members.map((member) => ({
+    ...member,
+    exchange: "HOSE",
+    marketCapBillion: safePositiveNumber(member.marketCapBillion),
+    price: safePositiveNumber(member.price),
+    priceChangePct: safePriceChange(member.priceChangePct),
+    referenceMarketCapBillion: safePositiveNumber(member.referenceMarketCapBillion),
+  }))
+  const published = await supabase.rpc("publish_market_insight_qeo_ex_vnindex_estimate", {
+    p_payload: { estimate, members: memberPayload },
+  })
+  if (published.error) {
+    console.error("Qeo ex VIC/VHM estimate persistence failed", "QEO_ESTIMATE_PERSIST_FAILED")
+    return { status: "unavailable", reason: "QEO_ESTIMATE_PERSIST_FAILED" }
+  }
+  return {
+    status: typeof published.data?.status === "string" ? published.data.status : estimate.status,
+    reason: typeof published.data?.unavailable_reason === "string" ? published.data.unavailable_reason : estimate.unavailableReason,
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405)
 
@@ -274,6 +485,7 @@ Deno.serve(async (req: Request) => {
   const reqBody = await req.json().catch(() => ({})) as Record<string, unknown>
   const syncRunId = crypto.randomUUID()
   const asOfIso = new Date().toISOString()
+  const ratingSyncRunId = typeof reqBody.ratingSyncRunId === "string" ? reqBody.ratingSyncRunId : null
   const sessionDate = deriveSessionDate(typeof reqBody.startedAt === "string" ? reqBody.startedAt : typeof reqBody.sessionDate === "string" ? reqBody.sessionDate : undefined)
 
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -430,6 +642,22 @@ Deno.serve(async (req: Request) => {
     const publishedUpdate = await supabase.from("market_insight_sync_runs").update({ published_counts: publishedCounts, payload_checksum: payloadChecksum }).eq("id", syncRunId)
     if (publishedUpdate.error) throw new Error(`PUBLISH_METADATA_FAILED: ${publishedUpdate.error.message}`)
 
+    let qeoEstimate = { status: "unavailable", reason: "QEO_OPTIONAL_STEP_NOT_RUN" as string | null }
+    try {
+      qeoEstimate = await publishQeoEstimate({
+        supabase,
+        sessionDate,
+        asOfIso,
+        sourceMarketSyncRunId: syncRunId,
+        ratingSyncRunId,
+        providerIndexes,
+      })
+    } catch {
+      // The Qeo estimate is optional and must never invalidate the published
+      // market snapshot. The EOD phase summary records this status for review.
+      console.error("Qeo ex VIC/VHM estimate step failed", "QEO_OPTIONAL_STEP_FAILED")
+    }
+
     return jsonResponse({
       ok: true,
       sync_run_id: syncRunId,
@@ -437,6 +665,8 @@ Deno.serve(async (req: Request) => {
       published: publishRes.data,
       quality_status: normalized.quality_status,
       contract_version: CONTRACT_VERSION,
+      qeo_ex_vnindex_status: qeoEstimate.status,
+      qeo_ex_vnindex_reason: qeoEstimate.reason,
     })
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err)

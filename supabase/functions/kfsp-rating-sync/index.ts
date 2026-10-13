@@ -256,7 +256,6 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
   const syncRunId = manualRequestId ?? crypto.randomUUID()
   const asOfDate = vietnamDate()
-  const fetchedAt = new Date().toISOString()
   let tokenRefreshed = false
   let manualContext: ManualKfspContext | null = null
 
@@ -292,6 +291,9 @@ Deno.serve(async (req: Request) => {
     }
     if (!filter.response.ok) throw new Error(`KFSP_FILTER_HTTP_${filter.response.status}`)
 
+    // Timestamp the full provider feed only after its response is in hand.
+    // This lets the EOD estimate reject pre-close or stale candidate snapshots.
+    const fetchedAt = new Date().toISOString()
     const supplemental = await fetchSupplementalRecords(auth.token, canonicalTickers)
     const providerRows = buildProviderRows(filter.payload, supplemental, asOfDate, syncRunId, fetchedAt)
     const byTicker = new Map(providerRows.map((row) => [row.ticker, row]))
@@ -309,6 +311,8 @@ Deno.serve(async (req: Request) => {
       market_cap_billion: row.market_cap_billion,
       price: row.price,
       price_change_pct: row.price_change_pct,
+      pe_ttm: row.pe_ttm,
+      pb_ttm: row.pb_ttm,
       average_volume_50_sessions: row.average_volume_50_sessions,
       volume_1d: numeric(row.kfsp_metrics.liquidity.volume_1d),
       traded_value_1d_billion: numeric(row.kfsp_metrics.liquidity.traded_value_1d_billion),

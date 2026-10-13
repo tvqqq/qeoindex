@@ -594,6 +594,13 @@
       ]
     },
     {
+      "path": "tests/qeo-ex-vic-vhm-estimate.test.ts",
+      "owner": "market",
+      "invariant": "Qeo EOD exclusion estimates preserve financial arithmetic, source identity, continuity, and visible isolated observations.",
+      "bucket": "canonical",
+      "suites": ["fast", "db", "ui-contracts"]
+    },
+    {
       "path": "tests/market-insight-schema.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market insight schema contract.",

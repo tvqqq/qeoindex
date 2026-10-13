@@ -1533,6 +1533,8 @@ export type Database = {
           exchange: string | null
           fetched_at: string
           market_cap_billion: number | null
+          pb_ttm: number | null
+          pe_ttm: number | null
           price: number | null
           price_change_pct: number | null
           sector: string | null
@@ -1548,6 +1550,8 @@ export type Database = {
           exchange?: string | null
           fetched_at?: string
           market_cap_billion?: number | null
+          pb_ttm?: number | null
+          pe_ttm?: number | null
           price?: number | null
           price_change_pct?: number | null
           sector?: string | null
@@ -1563,6 +1567,8 @@ export type Database = {
           exchange?: string | null
           fetched_at?: string
           market_cap_billion?: number | null
+          pb_ttm?: number | null
+          pe_ttm?: number | null
           price?: number | null
           price_change_pct?: number | null
           sector?: string | null
@@ -2005,6 +2011,176 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "market_insight_sync_runs"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_insight_qeo_ex_vnindex_daily: {
+        Row: {
+          as_of: string
+          base_session_date: string | null
+          base_vnindex_value: number | null
+          calculation_input_hash: string | null
+          calculation_version: string
+          created_at: string
+          estimated_vnindex_value: number | null
+          market_cap_billion: number | null
+          pb_market_cap_coverage_pct: number | null
+          pb_member_count: number
+          pb_mode: string
+          pb_total_member_count: number
+          pb_ttm: number | null
+          pe_market_cap_coverage_pct: number | null
+          pe_member_count: number
+          pe_mode: string
+          pe_total_member_count: number
+          pe_ttm: number | null
+          provider_breadth_count: number | null
+          provider_breadth_difference: number | null
+          reference_market_cap_billion: number | null
+          retained_member_count: number
+          retained_member_hash: string | null
+          session_date: string
+          source_candidate_count: number
+          source_contract_version: number | null
+          source_hose_count: number
+          source_hose_hash: string | null
+          source_market_sync_run_id: string | null
+          source_observed_from: string | null
+          source_observed_to: string | null
+          source_rating_sync_run_id: string | null
+          status: string
+          unavailable_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          as_of: string
+          base_session_date?: string | null
+          base_vnindex_value?: number | null
+          calculation_input_hash?: string | null
+          calculation_version: string
+          created_at?: string
+          estimated_vnindex_value?: number | null
+          market_cap_billion?: number | null
+          pb_market_cap_coverage_pct?: number | null
+          pb_member_count?: number
+          pb_mode: string
+          pb_total_member_count?: number
+          pb_ttm?: number | null
+          pe_market_cap_coverage_pct?: number | null
+          pe_member_count?: number
+          pe_mode: string
+          pe_total_member_count?: number
+          pe_ttm?: number | null
+          provider_breadth_count?: number | null
+          provider_breadth_difference?: number | null
+          reference_market_cap_billion?: number | null
+          retained_member_count?: number
+          retained_member_hash?: string | null
+          session_date: string
+          source_candidate_count?: number
+          source_contract_version?: number | null
+          source_hose_count?: number
+          source_hose_hash?: string | null
+          source_market_sync_run_id?: string | null
+          source_observed_from?: string | null
+          source_observed_to?: string | null
+          source_rating_sync_run_id?: string | null
+          status: string
+          unavailable_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          as_of?: string
+          base_session_date?: string | null
+          base_vnindex_value?: number | null
+          calculation_input_hash?: string | null
+          calculation_version?: string
+          created_at?: string
+          estimated_vnindex_value?: number | null
+          market_cap_billion?: number | null
+          pb_market_cap_coverage_pct?: number | null
+          pb_member_count?: number
+          pb_mode?: string
+          pb_total_member_count?: number
+          pb_ttm?: number | null
+          pe_market_cap_coverage_pct?: number | null
+          pe_member_count?: number
+          pe_mode?: string
+          pe_total_member_count?: number
+          pe_ttm?: number | null
+          provider_breadth_count?: number | null
+          provider_breadth_difference?: number | null
+          reference_market_cap_billion?: number | null
+          retained_member_count?: number
+          retained_member_hash?: string | null
+          session_date?: string
+          source_candidate_count?: number
+          source_contract_version?: number | null
+          source_hose_count?: number
+          source_hose_hash?: string | null
+          source_market_sync_run_id?: string | null
+          source_observed_from?: string | null
+          source_observed_to?: string | null
+          source_rating_sync_run_id?: string | null
+          status?: string
+          unavailable_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      market_insight_qeo_ex_vnindex_members: {
+        Row: {
+          exchange: string
+          exclusion_reason: string | null
+          fetched_at: string
+          included_in_estimate: boolean
+          market_cap_billion: number | null
+          pb_ttm: number | null
+          pe_ttm: number | null
+          price: number | null
+          price_change_pct: number | null
+          reference_market_cap_billion: number | null
+          session_date: string
+          sync_run_id: string
+          ticker: string
+        }
+        Insert: {
+          exchange: string
+          exclusion_reason?: string | null
+          fetched_at: string
+          included_in_estimate: boolean
+          market_cap_billion?: number | null
+          pb_ttm?: number | null
+          pe_ttm?: number | null
+          price?: number | null
+          price_change_pct?: number | null
+          reference_market_cap_billion?: number | null
+          session_date: string
+          sync_run_id: string
+          ticker: string
+        }
+        Update: {
+          exchange?: string
+          exclusion_reason?: string | null
+          fetched_at?: string
+          included_in_estimate?: boolean
+          market_cap_billion?: number | null
+          pb_ttm?: number | null
+          pe_ttm?: number | null
+          price?: number | null
+          price_change_pct?: number | null
+          reference_market_cap_billion?: number | null
+          session_date?: string
+          sync_run_id?: string
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_insight_qeo_ex_vnindex_members_session_date_fkey"
+            columns: ["session_date"]
+            isOneToOne: false
+            referencedRelation: "market_insight_qeo_ex_vnindex_daily"
+            referencedColumns: ["session_date"]
           },
         ]
       }
@@ -4832,6 +5008,10 @@ export type Database = {
       publish_kfsp_rating_snapshot: {
         Args: { p_minimum_rows?: number; p_sync_run_id: string }
         Returns: number
+      }
+      publish_market_insight_qeo_ex_vnindex_estimate: {
+        Args: { p_payload: Json }
+        Returns: Json
       }
       publish_market_insight_snapshot: {
         Args: { p_sync_run_id: string }

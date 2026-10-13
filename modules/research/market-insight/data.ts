@@ -115,6 +115,30 @@ export interface MarketSectorHistoryItem {
   closePrice: number | null
 }
 
+export interface QeoExVnindexHistoryItem {
+  tradingDate: string
+  status: "available" | "unavailable"
+  unavailableReason: string | null
+  sourceMarketSyncRunMismatch?: boolean
+  estimatedVnindexValue: number | null
+  pe: number | null
+  peMode: "all_signed" | "positive_subset" | "unavailable"
+  peMemberCount: number
+  peTotalMemberCount: number
+  peMarketCapCoveragePct: number | null
+  pb: number | null
+  pbMode: "all_signed" | "positive_subset" | "unavailable"
+  pbMemberCount: number
+  pbTotalMemberCount: number
+  pbMarketCapCoveragePct: number | null
+  sourceHoseCount: number
+  retainedMemberCount: number
+  providerBreadthCount: number | null
+  sourceObservedTo: string | null
+  baseSessionDate: string | null
+  baseVnindexValue: number | null
+}
+
 export interface MarketCloseDashboardData {
   sessionDate: string
   isStale: boolean
@@ -145,6 +169,7 @@ export interface MarketCloseDashboardData {
       pb2StdUp: number | null
       pb2StdDown: number | null
     }>
+    qeoExVnindexHistory: QeoExVnindexHistoryItem[]
     aboveMa10Pct: number | null
     aboveMa20Pct: number | null
     aboveMa50Pct: number | null
@@ -264,6 +289,29 @@ export async function getMarketCloseInsightData(
   if (!daily) {
     return null
   }
+
+  const qeoHistorySelect = "session_date,status,unavailable_reason,source_market_sync_run_id,estimated_vnindex_value,pe_ttm,pe_mode,pe_member_count,pe_total_member_count,pe_market_cap_coverage_pct,pb_ttm,pb_mode,pb_member_count,pb_total_member_count,pb_market_cap_coverage_pct,source_hose_count,retained_member_count,provider_breadth_count,source_observed_to,base_session_date,base_vnindex_value"
+  const qeoExVnindexHistoryRows: Record<string, unknown>[] = []
+  let qeoHistoryComplete = false
+  for (let offset = 0; offset < 50_000; offset += 1_000) {
+    const page = await supabase
+      .from("market_insight_qeo_ex_vnindex_daily")
+      .select(qeoHistorySelect)
+      .lte("session_date", targetDate)
+      .order("session_date", { ascending: true })
+      .range(offset, offset + 999)
+    if (page.error) {
+      qeoExVnindexHistoryRows.length = 0
+      break
+    }
+    const rows = (page.data || []) as Record<string, unknown>[]
+    qeoExVnindexHistoryRows.push(...rows)
+    if (rows.length < 1_000) {
+      qeoHistoryComplete = true
+      break
+    }
+  }
+  if (!qeoHistoryComplete) qeoExVnindexHistoryRows.length = 0
 
   const syncRunId = typeof daily.sync_run_id === "string" ? daily.sync_run_id : ""
   const syncRunRes = syncRunId
@@ -512,6 +560,44 @@ export async function getMarketCloseInsightData(
       const parsed = parser(item as Record<string, unknown>)
       return parsed == null ? [] : [parsed]
     }) : []
+  const finiteValue = (value: unknown): number | null => {
+    if (value == null) return null
+    const number = Number(value)
+    return Number.isFinite(number) ? number : null
+  }
+  const qeoExVnindexHistory: QeoExVnindexHistoryItem[] = qeoExVnindexHistoryRows.flatMap((row) => {
+    const tradingDate = String(row.session_date || "")
+    if (!tradingDate || (row.status !== "available" && row.status !== "unavailable")) return []
+    const sourceMarketSyncRunMismatch = tradingDate === targetDate
+      && (!syncRunId || row.source_market_sync_run_id !== syncRunId)
+    const metricMode = (value: unknown): QeoExVnindexHistoryItem["peMode"] =>
+      value === "all_signed" || value === "positive_subset" ? value : "unavailable"
+    return [{
+      tradingDate,
+      status: sourceMarketSyncRunMismatch ? "unavailable" : row.status,
+      unavailableReason: sourceMarketSyncRunMismatch
+        ? "MARKET_SNAPSHOT_CHANGED"
+        : row.unavailable_reason == null ? null : String(row.unavailable_reason),
+      sourceMarketSyncRunMismatch,
+      estimatedVnindexValue: sourceMarketSyncRunMismatch ? null : finiteValue(row.estimated_vnindex_value),
+      pe: sourceMarketSyncRunMismatch ? null : finiteValue(row.pe_ttm),
+      peMode: sourceMarketSyncRunMismatch ? "unavailable" : metricMode(row.pe_mode),
+      peMemberCount: sourceMarketSyncRunMismatch ? 0 : Number(row.pe_member_count || 0),
+      peTotalMemberCount: sourceMarketSyncRunMismatch ? 0 : Number(row.pe_total_member_count || 0),
+      peMarketCapCoveragePct: sourceMarketSyncRunMismatch ? null : finiteValue(row.pe_market_cap_coverage_pct),
+      pb: sourceMarketSyncRunMismatch ? null : finiteValue(row.pb_ttm),
+      pbMode: sourceMarketSyncRunMismatch ? "unavailable" : metricMode(row.pb_mode),
+      pbMemberCount: sourceMarketSyncRunMismatch ? 0 : Number(row.pb_member_count || 0),
+      pbTotalMemberCount: sourceMarketSyncRunMismatch ? 0 : Number(row.pb_total_member_count || 0),
+      pbMarketCapCoveragePct: sourceMarketSyncRunMismatch ? null : finiteValue(row.pb_market_cap_coverage_pct),
+      sourceHoseCount: Number(row.source_hose_count || 0),
+      retainedMemberCount: Number(row.retained_member_count || 0),
+      providerBreadthCount: finiteValue(row.provider_breadth_count),
+      sourceObservedTo: row.source_observed_to == null ? null : String(row.source_observed_to),
+      baseSessionDate: row.base_session_date == null ? null : String(row.base_session_date),
+      baseVnindexValue: finiteValue(row.base_vnindex_value),
+    }]
+  })
 
   return {
     sessionDate: targetDate,
@@ -549,6 +635,7 @@ export async function getMarketCloseInsightData(
         pb2StdUp: row.pb_2std_up != null ? Number(row.pb_2std_up) : null,
         pb2StdDown: row.pb_2std_down != null ? Number(row.pb_2std_down) : null,
       }) : null),
+      qeoExVnindexHistory,
       aboveMa10Pct: daily.above_ma10_pct != null ? Number(daily.above_ma10_pct) : null,
       aboveMa20Pct: daily.above_ma20_pct != null ? Number(daily.above_ma20_pct) : null,
       aboveMa50Pct: daily.above_ma50_pct != null ? Number(daily.above_ma50_pct) : null,

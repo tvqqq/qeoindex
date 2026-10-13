@@ -55,13 +55,16 @@ function finiteMetricValue(point: ValuationHistoryObservation, metric: Valuation
 export function filterValuationHistoryByRange<T extends { tradingDate: string }>(
   history: T[],
   rangeYears: ValuationRangeYears,
+  anchorDate?: string,
 ): T[] {
   const ordered = history
     .filter((item) => parseIsoDate(item.tradingDate) != null)
     .slice()
     .sort((a, b) => a.tradingDate.localeCompare(b.tradingDate))
 
-  const latestDate = ordered.at(-1)?.tradingDate ?? null
+  const latestDate = anchorDate && parseIsoDate(anchorDate)
+    ? anchorDate
+    : ordered.at(-1)?.tradingDate ?? null
   if (!latestDate || rangeYears === 0) return ordered
 
   const cutoff = subtractCalendarYears(latestDate, rangeYears)

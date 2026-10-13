@@ -150,7 +150,7 @@ export async function runEodReadyStep(runId: string, startedAtIso: string) {
   })
 }
 
-export async function runMarketCloseCollectStep(runId: string, startedAtIso: string, enabled = true) {
+export async function runMarketCloseCollectStep(runId: string, startedAtIso: string, enabled = true, ratingSyncRunId?: string) {
   "use step"
   if (!enabled) {
     await markQeoIndexEodPhaseSkipped({
@@ -249,7 +249,7 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
           "Content-Type": "application/json",
           Authorization: `Bearer ${syncSecret}`,
         },
-        body: JSON.stringify({ startedAt: startedAtIso, trigger: "qeoindex_eod_pipeline" }),
+        body: JSON.stringify({ startedAt: startedAtIso, trigger: "qeoindex_eod_pipeline", ratingSyncRunId }),
         signal: AbortSignal.timeout(30_000),
       }).catch((error) => ({
         ok: false,
@@ -270,6 +270,8 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
         syncRunId: String(payload.sync_run_id || ""),
         sessionDate: String(payload.session_date || sessionDate),
         qualityStatus: String(payload.quality_status || "healthy"),
+        qeoExVnindexStatus: String(payload.qeo_ex_vnindex_status || "unavailable"),
+        qeoExVnindexReason: String(payload.qeo_ex_vnindex_reason || "not_reported"),
         published: payload.published,
         orderbookCount,
         orderbookUniverseCount,
@@ -280,6 +282,8 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
       status: result.status,
       sessionDate: result.sessionDate,
       qualityStatus: "qualityStatus" in result ? result.qualityStatus : "unknown",
+      qeoExVnindexStatus: "qeoExVnindexStatus" in result ? result.qeoExVnindexStatus : undefined,
+      qeoExVnindexReason: "qeoExVnindexReason" in result ? result.qeoExVnindexReason : undefined,
       syncRunId: "syncRunId" in result ? result.syncRunId : undefined,
       orderbookCount: "orderbookCount" in result ? result.orderbookCount : undefined,
       orderbookUniverseCount: "orderbookUniverseCount" in result ? result.orderbookUniverseCount : undefined,
