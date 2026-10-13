@@ -28,7 +28,8 @@ import { marketToneFromPrice, marketToneHex, marketToneText } from "@/modules/ma
 import { normalizeEpochSeconds, normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
 import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/modules/shared/ui/use-flash-animation"
-import { useLargeTradeNotice, LargeTradeNotice } from "@/components/orderbook/large-trade-notice"
+import { useLargeTradeNotice } from "@/components/orderbook/large-trade-notice"
+import { OrderbookTradeAlert } from "@/components/orderbook/orderbook-trade-alert"
 import { playWhaleSound, unlockAudioContext } from "@/modules/shared/ui/sound-engine"
 import { calculateSessionCountdown } from "@/modules/market/realtime/session-countdown"
 import { calculateForeignRoomPercent, getEodForeignRoom } from "@/modules/eod/shares"
@@ -1826,7 +1827,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
     if (!newest) return
     const side: "BUY" | "SELL" | "REF" = newest.side === "SELL" ? "SELL" : newest.side === "BUY" ? "BUY" : "REF"
     const isWhale = newest.volume >= whaleThreshold
-    if (largeTradeNotice.fire({ tradeId: newest.id, side, volume: newest.volume, isWhale }) && isWhale && side !== "REF") {
+    if (largeTradeNotice.fire({ tradeId: newest.id, side, volume: newest.volume, price: newest.price, isWhale }) && isWhale && side !== "REF") {
       playWhaleSound(side)
     }
   }, [realtimeLargeTrades, whaleThreshold, largeTradeNotice.fire])
@@ -1911,7 +1912,6 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
             <span className={`font-mono text-lg sm:text-xl font-black tracking-tight rounded px-1 transition-colors drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${color} ${headerPriceFlash === "up" ? "flash-text-up font-black" : headerPriceFlash === "down" ? "flash-text-down font-black" : headerPriceFlash === "ref" ? "flash-text-ref font-black" : ""}`}>{formatPrice(activePrice)}</span>
             {activePrice ? <MarketChangePill value={changePercent} tone={tone} compact decimals={2} /> : null}
           </div>
-          <LargeTradeNotice notice={largeTradeNotice.notice} />
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a data-orderbook-action href={`/insights?ticker=${symbol}`} target="_blank" rel="noopener noreferrer" aria-label={`Mở phân tích Insight ${symbol} (tab mới)`} title="Mở phân tích Insight trong tab mới" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 font-ticker text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-200 transition-all shadow-[0_0_10px_rgba(34,201,138,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] group"><Sparkles className="h-3.5 w-3.5 text-emerald-400 group-hover:scale-110 transition-transform" /><span>Insight</span><ExternalLink className="h-3 w-3 text-emerald-400/80 group-hover:text-emerald-300 transition-colors" /></a>
@@ -1920,7 +1920,36 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
         </div>
       </header>
 
-      {stream.latestPtAlert && <div role="button" tabIndex={0} onClick={() => { setActivityTab("putthrough"); stream.setLatestPtAlert(null) }} className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-amber-500/50 bg-[#161a20]/95 px-4 py-2 text-xs font-mono shadow-[0_12px_36px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(245,158,11,0.3)] backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 cursor-pointer hover:bg-[#1f242d] hover:border-amber-400 transition-all select-none" title="Bấm để chuyển sang tab Thỏa thuận"><div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0 text-[11px]">🤝</div><div className="flex items-center gap-1.5 text-foreground font-sans"><span className="font-bold text-amber-300">Thỏa thuận mới:</span><span className="font-mono font-bold text-foreground">{formatVolume(stream.latestPtAlert.volume)} CP</span><span className="text-muted-2">@</span><span className="font-mono font-bold text-up">{formatPrice(stream.latestPtAlert.price)}</span><span className="rounded bg-amber-500/20 border border-amber-500/35 px-1.5 py-0.2 text-[11px] font-bold text-amber-300 font-mono">{formatMarketValue(stream.latestPtAlert.value)}</span></div><button type="button" onClick={(e) => { e.stopPropagation(); stream.setLatestPtAlert(null) }} className="ml-1 text-muted-2 hover:text-foreground text-[10px] p-0.5 rounded-full hover:bg-white/10 transition-colors">✕</button></div>}
+      {(stream.latestPtAlert || largeTradeNotice.notice) && (
+        <div data-orderbook-alert-stack className="pointer-events-none absolute inset-x-2 top-14 z-50 flex flex-col items-center gap-1.5">
+          {stream.latestPtAlert && (
+            <OrderbookTradeAlert
+              kind="putthrough"
+              tone="PUT_THROUGH"
+              icon={<Handshake className="size-3.5" />}
+              label="Thỏa thuận mới:"
+              volume={formatVolume(stream.latestPtAlert.volume)}
+              price={formatPrice(stream.latestPtAlert.price)}
+              value={formatMarketValue(stream.latestPtAlert.value)}
+              onActivate={() => { setActivityTab("putthrough"); stream.setLatestPtAlert(null) }}
+              onDismiss={() => stream.setLatestPtAlert(null)}
+            />
+          )}
+          {largeTradeNotice.notice && (
+            <OrderbookTradeAlert
+              kind="large"
+              tone={largeTradeNotice.notice.side}
+              icon={largeTradeNotice.notice.isWhale ? <SharkIcon className="size-4" /> : <SmallFishIcon className="size-4" />}
+              label={`Lệnh ${largeTradeNotice.notice.side === "BUY" ? "Mua" : largeTradeNotice.notice.side === "SELL" ? "Bán" : "khớp"} ${largeTradeNotice.notice.isWhale ? "Cá mập" : "Cá con"} mới:`}
+              volume={formatVolume(largeTradeNotice.notice.volume)}
+              price={formatPrice(largeTradeNotice.notice.price)}
+              value={formatMarketValue(largeTradeNotice.notice.price * 1000 * largeTradeNotice.notice.volume)}
+              onActivate={() => { setActivityTab("trades"); setTradeFilter(largeTradeNotice.notice!.isWhale ? "whale" : "large"); largeTradeNotice.clear() }}
+              onDismiss={largeTradeNotice.clear}
+            />
+          )}
+        </div>
+      )}
 
       {!minimized ? (
         <div className="min-h-0 flex-1 overflow-y-auto flex flex-col bg-[#121313]">

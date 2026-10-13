@@ -6,6 +6,7 @@ export type LargeTradeAlert = {
   tradeId: string
   side: "BUY" | "SELL" | "REF"
   volume: number
+  price: number
   isWhale: boolean
 }
 
@@ -39,24 +40,3 @@ export function useLargeTradeNotice() {
   return { notice, fire, clear }
 }
 
-export function LargeTradeNotice({ notice }: { notice: LargeTradeAlert | null }) {
-  if (!notice) return null
-
-  const tone = notice.side === "SELL"
-    ? "border-rose-400/50 bg-[#321a22] text-rose-200"
-    : notice.side === "BUY"
-      ? "border-emerald-400/50 bg-[#102e29] text-emerald-200"
-      : "border-slate-400/50 bg-[#1c2733] text-slate-200"
-
-  return (
-    <div
-      data-orderbook-large-trade-notice
-      role="status"
-      aria-live="polite"
-      className={`pointer-events-none inline-flex max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[10px] font-semibold ${tone}`}
-    >
-      <span>{notice.isWhale ? "Lệnh cá mập" : "Lệnh lớn"}</span>
-      <span className="font-mono font-bold tabular-nums">{notice.volume.toLocaleString("vi-VN")} cp</span>
-    </div>
-  )
-}
