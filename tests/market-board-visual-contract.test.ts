@@ -27,6 +27,7 @@ const intradayRouteSource = readFileSync(new URL("../app/api/market/intraday/rou
 const boardTransitionSource = readFileSync(new URL("../components/smoothui/market-board-transition/index.tsx", import.meta.url), "utf8")
 const orderbookSource = readFileSync(new URL("../components/orderbook/live-orderbook-panel.tsx", import.meta.url), "utf8")
 const largeTradeNoticeSource = readFileSync(new URL("../components/orderbook/large-trade-notice.tsx", import.meta.url), "utf8")
+const tradeAlertSource = readFileSync(new URL("../components/orderbook/orderbook-trade-alert.tsx", import.meta.url), "utf8")
 const pillSource = readFileSync(new URL("../components/market-change-pill.tsx", import.meta.url), "utf8")
 const marketStreamSource = readFileSync(new URL("../modules/market/providers/dnse/market-stream.ts", import.meta.url), "utf8")
 const marketRuntimeSource = readFileSync(new URL("../modules/market/providers/dnse/market-runtime.ts", import.meta.url), "utf8")
@@ -148,39 +149,49 @@ test("orderbook popup places vertical activity navigation beside responsive cont
   }
 })
 
-test("orderbook large trades use a bounded two-second lightweight notice without row tags or Lottie", () => {
-  assert.match(orderbookSource, /import \{ useLargeTradeNotice, LargeTradeNotice \} from "@\/components\/orderbook\/large-trade-notice"/)
-  assert.match(orderbookSource, /<LargeTradeNotice notice=\{largeTradeNotice\.notice\} \/>/)
-  // Keep the original full-row highlight for EVERY qualifying visible execution,
-  // not only the newest execution while the 2-second notice is displayed.
+test("orderbook negotiated and Cá con/Cá mập alerts reuse the same lightweight floating UI", () => {
+  assert.ok(orderbookSource.includes('import { OrderbookTradeAlert } from "@/components/orderbook/orderbook-trade-alert"'))
+  assert.equal((orderbookSource.match(/<OrderbookTradeAlert/g) ?? []).length, 2)
+  assert.ok(orderbookSource.includes('data-orderbook-alert-stack className="pointer-events-none absolute inset-x-2 top-14 z-50 flex flex-col items-center gap-1.5"'))
+  for (const token of ['kind="putthrough"', 'tone="PUT_THROUGH"', 'kind="large"', 'tone={largeTradeNotice.notice.side}', '<SharkIcon className="size-4" />', '<SmallFishIcon className="size-4" />', 'setActivityTab("trades")', 'setTradeFilter(largeTradeNotice.notice!.isWhale ? "whale" : "large")']) {
+    assert.ok(orderbookSource.includes(token), token)
+  }
+  assert.ok(orderbookSource.includes('side === "BUY" ? "Mua" : largeTradeNotice.notice.side === "SELL" ? "Bán" : "khớp"'))
+  assert.ok(orderbookSource.includes('largeTradeNotice.fire({ tradeId: newest.id, side, volume: newest.volume, price: newest.price, isWhale })'))
+  assert.ok(largeTradeNoticeSource.includes("price: number"))
+  assert.ok(tradeAlertSource.includes('role="status"'))
+  assert.ok(tradeAlertSource.includes('aria-live="polite"'))
+  assert.ok(tradeAlertSource.includes('data-orderbook-trade-alert={kind}'))
+  for (const [tone, token] of [["BUY", "border-emerald-400/60"], ["SELL", "border-rose-400/60"], ["REF", "border-slate-400/50"], ["PUT_THROUGH", "border-amber-500/50"]]) {
+    assert.ok(tradeAlertSource.includes(tone + ": {"), tone)
+    assert.ok(tradeAlertSource.includes(token), token)
+  }
+  assert.ok(tradeAlertSource.includes("onClick={onActivate}"))
+  assert.ok(tradeAlertSource.includes("onClick={onDismiss}"))
+  assert.ok(tradeAlertSource.includes("data-no-drag"))
+  assert.doesNotMatch(tradeAlertSource, /backdrop-blur|backdrop-filter|animate-|transition-all|requestAnimationFrame|Lottie/)
+})
+
+test("orderbook large trades retain two-second coalescing, tape styling and no whale animation", () => {
   assert.match(orderbookSource, /isLarge = !isAto && !isAtc && trade\.volume >= LARGE_TRADE_MIN_VOLUME/)
   assert.match(orderbookSource, /isWhale = !isAto && !isAtc && trade\.volume >= whaleThreshold/)
-  assert.match(orderbookSource, /\$\{isWhale \|\| isLarge \|\| isAto \|\| isAtc \? `\$\{sideBgClass\} font-bold -mx-3\.5 px-3\.5`/)
-  assert.match(orderbookSource, /\$\{isWhale \|\| isLarge \? sideColorClass : "text-foreground"\}/)
-  assert.doesNotMatch(orderbookSource, /isRecentLarge = largeTradeNotice\.notice\?\.tradeId === trade\.id/)
+  assert.ok(orderbookSource.includes('isWhale || isLarge || isAto || isAtc ? `${sideBgClass} font-bold -mx-3.5 px-3.5`'))
+  assert.ok(orderbookSource.includes('isWhale || isLarge ? sideColorClass : "text-foreground"'))
   const renderedRows = orderbookSource.slice(orderbookSource.indexOf("{visibleTrades.length ? <div"), orderbookSource.indexOf("{visibleTrades.length ? <div") + 2800)
   assert.doesNotMatch(renderedRows, /10K\+|30K\+|50K\+|🐋|tagBadgeClass/)
   assert.match(renderedRows, /trade\.count > 1 \? <span/)
   assert.match(renderedRows, /isAto \? <span/)
   assert.match(renderedRows, /isAtc \? <span/)
   assert.doesNotMatch(orderbookSource, /10K\+|30K\+|50K\+|🐋|tagBadgeClass|isWhaleGlow|ConfettiOverlay|useWhaleConfetti/)
-  assert.match(orderbookSource, /if \(!newest\) newest = t/)
-  assert.match(orderbookSource, /if \(largeTradeNotice\.fire\(/)
-  assert.match(orderbookSource, /if \(t\.volume < LARGE_TRADE_MIN_VOLUME \|\| isAtoTradeTime/)
+  assert.ok(orderbookSource.includes("if (!newest) newest = t"))
+  assert.ok(orderbookSource.includes("if (largeTradeNotice.fire("))
   assert.match(largeTradeNoticeSource, /const NOTICE_DURATION_MS = 2_000/)
   assert.match(largeTradeNoticeSource, /if \(timerRef\.current !== null\) return false/)
   assert.match(largeTradeNoticeSource, /window\.setTimeout\(\(\) => \{[\s\S]*?setNotice\(null\)[\s\S]*?\}, NOTICE_DURATION_MS\)/)
   assert.match(largeTradeNoticeSource, /window\.clearTimeout\(timerRef\.current\)/)
-  assert.match(largeTradeNoticeSource, /data-orderbook-large-trade-notice/)
-  assert.match(largeTradeNoticeSource, /pointer-events-none inline-flex max-w-full shrink-0/)
-  assert.doesNotMatch(largeTradeNoticeSource, /absolute right-3 top-16|animate-|backdrop-blur/)
-  const orderbookHeader = orderbookSource.slice(orderbookSource.indexOf("<header className=\"relative flex cursor-grab"), orderbookSource.indexOf("</header>", orderbookSource.indexOf("<header className=\"relative flex cursor-grab")))
-  assert.ok(orderbookHeader.includes("<LargeTradeNotice notice={largeTradeNotice.notice} />"))
-  assert.ok(orderbookHeader.indexOf("MarketChangePill value={changePercent}") < orderbookHeader.indexOf("<LargeTradeNotice notice="))
-  assert.ok(orderbookHeader.indexOf("<LargeTradeNotice notice=") < orderbookHeader.indexOf("data-orderbook-action href="))
-  assert.match(orderbookHeader, /className="flex items-center gap-2\.5 min-w-0 flex-wrap"/)
   assert.doesNotMatch(largeTradeNoticeSource, /Lottie|lottie-react|animate-|backdrop-blur|transition-all|requestAnimationFrame/)
 })
+
 test("orderbook popup restores pre-freeze pointer drag and live stream while preserving resize", () => {
   assert.match(orderbookSource, /const stream = useDnseOrderBookStream\(symbol, reconnectKey, initialMeta\)/)
   assert.match(orderbookSource, /const isInteractingRef = useRef\(false\)/)
