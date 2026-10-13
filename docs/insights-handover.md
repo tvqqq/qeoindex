@@ -7,7 +7,7 @@ Tài liệu này là source of truth cho `/insights`. Bản audit ngày 2026-08-
 - Dữ liệu thị trường, ngành và định giá hiển thị trên Insights phải đến từ KFSP và có `as_of`/`session_date` rõ ràng.
 - Không có preview rows, số mẫu, lịch sử tạo bằng công thức, ngày hard-code hoặc fallback từ một metric khác.
 - Trường KFSP thiếu phải giữ `null` và UI hiển thị `—`/empty state.
-- Không tự suy ra RRG, MA, P/E, P/B, độ lệch chuẩn, Nỗ lực hoặc Kết quả.
+- Không tự suy ra RRG, MA, độ lệch chuẩn, Nỗ lực hoặc Kết quả. P/E/P/B provider giữ nguyên; ngoại lệ Qeo estimate có công thức riêng tại mục 3.4 và không được trộn vào giá trị KFSP.
 - Giá trị QeoIndex tự tính phải có tên **Qeo**, công thức và owner rõ ràng; không được gắn nhãn như điểm KFSP.
 - Provider drift hoặc thiếu P0 làm run `failing`; snapshot cũ đang tốt không bị thay bằng snapshot thiếu dữ liệu.
 
@@ -24,7 +24,11 @@ flowchart LR
   RPC --> Leaders["market_insight_leaders"]
   KFSPStock["KFSP stock filter/detail APIs"] --> RatingSync["kfsp-rating-sync"]
   RatingSync --> Ratings["insights_stock_ratings"]
+  RatingSync --> Candidates["kfsp_universe_candidate_snapshots\nfull provider feed"]
+  Daily & Indexes & Candidates --> QeoEstimate["Qeo ex VIC/VHM estimate\noptional post-publish step"]
+  QeoEstimate --> QeoDaily["market_insight_qeo_ex_vnindex_daily\n+ member evidence"]
   Daily & Indexes & Sectors & Leaders & Ratings --> Loader["server loaders"]
+  QeoDaily --> Loader
   Loader --> UI["/insights"]
 ```
 
@@ -78,6 +82,32 @@ mean(các giá trị có mặt trong [KFSP 4M, KFSP CANSLIM, KFSP stock RS-S, KF
 Null bị loại khỏi mean; nếu cả bốn null thì composite null. UI phải ghi “Qeo composite” hoặc “Nguồn KFSP · điểm Qeo”, không gọi đây là model/composite của KFSP.
 
 `QeoIndex state radar` là heuristic UI riêng, owner tại `modules/research/insights/rating-model.ts`; công thức/weights nằm trong file và UI ghi rõ đây không phải logic proprietary của KFSP. Nếu thay đổi công thức phải cập nhật tests và metric guide trong cùng commit.
+
+### 3.4. Qeo ước tính · HOSE loại VIC, VHM
+
+Đây là chuỗi ước tính của Qeo, không phải VNINDEX chính thức, không phải chỉ số có divisor chính thức và không khẳng định danh sách thành phần chính thức. UI đặt chart thứ hai dưới chart định giá KFSP với tên **“Qeo ước tính · HOSE loại VIC, VHM”**. Các dải độ lệch chuẩn KFSP chỉ thuộc chart gốc.
+
+Nguồn là toàn bộ kết quả KFSP `/api/filter` của cùng một `kfsp_rating_sync_runs` đã hoàn tất sau 15:00 ICT trong đúng ngày phiên, không phải 200 mã canonical. EOD đọc candidate theo `sync_run_id`, phân trang toàn bộ `provider_row_count`, kiểm tra thời điểm từng hàng, mã HOSE ba ký tự, vốn hóa/giá/biến động hợp lệ và yêu cầu cả VIC, VHM có mặt trước khi loại hai mã này. `fetched_at` là thời điểm Qeo nhận phản hồi filter; trường `thoigian` từ provider không được dùng vì không đủ tin cậy để xác nhận thời điểm cập nhật. Nguồn cần tối thiểu 350 mã HOSE, ít nhất 90% số mã HOSE quan sát ở lần trước và không thấp hơn số tăng + đứng giá + giảm của VNINDEX khi số breadth này có sẵn. 413 mã là số quan sát của feed đã kiểm tra, không phải số lượng membership cố định; breadth chỉ là kiểm tra cận dưới, không chứng minh danh tính thành phần chỉ số.
+
+Điểm đầu tiên có nguồn EOD đầy đủ lấy VNINDEX đã publish cùng phiên làm mốc gốc bất biến. Từ phiên tiếp theo, chuỗi tính:
+
+```text
+vốn hóa tham chiếu từng mã = vốn hóa hiện tại / (1 + biến động giá phiên / 100)
+Qeo phiên này = Qeo phiên trước × (Σ vốn hóa hiện tại HOSE trừ VIC/VHM / Σ vốn hóa tham chiếu HOSE trừ VIC/VHM)
+```
+
+Đây là điều chỉnh theo tham chiếu lợi suất giá do KFSP cung cấp; thay đổi divisor hoặc corporate action không được tự suy diễn. Khi đã có mốc gốc, một phiên thị trường đã publish nhưng thiếu Qeo sẽ làm chuỗi điểm dừng. RPC cũng đối chiếu phiên hiện tại và phiên liền trước trong lịch sử định giá KFSP với phiên thị trường đã lưu, để phát hiện cả trường hợp toàn bộ Market Close bỏ lỡ một phiên. Không nối qua ngày thiếu dữ liệu và không tự đặt mốc mới. P/E/P/B vẫn được lưu từ nguồn đầy đủ của phiên hiện tại khi chuỗi điểm bị dừng. Các lần chạy thiếu dữ liệu trước mốc gốc đầu tiên được lưu `unavailable`; phiên hợp lệ đầu tiên mới được làm mốc.
+
+P/E và P/B dùng trực tiếp các field `pe_ttm`/`pb_ttm` của filter feed, không suy từ EPS/BVPS. Để định nghĩa mẫu không đổi giữa các ngày, mỗi point luôn dùng nhóm có bội số dương, hữu hạn:
+
+```text
+P/E nhóm dương = Σ vốn hóa mã có P/E dương / Σ(vốn hóa mã / P/E mã)
+P/B nhóm dương = Σ vốn hóa mã có P/B dương / Σ(vốn hóa mã / P/B mã)
+```
+
+VIC và VHM bị loại trước mọi phép cộng. P/E/P/B thiếu, bằng 0 hoặc âm không vào mẫu số. UI ghi `P/E nhóm có P/E dương` hoặc `P/B nhóm có P/B dương`, kèm số mã có metric trên tổng số mã retained của chính phiên và tỷ lệ vốn hóa bao phủ; thiếu một metric không xóa point của metric còn lại. Tooltip hiển thị thời điểm Qeo nhận feed và ghi rõ đây không phải timestamp cập nhật từ nhà cung cấp. Mọi giá trị P/E/P/B và tick trục định giá hiển thị đúng hai chữ số thập phân.
+
+Chỉ EOD thật kể từ khi tính năng chạy mới được lưu; không dựng ngược P/E/P/B từ lịch sử index. Bảng summary lưu source run/contract, source và retained hash, số lượng/coverage, base date/value, timestamp quan sát và trạng thái. Bảng member service-role-only giữ bằng chứng từng mã. Candidate PE/PB được giữ 14 ngày theo retention hiện hữu, còn estimate/member history có bảng lưu riêng.
 
 ## 4. Storage contract v2
 
