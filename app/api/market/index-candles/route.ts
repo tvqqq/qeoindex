@@ -72,6 +72,13 @@ export async function GET(request: NextRequest) {
   })
 
   const ok = INDEX_CHART_SYMBOLS.some((symbol) => candles[symbol].length > 0)
+  if (Object.keys(errors).length > 0) {
+    console.warn("[market/index-candles] DNSE history unavailable", {
+      resolution,
+      failedSymbols: Object.keys(errors),
+      reasons: Object.fromEntries(Object.entries(errors).map(([symbol, message]) => [symbol, message.slice(0, 300)])),
+    })
+  }
   const data = {
     ok,
     resolution,

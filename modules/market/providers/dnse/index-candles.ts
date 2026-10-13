@@ -1,6 +1,7 @@
 import "server-only"
 
 import { createHmac, randomUUID } from "node:crypto"
+import { buildDnseRequestWindows } from "@/modules/market/providers/dnse/request-windows"
 import {
   normalizeCandleBar,
   resampleCandleSeries,
@@ -151,7 +152,7 @@ type OhlcAttempt = { label: string; params: Record<string, string | number> }
 
 function openApiAttemptFor(
   symbol: IndexChartSymbol,
-  resolution: Exclude<IndexChartResolution, "4H">,
+  resolution: string,
   from: number,
   to: number,
 ): OhlcAttempt {
@@ -212,30 +213,42 @@ export async function fetchDnseIndexCandleHistory(
       })),
     ),
   )
+  // DNSE 1-minute OHLC requests are bounded to seven-day windows in the
+  // canonical minute-history reader. The old 14-day single request can be
+  // rejected by the provider, leaving BOTH VNINDEX and VN30F1M charts empty.
+  const windows = resolution === "1"
+    ? buildDnseRequestWindows(from, to, 7)
+    : [{ from, to }]
+
+  // Keep attempts independent by origin/kind: never stitch candles from
+  // different provider endpoints into one authoritative response.
   const publicResults = await Promise.allSettled(publicAttempts.map(async (attempt) => {
-    try {
-      return {
-        attempt,
-        bars: finalizeHistory(
-          symbol,
-          resolution,
-          normalizeDnseChartHistory(await publicChartGet(attempt.baseUrl, attempt.kind, {
-            resolution: attempt.sourceResolution,
-            symbol,
-            from,
-            to,
-          })),
-          from,
-          to,
-          limit,
-        ),
-      }
-    } catch (error) {
-      throw new Error(`${attempt.label}: ${error instanceof Error ? error.message : "failed"}`)
+    const segments = await Promise.allSettled(windows.map(async (window) =>
+      normalizeDnseChartHistory(await publicChartGet(attempt.baseUrl, attempt.kind, {
+        resolution: attempt.sourceResolution,
+        symbol,
+        from: window.from,
+        to: window.to,
+      })),
+    ))
+    const bars = finalizeHistory(
+      symbol,
+      resolution,
+      segments.flatMap((result) => result.status === "fulfilled" ? result.value : []),
+      from,
+      to,
+      limit,
+    )
+    if (!bars.length) {
+      const failures = segments.map((result) => result.status === "rejected"
+        ? (result.reason instanceof Error ? result.reason.message : "failed")
+        : result.value.length ? "ok" : "empty")
+      throw new Error(`${attempt.label}: ${failures.join(", ")}`)
     }
+    return { attempt, bars }
   }))
   for (const result of publicResults) {
-    if (result.status === "fulfilled" && result.value.bars.length) {
+    if (result.status === "fulfilled") {
       const { bars, attempt } = result.value
       return {
         symbol,
@@ -245,24 +258,41 @@ export async function fetchDnseIndexCandleHistory(
         transport: attempt.label,
       }
     }
-    if (result.status === "fulfilled") {
-      failures.push(`${result.value.attempt.label}: empty`)
-    } else {
-      failures.push(result.reason instanceof Error ? result.reason.message : "DNSE public chart failed")
-    }
+    failures.push(result.reason instanceof Error ? result.reason.message : "DNSE public chart failed")
   }
 
-  const attempt = openApiAttemptFor(symbol, config.sourceResolution, from, to)
-  try {
+  // Some DNSE OpenAPI installations accept "1m" rather than "1".
+  // Probe both variants concurrently so a failed source cannot exhaust
+  // the route's 20-second execution budget.
+  const signedResolutions = resolution === "1" ? ["1", "1m"] : [config.sourceResolution]
+  const signedResults = await Promise.allSettled(signedResolutions.map(async (sourceResolution) => {
+    const attempt = openApiAttemptFor(symbol, sourceResolution, from, to)
+    const segments = await Promise.allSettled(windows.map(async (window) =>
+      normalizeDnseChartHistory(await signedGet({
+        ...attempt.params,
+        from: window.from,
+        to: window.to,
+      })),
+    ))
     const bars = finalizeHistory(
       symbol,
       resolution,
-      normalizeDnseChartHistory(await signedGet(attempt.params)),
+      segments.flatMap((result) => result.status === "fulfilled" ? result.value : []),
       from,
       to,
       limit,
     )
-    if (bars.length) {
+    if (!bars.length) {
+      const reasons = segments.map((result) => result.status === "rejected"
+        ? (result.reason instanceof Error ? result.reason.message : "failed")
+        : "empty")
+      throw new Error(`${attempt.label}: ${reasons.join(", ")}`)
+    }
+    return { attempt, bars }
+  }))
+  for (const result of signedResults) {
+    if (result.status === "fulfilled") {
+      const { bars, attempt } = result.value
       return {
         symbol,
         resolution,
@@ -271,10 +301,8 @@ export async function fetchDnseIndexCandleHistory(
         transport: attempt.label,
       }
     }
-    failures.push(`${attempt.label}: empty`)
-  } catch (error) {
-    failures.push(`${attempt.label}: ${error instanceof Error ? error.message : "failed"}`)
+    failures.push(result.reason instanceof Error ? result.reason.message : "DNSE signed OHLC failed")
   }
 
-  throw new Error(`DNSE OHLC unavailable for ${symbol} ${resolution} (${failures.join("; ")})`)
+  throw new Error(`DNSE OHLC unavailable for ${symbol} ${resolution} (${failures.join("; ").slice(0, 1_400)})`)
 }
