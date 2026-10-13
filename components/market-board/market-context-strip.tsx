@@ -448,12 +448,12 @@ function ComparisonLineChart({
               const paths = observedAreaPaths(sessionPoints, x, y, zeroY)
               return <g key={sessionIndex}>
                 {paths.area && (
-                  <path d={paths.area} fill={line.color} fillOpacity={line.previous ? 0.13 : 0.21}
+                  <path d={paths.area} fill={line.color} fillOpacity={line.previous ? 0.08 : 0.21}
                     stroke="none" pointerEvents="none" aria-hidden="true" />
                 )}
                 {sessionPoints.length > 1 && (
                   <path d={paths.line} fill="none" stroke={line.color}
-                    strokeWidth={line.previous ? 2 : 2.6} strokeOpacity={line.previous ? 0.92 : 1}
+                    strokeWidth={line.previous ? 1.25 : 2.6} strokeOpacity={line.previous ? 0.75 : 1}
                     strokeLinecap="round" strokeLinejoin="round" />
                 )}
               </g>
@@ -1116,7 +1116,6 @@ export function MarketContextStrip({
     .sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf))[0]
   const liquiditySeriesSource = liquidityCandidate?.source ?? "index-quote"
   const liquidityValue = liquidityCandidate?.value
-  const liquidityVolume = liquidityCandidate?.volume
   const liquidityUpdatedAt = liquidityCandidate?.asOf ?? ""
 
   useEffect(() => {
@@ -1354,17 +1353,10 @@ export function MarketContextStrip({
             {finite(liquidityValue) && liquidityValue >= 0 && (
               <strong key={liquidityValue} data-market-liquidity-value className={`font-ticker text-[11px] font-extrabold text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatVndValue(liquidityValue)}</strong>
             )}
-            {finite(liquidityVolume) && liquidityVolume > 0 && (
-              <>
-                {finite(liquidityValue) && liquidityValue >= 0 && <span className="text-zinc-500">/</span>}
-                <span className="font-sans text-[10px] text-zinc-400">KL</span>
-                <strong key={liquidityVolume} className={`font-ticker text-[11px] font-extrabold text-zinc-100 ${isFresh(liquidityUpdatedAt) ? "market-realtime-number" : ""}`}>{formatCompactVolume(liquidityVolume)}</strong>
-              </>
-            )}
           </span>}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col"><ComparisonLineChart series={[
             { label: "Nay", points: todayLiquidityPoints, color: "#8fbac1" },
-            { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#e87974", previous: true },
+            { label: "Trước", points: verifiedPreviousLiquidity?.points ?? [], color: "#d9a09c", previous: true },
           ]} animate={isDisplaySession && isFresh(liquidityUpdatedAt)} /></div>
         </ContextCard>
         <ContextCard title="Mua bán nước ngoài" className="h-full md:h-[156px]" icon={<Globe2 className="h-3.5 w-3.5" />} accent="purple"
