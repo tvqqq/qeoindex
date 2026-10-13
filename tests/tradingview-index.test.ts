@@ -252,3 +252,14 @@ test("index charts keep pan and wheel zoom without floating zoom buttons", () =>
   assert.match(minuteChartSource, /pressedMouseMove: true/)
   assert.match(minuteChartSource, /pinch: true/)
 })
+
+test("QEO-409 bounds 1m history requests and preserves real partial results per source", () => {
+  assert.match(historySource, /lookbackDays: 14, maxPoints: 2_600/)
+  assert.match(historySource, /buildDnseRequestWindows\(from, to, 7\)/)
+  assert.match(historySource, /Promise\.allSettled\(windows\.map/)
+  assert.match(historySource, /segments\.flatMap\(\(result\) => result\.status === "fulfilled" \? result\.value : \[\]\)/)
+  assert.match(historySource, /signedResolutions = resolution === "1" \? \["1", "1m"\]/)
+  assert.match(historySource, /normalizeDnseChartHistory\(await signedGet/)
+  assert.match(routeSource, /DNSE history unavailable/)
+  assert.match(routeSource, /INDEX_CHART_SYMBOLS\.some\(\(symbol\) => candles\[symbol\]\.length > 0\)/)
+})
