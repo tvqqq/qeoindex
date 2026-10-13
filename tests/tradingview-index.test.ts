@@ -284,6 +284,7 @@ test("QEO-410 both charts draw independent lightweight dashed reference lines", 
   assert.match(modalSource, /referencePrice=\{previousClose\}/)
   assert.match(minuteChartSource, /series\.createPriceLine\(/)
   assert.match(minuteChartSource, /series\.removePriceLine/)
-  assert.match(minuteChartSource, /title: symbol === "VNINDEX" \? "TC" : "Đóng trước"/)
+  assert.match(minuteChartSource, /title: symbol === "VNINDEX" \? "TC" : "Đóng"/)
   assert.match(minuteChartSource, /lineStyle: DASHED_LINE_STYLE/)
+  assert.match(minuteChartSource, /const REFERENCE_COLOR = "rgba\(251, 191, 36, 0\.5\)"/)
 })
