@@ -32,12 +32,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Git and production deployment invariants
 
 - `main` is the only deployment-enabled Git branch. Vercel Git Integration is the single source of truth for production deployments.
-- Normal workflow: make changes on a feature/work branch, validate locally, commit/push the branch, then merge or squash once into `main` when the release is approved.
+- Default ChatGPT inline-coding workflow: inspect repo instructions and relevant code → implement directly on a feature/work branch using the GitHub Connector → review diff → verify with GitHub Actions → **automatically squash-merge into `main` when required checks pass**. The user's normal coding request (fix/implement/update/refactor) already authorizes the routine PR, merge and Git-triggered production release; do not ask for a second merge/deploy confirmation.
+- QeoIndex inline-only execution policy still applies: do not run shell commands, local/remote builds, tests, lint, typecheck or deploy commands by default. GitHub Actions is the validation environment. Never bypass branch protection, checks or review requirements, and never report tests as passed without CI evidence.
+- Pause and ask only for blockers requiring decisions: missing access, unresolved CI failures, merge conflicts, destructive/irreversible operations, database or infrastructure changes with significant production/security risk, or genuinely ambiguous requirements. If release is blocked, keep the PR open and report the actual blocker; do not silently push to `main`.
 - A push/merge to `main` is itself the production deployment trigger. Do not run `vercel --prod`, `vercel deploy --prod`, a Vercel Deploy Hook, or another manual production deployment for the same release.
 - Agents may use Vercel tooling to inspect deployments, logs, or production health, but must not create a production deployment unless the user explicitly requests an exceptional manual recovery and confirms Git auto-deploy will not also run for that release.
 - Never redeploy merely to verify a release. Verify the Git-triggered deployment and smoke-test the live domain instead.
 - If Vercel reports a deployment quota/rate limit, stop retrying and report the blocked release. Repeated retries can consume additional deployment attempts.
-- Target invariant: one approved release merged to `main` → one Vercel production deployment.
+- Target invariant: one CI-green, authorized release squash-merged to `main` → one Vercel Git Integration production deployment. Verify the exact merge SHA, READY state and live smoke when access permits; do not manually trigger another deployment.
 
 ## Supabase production deployment invariants
 

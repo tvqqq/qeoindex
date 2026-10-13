@@ -165,6 +165,12 @@ For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest
 
 ## Required release gates
 
+### ChatGPT inline code → automatic PR / merge / production
+
+For normal QeoIndex coding requests, the request itself authorizes ChatGPT to implement inline through the GitHub Connector, review the diff, open a PR, wait for required GitHub Actions and reviews, then **squash-merge into `main` without asking again**. Vercel Git Integration handles deployment automatically after that merge. Track the work in Linear, verify the deployed merge SHA and production READY status, and run available production smoke checks before marking Done.
+
+This does not authorize bypassing GitHub protections, running remote/local command-based verification, additional manual deployments, destructive operations, or unreviewed high-risk database/infrastructure/security changes. Stop and report those blockers or request a decision if necessary. Keep one merged release to one Vercel deployment; avoid unnecessary release commits.
+
 For normal source/docs changes:
 
 - `pnpm test:manifest`
