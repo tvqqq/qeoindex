@@ -11,6 +11,7 @@ import {
   mergeCandleSeries,
   mergePartialCandle,
   normalizeDnseOhlcFrame,
+  previousIndexSessionClose,
   resampleCandleSeries,
   timeframeBucketKey,
 } from "../modules/market/realtime/index-candles.ts"
@@ -262,4 +263,27 @@ test("QEO-409 bounds 1m history requests and preserves real partial results per 
   assert.match(historySource, /normalizeDnseChartHistory\(await signedGet/)
   assert.match(routeSource, /DNSE history unavailable/)
   assert.match(routeSource, /INDEX_CHART_SYMBOLS\.some\(\(symbol\) => candles\[symbol\]\.length > 0\)/)
+})
+
+test("QEO-410 previous-session level comes from the immediately prior trading session, not the new open", () => {
+  const previousClose = { time: epoch("2026-10-09T07:44:00Z"), open: 1700, high: 1704, low: 1699, close: 1702.45, volume: 100 }
+  const todayOpen = { time: epoch("2026-10-12T02:00:00Z"), open: 1699, high: 1701, low: 1698, close: 1700, volume: 50 }
+  assert.equal(previousIndexSessionClose([previousClose, todayOpen]), 1702.45)
+  assert.equal(previousIndexSessionClose([todayOpen]), null)
+  assert.equal(previousIndexSessionClose([]), null)
+})
+
+test("QEO-410 missing previous session never substitutes a stale older session", () => {
+  const thursday = { time: epoch("2026-10-08T07:44:00Z"), open: 1700, high: 1702, low: 1698, close: 1701, volume: 100 }
+  const monday = { time: epoch("2026-10-12T02:00:00Z"), open: 1706, high: 1710, low: 1705, close: 1707, volume: 100 }
+  assert.equal(previousIndexSessionClose([thursday, monday]), null)
+})
+
+test("QEO-410 both charts draw independent lightweight dashed reference lines", () => {
+  assert.match(modalSource, /previousIndexSessionClose\(bars\)/)
+  assert.match(modalSource, /referencePrice=\{previousClose\}/)
+  assert.match(minuteChartSource, /series\.createPriceLine\(/)
+  assert.match(minuteChartSource, /series\.removePriceLine/)
+  assert.match(minuteChartSource, /title: symbol === "VNINDEX" \? "TC" : "Đóng trước"/)
+  assert.match(minuteChartSource, /lineStyle: DASHED_LINE_STYLE/)
 })

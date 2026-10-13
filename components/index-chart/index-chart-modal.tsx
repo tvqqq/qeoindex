@@ -17,6 +17,7 @@ import { useIndexCandles } from "@/components/index-chart/use-index-candles"
 import {
   INDEX_CHART_RESOLUTIONS,
   INDEX_CHART_RESOLUTION_LABELS,
+  previousIndexSessionClose,
   type CandleBar,
   type IndexChartResolution,
   type IndexChartSymbol,
@@ -96,6 +97,7 @@ function ChartCard({
 }) {
   const current = bars.at(-1)
   const { open: sessionOpen, sessionCount } = useMemo(() => sessionMeta(bars), [bars])
+  const previousClose = useMemo(() => previousIndexSessionClose(bars), [bars])
   const change = current && sessionOpen ? current.close - sessionOpen : 0
   const changePercent = current && sessionOpen ? (change / sessionOpen) * 100 : 0
   const tone = change > 0 ? "text-emerald-400" : change < 0 ? "text-rose-400" : "text-amber-300"
@@ -155,7 +157,7 @@ function ChartCard({
           </span>
         ) : null}
         {bars.length ? (
-          <IndexMinuteChart symbol={symbol} data={bars} resolution={resolution} />
+          <IndexMinuteChart symbol={symbol} data={bars} resolution={resolution} referencePrice={previousClose} />
         ) : loading ? (
           <div className="absolute inset-0 overflow-hidden bg-[#080c10] p-5">
             <div className="h-full animate-pulse rounded-xl bg-[linear-gradient(110deg,rgba(255,255,255,0.025),rgba(255,255,255,0.065),rgba(255,255,255,0.025))] bg-[length:200%_100%]" />

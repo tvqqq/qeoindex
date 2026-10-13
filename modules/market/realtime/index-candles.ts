@@ -1,3 +1,5 @@
+import { previousTradingSessionDateKey } from "../board/market-context-metrics.ts"
+
 export const INDEX_CHART_SYMBOLS = ["VNINDEX", "VN30F1M"] as const
 export const INDEX_CHART_RESOLUTIONS = ["1", "5", "30", "1H", "4H", "1D"] as const
 
@@ -111,6 +113,26 @@ export function isSessionSeparatorResolution(resolution: IndexChartResolution) {
 
 export function candleDateKey(time: number) {
   return vietnamTimeParts(time).dateKey
+}
+
+/**
+ * Last observed close of the immediately preceding Vietnam trading session.
+ * Derived independently from each chart's authentic OHLCV, not from VN30 spot
+ * or the latest session open. This is not an official futures settlement price.
+ */
+export function previousIndexSessionClose(bars: readonly CandleBar[]): number | null {
+  const latest = bars.at(-1)
+  if (!latest) return null
+  const priorSession = previousTradingSessionDateKey(candleDateKey(latest.time))
+  if (!priorSession) return null
+
+  for (let i = bars.length - 2; i >= 0; i -= 1) {
+    const bar = bars[i]
+    const session = candleDateKey(bar.time)
+    if (session === priorSession) return Number.isFinite(bar.close) && bar.close > 0 ? bar.close : null
+    if (session < priorSession) break
+  }
+  return null
 }
 
 // Lightweight Charts uses logical bar positions; omitting lunch-only rows
