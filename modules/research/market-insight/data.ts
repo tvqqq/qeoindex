@@ -569,7 +569,6 @@ export async function getMarketCloseInsightData(
     const tradingDate = String(row.session_date || "")
     if (!tradingDate || (row.status !== "available" && row.status !== "unavailable")) return []
     const sourceMarketSyncRunMismatch = tradingDate === targetDate
-      && row.status === "available"
       && (!syncRunId || row.source_market_sync_run_id !== syncRunId)
     const metricMode = (value: unknown): QeoExVnindexHistoryItem["peMode"] =>
       value === "all_signed" || value === "positive_subset" ? value : "unavailable"
