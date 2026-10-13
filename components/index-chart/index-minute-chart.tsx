@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { loadLightweightCharts, type LightweightChartApi, type LightweightSeriesApi } from "@/modules/shared/charts/lightweight-charts-runtime"
+import { loadLightweightCharts, type LightweightChartApi, type LightweightPriceLineApi, type LightweightSeriesApi } from "@/modules/shared/charts/lightweight-charts-runtime"
 import {
   candleDateKey,
   isSessionSeparatorResolution,
@@ -12,6 +12,8 @@ import {
 
 const UP_COLOR = "#22c98a"
 const DOWN_COLOR = "#ff4757"
+const REFERENCE_COLOR = "#fbbf24"
+const DASHED_LINE_STYLE = 2 // Lightweight Charts LineStyle.Dashed
 const INITIAL_VISIBLE_BARS: Record<IndexChartResolution, number> = {
   "1": 420,
   "5": 300,
@@ -118,20 +120,52 @@ export function IndexMinuteChart({
   symbol,
   data,
   resolution,
+  referencePrice,
 }: {
   symbol: IndexChartSymbol
   data: CandleBar[]
   resolution: IndexChartResolution
+  referencePrice: number | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const markerLayerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<LightweightChartApi | null>(null)
   const candleSeriesRef = useRef<LightweightSeriesApi | null>(null)
   const volumeSeriesRef = useRef<LightweightSeriesApi | null>(null)
+  const referenceLineRef = useRef<LightweightPriceLineApi | null>(null)
+  const referenceValueRef = useRef<number | null>(null)
+  const referencePriceRef = useRef(referencePrice)
   const dataRef = useRef(data)
   const renderedRef = useRef<{ length: number; prefix: string; firstTime: number } | null>(null)
   const markerRafRef = useRef<number | null>(null)
   const [runtimeError, setRuntimeError] = useState("")
+
+  const syncReferenceLine = useCallback((value: number | null) => {
+    const series = candleSeriesRef.current
+    if (!series) return
+    const valid = value !== null && Number.isFinite(value) && value > 0 ? value : null
+    if (valid === referenceValueRef.current) return
+
+    if (referenceLineRef.current) series.removePriceLine?.(referenceLineRef.current)
+    referenceLineRef.current = null
+    referenceValueRef.current = null
+
+    if (valid === null || !series.createPriceLine) return
+    referenceLineRef.current = series.createPriceLine({
+      price: valid,
+      color: REFERENCE_COLOR,
+      lineWidth: 1,
+      lineStyle: DASHED_LINE_STYLE,
+      axisLabelVisible: true,
+      title: symbol === "VNINDEX" ? "TC" : "Đóng trước",
+    })
+    referenceValueRef.current = valid
+  }, [symbol])
+
+  useEffect(() => {
+    referencePriceRef.current = referencePrice
+    syncReferenceLine(referencePrice)
+  }, [referencePrice, syncReferenceLine])
 
   const renderDayMarkers = useCallback(() => {
     const layer = markerLayerRef.current
@@ -316,6 +350,7 @@ export function IndexMinuteChart({
         chartRef.current = chart
         candleSeriesRef.current = candles
         volumeSeriesRef.current = volume
+        syncReferenceLine(referencePriceRef.current)
         setRuntimeError("")
 
         // Handle vertical wheel and trackpad gestures explicitly, independent of scrollable parents.
@@ -356,10 +391,12 @@ export function IndexMinuteChart({
       chartRef.current = null
       candleSeriesRef.current = null
       volumeSeriesRef.current = null
+      referenceLineRef.current = null
+      referenceValueRef.current = null
       renderedRef.current = null
       markerLayerRef.current?.replaceChildren()
     }
-  }, [symbol, resolution, scheduleDayMarkers, syncData, zoom])
+  }, [symbol, resolution, scheduleDayMarkers, syncData, syncReferenceLine, zoom])
 
   return (
     <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-b-2xl bg-[#080c10]">
