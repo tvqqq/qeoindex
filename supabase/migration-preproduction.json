@@ -223,6 +223,14 @@
       "state": "MAPPED",
       "evidence": "QEO-408 local Verify/build, clean DB replay, generated types and SQL publisher rehearsals passed; production schema and RLS/RPC read back",
       "rationale": "Supabase assigned production version 20261013054243; repository replay retains reviewed ordering 20261013120000. Forward EOD estimates use immutable same-session evidence and preserve the original provider snapshot."
+    },
+    {
+      "logicalName": "qeo408_alphanumeric_hose_tickers",
+      "repositoryVersion": "20261014173000",
+      "productionVersion": "20261014101221",
+      "state": "MAPPED",
+      "evidence": "Production dry-run exposed valid PC1/NT2/C32-style stocks rejected by letters-only ticker validation; exact member constraint changed and read back on 2026-10-14",
+      "rationale": "Accepts the full observed three-character uppercase alphanumeric HOSE equity feed without dropping any members. Supabase assigned version 20261014101221; repository preserves reviewed forward order 20261014173000. No formula, source-quality, RLS, or immutable publication rule changes."
     }
   ]
 }

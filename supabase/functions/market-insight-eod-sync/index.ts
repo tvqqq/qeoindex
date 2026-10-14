@@ -483,9 +483,13 @@ Deno.serve(async (req: Request) => {
   if (!supabaseUrl || !supabaseKey) return jsonResponse({ ok: false, error: "SUPABASE_NOT_CONFIGURED" }, 500)
 
   const reqBody = await req.json().catch(() => ({})) as Record<string, unknown>
+  const trigger = typeof reqBody.trigger === "string" ? reqBody.trigger : "workflow"
+  const ratingSyncRunId = typeof reqBody.ratingSyncRunId === "string" ? reqBody.ratingSyncRunId : null
+  if (trigger === "qeoindex_eod_pipeline" && (!ratingSyncRunId || !isUuid(ratingSyncRunId))) {
+    return jsonResponse({ ok: false, error: "QEO_RATING_SYNC_RUN_ID_REQUIRED" }, 422)
+  }
   const syncRunId = crypto.randomUUID()
   const asOfIso = new Date().toISOString()
-  const ratingSyncRunId = typeof reqBody.ratingSyncRunId === "string" ? reqBody.ratingSyncRunId : null
   const sessionDate = deriveSessionDate(typeof reqBody.startedAt === "string" ? reqBody.startedAt : typeof reqBody.sessionDate === "string" ? reqBody.sessionDate : undefined)
 
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -493,7 +497,7 @@ Deno.serve(async (req: Request) => {
   const created = await supabase.from("market_insight_sync_runs").insert({
     id: syncRunId,
     session_date: sessionDate,
-    trigger: typeof reqBody.trigger === "string" ? reqBody.trigger : "workflow",
+    trigger,
     status: "running",
     contract_version: CONTRACT_VERSION,
   })

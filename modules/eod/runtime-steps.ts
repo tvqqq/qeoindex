@@ -13,6 +13,11 @@ function requiredSupabase() {
   return supabase
 }
 
+function isUuid(value: unknown): value is string {
+  return typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 async function assertFinalEodMarketReady(startedAtIso: string) {
   const supabase = requiredSupabase()
   const expectedSessionDate = vietnamDateKey(startedAtIso)
@@ -169,6 +174,13 @@ export async function runMarketCloseCollectStep(runId: string, startedAtIso: str
     runId,
     phaseKey: "MARKET_CLOSE_COLLECT",
     fn: async () => {
+      if (!isUuid(ratingSyncRunId)) {
+        throw Object.assign(
+          new Error("MARKET_CLOSE_COLLECT requires a valid Rating sync run ID."),
+          { code: "QEO_RATING_SYNC_RUN_ID_REQUIRED", status: 422 },
+        )
+      }
+
       const supabase = requiredSupabase()
       const supabaseUrl = process.env.SUPABASE_URL
         || process.env.NEXT_PUBLIC_SUPABASE_URL

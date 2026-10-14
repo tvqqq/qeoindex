@@ -12,6 +12,12 @@ const sessionDate = "2026-10-12"
 const observedAt = `${sessionDate}T08:05:00.000Z` // 15:05 ICT receipt time
 const ratingRunId = "11111111-1111-4111-8111-111111111111"
 const marketRunId = "22222222-2222-4222-8222-222222222222"
+const alphanumericHoseTickerOverrides: Record<number, string> = {
+  4: "PC1",
+  5: "NT2",
+  6: "C32",
+  7: "D2D",
+}
 
 function tickerAt(index: number): string {
   const first = String.fromCharCode(65 + Math.floor(index / (26 * 26)) % 26)
@@ -22,7 +28,7 @@ function tickerAt(index: number): string {
 
 function fixtureRows(date = sessionDate, count = 350): QeoCandidateRow[] {
   return Array.from({ length: count }, (_, index) => {
-    const ticker = index === 2 ? "VIC" : index === 3 ? "VHM" : tickerAt(index)
+    const ticker = index === 2 ? "VIC" : index === 3 ? "VHM" : alphanumericHoseTickerOverrides[index] || tickerAt(index)
     return {
       asOfDate: date,
       ticker,
@@ -86,6 +92,9 @@ test("Qeo estimate anchors the first complete EOD and excludes VIC/VHM from PE/P
   assert.equal(estimate.retainedMemberCount, 348)
   assert.equal(estimate.members.find((member) => member.ticker === "VIC")?.includedInEstimate, false)
   assert.equal(estimate.members.find((member) => member.ticker === "VHM")?.includedInEstimate, false)
+  for (const ticker of ["PC1", "NT2", "C32", "D2D"]) {
+    assert.equal(estimate.members.find((member) => member.ticker === ticker)?.includedInEstimate, true)
+  }
 
   // The eligible PE subset has cap 10 at multiples 10 and 20:
   // Σ cap / Σ(cap / multiple) = 20 / (1 + 0.5) = 13.333...
@@ -183,6 +192,29 @@ test("the source gate rejects incomplete HOSE coverage, duplicate rows, and stal
   nextDayRows[0] = { ...nextDayRows[0], fetchedAt: "2026-10-13T08:05:00.000Z" }
   const crossDate = build({ rows: nextDayRows })
   assert.equal(crossDate.unavailableReason, "CANDIDATE_FEED_RUN_OR_FRESHNESS_MISMATCH")
+})
+
+test("long ETF/warrant-shaped and malformed HOSE tickers invalidate the source instead of shrinking it", () => {
+  const invalidTickers = ["E1VFVN30", "WARRANT1", "AB-", "AB"]
+
+  for (const ticker of invalidTickers) {
+    const rows = fixtureRows()
+    rows[8] = { ...rows[8], ticker }
+    const estimate = build({ rows })
+
+    assert.equal(estimate.status, "unavailable", `${ticker} must invalidate the complete source`)
+    assert.equal(estimate.unavailableReason, "HOSE_MEMBERSHIP_INVALID")
+    assert.equal(estimate.sourceHoseCount, rows.length, "invalid members remain visible in source coverage evidence")
+  }
+})
+
+test("the calculator and member-table migration share the uppercase alphanumeric three-character rule", () => {
+  const calculator = source("supabase/functions/_shared/qeo-ex-vic-vhm-valuation.ts")
+  const migration = source("supabase/migrations/20261014173000_qeo408_alphanumeric_hose_tickers.sql")
+
+  assert.equal(calculator.split("^[A-Z0-9]{3}$").length - 1, 2)
+  assert.ok(migration.includes("drop constraint if exists market_insight_qeo_ex_vnindex_members_ticker_check"))
+  assert.ok(migration.includes("check (ticker ~ '^[A-Z0-9]{3}$')"))
 })
 
 test("SQL publication serializes chain writes, binds the published market run, and preserves available points", () => {
