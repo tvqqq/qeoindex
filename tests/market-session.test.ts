@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 import { isTradingSessionOpen, isLunchBreak, getMarketSessionStatus, getMarketSessionDisplay, getVnTimeSeconds } from "../modules/market/realtime/session-countdown.ts"
-import { getMarketUiPhase, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart, shouldResetForNewTradingDay } from "../modules/market/realtime/session-ui.ts"
+import { getMarketUiPhase, isCurrentSessionOrderbookSnapshot, miniChartPointsForDisplay, newSessionReferencePoint, shouldAcceptRealtimeMiniChart, shouldResetForNewTradingDay } from "../modules/market/realtime/session-ui.ts"
 
 test("isTradingSessionOpen returns true during active trading hours (09:00 - 14:46 on weekdays)", () => {
   // Tuesday at 10:30 AM ICT (UTC 03:30)
@@ -260,4 +260,42 @@ test("QEO-237 measures browser delivery with one monotonic clock instead of work
     /delivery:\s*latencyBetween\(message\.browserReceivedAtMonotonicMs, subscriberReceivedAtMonotonicMs\)/,
   )
   assert.doesNotMatch(orderbook, /delivery:\s*latencyBetween\(publishedAt, browserReceivedAt\)/)
+})
+
+
+test("QEO-413 accepts only same-session persisted orderbook data after 09:00 ICT", () => {
+  const today0900 = new Date("2026-10-14T09:00:00+07:00")
+  const today0925 = new Date("2026-10-14T09:25:00+07:00")
+  const beforeOpen = new Date("2026-10-14T08:59:59+07:00")
+  const priorClose = "2026-10-13T14:45:00+07:00"
+  assert.equal(isCurrentSessionOrderbookSnapshot(priorClose, beforeOpen), true)
+  assert.equal(isCurrentSessionOrderbookSnapshot(priorClose, today0900), false)
+  assert.equal(isCurrentSessionOrderbookSnapshot(priorClose, today0925), false)
+  assert.equal(isCurrentSessionOrderbookSnapshot("2026-10-14T09:02:00+07:00", today0925), true)
+  assert.equal(isCurrentSessionOrderbookSnapshot(null, today0925), false)
+  assert.equal(isCurrentSessionOrderbookSnapshot("invalid", today0925), false)
+  assert.equal(isCurrentSessionOrderbookSnapshot(priorClose, new Date("2026-10-17T09:25:00+07:00")), true)
+})
+
+test("QEO-413 orderbook owns rollover lifecycle and reboots REST + relay without F5", () => {
+  const popup = readFileSync("components/orderbook/live-orderbook-panel.tsx", "utf8")
+  const relay = readFileSync("modules/market/providers/dnse/orderbook-stream.ts", "utf8")
+  assert.match(popup, /shouldResetForNewTradingDay\(activeSessionDayRef\.current, now\)/)
+  assert.match(popup, /phase === "ATO" && previousPhase !== "ATO"/)
+  assert.match(popup, /previousPhase === "ATO" && phase === "CONTINUOUS"/)
+  assert.match(popup, /window\.setInterval\(checkSession, 15_000\)/)
+  assert.match(popup, /document\.addEventListener\("visibilitychange", onVisibility\)/)
+  assert.match(popup, /window\.addEventListener\("focus", checkSession\)/)
+  assert.match(popup, /lastSessionResetDayRef\.current === sessionDay/)
+  assert.match(popup, /sessionOrderBookCache\.clear\(\)/)
+  assert.match(popup, /setQuote\(null\)/)
+  assert.match(popup, /setRecoveryKey\(\(key\) => key \+ 1\)/)
+  assert.match(popup, /setSessionStreamKey\(\(key\) => key \+ 1\)/)
+  assert.match(popup, /\[symbol, reconnectKey, sessionStreamKey\]/)
+  assert.match(popup, /currentSessionOrderbookCache\(symbol\)/)
+  assert.match(popup, /isCurrentSessionOrderbookSnapshot\(payload\.generatedAt\)/)
+  assert.match(popup, /isCurrentSessionOrderbookSnapshot\(direct\.generatedAt\)/)
+  assert.match(popup, /recoveryKey \? "&refresh=1" : ""/)
+  assert.match(relay, /if \(!isCurrentSessionOrderbookSnapshot\(updatedAt\)\) return/)
+  assert.match(relay, /!isCurrentSessionOrderbookSnapshot\(message\.publishedAt\)/)
 })
