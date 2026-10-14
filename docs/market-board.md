@@ -1,6 +1,12 @@
 # Market board data and performance model
 
-Last updated: 2026-10-12
+Last updated: 2026-10-14
+
+## Orderbook daily rollover
+
+A live Orderbook popup owns its own session-day and ATO phase watcher; it must not depend on `LiveMarketBoard` remaining mounted to dispatch a reset. At 09:00 ICT, or on the first visible/focused check after missing ATO, it clears previous-session orderbook/trades/foreign/volume state once per trading day, restarts its relay subscription, and forces a no-store `/api/market/session?refresh=1` bootstrap. When ATO ends at 09:15 it re-fetches the first matched trades. Day/phase checks are local (15s cadence plus focus/visibility) and never require an F5/full navigation.
+
+In a new active session, client-side cached orderbook payloads, fallback Supabase snapshots and relay checkpoints are accepted only with same-day Vietnam timestamps. Missing or previous-session timestamp means unavailable until current-session provider evidence arrives. Outside active day/pre-open, last-close data may still be displayed as historical context. Keep these guards aligned with the shared `modules/market/realtime/session-ui.ts` calendar utilities.
 
 ## Server bootstrap
 
