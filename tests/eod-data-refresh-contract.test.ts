@@ -136,3 +136,47 @@ test("morning freshness schedulers are retired while explicit recovery capabilit
     assert.deepEqual(job.automatedParentKeys, ["qeoindex.eod_pipeline"])
   }
 })
+
+test("MARKET_CLOSE_COLLECT requires a valid Rating sync run ID before collection side effects", () => {
+  const runtimeSteps = source("modules/eod/runtime-steps.ts")
+  const start = runtimeSteps.indexOf("export async function runMarketCloseCollectStep")
+  const end = runtimeSteps.indexOf("export async function runCompleteStep", start)
+  assert.ok(start >= 0 && end > start, "MARKET_CLOSE_COLLECT runtime step must exist")
+
+  const marketCloseStep = runtimeSteps.slice(start, end)
+  const skipped = marketCloseStep.indexOf("if (!enabled)")
+  const phase = marketCloseStep.indexOf("return runQeoIndexEodPhase({", skipped)
+  const callback = marketCloseStep.indexOf("fn: async () => {", phase)
+  const guard = marketCloseStep.indexOf("if (!isUuid(ratingSyncRunId))", callback)
+  const supabase = marketCloseStep.indexOf("const supabase = requiredSupabase()", callback)
+  const secret = marketCloseStep.indexOf('rpc("qeo_get_market_close_sync_secret")', callback)
+  const orderbook = marketCloseStep.indexOf("/functions/v1/orderbook-sync", callback)
+
+  assert.ok(skipped >= 0 && phase > skipped && callback > phase)
+  assert.ok(guard > callback, "run ID validation must be tracked inside the phase callback")
+  assert.ok(supabase > guard && secret > guard && orderbook > guard, "validation must precede collection side effects")
+  assert.ok(runtimeSteps.includes("function isUuid(value: unknown): value is string"))
+  assert.ok(marketCloseStep.includes("QEO_RATING_SYNC_RUN_ID_REQUIRED"))
+  assert.ok(marketCloseStep.includes("status: 422"))
+})
+
+test("market-insight-eod-sync rejects a missing Rating run ID for pipeline calls before creating work", () => {
+  const edge = source("supabase/functions/market-insight-eod-sync/index.ts")
+  const handlerStart = edge.indexOf("Deno.serve(async (req: Request) =>")
+  assert.ok(handlerStart >= 0)
+  const handler = edge.slice(handlerStart)
+  const auth = handler.indexOf("if (!constantTimeEqual(syncSecret, token))")
+  const body = handler.indexOf("const reqBody = await req.json()")
+  const guard = handler.indexOf('trigger === "qeoindex_eod_pipeline"')
+  const errorResponse = handler.indexOf('error: "QEO_RATING_SYNC_RUN_ID_REQUIRED"')
+  const syncRun = handler.indexOf("const syncRunId = crypto.randomUUID()")
+  const client = handler.indexOf("createClient(supabaseUrl, supabaseKey")
+  const insert = handler.indexOf('from("market_insight_sync_runs").insert')
+  const provider = handler.indexOf("getKfspProviderToken", insert)
+
+  assert.ok(auth >= 0 && body > auth)
+  assert.ok(guard > body && errorResponse > guard && errorResponse < syncRun)
+  assert.ok(syncRun < client && client < insert && insert < provider)
+  assert.ok(handler.includes('if (trigger === "qeoindex_eod_pipeline" && (!ratingSyncRunId || !isUuid(ratingSyncRunId)))'))
+  assert.ok(handler.includes('return jsonResponse({ ok: false, error: "QEO_RATING_SYNC_RUN_ID_REQUIRED" }, 422)'))
+})

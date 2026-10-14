@@ -7,6 +7,8 @@ COPY . .
 RUN pnpm eod:worker:build
 
 FROM node:22.20-alpine
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.revision=$VCS_REF
 WORKDIR /app
 COPY --from=build /src/services/eod-worker/dist/eod-worker.mjs /app/eod-worker.mjs
 USER node

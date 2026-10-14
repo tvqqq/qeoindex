@@ -145,7 +145,7 @@ function buildObservedMembers(rows: QeoCandidateRow[]): QeoEstimateMember[] {
   const byTicker = new Map<string, QeoCandidateRow>()
   for (const row of rows) {
     const ticker = row.ticker.trim().toUpperCase()
-    if (row.exchange?.trim().toUpperCase() === "HOSE" && /^[A-Z]{3}$/.test(ticker) && !byTicker.has(ticker)) {
+    if (row.exchange?.trim().toUpperCase() === "HOSE" && /^[A-Z0-9]{3}$/.test(ticker) && !byTicker.has(ticker)) {
       byTicker.set(ticker, row)
     }
   }
@@ -274,7 +274,7 @@ export function buildQeoExVnindexEstimate(input: {
   if (!finite(input.vnindexValue) || input.vnindexValue <= 0) {
     return unavailable(metadata, "PUBLISHED_VNINDEX_VALUE_MISSING", input.asOf)
   }
-  if (!hoseRows.length || hoseRows.some((row) => !/^[A-Z]{3}$/.test(row.ticker.trim().toUpperCase()))) {
+  if (!hoseRows.length || hoseRows.some((row) => !/^[A-Z0-9]{3}$/.test(row.ticker.trim().toUpperCase()))) {
     return unavailable(metadata, "HOSE_MEMBERSHIP_INVALID", input.asOf)
   }
 
