@@ -30,6 +30,14 @@ export function shouldResetForNewTradingDay(activeSessionDay: string, date = new
   return getMarketUiPhase(date) !== "PRE_MARKET"
 }
 
+/** Prevent yesterday's persisted orderbook/cache from repainting an active new session. */
+export function isCurrentSessionOrderbookSnapshot(timestamp: string | null | undefined, now = new Date()) {
+  if (!isVietnamSecuritiesTradingDay(now) || getMarketUiPhase(now) === "PRE_MARKET") return true
+  if (!timestamp) return false
+  const updatedAt = new Date(timestamp)
+  return Number.isFinite(updatedAt.getTime()) && vietnamDateKey(updatedAt) === vietnamDateKey(now)
+}
+
 export function shouldAcceptRealtimeMiniChart(timestampSeconds: number) {
   return getMarketUiPhase(new Date(timestampSeconds * 1000)) === "CONTINUOUS"
 }

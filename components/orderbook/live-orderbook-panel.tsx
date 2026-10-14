@@ -26,7 +26,8 @@ import {
 import { MarketChangePill } from "@/components/market-change-pill"
 import { marketToneFromPrice, marketToneHex, marketToneText } from "@/modules/market/tone"
 import { normalizeEpochSeconds, normalizeMarketPrice } from "@/modules/market/realtime/intraday-5m"
-import { getMarketUiPhase, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
+import { getMarketUiPhase, isCurrentSessionOrderbookSnapshot, MARKET_SESSION_RESET_EVENT, shouldAcceptRealtimeMiniChart, shouldResetForNewTradingDay } from "@/modules/market/realtime/session-ui"
+import { vietnamDateKey } from "@/modules/market/calendar"
 import { useFlashAnimation, usePriceFlashAnimation } from "@/modules/shared/ui/use-flash-animation"
 import { useLargeTradeNotice } from "@/components/orderbook/large-trade-notice"
 import { OrderbookTradeAlert } from "@/components/orderbook/orderbook-trade-alert"
@@ -103,6 +104,7 @@ type SessionHistoryResponse = {
   provider?: string
   message?: string
   sessionStart?: number
+  generatedAt?: string
   prices?: Array<{ time: number; open?: number; close: number }>
   trades?: Array<{ id: string; time: number; price: number; volume: number; side: string }>
   tradesTruncated?: boolean
@@ -503,6 +505,13 @@ export interface CachedSessionData {
 
 export const sessionOrderBookCache = new Map<string, CachedSessionData>()
 
+function currentSessionOrderbookCache(symbol: string): CachedSessionData | null {
+  const cached = sessionOrderBookCache.get(symbol)
+  return cached && isCurrentSessionOrderbookSnapshot(new Date(cached.cachedAt).toISOString())
+    ? cached
+    : null
+}
+
 function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
   const deduped = new Map<string, StreamTrade>()
   for (const trade of [...incoming, ...current]) deduped.set(trade.id, trade)
@@ -512,9 +521,10 @@ function mergeTrades(incoming: StreamTrade[], current: StreamTrade[]) {
 }
 
 function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMeta?: StockInitialMeta) {
-  const cachedInitial = getMarketUiPhase() === "ATO" ? undefined : sessionOrderBookCache.get(symbol)
+  const cachedInitial = getMarketUiPhase() === "ATO" ? undefined : currentSessionOrderbookCache(symbol)
   const [state, setState] = useState<StreamState>("CONNECTING")
   const [recoveryKey, setRecoveryKey] = useState(0)
+  const [sessionStreamKey, setSessionStreamKey] = useState(0)
   const [bids, setBids] = useState<DepthLevel[]>(() => cachedInitial?.bids ?? [])
   const [asks, setAsks] = useState<DepthLevel[]>(() => cachedInitial?.asks ?? [])
   const [trades, setTrades] = useState<StreamTrade[]>(() => cachedInitial?.trades ?? [])
@@ -577,6 +587,9 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
   const depthRef = useRef<{ bids: DepthLevel[]; asks: DepthLevel[] }>({ bids: cachedInitial?.bids ?? [], asks: cachedInitial?.asks ?? [] })
   const lastForeignEventKey = useRef<string>("")
   const lastMiniChartBucket = useRef<number | null>(null)
+  const activeSessionDayRef = useRef(vietnamDateKey())
+  const sessionPhaseRef = useRef(getMarketUiPhase())
+  const lastSessionResetDayRef = useRef<string | null>(null)
 
   useEffect(() => {
     setAuctionExpected(null)
@@ -584,6 +597,11 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
   useEffect(() => {
     const resetSession = () => {
+      const sessionDay = vietnamDateKey()
+      if (lastSessionResetDayRef.current === sessionDay) return
+      lastSessionResetDayRef.current = sessionDay
+      activeSessionDayRef.current = sessionDay
+      sessionPhaseRef.current = getMarketUiPhase()
       sessionOrderBookCache.clear()
       depthRef.current = { bids: [], asks: [] }
       lastMiniChartBucket.current = null
@@ -603,39 +621,42 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
       setError("")
       setHistoryState("READY")
       setHistoryMessage("Phiên mới 09:00 · đang chờ dữ liệu ATO.")
-      setQuote((current) => {
-        const rawRef = current?.reference || initialMeta?.reference || 0
-        const reference = rawRef > 1000 ? rawRef / 1000 : rawRef
-        if (!reference) return null
-        const rawCeil = current?.ceiling || initialMeta?.ceiling
-        const ceiling = rawCeil ? (rawCeil > 1000 ? rawCeil / 1000 : rawCeil) : Math.round(reference * 1.07 * 100) / 100
-        const rawFloor = current?.floor || initialMeta?.floor
-        const floor = rawFloor ? (rawFloor > 1000 ? rawFloor / 1000 : rawFloor) : Math.round(reference * 0.93 * 100) / 100
-        return {
-          symbol,
-          price: reference,
-          reference,
-          ceiling,
-          floor,
-          change: 0,
-          changePercent: 0,
-          totalVolume: 0,
-          volume: 0,
-          updatedAt: new Date().toISOString(),
-        }
-      })
+      // Yesterday's reference/limits are not authoritative for the new session.
+      setQuote(null)
+      setRecoveryKey((key) => key + 1)
+      setSessionStreamKey((key) => key + 1)
+    }
+    const checkSession = () => {
+      const now = new Date()
+      const phase = getMarketUiPhase(now)
+      const previousPhase = sessionPhaseRef.current
+      const newTradingDay = shouldResetForNewTradingDay(activeSessionDayRef.current, now)
+      sessionPhaseRef.current = phase
+      if (newTradingDay || (phase === "ATO" && previousPhase !== "ATO")) {
+        resetSession()
+      } else if (previousPhase === "ATO" && phase === "CONTINUOUS") {
+        // Backfill the first matched trades when the ATO auction completes.
+        setRecoveryKey((key) => key + 1)
+      }
     }
     window.addEventListener(MARKET_SESSION_RESET_EVENT, resetSession)
     const mountReset = getMarketUiPhase() === "ATO" ? window.setTimeout(resetSession, 0) : null
+    const timer = window.setInterval(checkSession, 15_000)
+    const onVisibility = () => { if (document.visibilityState === "visible") checkSession() }
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("focus", checkSession)
     return () => {
       window.removeEventListener(MARKET_SESSION_RESET_EVENT, resetSession)
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("focus", checkSession)
       if (mountReset !== null) window.clearTimeout(mountReset)
     }
   }, [symbol, initialMeta])
 
   useEffect(() => {
     const isAto = getMarketUiPhase() === "ATO"
-    const cached = isAto ? null : sessionOrderBookCache.get(symbol)
+    const cached = isAto ? null : currentSessionOrderbookCache(symbol)
     if (cached) {
       setBids(cached.bids)
       setAsks(cached.asks)
@@ -724,7 +745,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     void (async () => {
       try {
         const direct = await fetchOrderbookFromSupabaseDirect(symbol)
-        if (direct && !disposed && getMarketUiPhase() !== "ATO") {
+        if (direct && !disposed && getMarketUiPhase() !== "ATO" && isCurrentSessionOrderbookSnapshot(direct.generatedAt)) {
           const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
           if (directPrices.length > 0) setPriceHistory(directPrices)
           if (direct.trades?.length) {
@@ -770,7 +791,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     const controller = new AbortController()
     let disposed = false
     const isAto = getMarketUiPhase() === "ATO"
-    const cached = isAto ? null : sessionOrderBookCache.get(symbol)
+    const cached = isAto ? null : currentSessionOrderbookCache(symbol)
 
     if (!cached) {
       setHistoryState("LOADING")
@@ -779,13 +800,16 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
     void (async () => {
       try {
-        const response = await fetch(`/api/market/session?symbol=${encodeURIComponent(symbol)}`, {
+        const response = await fetch(`/api/market/session?symbol=${encodeURIComponent(symbol)}${recoveryKey ? "&refresh=1" : ""}`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
           signal: controller.signal,
         })
         const payload = (await response.json()) as SessionHistoryResponse
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? `Session history ${response.status}`)
+        if (payload.provider === "Supabase-Snapshot" && !isCurrentSessionOrderbookSnapshot(payload.generatedAt)) {
+          throw new Error("Orderbook snapshot belongs to a previous trading session.")
+        }
         if (disposed) return
 
         const prices = isAto ? [] : (payload.prices ?? []).map((point) => number(point.close)).filter((value) => value > 0)
@@ -908,7 +932,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
 
         try {
           const direct = await fetchOrderbookFromSupabaseDirect(symbol)
-          if (direct && !disposed && getMarketUiPhase() !== "ATO") {
+          if (direct && !disposed && getMarketUiPhase() !== "ATO" && isCurrentSessionOrderbookSnapshot(direct.generatedAt)) {
             const directPrices = (direct.prices ?? []).map((point: any) => number(point.close)).filter((v: number) => v > 0)
             if (directPrices.length > 0) setPriceHistory(directPrices)
             if (direct.trades?.length) {
@@ -1261,7 +1285,7 @@ function useDnseOrderBookStream(symbol: string, reconnectKey: number, initialMet
     )
 
     return unsubscribe
-  }, [symbol, reconnectKey])
+  }, [symbol, reconnectKey, sessionStreamKey])
 
   const latestSnapshotRef = useRef({
     prices: priceHistory,

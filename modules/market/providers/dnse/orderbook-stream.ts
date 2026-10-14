@@ -8,6 +8,7 @@ import {
 } from "@/modules/market/realtime/relay-client"
 import { reportRealtimeHealth } from "@/modules/market/realtime/health-reporter"
 import { getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
+import { isCurrentSessionOrderbookSnapshot } from "@/modules/market/realtime/session-ui"
 import { getAuthenticatedSupabaseRealtimeClient } from "@/modules/shared/supabase/authenticated-realtime"
 
 export type DnseOrderbookFrame = Record<string, unknown>
@@ -259,6 +260,8 @@ export function subscribeDnseOrderbookFrames(
 
   const applyCheckpoint = (row: OrderbookCheckpointRow | null | undefined) => {
     if (!row) return
+    const updatedAt = String(row.source_updated_at ?? row.updated_at ?? "")
+    if (!isCurrentSessionOrderbookSnapshot(updatedAt)) return
     const sequence = Number(row.sequence ?? 0)
     if (!Number.isSafeInteger(sequence) || sequence <= checkpointSequence) return
     checkpointSequence = sequence
@@ -266,7 +269,6 @@ export function subscribeDnseOrderbookFrames(
       ? row.frames.map(parseFrame).filter((frame): frame is DnseOrderbookFrame => Boolean(frame))
       : []
     emitFrames(frames)
-    const updatedAt = String(row.source_updated_at ?? row.updated_at ?? "")
     if (updatedAt) {
       const parsed = Date.parse(updatedAt)
       if (Number.isFinite(parsed)) lastMessageAtMs = parsed
@@ -288,7 +290,7 @@ export function subscribeDnseOrderbookFrames(
   }
 
   const applyRelayMessage = (message: MarketRelayOrderbookMessage) => {
-    if (message.symbol !== upper) return
+    if (message.symbol !== upper || !isCurrentSessionOrderbookSnapshot(message.publishedAt)) return
     if (message.continuityGap) {
       void recover("Orderbook realtime continuity gap; refreshing session state.")
       return
