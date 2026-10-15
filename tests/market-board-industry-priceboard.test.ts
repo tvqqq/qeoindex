@@ -9,6 +9,7 @@ import {
   industryPriceboardBreadth,
   industryPriceboardChangeIntensity,
   industryPriceboardTone,
+  industryPriceboardVolumeProgress,
   moveIndustryColumn,
   moveIndustryColumnBy,
   mergeIndustryOrderIntoSettings,
@@ -264,6 +265,11 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
   assert.match(source, /space-y-\[4px\]/)
   assert.match(source, /hover:border-white\/35/)
   assert.match(source, /hover:shadow-\[0_0_0_1px_rgba\(255,255,255,0\.10\)\]/)
+  assert.match(source, /data-priceboard-volume-fill/)
+  assert.match(source, /data-priceboard-volume-overflow/)
+  assert.match(source, /motion-safe:transition-transform/)
+  assert.match(source, /volumeSurgeMarker/)
+  assert.match(source, /progress\.ratio \* 10/)
   assert.match(source, /font-semibold[\s\S]*?group-hover:font-extrabold/)
   assert.doesNotMatch(source, /transition-all/)
 })
@@ -284,12 +290,13 @@ test("compact Price/KL mode hides those columns and narrows every industry lane"
   assert.match(source, /const columnWidth = showPriceVolume \? FULL_COLUMN_WIDTH : COMPACT_COLUMN_WIDTH/)
   assert.match(source, /data-industry-column="vn30"[\s\S]*?<StockRows stocks=\{vn30Stocks\}/)
   assert.match(source, /\$\{columnWidth\} flex shrink-0 flex-col rounded-\[15px\][^\n]*data-industry-column="vn30"/)
-  assert.match(source, /showPriceVolume \? "grid-cols-\[minmax\(34px,1fr\)_56px_54px_39px\]" : "grid-cols-\[minmax\(42px,1fr\)_52px\]"/)
+  assert.match(source, /showPriceVolume \? "grid-cols-\[48px_48px_54px_minmax\(34px,1fr\)\]" : "grid-cols-\[minmax\(42px,1fr\)_52px\]"/)
   assert.match(source, /showPriceVolume \? <span className="truncate text-right text-\[11px\] tabular-nums">\{formatPrice\(quote\?\.price\)\}<\/span> : null/)
   assert.match(source, /showPriceVolume \? <span className="truncate text-right text-\[10px\] tabular-nums text-white\/55">\{formatVolume\(quote\?\.volume\)\}<\/span> : null/)
   // Compact mode removes the excessive ticker-to-percentage gap without changing full mode.
-  assert.match(source, /items-center \$\{showPriceVolume \? "gap-1" : "gap-0\.5"\} text-left/)
-  assert.match(source, /items-center \$\{showPriceVolume \? "gap-1" : "gap-0\.5"\} border-b/)
+  assert.match(source, /items-center gap-0\.5 text-left/)
+  assert.match(source, /items-center gap-0\.5 border-b/)
+  assert.match(source, /"grid-cols-\[14px_48px_48px_54px_minmax\(34px,1fr\)\]"/)
   assert.match(source, /"grid-cols-\[14px_minmax\(42px,1fr\)_52px\]"/)
   assert.match(source, /previous\.showPriceVolume === next\.showPriceVolume/)
   assert.match(source, /pr-8 \[scrollbar-color:/)
@@ -324,4 +331,50 @@ test("VN30 lookup is bounded, cached, fail-open, and filtered realtime still use
   assert.match(membershipSource, /validate: \(value\): value is Vn30Membership \| null => isValidVn30Membership\(value\)/)
   assert.match(membershipSource, /catch \{\s*return null\s*\}\s*\}/)
   assert.match(filterShellSource, /universe=\{activeUniverse\}[\s\S]*?canonicalUniverse=\{universe\}/)
+})
+
+test("QEO-419 volume progress uses exact prior session denominator and never guesses", () => {
+  assert.equal(industryPriceboardVolumeProgress(200, null), null)
+  assert.equal(industryPriceboardVolumeProgress(200, 0), null)
+  assert.equal(industryPriceboardVolumeProgress(null, 200), null)
+  assert.equal(industryPriceboardVolumeProgress(-1, 200), null)
+  assert.equal(industryPriceboardVolumeProgress(Number.NaN, 200), null)
+  assert.equal(industryPriceboardVolumeProgress(200, Number.POSITIVE_INFINITY), null)
+  assert.deepEqual(industryPriceboardVolumeProgress(0, 1000), {
+    ratio: 0, fillPercent: 0, overflowPercent: 0, exceeded: false,
+  })
+  assert.deepEqual(industryPriceboardVolumeProgress(500, 1000), {
+    ratio: 0.5, fillPercent: 50, overflowPercent: 0, exceeded: false,
+  })
+  assert.deepEqual(industryPriceboardVolumeProgress(1000, 1000), {
+    ratio: 1, fillPercent: 100, overflowPercent: 0, exceeded: false,
+  })
+  assert.deepEqual(industryPriceboardVolumeProgress(1300, 1000), {
+    ratio: 1.3, fillPercent: 100, overflowPercent: 30.000000000000004, exceeded: true,
+  })
+  assert.deepEqual(industryPriceboardVolumeProgress(2500, 1000), {
+    ratio: 2.5, fillPercent: 100, overflowPercent: 100, exceeded: true,
+  })
+})
+
+test("QEO-419 exact prior-session EOD read is bounded and seeded into the board", () => {
+  const loader = readFileSync(new URL("../modules/market/board/previous-session-volume.ts", import.meta.url), "utf8")
+  const page = readFileSync(new URL("../app/board/page.tsx", import.meta.url), "utf8")
+  const stocks = readFileSync(new URL("../components/live-market-stock.tsx", import.meta.url), "utf8")
+  const css = readFileSync(new URL("../app/market-board-performance.module.css", import.meta.url), "utf8")
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.match(loader, /previousTradingSessionDateKey\(currentDay\)/)
+  assert.match(loader, /\.from\("market_ohlcv_history"\)/)
+  assert.match(loader, /\.eq\("timeframe", "1D"\)/)
+  assert.match(loader, /\.gte\("bar_time",/)
+  assert.match(loader, /\.lt\("bar_time", nextDay\.toISOString\(\)\)/)
+  assert.match(loader, /\.abortSignal\(AbortSignal\.timeout\(VOLUME_BASELINE_TIMEOUT_MS\)\)/)
+  assert.match(page, /getPreviousSessionVolumes\(tickers, currentDay\)/)
+  assert.match(page, /previousSessionVolume: previousVolumes\[stock\.ticker\] \?\? null/)
+  assert.match(stocks, /previousSessionVolume\?: number \| null/)
+  assert.match(source, /showPriceVolume \? industryPriceboardVolumeProgress\(quote\?\.volume, stock\.previousSessionVolume\) : null/)
+  assert.match(source, /style=\{\{ backgroundColor: showPriceVolume \? "rgba\(255, 255, 255, 0\.025\)" : background \}\}/)
+  assert.match(source, /key=\{Math\.floor\(progress\.ratio \* 10\)\}/)
+  assert.match(css, /@keyframes volumeSurgeOnce/)
+  assert.match(css, /prefers-reduced-motion: reduce/)
 })
