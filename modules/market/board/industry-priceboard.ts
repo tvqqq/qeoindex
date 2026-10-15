@@ -3,6 +3,7 @@ export interface IndustryPriceboardStock {
   rank: number
   sector: string
   kfspSector?: string | null
+  previousSessionVolume?: number | null
 }
 
 export interface IndustryPriceboardQuote {
