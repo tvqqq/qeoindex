@@ -83,7 +83,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
   const background = industryPriceboardBackground(quote)
   return (
     <div
-      className="board-stock-row group relative flex h-[25px] items-center gap-0.5 overflow-hidden rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow] duration-100 hover:border-white/35 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
+      className="board-stock-row group relative isolate flex h-[25px] items-center gap-0.5 overflow-hidden rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow] duration-100 hover:border-white/35 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
       style={{ backgroundColor: showPriceVolume ? "rgba(255, 255, 255, 0.025)" : background }}
       title={progress ? `KL hôm nay ${VOLUME_FORMATTER.format(quote!.volume!)} / phiên trước ${VOLUME_FORMATTER.format(stock.previousSessionVolume!)} · ${(progress.ratio * 100).toFixed(1)}%` : undefined}
     >
@@ -92,17 +92,18 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
           <span
             data-priceboard-volume-fill
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 origin-left rounded-full motion-safe:transition-transform motion-safe:duration-700 motion-safe:ease-out"
-            style={{ backgroundColor: background, transform: `scaleX(${progress.fillPercent / 100})` }}
+            className="pointer-events-none absolute inset-y-0 left-0 rounded-full motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
+            style={{ backgroundColor: background, width: `${progress.fillPercent}%` }}
           />
           {progress.exceeded ? (
             <>
-              <span
-                data-priceboard-volume-overflow
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-[2px] left-0 w-full origin-left rounded-full bg-white/[0.12] motion-safe:transition-transform motion-safe:duration-700 motion-safe:ease-out"
-                style={{ transform: `scaleX(${progress.overflowPercent / 100})` }}
-              />
+              <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
+                <span
+                  data-priceboard-volume-overflow
+                  className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
+                  style={{ width: `${progress.overflowPercent}%` }}
+                />
+              </span>
               <span key={Math.floor(progress.ratio * 10)} aria-hidden="true" className={`${styles.volumeSurgeMarker} pointer-events-none absolute right-[3px] top-[7px] h-[9px] w-[3px] rounded-full bg-white/65`} />
             </>
           ) : null}

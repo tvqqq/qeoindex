@@ -267,7 +267,8 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
   assert.match(source, /hover:shadow-\[0_0_0_1px_rgba\(255,255,255,0\.10\)\]/)
   assert.match(source, /data-priceboard-volume-fill/)
   assert.match(source, /data-priceboard-volume-overflow/)
-  assert.match(source, /motion-safe:transition-transform/)
+  assert.match(source, /motion-safe:transition-\[width\]/)
+  assert.doesNotMatch(source, /scaleX\(\$\{progress\./)
   assert.match(source, /volumeSurgeMarker/)
   assert.match(source, /progress\.ratio \* 10/)
   assert.match(source, /font-semibold[\s\S]*?group-hover:font-extrabold/)
@@ -331,6 +332,18 @@ test("VN30 lookup is bounded, cached, fail-open, and filtered realtime still use
   assert.match(membershipSource, /validate: \(value\): value is Vn30Membership \| null => isValidVn30Membership\(value\)/)
   assert.match(membershipSource, /catch \{\s*return null\s*\}\s*\}/)
   assert.match(filterShellSource, /universe=\{activeUniverse\}[\s\S]*?canonicalUniverse=\{universe\}/)
+})
+
+test("QEO-420 Safari volume fill uses clipped percentage widths, not scaled rounded layers", () => {
+  const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
+  assert.match(source, /board-stock-row group relative isolate[^\n]*overflow-hidden rounded-full/)
+  assert.match(source, /data-priceboard-volume-fill[\s\S]*?absolute inset-y-0 left-0 rounded-full/)
+  assert.match(source, /style=\{\{ backgroundColor: background, width: `\$\{progress\.fillPercent\}%` \}\}/)
+  assert.match(source, /data-priceboard-volume-overflow[\s\S]*?bg-white\/40/)
+  assert.match(source, /style=\{\{ width: `\$\{progress\.overflowPercent\}%` \}\}/)
+  assert.match(source, /inset-x-\[4px\] bottom-\[2px\] h-\[2px\] overflow-hidden rounded-full/)
+  assert.doesNotMatch(source, /scaleX\(\$\{progress\./)
+  assert.doesNotMatch(source, /inset-y-\[2px\] left-0 w-full[^\n]*bg-white/)
 })
 
 test("QEO-419 volume progress uses exact prior session denominator and never guesses", () => {
