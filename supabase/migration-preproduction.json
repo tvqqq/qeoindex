@@ -231,6 +231,14 @@
       "state": "MAPPED",
       "evidence": "Production dry-run exposed valid PC1/NT2/C32-style stocks rejected by letters-only ticker validation; exact member constraint changed and read back on 2026-10-14",
       "rationale": "Accepts the full observed three-character uppercase alphanumeric HOSE equity feed without dropping any members. Supabase assigned version 20261014101221; repository preserves reviewed forward order 20261014173000. No formula, source-quality, RLS, or immutable publication rule changes."
+    },
+    {
+      "logicalName": "qeo408_historical_vni_prefix",
+      "repositoryVersion": "20261015100000",
+      "productionVersion": null,
+      "state": "REPO_AHEAD",
+      "evidence": "PR #655 exact-head migration-drift registration; production function apply and assigned version are still pending",
+      "rationale": "Adds a separate service-role-only, source-backed reverse-prefix recovery RPC for the eight published sessions before the immutable 2026-10-13 anchor. Keep repository history ahead until exact-head drift, zero-to-latest replay, generated Database types, and contracts pass; promote to a mapped production version only after the separately gated dry-run/publish and production readback."
     }
   ]
 }
