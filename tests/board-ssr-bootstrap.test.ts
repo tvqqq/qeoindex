@@ -171,7 +171,7 @@ test("board SSR and VN30 cache calls opt into finite I/O budgets without changin
   const uiCache = source("modules/shared/cache/ui-data-cache.ts")
   const intraday = source("modules/market/realtime/intraday-5m-service.ts")
 
-  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v10"/)
+  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v11"/)
   assert.match(page, /getCachedIntraday5mSnapshot\(tickers, now, \{ ioBudgetMs: BOARD_INTRADAY_CACHE_IO_BUDGET_MS \}\)/)
   assert.doesNotMatch(page, /getIntraday5mSnapshot/)
   assert.match(page, /ioBudgetMs: BOARD_CACHE_IO_BUDGET_MS/)
