@@ -15,10 +15,12 @@ import {
 } from "recharts"
 import { BarChart3, ChevronDown, Gauge, HeartPulse, ShieldAlert } from "lucide-react"
 
-import type { MarketCloseDashboardData, MarketHistoryPoint, QeoExVnindexHistoryItem } from "@/modules/research/market-insight/data"
+import type { MarketCloseDashboardData, MarketHistoryPoint } from "@/modules/research/market-insight/data"
 import {
   buildValuationSnapshot,
   filterValuationHistoryByRange,
+  mergeValuationHistories,
+  type MergedValuationHistoryPoint,
   type ValuationMetric,
   type ValuationRangeYears,
 } from "@/modules/research/market-insight/valuation-snapshot"
@@ -324,20 +326,7 @@ function RiskIndicatorChart({ data }: RiskChartProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Valuation Multi-Band Chart (Định giá P/E / P/B vs VNINDEX)
 // ─────────────────────────────────────────────────────────────────────────────
-interface ValuationPoint {
-  date: string
-  vnindex: number | null
-  pe: number | null
-  pb: number | null
-  pe1StdUp: number | null
-  pe1StdDown: number | null
-  pe2StdUp: number | null
-  pe2StdDown: number | null
-  pb1StdUp: number | null
-  pb1StdDown: number | null
-  pb2StdUp: number | null
-  pb2StdDown: number | null
-}
+type ValuationPoint = MergedValuationHistoryPoint
 
 const VALUATION_HISTORY_RANGES = [
   { label: "1Y", years: 1 },
@@ -429,42 +418,79 @@ interface ValuationChartProps {
 }
 
 function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartProps) {
-  const metricPointCount = data.filter((item) => (metric === "PE" ? item.pe : item.pb) != null).length
-  const indexPointCount = data.filter((item) => item.vnindex != null).length
+  const metricPointCount = data.filter((item) => (metric === "PE" ? item.pe : item.pb) != null
+    || (metric === "PE" ? item.qeoPe : item.qeoPb) != null).length
+  const indexPointCount = data.filter((item) => item.vnindex != null || item.qeoEstimatedVnindexValue != null).length
+  const hasVisibleValue = metricPointCount > 0 || indexPointCount > 0
+  const isolatedDot = (
+    key: "vnindex" | "pe" | "pb" | "qeoEstimatedVnindexValue" | "qeoPe" | "qeoPb",
+    color: string,
+  ) => function IsolatedDot(props: { cx?: number; cy?: number; index?: number }) {
+    const index = props.index ?? -1
+    const isolated = index >= 0 && data[index]?.[key] != null
+      && data[index - 1]?.[key] == null && data[index + 1]?.[key] == null
+    return isolated && props.cx != null && props.cy != null
+      ? <circle cx={props.cx} cy={props.cy} r={3} fill={color} strokeWidth={0} />
+      : <g />
+  }
 
-  if (data.length === 0) {
-    return <div className="flex h-[260px] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-500">KFSP chưa trả lịch sử định giá hợp lệ.</div>
+  if (data.length === 0 || !hasVisibleValue) {
+    return <div className="flex h-[260px] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-500">Chưa có lịch sử định giá hoặc chỉ số hợp lệ.</div>
+  }
+
+  const qeoMetricValue = (item: ValuationPoint) => metric === "PE" ? item.qeoPe : item.qeoPb
+  const qeoMetricLegend = metric === "PE" ? "P/E Qeo · loại VIC/VHM" : "P/B Qeo · loại VIC/VHM"
+  const qeoMetricTooltip = metric === "PE" ? "P/E nhóm có P/E dương · loại VIC/VHM" : "P/B nhóm có P/B dương · loại VIC/VHM"
+  const receivedAt = (value: string | null) => {
+    if (!value || !Number.isFinite(new Date(value).getTime())) return null
+    return new Date(value).toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
   }
 
   return (
-    <div className="space-y-1">
-      {/* Legend */}
-      <div className="flex items-center justify-end gap-4 px-1 font-mono text-xs font-bold">
-        <div className="flex items-center gap-1.5 text-lime-400">
-          <span className="size-2 rounded-full bg-lime-400" />
-          <span>{metric === "PE" ? "P/E" : "P/B"}</span>
-        </div>
+    <div className="space-y-1" data-valuation-qeo-overlay>
+      <div className="flex flex-wrap items-center justify-start gap-x-3 gap-y-1 px-1 font-mono text-[10px] font-bold sm:text-xs">
         <div className="flex items-center gap-1.5 text-blue-400">
           <span className="size-2 rounded-full bg-blue-400" />
           <span>VNINDEX</span>
         </div>
+        <div className="flex items-center gap-1.5 text-lime-400">
+          <span className="size-2 rounded-full bg-lime-400" />
+          <span>{metric === "PE" ? "P/E KFSP" : "P/B KFSP"}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-orange-400">
+          <span className="w-4 border-t-2 border-dashed border-orange-400" />
+          <span>Qeo VNINDEX · loại VIC/VHM</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-fuchsia-400">
+          <span className="w-4 border-t-2 border-dotted border-fuchsia-400" />
+          <span>{qeoMetricLegend}</span>
+        </div>
       </div>
 
-      {/* Dual Axis Composed Chart */}
       <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 4, right: 28, left: 10, bottom: 0 }}>
             <CartesianGrid stroke={GRID_COLOR} vertical={false} strokeDasharray="3 3" />
-
             <XAxis
-              dataKey="date"
+              dataKey="tradingDate"
+              tickFormatter={(value) => {
+                const parts = String(value).split("-")
+                return parts.length === 3 ? `${parts[2]}-${parts[1]}` : String(value)
+              }}
               axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
               tickLine={false}
               tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
               minTickGap={32}
             />
 
-            {/* Left Y-Axis: VNINDEX (1500 - 2000) */}
             <YAxis
               yAxisId="vnindex"
               orientation="left"
@@ -474,7 +500,6 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
               tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
             />
 
-            {/* Right Y-Axis: P/E or P/B (10 - 18) */}
             <YAxis
               yAxisId="valuation"
               orientation="right"
@@ -488,23 +513,37 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
 
             <Tooltip
               content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const item = payload[0].payload as ValuationPoint
-                  return (
-                    <div className="rounded-lg border border-white/15 bg-[#08131e] p-2.5 shadow-xl font-mono text-xs space-y-1">
-                      <p className="text-slate-400 text-[11px] mb-1">{item.date}</p>
-                      <p className="text-blue-400 font-bold">VNINDEX: {item.vnindex == null ? "—" : item.vnindex.toFixed(2)}</p>
-                      <p className="text-lime-400 font-bold">
-                        {metric}: {(metric === "PE" ? item.pe : item.pb)?.toFixed(2) ?? "—"}
+                if (!active || !payload?.length) return null
+                const item = payload[0].payload as ValuationPoint
+                const originalMetric = metric === "PE" ? item.pe : item.pb
+                const estimateMetric = qeoMetricValue(item)
+                const count = metric === "PE" ? item.qeoPeMemberCount : item.qeoPbMemberCount
+                const total = metric === "PE" ? item.qeoPeTotalMemberCount : item.qeoPbTotalMemberCount
+                const coverage = metric === "PE" ? item.qeoPeMarketCapCoveragePct : item.qeoPbMarketCapCoveragePct
+                const receivedTimestamp = receivedAt(item.qeoSourceObservedTo)
+                return (
+                  <div className="max-w-[min(280px,calc(100vw-32px))] break-words space-y-1 rounded-lg border border-white/15 bg-[#08131e] p-2.5 font-mono text-xs shadow-xl">
+                    <p className="mb-1 text-[11px] text-slate-400">{item.tradingDate}</p>
+                    <p className="font-bold text-blue-400">VNINDEX: {item.vnindex?.toFixed(2) ?? "—"}</p>
+                    <p className="font-bold text-lime-400">{metric} KFSP: {originalMetric?.toFixed(2) ?? "—"}</p>
+                    <p className="font-bold text-orange-400">Qeo VNINDEX · loại VIC/VHM: {item.qeoEstimatedVnindexValue?.toFixed(2) ?? "—"}</p>
+                    <p className="font-bold text-fuchsia-400">{qeoMetricTooltip}: {estimateMetric?.toFixed(2) ?? "—"}</p>
+                    <p className="text-[10px] text-slate-400">
+                      {count == null || total == null ? "— mã" : `${count}/${total} mã`}
+                      {" · "}
+                      {coverage == null ? "—" : `${coverage.toFixed(2)}% vốn hóa`}
+                    </p>
+                    {receivedTimestamp && (
+                      <p className="text-[10px] text-slate-500">
+                        Qeo nhận lúc {receivedTimestamp} ICT; không phải timestamp cập nhật từ nhà cung cấp.
                       </p>
-                    </div>
-                  )
-                }
-                return null
+                    )}
+                  </div>
+                )
               }}
             />
 
-            {/* 1 SD Bands (Đứt nét) */}
+            {/* Original provider valuation bands remain attached to KFSP values only. */}
             {show1SD && (
               <>
                 <Line
@@ -514,6 +553,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                   stroke="#fb7185"
                   strokeDasharray="4 4"
                   strokeWidth={1.5}
+                  isAnimationActive={false}
                   dot={false}
                   name="+1 SD"
                 />
@@ -524,13 +564,12 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                   stroke="#f43f5e"
                   strokeDasharray="4 4"
                   strokeWidth={1.5}
+                  isAnimationActive={false}
                   dot={false}
                   name="-1 SD"
                 />
               </>
             )}
-
-            {/* 2 SD Bands (Đứt nét) */}
             {show2SD && (
               <>
                 <Line
@@ -540,6 +579,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                   stroke="#f43f5e"
                   strokeDasharray="3 3"
                   strokeWidth={1.2}
+                  isAnimationActive={false}
                   dot={false}
                   name="+2 SD"
                 />
@@ -550,158 +590,62 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                   stroke="#e11d48"
                   strokeDasharray="3 3"
                   strokeWidth={1.2}
+                  isAnimationActive={false}
                   dot={false}
                   name="-2 SD"
                 />
               </>
             )}
 
-            {/* VNINDEX Line (Blue - Đậm hơn) */}
             <Line
               yAxisId="vnindex"
               type="monotone"
               dataKey="vnindex"
               stroke="#3b82f6"
               strokeWidth={2.8}
-              dot={indexPointCount === 1 ? { r: 3, fill: "#3b82f6", strokeWidth: 0 } : false}
+              isAnimationActive={false}
+              dot={isolatedDot("vnindex", "#3b82f6")}
               connectNulls={false}
               activeDot={{ r: 4.5, fill: "#3b82f6" }}
               name="VNINDEX"
             />
-
-            {/* Valuation Line (Lime Green - Đậm hơn) */}
             <Line
               yAxisId="valuation"
               type="monotone"
               dataKey={metric === "PE" ? "pe" : "pb"}
               stroke="#84cc16"
               strokeWidth={2.8}
-              dot={metricPointCount === 1 ? { r: 3, fill: "#84cc16", strokeWidth: 0 } : false}
+              isAnimationActive={false}
+              dot={isolatedDot(metric === "PE" ? "pe" : "pb", "#84cc16")}
               connectNulls={false}
               activeDot={{ r: 4.5, fill: "#84cc16" }}
-              name={metric}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  )
-}
-
-interface QeoEstimateChartPoint extends QeoExVnindexHistoryItem {
-  date: string
-}
-
-function QeoExVnindexChart({ data, metric }: { data: QeoEstimateChartPoint[]; metric: ValuationMetric }) {
-  const indexPointCount = data.filter((item) => item.estimatedVnindexValue != null).length
-  const metricPointCount = data.filter((item) => (metric === "PE" ? item.pe : item.pb) != null).length
-  const hasVisibleValue = indexPointCount > 0 || metricPointCount > 0
-  const isolatedDot = (key: "estimatedVnindexValue" | "pe" | "pb", color: string) =>
-    function IsolatedDot(props: { cx?: number; cy?: number; index?: number }) {
-      const index = props.index ?? -1
-      const isolated = index >= 0 && data[index]?.[key] != null
-        && data[index - 1]?.[key] == null && data[index + 1]?.[key] == null
-      return isolated && props.cx != null && props.cy != null
-        ? <circle cx={props.cx} cy={props.cy} r={3} fill={color} strokeWidth={0} />
-        : <g />
-    }
-
-  if (!data.length || !hasVisibleValue) {
-    return (
-      <div className="flex h-[240px] items-center justify-center rounded-xl border border-dashed border-white/10 px-4 text-center text-sm text-slate-500">
-        {data.length ? "Chưa có phiên ước tính hợp lệ để vẽ." : "Chưa có dữ liệu EOD ước tính; lịch sử chỉ bắt đầu từ phiên có nguồn đầy đủ."}
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-1" data-qeo-ex-vnindex-chart>
-      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 px-1 font-mono text-xs font-bold">
-        <div className="flex items-center gap-1.5 text-sky-400"><span className="size-2 rounded-full bg-sky-400" /><span>Qeo VNINDEX ước tính</span></div>
-        <div className="flex items-center gap-1.5 text-amber-300"><span className="size-2 rounded-full bg-amber-300" /><span>{metric === "PE" ? "P/E nhóm có P/E dương" : "P/B nhóm có P/B dương"}</span></div>
-      </div>
-      <div className="h-[240px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 4, right: 28, left: 10, bottom: 0 }}>
-            <CartesianGrid stroke={GRID_COLOR} vertical={false} strokeDasharray="3 3" />
-            <XAxis
-              dataKey="date"
-              axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-              tickLine={false}
-              tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
-              minTickGap={32}
-            />
-            <YAxis
-              yAxisId="qeo-vnindex"
-              orientation="left"
-              domain={["dataMin - 50", "dataMax + 50"]}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
-              tickFormatter={(value) => Number(value).toFixed(2)}
-            />
-            <YAxis
-              yAxisId="qeo-valuation"
-              orientation="right"
-              domain={["dataMin - 1", "dataMax + 1"]}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: AXIS_COLOR, fontSize: 10, fontFamily: "monospace" }}
-              tickFormatter={(value) => Number(value).toFixed(2)}
-            />
-            <Tooltip
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null
-                const item = payload[0].payload as QeoEstimateChartPoint
-                const value = metric === "PE" ? item.pe : item.pb
-                const count = metric === "PE" ? item.peMemberCount : item.pbMemberCount
-                const total = metric === "PE" ? item.peTotalMemberCount : item.pbTotalMemberCount
-                const capCoverage = metric === "PE" ? item.peMarketCapCoveragePct : item.pbMarketCapCoveragePct
-                const receivedAt = item.sourceObservedTo
-                  ? new Date(item.sourceObservedTo).toLocaleString("vi-VN", {
-                    timeZone: "Asia/Ho_Chi_Minh",
-                    day: "2-digit",
-                    month: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                  : null
-                return (
-                  <div className="space-y-1 rounded-lg border border-white/15 bg-[#08131e] p-2.5 font-mono text-xs shadow-xl">
-                    <p className="mb-1 text-[11px] text-slate-400">{item.tradingDate}</p>
-                    <p className="font-bold text-sky-400">Qeo VNINDEX: {item.estimatedVnindexValue?.toFixed(2) ?? "—"}</p>
-                    <p className="font-bold text-amber-300">
-                      {metric === "PE" ? "P/E nhóm có P/E dương" : "P/B nhóm có P/B dương"}: {value?.toFixed(2) ?? "—"}
-                    </p>
-                    <p className="text-[10px] text-slate-400">{count}/{total} mã · {capCoverage == null ? "chưa có độ phủ vốn hóa" : `${capCoverage.toFixed(2)}% vốn hóa`}</p>
-                    {receivedAt && <p className="text-[10px] text-slate-500">Qeo nhận lúc {receivedAt} ICT; không phải timestamp cập nhật từ nhà cung cấp.</p>}
-                  </div>
-                )
-              }}
+              name={metric === "PE" ? "P/E KFSP" : "P/B KFSP"}
             />
             <Line
-              yAxisId="qeo-vnindex"
+              yAxisId="vnindex"
               type="monotone"
-              dataKey="estimatedVnindexValue"
-              stroke="#38bdf8"
+              dataKey="qeoEstimatedVnindexValue"
+              stroke="#f97316"
+              strokeDasharray="7 4"
               strokeWidth={2.5}
               isAnimationActive={false}
-              dot={isolatedDot("estimatedVnindexValue", "#38bdf8")}
-              activeDot={{ r: 4, fill: "#38bdf8" }}
+              dot={isolatedDot("qeoEstimatedVnindexValue", "#f97316")}
               connectNulls={false}
-              name="Qeo VNINDEX"
+              activeDot={{ r: 4, fill: "#f97316" }}
+              name="Qeo VNINDEX · loại VIC/VHM"
             />
             <Line
-              yAxisId="qeo-valuation"
+              yAxisId="valuation"
               type="monotone"
-              dataKey={metric === "PE" ? "pe" : "pb"}
-              stroke="#fbbf24"
+              dataKey={metric === "PE" ? "qeoPe" : "qeoPb"}
+              stroke="#e879f9"
+              strokeDasharray="3 3"
               strokeWidth={2.5}
               isAnimationActive={false}
-              dot={isolatedDot(metric === "PE" ? "pe" : "pb", "#fbbf24")}
-              activeDot={{ r: 4, fill: "#fbbf24" }}
+              dot={isolatedDot(metric === "PE" ? "qeoPe" : "qeoPb", "#e879f9")}
               connectNulls={false}
-              name={metric}
+              activeDot={{ r: 4, fill: "#e879f9" }}
+              name={qeoMetricLegend}
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -750,43 +694,19 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
   }, [data.dailySummary.riskHistory, history])
 
   const visibleValuationHistory = React.useMemo(
-    () => filterValuationHistoryByRange(data.dailySummary.valuationHistory, valuationRangeYears),
-    [data.dailySummary.valuationHistory, valuationRangeYears],
+    () => filterValuationHistoryByRange(data.dailySummary.valuationHistory, valuationRangeYears, data.sessionDate),
+    [data.dailySummary.valuationHistory, valuationRangeYears, data.sessionDate],
   )
   const visibleQeoExVnindexHistory = React.useMemo(
     () => filterValuationHistoryByRange(data.dailySummary.qeoExVnindexHistory, valuationRangeYears, data.sessionDate),
     [data.dailySummary.qeoExVnindexHistory, valuationRangeYears, data.sessionDate],
   )
-  const qeoEstimateChartData: QeoEstimateChartPoint[] = React.useMemo(() => visibleQeoExVnindexHistory.map((item) => {
-    const parts = item.tradingDate.split("-")
-    return {
-      ...item,
-      date: parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.tradingDate,
-    }
-  }), [visibleQeoExVnindexHistory])
   const latestQeoEstimate = visibleQeoExVnindexHistory.at(-1) || null
 
-  // Build Valuation Series (P/E, P/B, VNINDEX, 1SD, 2SD) from the selected history window.
-  const visibleValuationSeries: ValuationPoint[] = React.useMemo(() => {
-    return visibleValuationHistory.flatMap((item) => {
-      if (item.price == null && item.pe == null && item.pb == null) return []
-      const parts = item.tradingDate.split("-")
-      return [{
-        date: parts.length === 3 ? `${parts[2]}-${parts[1]}` : item.tradingDate,
-        vnindex: item.price,
-        pe: item.pe,
-        pb: item.pb,
-        pe1StdUp: item.pe1StdUp,
-        pe1StdDown: item.pe1StdDown,
-        pe2StdUp: item.pe2StdUp,
-        pe2StdDown: item.pe2StdDown,
-        pb1StdUp: item.pb1StdUp,
-        pb1StdDown: item.pb1StdDown,
-        pb2StdUp: item.pb2StdUp,
-        pb2StdDown: item.pb2StdDown,
-      }]
-    })
-  }, [visibleValuationHistory])
+  // The original and Qeo series share this full-date union and the published market-session range.
+  const visibleValuationSeries: ValuationPoint[] = React.useMemo(() => (
+    mergeValuationHistories(visibleValuationHistory, visibleQeoExVnindexHistory)
+  ), [visibleValuationHistory, visibleQeoExVnindexHistory])
 
   const valuationSnapshot = React.useMemo(() => buildValuationSnapshot({
     metric: valuationMetric,
@@ -834,8 +754,7 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
                 Ước tính độc lập của Qeo từ dữ liệu cổ phiếu HOSE của KFSP; không phải VNINDEX chính thức hoặc danh sách thành phần chính thức. Thời điểm ghi nhận là lúc Qeo nhận dữ liệu, không phải timestamp cập nhật từ nhà cung cấp.
               </p>
             </div>
-            <QeoExVnindexChart data={qeoEstimateChartData} metric={valuationMetric} />
-            {latestQeoEstimate && latestQeoEstimate.tradingDate !== data.sessionDate && (
+              {latestQeoEstimate && latestQeoEstimate.tradingDate !== data.sessionDate && (
               <p role="status" className="text-[11px] leading-5 text-amber-100/80">
                 Chưa có ước tính cho phiên {data.sessionDate}; giá trị bên dưới thuộc phiên {latestQeoEstimate.tradingDate}.
               </p>

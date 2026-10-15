@@ -24,6 +24,134 @@ export interface ValuationSnapshotResult {
 
 const MIN_STATISTICAL_SAMPLE = 20
 
+
+export type ValuationOverlayMetricMode = "all_signed" | "positive_subset" | "unavailable"
+
+export interface ValuationOverlayMarketObservation {
+  tradingDate: string
+  price: number | null
+  pe: number | null
+  pb: number | null
+  pe1StdUp: number | null
+  pe1StdDown: number | null
+  pe2StdUp: number | null
+  pe2StdDown: number | null
+  pb1StdUp: number | null
+  pb1StdDown: number | null
+  pb2StdUp: number | null
+  pb2StdDown: number | null
+}
+
+export interface ValuationOverlayQeoObservation {
+  tradingDate: string
+  status: "available" | "unavailable"
+  unavailableReason: string | null
+  estimatedVnindexValue: number | null
+  pe: number | null
+  peMode: ValuationOverlayMetricMode
+  peMemberCount: number
+  peTotalMemberCount: number
+  peMarketCapCoveragePct: number | null
+  pb: number | null
+  pbMode: ValuationOverlayMetricMode
+  pbMemberCount: number
+  pbTotalMemberCount: number
+  pbMarketCapCoveragePct: number | null
+  sourceHoseCount: number
+  retainedMemberCount: number
+  providerBreadthCount: number | null
+  sourceObservedTo: string | null
+  baseSessionDate: string | null
+  baseVnindexValue: number | null
+}
+
+export type MergedValuationHistoryPoint = Omit<ValuationOverlayMarketObservation, "price"> & {
+  vnindex: number | null
+  qeoEstimatedVnindexValue: number | null
+  qeoPe: number | null
+  qeoPeMode: ValuationOverlayMetricMode | null
+  qeoPeMemberCount: number | null
+  qeoPeTotalMemberCount: number | null
+  qeoPeMarketCapCoveragePct: number | null
+  qeoPb: number | null
+  qeoPbMode: ValuationOverlayMetricMode | null
+  qeoPbMemberCount: number | null
+  qeoPbTotalMemberCount: number | null
+  qeoPbMarketCapCoveragePct: number | null
+  qeoStatus: "available" | "unavailable" | null
+  qeoUnavailableReason: string | null
+  qeoSourceHoseCount: number | null
+  qeoRetainedMemberCount: number | null
+  qeoProviderBreadthCount: number | null
+  qeoSourceObservedTo: string | null
+  qeoBaseSessionDate: string | null
+  qeoBaseVnindexValue: number | null
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value) ? value : null
+}
+
+export function mergeValuationHistories(
+  originalHistory: ValuationOverlayMarketObservation[],
+  qeoHistory: ValuationOverlayQeoObservation[],
+): MergedValuationHistoryPoint[] {
+  const byDate = new Map<string, {
+    original?: ValuationOverlayMarketObservation
+    qeo?: ValuationOverlayQeoObservation
+  }>()
+
+  for (const item of originalHistory) {
+    if (!parseIsoDate(item.tradingDate)) continue
+    const entry = byDate.get(item.tradingDate) || {}
+    entry.original = item
+    byDate.set(item.tradingDate, entry)
+  }
+  for (const item of qeoHistory) {
+    if (!parseIsoDate(item.tradingDate)) continue
+    const entry = byDate.get(item.tradingDate) || {}
+    entry.qeo = item
+    byDate.set(item.tradingDate, entry)
+  }
+
+  return Array.from(byDate.entries())
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .map(([tradingDate, { original, qeo }]) => ({
+      tradingDate,
+      vnindex: finiteOrNull(original?.price),
+      pe: finiteOrNull(original?.pe),
+      pb: finiteOrNull(original?.pb),
+      pe1StdUp: finiteOrNull(original?.pe1StdUp),
+      pe1StdDown: finiteOrNull(original?.pe1StdDown),
+      pe2StdUp: finiteOrNull(original?.pe2StdUp),
+      pe2StdDown: finiteOrNull(original?.pe2StdDown),
+      pb1StdUp: finiteOrNull(original?.pb1StdUp),
+      pb1StdDown: finiteOrNull(original?.pb1StdDown),
+      pb2StdUp: finiteOrNull(original?.pb2StdUp),
+      pb2StdDown: finiteOrNull(original?.pb2StdDown),
+      qeoEstimatedVnindexValue: finiteOrNull(qeo?.estimatedVnindexValue),
+      qeoPe: finiteOrNull(qeo?.pe),
+      qeoPeMode: qeo?.peMode ?? null,
+      qeoPeMemberCount: qeo == null ? null : finiteOrNull(qeo.peMemberCount),
+      qeoPeTotalMemberCount: qeo == null ? null : finiteOrNull(qeo.peTotalMemberCount),
+      qeoPeMarketCapCoveragePct: finiteOrNull(qeo?.peMarketCapCoveragePct),
+      qeoPb: finiteOrNull(qeo?.pb),
+      qeoPbMode: qeo?.pbMode ?? null,
+      qeoPbMemberCount: qeo == null ? null : finiteOrNull(qeo.pbMemberCount),
+      qeoPbTotalMemberCount: qeo == null ? null : finiteOrNull(qeo.pbTotalMemberCount),
+      qeoPbMarketCapCoveragePct: finiteOrNull(qeo?.pbMarketCapCoveragePct),
+      qeoStatus: qeo?.status ?? null,
+      qeoUnavailableReason: qeo?.unavailableReason ?? null,
+      qeoSourceHoseCount: qeo == null ? null : finiteOrNull(qeo.sourceHoseCount),
+      qeoRetainedMemberCount: qeo == null ? null : finiteOrNull(qeo.retainedMemberCount),
+      qeoProviderBreadthCount: finiteOrNull(qeo?.providerBreadthCount),
+      qeoSourceObservedTo: qeo?.sourceObservedTo ?? null,
+      qeoBaseSessionDate: qeo?.baseSessionDate ?? null,
+      qeoBaseVnindexValue: finiteOrNull(qeo?.baseVnindexValue),
+    }))
+}
+
+
 function parseIsoDate(value: string): { year: number; month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
   if (!match) return null
