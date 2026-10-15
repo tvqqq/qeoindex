@@ -1,6 +1,6 @@
 # Market board data and performance model
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 ## Orderbook daily rollover
 
@@ -14,10 +14,14 @@ The authenticated `/board` page verifies the Supabase server session before load
 
 - Supabase orderbook snapshots for persisted reference/session/orderbook data.
 - Broker batch quotes for current quote fields.
-- The shared 5-minute intraday snapshot cache for mini-chart history.
+- A cache-only read of the shared 5-minute intraday snapshot for mini-chart history, with a 600ms cumulative cache-read budget.
 - DNSE's current VN30 basket-membership endpoint, validated as exactly 30 unique symbols and cached for six hours. Provider time is retained as `asOf`; failed fetches/cache reads leave membership unavailable and do not fail board SSR.
 
-The SSR model is cached through the QeoIndex UI cache with a short session-aware TTL. This lets the first render contain usable prices and chart history before the browser WebSocket becomes live. The cache namespace is versioned so a release that changes intraday completeness semantics can invalidate stale board payloads immediately.
+The SSR model is cached through the QeoIndex UI cache with a short session-aware TTL. Board SSR and VN30 membership cache reads/writes each have a finite 600ms cache-I/O budget; other UI-cache callers keep the default behavior. A cache timeout falls through to the canonical loader where applicable, while a timed-out cache layer is not followed by another cache operation. The budget does not cancel or race authoritative loaders. The SSR cache namespace is versioned so a change in seed semantics can invalidate stale board payloads immediately.
+
+If no acceptable 5-minute history is cached, SSR does not call DNSE or Yahoo history providers. It can still seed same-day `intraday_1m` points from the Supabase overview snapshot; otherwise the board starts without mini-chart history and the existing authenticated browser bootstrap can fill it after render. The separate `/api/market/intraday` path retains its cache-first provider fallback for client requests.
+
+Server logs report only stage name and duration when an authenticated board bootstrap stage or total exceeds three seconds (`auth`, `canonical`, `seed`, `membership`, `overview`, `quotes`, `history-cache`, or `total`). They omit user, request, provider and data identifiers.
 
 When SSR already provides usable multi-point history for at least 95% of the canonical universe, the browser does not immediately call `/api/market/intraday` again on first mount. A session rollover still increments the reload key and forces a fresh browser history bootstrap.
 
@@ -63,7 +67,7 @@ A failed persistence write never disables the locally active filter. A failed fu
 3. Today's latest known-good snapshot from Redis/Runtime Cache; during a live session it is accepted only when generated in the current or immediately previous 5-minute bucket, while lunch-break reuse must already cover the final 11:25 morning bar for the required universe coverage.
 4. Provider fan-out only when no acceptable cached snapshot exists.
 
-The provider path tries the DNSE 5-minute chart endpoint first and falls back to Yahoo when required. Fetch concurrency remains bounded at 12 symbols.
+The provider path tries the DNSE 5-minute chart endpoint first and falls back to Yahoo when required. Fetch concurrency remains bounded at 12 symbols. The `/board` server seed uses only the first three cache layers, with the same session freshness checks and a 600ms total cache-read budget; a miss or timeout returns no cached 5-minute rows and never starts this provider fan-out. The current-session Supabase `intraday_1m` snapshot remains the SSR history fallback.
 
 `/api/market/intraday` follows the same stale-while-live strategy, but reuse is session-aware. During live trading, an exact current bucket remains preferred and a `latest` fallback is accepted only from the current or immediately previous 5-minute bucket. During lunch, both exact `lunch_break` and `latest` snapshots must already cover the final 11:25 morning bar for enough rows; otherwise the service falls through to provider refresh. This keeps the complete 09:15–11:25 morning chart visible while realtime ingestion is paused, then allows realtime to continue from 13:00.
 

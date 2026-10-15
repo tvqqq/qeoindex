@@ -13,7 +13,7 @@ import { getCanonicalBoardOverviewSnapshots } from "@/modules/shared/supabase/bo
 import { isTradingSessionOpen, getMarketSessionStatus } from "@/modules/market/realtime/session-countdown"
 import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
 import { readThroughUiCache } from "@/modules/shared/cache/ui-data-cache"
-import { getIntraday5mSnapshot } from "@/modules/market/realtime/intraday-5m-service"
+import { getCachedIntraday5mSnapshot } from "@/modules/market/realtime/intraday-5m-service"
 import { miniChartPointsForDisplay } from "@/modules/market/realtime/session-ui"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
@@ -24,7 +24,24 @@ import styles from "../market-board-performance.module.css"
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v9"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v10"
+const BOARD_CACHE_IO_BUDGET_MS = 600
+const BOARD_INTRADAY_CACHE_IO_BUDGET_MS = 600
+const BOARD_SSR_SLOW_STAGE_MS = 3_000
+
+type BoardSsrStage = "total" | "auth" | "canonical" | "seed" | "membership" | "overview" | "quotes" | "history-cache"
+
+async function measureBoardSsrStage<T>(stage: BoardSsrStage, operation: () => Promise<T>): Promise<T> {
+  const startedAt = performance.now()
+  try {
+    return await operation()
+  } finally {
+    const durationMs = Math.round(performance.now() - startedAt)
+    if (durationMs >= BOARD_SSR_SLOW_STAGE_MS) {
+      console.warn("[board:ssr] slow stage", { stage, durationMs })
+    }
+  }
+}
 
 type InitialBoardData = {
   universe: FilterBoardUniverseStock[]
@@ -51,9 +68,9 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
   const currentDay = vietnamDateKey(now)
   const tickers = canonical.stocks.map((stock) => stock.ticker)
   const [snapshots, liveQuotes, intraday5m] = await Promise.all([
-    getCanonicalBoardOverviewSnapshots(tickers),
-    fetchLiveBatchQuotes(tickers),
-    getIntraday5mSnapshot(tickers, now),
+    measureBoardSsrStage("overview", () => getCanonicalBoardOverviewSnapshots(tickers)),
+    measureBoardSsrStage("quotes", () => fetchLiveBatchQuotes(tickers)),
+    measureBoardSsrStage("history-cache", () => getCachedIntraday5mSnapshot(tickers, now, { ioBudgetMs: BOARD_INTRADAY_CACHE_IO_BUDGET_MS })),
   ])
 
   const cachedRowsBySymbol = intraday5m?.rows
@@ -126,28 +143,29 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
   return { universe, initialQuotes, initialHistories }
 }
 
-export default async function BoardPage() {
-  const auth = await getServerAuthContext()
+async function loadBoardPage() {
+  const auth = await measureBoardSsrStage("auth", getServerAuthContext)
   if (!auth) return <LandingLogin />
 
   const now = new Date()
-  const canonical = await getCanonicalUniverse()
+  const canonical = await measureBoardSsrStage("canonical", getCanonicalUniverse)
   const isSessionOpen = isTradingSessionOpen(now)
   const session = getMarketSessionStatus(now)
   const ttlSeconds = session.isLiveSession ? 4 : Math.min(session.ttlSeconds, 3600)
   const cacheKey = `ssr:${canonical.runId}:${vietnamDateKey(now)}:${session.cacheBucketKey}`
 
   const [{ universe, initialQuotes, initialHistories }, vn30Membership] = await Promise.all([
-    readThroughUiCache({
+    measureBoardSsrStage("seed", () => readThroughUiCache({
       namespace: BOARD_SSR_CACHE_NAMESPACE,
       key: cacheKey,
       tag: "board-ssr",
       name: "QeoIndex Board SSR Initial Data",
       ttlSeconds,
       validate: isInitialBoardData,
+      ioBudgetMs: BOARD_CACHE_IO_BUDGET_MS,
       load: () => loadInitialBoardDataCanonical(now, canonical),
-    }),
-    getVn30Membership(),
+    })),
+    measureBoardSsrStage("membership", () => getVn30Membership({ ioBudgetMs: BOARD_CACHE_IO_BUDGET_MS })),
   ])
 
   return (
@@ -172,4 +190,8 @@ export default async function BoardPage() {
       </div>
     </OrderBookProvider>
   )
+}
+
+export default async function BoardPage() {
+  return measureBoardSsrStage("total", loadBoardPage)
 }

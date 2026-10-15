@@ -7,6 +7,7 @@ import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 import { getMarketSessionStatus, getVnTimeSeconds } from "@/modules/market/realtime/session-countdown"
 import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
 import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
+import { readFirstValidCacheValue } from "@/modules/shared/cache/io-budget"
 
 export const FETCH_CONCURRENCY = 12
 const INTRADAY_CACHE_VERSION = "market-universe:v11"
@@ -251,35 +252,36 @@ export async function fetchSnapshot(symbols: string[] | readonly string[], now: 
   return { rows: enhancedRows, generatedAt: new Date().toISOString() }
 }
 
-export async function getCachedIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot | null> {
+export async function getCachedIntraday5mSnapshot(
+  symbols: string[] | readonly string[],
+  now: Date = new Date(),
+  options: { ioBudgetMs?: number } = {},
+): Promise<IntradaySnapshot | null> {
   const bucketKey = snapshotCacheKey(symbols, now)
   const latestKey = latestSnapshotCacheKey(symbols, now)
   const cache = getCache({ namespace: "market-board-v11" })
-
-  try {
-    const cached = await cache.get(bucketKey)
-    if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
-  } catch { /* Runtime Cache fail open */ }
-
   const redisClient = getRedis()
-  if (redisClient) {
-    try {
-      const cached = await redisClient.get<IntradaySnapshot>(bucketKey)
-      if (isUsableCachedIntradaySnapshot(cached, symbols, now)) return cached
-    } catch { /* Redis fail open */ }
 
-    try {
-      const cachedLatest = await redisClient.get<IntradaySnapshot>(latestKey)
-      if (isUsableLatestCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
-    } catch { /* Redis fail open */ }
-  }
+  const candidates = [
+    {
+      read: () => cache.get(bucketKey),
+      validate: (value: unknown): value is IntradaySnapshot => isUsableCachedIntradaySnapshot(value, symbols, now),
+    },
+    ...(redisClient ? [{
+      read: () => redisClient.get<IntradaySnapshot>(bucketKey),
+      validate: (value: unknown): value is IntradaySnapshot => isUsableCachedIntradaySnapshot(value, symbols, now),
+    }] : []),
+    ...(redisClient ? [{
+      read: () => redisClient.get<IntradaySnapshot>(latestKey),
+      validate: (value: unknown): value is IntradaySnapshot => isUsableLatestCachedIntradaySnapshot(value, symbols, now),
+    }] : []),
+    {
+      read: () => cache.get(latestKey),
+      validate: (value: unknown): value is IntradaySnapshot => isUsableLatestCachedIntradaySnapshot(value, symbols, now),
+    },
+  ]
 
-  try {
-    const cachedLatest = await cache.get(latestKey)
-    if (isUsableLatestCachedIntradaySnapshot(cachedLatest, symbols, now)) return cachedLatest
-  } catch { /* Runtime Cache fail open */ }
-
-  return null
+  return readFirstValidCacheValue(candidates, options.ioBudgetMs)
 }
 
 export async function getIntraday5mSnapshot(symbols: string[] | readonly string[], now: Date = new Date()): Promise<IntradaySnapshot> {

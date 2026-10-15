@@ -26,7 +26,7 @@ async function fetchVn30Membership(): Promise<Vn30Membership | null> {
   }
 }
 
-export async function getVn30Membership(): Promise<Vn30Membership | null> {
+export async function getVn30Membership(options: { ioBudgetMs?: number } = {}): Promise<Vn30Membership | null> {
   try {
     return await readThroughUiCache({
       namespace: "vn30-membership-v1",
@@ -36,6 +36,7 @@ export async function getVn30Membership(): Promise<Vn30Membership | null> {
       ttlSeconds: VN30_MEMBERSHIP_TTL_SECONDS,
       validate: (value): value is Vn30Membership | null => isValidVn30Membership(value),
       shouldCache: (value) => value !== null,
+      ioBudgetMs: options.ioBudgetMs,
       load: fetchVn30Membership,
     })
   } catch {
