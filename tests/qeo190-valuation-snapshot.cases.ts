@@ -16,7 +16,7 @@ function point(tradingDate: string, pe: number | null, pb: number | null): Valua
   return { tradingDate, pe, pb }
 }
 
-async function loadValuationSnapshot() {
+async function loadValuationSnapshot(): Promise<typeof import("../modules/research/market-insight/valuation-snapshot")> {
   const modulePath = path.resolve("modules/research/market-insight/valuation-snapshot.ts")
   assert.ok(fs.existsSync(modulePath), "QEO-190 must add a pure valuation snapshot helper")
   return import(pathToFileURL(modulePath).href)
