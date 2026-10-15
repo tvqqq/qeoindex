@@ -66,6 +66,7 @@ test("the authenticated board renders through its cache-only history path withou
     "@/modules/market/realtime/session-ui": "export const miniChartPointsForDisplay = (...args) => globalThis.__boardSsrMocks.miniChartPointsForDisplay(...args)",
     "@/modules/eod/shares": "export const getEodForeignRoom = (...args) => globalThis.__boardSsrMocks.getEodForeignRoom(...args)",
     "@/modules/market/board/vn30-membership": "export const getVn30Membership = (...args) => globalThis.__boardSsrMocks.getVn30Membership(...args)",
+    "@/modules/market/board/previous-session-volume": "export const getPreviousSessionVolumes = (...args) => globalThis.__boardSsrMocks.getPreviousSessionVolumes(...args)",
     "../market-board-performance.module.css": "export default { performanceSurface: 'surface' }",
     "react/jsx-runtime": "export function jsx(type, props, key) { return { type, props, key } }; export const jsxs = jsx; export const Fragment = Symbol.for('react.fragment')",
   }
@@ -129,6 +130,7 @@ test("the authenticated board renders through its cache-only history path withou
     miniChartPointsForDisplay: (points: unknown[]) => points,
     getEodForeignRoom: () => null,
     getVn30Membership: async () => null,
+    getPreviousSessionVolumes: async () => ({ ABC: 2 }),
   }
   const globalWithMocks = globalThis as typeof globalThis & { __boardSsrMocks?: typeof mocks }
   const previousMocks = globalWithMocks.__boardSsrMocks
@@ -163,6 +165,7 @@ test("the authenticated board renders through its cache-only history path withou
   assert.deepEqual(board.props.initialHistories.ABC, historyPoints, "same-day Supabase intraday history remains the miss fallback")
   assert.equal(board.props.initialQuotes.ABC.price, 10.5, "live quote precedence remains intact")
   assert.equal(board.props.initialQuotes.ABC.reference, 9.5, "live reference precedence remains intact")
+  assert.equal(board.props.universe[0].previousSessionVolume, 2, "previous completed-session volume stays available on the SSR universe")
 })
 
 test("board SSR and VN30 cache calls opt into finite I/O budgets without changing other cache callers", () => {
