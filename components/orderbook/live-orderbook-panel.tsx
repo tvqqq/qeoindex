@@ -1964,7 +1964,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const foreignNetVolFlash = useFlashAnimation(foreignNetVolume, 1)
   const foreignRoomFlash = useFlashAnimation(foreignRoom, 1)
 
-  const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`, zIndex: z }
+  const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - (isSnapped ? 24 : 32))}px`, zIndex: z }
 
   return (
     <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] will-change-[width,height,left,top] ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
