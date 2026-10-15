@@ -10,7 +10,7 @@ In a new active session, client-side cached orderbook payloads, fallback Supabas
 
 ## Compact Bảng ngành colors and widths
 
-When Bảng ngành hides Giá/KL, the VN30 and industry lane widths are **152px** (was 164px), while the pinned Theo dõi column and full Giá/KL layout retain their existing width. Stock row backgrounds are deliberately neutral for absolute changes below **0.5%** and use directional green/red from **+0.5% / -0.5% inclusive**, with increasing opacity through 7%. Provider-confirmed ceiling/floor colors remain higher priority; unavailable and unchanged quotes remain neutral. This is presentation-only: stock ordering, provider quotes and market breadth are unchanged.
+When Bảng ngành hides Giá/KL, the VN30 and industry lane widths are **136px** (previously 152px). Compact rows and column labels share a 2px grid gap, a minimum 42px ticker track, and a right-aligned 52px percent track so values stay aligned and ticker/% spacing is tighter. The pinned Theo dõi column and full Giá/KL layout retain their existing width and 4px grid gap. Stock row backgrounds are deliberately neutral for absolute changes below **0.5%** and use directional green/red from **+0.5% / -0.5% inclusive**, with increasing opacity through 7%. Provider-confirmed ceiling/floor colors remain higher priority; unavailable and unchanged quotes remain neutral. This is presentation-only: stock ordering, provider quotes and market breadth are unchanged.
 
 ## Orderbook popup snap layout
 
