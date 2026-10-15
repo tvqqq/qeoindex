@@ -8,6 +8,10 @@ A live Orderbook popup owns its own session-day and ATO phase watcher; it must n
 
 In a new active session, client-side cached orderbook payloads, fallback Supabase snapshots and relay checkpoints are accepted only with same-day Vietnam timestamps. Missing or previous-session timestamp means unavailable until current-session provider evidence arrives. Outside active day/pre-open, last-close data may still be displayed as historical context. Keep these guards aligned with the shared `modules/market/realtime/session-ui.ts` calendar utilities.
 
+## Compact Bảng ngành colors and widths
+
+When Bảng ngành hides Giá/KL, the VN30 and industry lane widths are **152px** (was 164px), while the pinned Theo dõi column and full Giá/KL layout retain their existing width. Stock row backgrounds are deliberately neutral for absolute changes below **0.5%** and use directional green/red from **+0.5% / -0.5% inclusive**, with increasing opacity through 7%. Provider-confirmed ceiling/floor colors remain higher priority; unavailable and unchanged quotes remain neutral. This is presentation-only: stock ordering, provider quotes and market breadth are unchanged.
+
 ## Orderbook popup snap layout
 
 The Orderbook header offers a one-click **Snap ↘** control to dock the existing popup into the bottom-right quarter (half the viewport width and half its height, with a 12px safe inset). Compact laptop viewports enlarge the popup only as necessary (minimum 750px wide and 440px tall, capped to the available viewport). **While snapped, the Khớp lệnh trade tape and GIAO DỊCH NĐTNN card remain adjacent in two columns regardless of the inner pane's 620px container breakpoint**. On very narrow viewports, each column becomes compact rather than placing the foreign card above the tape; readability at phone-sized widths is limited by physical screen space. The unsnapped popup retains its original responsive one-column fallback.

@@ -43,7 +43,7 @@ const INDUSTRY_ORDER_KEY = "qeoindex:market-board-industry-order:v1"
 const PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
 const FULL_COLUMN_WIDTH = "w-[232px] min-w-[232px] max-w-[232px]"
-const COMPACT_COLUMN_WIDTH = "w-[164px] min-w-[164px] max-w-[164px]"
+const COMPACT_COLUMN_WIDTH = "w-[152px] min-w-[152px] max-w-[152px]"
 
 function formatPrice(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"

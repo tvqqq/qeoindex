@@ -278,10 +278,10 @@ export function industryPriceboardTone(quote?: IndustryPriceboardQuote | null): 
 export function industryPriceboardChangeIntensity(changePercent: number) {
   if (!Number.isFinite(changePercent)) return 0
   const magnitude = Math.abs(changePercent)
-  // Within ±1% use a quiet neutral ramp; 0% stays closest to the board surface.
-  if (magnitude <= 1) return 0.018 + magnitude * 0.062
-  // Beyond 1% reveal the directional tone, capped at 7% for HOSE/HNX/UPCOM.
-  return 0.12 + Math.min(1, (magnitude - 1) / 6) * 0.48
+  // Below ±0.5% stay quiet and neutral; 0% remains closest to the board surface.
+  if (magnitude < 0.5) return 0.018 + magnitude * 0.062
+  // From ±0.5% show direction, with intensity capped at 7%.
+  return 0.12 + Math.min(1, (magnitude - 0.5) / 6.5) * 0.48
 }
 
 export function industryPriceboardBackground(quote?: IndustryPriceboardQuote | null) {
@@ -292,7 +292,7 @@ export function industryPriceboardBackground(quote?: IndustryPriceboardQuote | n
 
   const change = quote?.changePercent ?? 0
   const alpha = industryPriceboardChangeIntensity(change)
-  if (tone === "unchanged" || Math.abs(change) <= 1) {
+  if (tone === "unchanged" || Math.abs(change) < 0.5) {
     return `rgba(255, 255, 255, ${alpha.toFixed(3)})`
   }
   return tone === "up"
