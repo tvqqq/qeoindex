@@ -8,6 +8,12 @@ A live Orderbook popup owns its own session-day and ATO phase watcher; it must n
 
 In a new active session, client-side cached orderbook payloads, fallback Supabase snapshots and relay checkpoints are accepted only with same-day Vietnam timestamps. Missing or previous-session timestamp means unavailable until current-session provider evidence arrives. Outside active day/pre-open, last-close data may still be displayed as historical context. Keep these guards aligned with the shared `modules/market/realtime/session-ui.ts` calendar utilities.
 
+## Orderbook popup snap layout
+
+The Orderbook header offers a one-click **Snap ↘** control to dock the existing popup into the bottom-right quarter (half the viewport width and half its height, with a 12px safe inset). Compact laptop viewports enlarge the popup only as necessary (minimum 750px wide and 440px tall, capped to the available viewport) so the **GIAO DỊCH NĐTNN** card remains beside the trade tape and above the fold. When a phone-sized viewport cannot fit the two-column layout, the foreign card is ordered before the long trade tape in snapped mode.
+
+Click the same control again to restore the previous floating geometry, clamped to the current viewport. Dragging or manual resizing exits snap; maximizing retains the docked dimensions for subsequent unmaximize. The viewport resize listener keeps snapped windows anchored without new data requests, persistence, remounts, or realtime subscriptions. Geometry is implemented in `components/orderbook/orderbook-snap-layout.ts`.
+
 ## Server bootstrap
 
 The authenticated `/board` page verifies the Supabase server session before loading board data. The server then assembles one initial board model from bounded sources in parallel:

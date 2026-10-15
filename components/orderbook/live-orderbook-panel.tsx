@@ -14,6 +14,7 @@ import {
   ListFilter,
   Maximize2,
   Minimize2,
+  PanelBottom,
   Minus,
   PieChart,
   RefreshCw,
@@ -38,6 +39,7 @@ import type { StockInitialMeta } from "@/components/orderbook/orderbook-context"
 import { fetchOrderbookFromSupabaseDirect, subscribeToOrderbookRealtime } from "@/modules/shared/supabase/browser-orderbook"
 import { subscribeDnseOrderbookFrames } from "@/modules/market/providers/dnse/orderbook-stream"
 import { StockLogo } from "@/components/stock-logo"
+import { clampOrderbookRectToViewport, getSnappedOrderbookRect, type OrderbookRect } from "@/components/orderbook/orderbook-snap-layout"
 
 export type DepthLevel = { price: number; volume: number }
 export type TradeSide = "BUY" | "SELL" | "UNKNOWN"
@@ -1729,6 +1731,7 @@ function OrderBookDepthRow({ bid, ask, maxDepthVolume, quote }: { bid?: DepthLev
 export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, onClose, onFocus }: { stockKey: string; symbol: string; initialMeta?: StockInitialMeta; index: number; z: number; onClose: () => void; onFocus: () => void }) {
   const [minimized, setMinimized] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
+  const [isSnapped, setIsSnapped] = useState(false)
   const [activityTab, setActivityTab] = useState<ActivityTab>("trades")
   const [tradeFilter, setTradeFilter] = useState<"all" | "large" | "whale">("all")
   const [reconnectKey, setReconnectKey] = useState(0)
@@ -1745,6 +1748,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   })
 
   const panelRef = useRef<HTMLElement>(null)
+  const beforeSnapRef = useRef<OrderbookRect | null>(null)
   const isInteractingRef = useRef(false)
   const [isInteracting, setIsInteracting] = useState(false)
   const closeRequested = useRef(false)
@@ -1761,16 +1765,51 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
 
   useEffect(() => { unlockAudioContext() }, [])
 
+  const toggleSnap = useCallback(() => {
+    onFocus()
+    if (isSnapped) {
+      const previous = beforeSnapRef.current
+      if (previous) {
+        const restored = clampOrderbookRectToViewport(previous, window.innerWidth, window.innerHeight)
+        setPos({ x: restored.x, y: restored.y })
+        setSize({ width: restored.width, height: restored.height })
+      }
+      beforeSnapRef.current = null
+      setIsSnapped(false)
+    } else {
+      beforeSnapRef.current = { ...pos, ...size }
+      const rect = getSnappedOrderbookRect(window.innerWidth, window.innerHeight)
+      setPos({ x: rect.x, y: rect.y })
+      setSize({ width: rect.width, height: rect.height })
+      setIsMaximized(false)
+      setMinimized(false)
+      setIsSnapped(true)
+    }
+  }, [isSnapped, onFocus, pos, size])
+
+  // Keep the snapped window anchored when the browser resizes or changes zoom.
+  useEffect(() => {
+    if (!isSnapped) return
+    const syncSnappedViewport = () => {
+      const rect = getSnappedOrderbookRect(window.innerWidth, window.innerHeight)
+      setPos({ x: rect.x, y: rect.y })
+      setSize({ width: rect.width, height: rect.height })
+    }
+    window.addEventListener("resize", syncSnappedViewport)
+    return () => window.removeEventListener("resize", syncSnappedViewport)
+  }, [isSnapped])
+
   const onHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const target = event.target instanceof HTMLElement ? event.target : null
     if (target?.closest("button, a, [data-orderbook-action], [data-no-drag]")) return
     if (isMaximized) return
     onFocus()
     const startX = event.clientX, startY = event.clientY, startPosX = pos.x, startPosY = pos.y
-    let curX = startPosX, curY = startPosY, rafId: number | null = null
+    let curX = startPosX, curY = startPosY, rafId: number | null = null, moved = false
     isInteractingRef.current = true
     setIsInteracting(true)
     const handlePointerMove = (ev: PointerEvent) => {
+      moved = moved || ev.clientX !== startX || ev.clientY !== startY
       curX = Math.max(0, Math.min(window.innerWidth - 200, startPosX + ev.clientX - startX))
       curY = Math.max(0, Math.min(window.innerHeight - 50, startPosY + ev.clientY - startY))
       if (rafId) cancelAnimationFrame(rafId)
@@ -1780,6 +1819,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
       if (rafId) cancelAnimationFrame(rafId)
       window.removeEventListener("pointermove", handlePointerMove); window.removeEventListener("pointerup", handlePointerUp); window.removeEventListener("pointercancel", handlePointerUp)
       isInteractingRef.current = false; setIsInteracting(false); setPos({ x: curX, y: curY })
+      if (moved) { setIsSnapped(false); beforeSnapRef.current = null }
     }
     window.addEventListener("pointermove", handlePointerMove, { passive: true }); window.addEventListener("pointerup", handlePointerUp); window.addEventListener("pointercancel", handlePointerUp)
   }, [onFocus, pos.x, pos.y, isMaximized])
@@ -1787,12 +1827,13 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const startResize = useCallback((e: React.PointerEvent, handle: "se" | "e" | "s") => {
     e.preventDefault(); e.stopPropagation(); onFocus()
     const startX = e.clientX, startY = e.clientY, startW = size.width, startH = size.height
-    let curW = startW, curH = startH, rafId: number | null = null
+    let curW = startW, curH = startH, rafId: number | null = null, resized = false
     isInteractingRef.current = true; setIsInteracting(true)
     const handlePointerMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX, dy = ev.clientY - startY
-      if (handle === "se" || handle === "e") curW = Math.max(MIN_WIDTH, Math.min(window.innerWidth - pos.x - 12, startW + dx))
-      if (handle === "se" || handle === "s") curH = Math.max(MIN_HEIGHT, Math.min(window.innerHeight - pos.y - 12, startH + dy))
+      resized = resized || dx !== 0 || dy !== 0
+      if (handle === "se" || handle === "e") curW = Math.max(Math.min(MIN_WIDTH, startW), Math.min(window.innerWidth - pos.x - 12, startW + dx))
+      if (handle === "se" || handle === "s") curH = Math.max(Math.min(MIN_HEIGHT, startH), Math.min(window.innerHeight - pos.y - 12, startH + dy))
       if (rafId) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => { if (panelRef.current) { if (handle === "se" || handle === "e") panelRef.current.style.width = `${curW}px`; if (handle === "se" || handle === "s") panelRef.current.style.height = `${curH}px` } })
     }
@@ -1800,6 +1841,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
       if (rafId) cancelAnimationFrame(rafId)
       window.removeEventListener("pointermove", handlePointerMove); window.removeEventListener("pointerup", handlePointerUp); window.removeEventListener("pointercancel", handlePointerUp)
       isInteractingRef.current = false; setIsInteracting(false); setSize({ width: curW, height: curH })
+      if (resized) { setIsSnapped(false); beforeSnapRef.current = null }
     }
     window.addEventListener("pointermove", handlePointerMove, { passive: true }); window.addEventListener("pointerup", handlePointerUp); window.addEventListener("pointercancel", handlePointerUp)
   }, [onFocus, size.width, size.height, pos.x, pos.y])
@@ -1922,7 +1964,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
   const foreignNetVolFlash = useFlashAnimation(foreignNetVolume, 1)
   const foreignRoomFlash = useFlashAnimation(foreignRoom, 1)
 
-  const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - 32)}px`, zIndex: z }
+  const panelStyle = isMaximized ? { top: "12px", left: "12px", right: "12px", bottom: "12px", width: "calc(100vw - 24px)", height: "calc(100vh - 24px)", zIndex: z + 10 } : { left: `${pos.x}px`, top: `${pos.y}px`, width: `${Math.min(size.width, window.innerWidth - 16)}px`, height: minimized ? "auto" : `${Math.min(size.height, window.innerHeight - (isSnapped ? 24 : 32))}px`, zIndex: z }
 
   return (
     <section ref={panelRef} className={`pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0f14]/94 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95),inset_0_1px_0_0_rgba(255,255,255,0.12)] will-change-[width,height,left,top] ${isMaximized ? "fixed" : ""} ${!isInteracting ? "transition-[width,height,left,top,border-color,box-shadow] duration-200 ease-out" : "select-none"}`} style={panelStyle} onPointerDown={onPanelPointerDown} data-orderbook={stockKey}>
@@ -1939,6 +1981,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a data-orderbook-action href={`/insights?ticker=${symbol}`} target="_blank" rel="noopener noreferrer" aria-label={`Mở phân tích Insight ${symbol} (tab mới)`} title="Mở phân tích Insight trong tab mới" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 font-ticker text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-200 transition-all shadow-[0_0_10px_rgba(34,201,138,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] group"><Sparkles className="h-3.5 w-3.5 text-emerald-400 group-hover:scale-110 transition-transform" /><span>Insight</span><ExternalLink className="h-3 w-3 text-emerald-400/80 group-hover:text-emerald-300 transition-colors" /></a>
+          <button data-orderbook-action data-orderbook-snap type="button" aria-pressed={isSnapped} aria-label={isSnapped ? "Bỏ ghim góc phải dưới" : "Ghim sổ lệnh vào góc phải dưới"} title={isSnapped ? "Khôi phục vị trí" : "Snap ↘: Góc phải dưới"} onClick={(event) => { event.stopPropagation(); toggleSnap() }} className={`rounded p-1 transition-colors ${isSnapped ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30" : "text-white/50 hover:bg-white/[0.08] hover:text-white"}`}><PanelBottom className="h-3.5 w-3.5" /></button>
           <button data-orderbook-action type="button" aria-label={isMaximized ? "Khôi phục cửa sổ" : "Phóng to toàn màn hình"} title={isMaximized ? "Khôi phục kích thước" : "Phóng to"} onClick={(event) => { event.stopPropagation(); setIsMaximized((v) => !v) }} className="rounded p-1 text-white/50 hover:bg-white/[0.08] hover:text-white transition-colors">{isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
           <button data-orderbook-action type="button" aria-label="Đóng sổ lệnh" title="Đóng" onPointerDown={closeOnPointerDown} onClick={closeOnClick} className="rounded p-1 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"><X className="h-4 w-4" /></button>
         </div>
@@ -2055,7 +2098,7 @@ export function LiveOrderBookPanel({ stockKey, symbol, initialMeta, index, z, on
                       return <div key={trade.id} className={`grid grid-cols-[1.25fr_1.1fr_0.75fr] items-center gap-x-2 py-1.5 font-mono text-xs hover:bg-white/[0.04] transition-colors ${isWhale || isLarge || isAto || isAtc ? `${sideBgClass} font-bold -mx-3.5 px-3.5` : "text-foreground"}`}><div className="flex items-center gap-1.5 min-w-0"><span className="text-slate-400 text-xs font-medium">{timeLabel(trade.time)}</span>{trade.count > 1 ? <span className="rounded bg-white/[0.08] border border-white/[0.1] px-1 py-0.2 text-[10px] text-slate-300 font-mono font-bold shrink-0">x{trade.count}</span> : null}{isAto ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-blue-400/50 bg-blue-950/70 text-blue-300">ATO</span> : isAtc ? <span className="flex items-center rounded px-1.5 py-0.5 text-[10px] font-black shrink-0 border border-purple-400/50 bg-purple-950/70 text-purple-300">ATC</span> : null}</div><span className={`text-right font-bold text-sm sm:text-[14px] flex items-center justify-end gap-1.5 ${isWhale || isLarge ? sideColorClass : "text-foreground"}`}><span>{formatVolume(trade.volume)}</span><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${pill.className} leading-none shrink-0`}>{pill.label}</span></span><span className={`text-right font-bold text-sm sm:text-[14px] ${getPriceColorClass(trade.price, quote?.reference, quote?.ceiling, quote?.floor)}`}>{formatPrice(trade.price)}</span></div>
                     })}</div> : <div className="flex min-h-[555px] items-center justify-center px-4 py-8 text-center text-xs text-slate-400">{stream.historyState === "LOADING" ? "Đang tải dữ liệu khớp lệnh..." : tradeFilter !== "all" ? "Không có lệnh thỏa mãn bộ lọc." : "Chờ dữ liệu khớp lệnh mới..."}</div>}
                     </div>
-                    <div className="flex flex-col gap-2.5"><ForeignRealtimeCard foreign={stream.foreign} quotePrice={activePrice} foreignNetVolume={foreignNetVolume} foreignNetValue={foreignNetValue} roomPercentage={roomPercentage} latestTradeTime={stream.trades[0]?.time} /><TradeInitiativeAndMarketStatsCard symbol={symbol} tradeStats={tradeStats} quote={quote} spread={spread} /></div>
+                    <div className={`flex flex-col gap-2.5 ${isSnapped ? "order-first @min-[620px]:order-none" : ""}`}><ForeignRealtimeCard foreign={stream.foreign} quotePrice={activePrice} foreignNetVolume={foreignNetVolume} foreignNetValue={foreignNetValue} roomPercentage={roomPercentage} latestTradeTime={stream.trades[0]?.time} /><TradeInitiativeAndMarketStatsCard symbol={symbol} tradeStats={tradeStats} quote={quote} spread={spread} /></div>
                   </div></div>
                 )}
 
