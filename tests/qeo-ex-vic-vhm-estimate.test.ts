@@ -233,6 +233,7 @@ test("full Qeo history is paginated and valuation renders one aligned four-serie
   const loader = source("modules/research/market-insight/data.ts")
   const valuation = source("modules/research/market-insight/valuation-snapshot.ts")
   const view = source("components/insights/market-health-view.tsx")
+  const valuationChart = view.slice(view.indexOf("function ValuationBandChart"), view.indexOf("function qeoUnavailableCopy"))
   const edge = source("supabase/functions/market-insight-eod-sync/index.ts")
 
   assert.match(loader, /for \(let offset = 0; offset < 50_000; offset \+= 1_000\)/)
@@ -256,7 +257,8 @@ test("full Qeo history is paginated and valuation renders one aligned four-serie
   assert.match(view, /flex flex-wrap items-center justify-start/)
   assert.match(view, /isAnimationActive=\{false\}/)
   assert.match(view, /Number\(value\)\.toFixed\(2\)/)
-  assert.match(view, /max-w-\[min\(280px,calc\(100vw-32px\)\)\]/)
+  assert.match(view, /max-w-\[min\(280px,calc\(100vw-112px\)\)\]/)
+  assert.match(valuationChart, /<Tooltip\s+position=\{\{ x: 0 \}\}/)
   assert.match(view, /Qeo nhận lúc[\s\S]*không phải timestamp cập nhật từ nhà cung cấp/)
   assert.match(view, /isolatedDot\("qeoEstimatedVnindexValue"/)
   assert.match(view, /connectNulls=\{false\}/)
