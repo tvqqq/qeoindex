@@ -59,7 +59,7 @@ test("orderbook popup places vertical activity navigation beside responsive cont
   assert.match(orderbookSource, /data-orderbook-activity-nav aria-label="Loại giao dịch" className="relative z-10 w-\[88px\] shrink-0 self-stretch rounded-l-xl bg-\[#0c1015\] py-1 pl-1"/)
   assert.match(orderbookSource, /data-orderbook-activity-tabs className="flex flex-col gap-1"/)
   assert.match(orderbookSource, /data-orderbook-activity-pane className=\{\`@container relative z-0 flex min-w-0 flex-1 flex-col rounded-r-xl border/)
-  assert.match(orderbookSource, /grid grid-cols-1 items-start gap-2\.5 @min-\[620px\]:grid-cols-\[1\.18fr_1fr\]/)
+  assert.ok(orderbookSource.includes('data-orderbook-trades-grid className={`grid items-start gap-2.5 ${isSnapped ? "grid-cols-[minmax(0,1.18fr)_minmax(0,1fr)]" : "grid-cols-1 @min-[620px]:grid-cols-[1.18fr_1fr]"}`}'))
   assert.match(orderbookSource, /grid grid-cols-2 gap-2\.5 @min-\[580px\]:grid-cols-4/)
   assert.match(orderbookSource, /relative flex min-h-14 w-full flex-col items-center justify-center gap-1/)
   assert.match(orderbookSource, /z-20 -mr-px rounded-l-md rounded-r-none \$\{ACTIVITY_TAB_STYLES\[tab\]\.selected\}/)
@@ -938,7 +938,7 @@ test("QEO-415 orderbook snap uses a viewport quarter with minimum foreign-card v
   assert.deepEqual(getSnappedOrderbookRect(1366, 768), {
     x: 604, y: 316, width: 750, height: 440,
   })
-  // Phone: fit within the screen; the responsive NĐTNN card moves ahead of tape.
+  // Phone: fit within the screen; two columns become compact rather than stack.
   assert.deepEqual(getSnappedOrderbookRect(390, 844), {
     x: 12, y: 392, width: 366, height: 440,
   })
@@ -953,7 +953,7 @@ test("QEO-415 orderbook snap uses a viewport quarter with minimum foreign-card v
   ), { x: 232, y: 16, width: 780, height: 740 })
 })
 
-test("QEO-415 snap control restores geometry, tracks viewport and prioritizes NĐTNN on narrow panes", () => {
+test("QEO-415 snap control restores geometry and tracks viewport", () => {
   assert.match(orderbookSource, /data-orderbook-action data-orderbook-snap type="button" aria-pressed=\{isSnapped\}/)
   assert.match(orderbookSource, /onClick=\{\(event\) => \{ event\.stopPropagation\(\); toggleSnap\(\) \}\}/)
   assert.match(orderbookSource, /beforeSnapRef\.current = \{ \.\.\.pos, \.\.\.size \}/)
@@ -962,6 +962,25 @@ test("QEO-415 snap control restores geometry, tracks viewport and prioritizes N�
   assert.match(orderbookSource, /window\.addEventListener\("resize", syncSnappedViewport\)/)
   assert.match(orderbookSource, /if \(moved\) \{ setIsSnapped\(false\); beforeSnapRef\.current = null \}/)
   assert.match(orderbookSource, /if \(resized\) \{ setIsSnapped\(false\); beforeSnapRef\.current = null \}/)
-  assert.match(orderbookSource, /isSnapped \? "order-first @min-\[620px\]:order-none" : ""/)
+  assert.doesNotMatch(orderbookSource, /isSnapped \? "order-first/)
   assert.ok(orderbookSource.indexOf("data-orderbook-trade-card") < orderbookSource.indexOf("<ForeignRealtimeCard foreign="))
+})
+
+
+test("QEO-416 snapped orderbook always displays trade tape and NĐTNN side by side", () => {
+  const gridMarker = orderbookSource.indexOf("data-orderbook-trades-grid")
+  const tradeCard = orderbookSource.indexOf("data-orderbook-trade-card", gridMarker)
+  const foreignCard = orderbookSource.indexOf("<ForeignRealtimeCard foreign=", tradeCard)
+  assert.ok(gridMarker > 0 && tradeCard > gridMarker && foreignCard > tradeCard)
+
+  // The snapped branch must override the responsive single-column fallback,
+  // even when the inner pane is narrower than the 620px container breakpoint.
+  const grid = orderbookSource.slice(gridMarker, tradeCard)
+  assert.ok(grid.includes('isSnapped ? "grid-cols-[minmax(0,1.18fr)_minmax(0,1fr)]"'))
+  assert.ok(grid.includes('"grid-cols-1 @min-[620px]:grid-cols-[1.18fr_1fr]"'))
+  assert.ok(grid.includes('data-orderbook-trades-grid className={`grid items-start gap-2.5'))
+  assert.doesNotMatch(grid, /order-first|order-last/)
+  const rightColumn = orderbookSource.slice(tradeCard, foreignCard)
+  assert.ok(rightColumn.includes('className="flex min-w-0 flex-col gap-2.5"'))
+  assert.doesNotMatch(rightColumn, /order-first|order-last/)
 })
