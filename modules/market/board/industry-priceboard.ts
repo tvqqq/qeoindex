@@ -14,6 +14,19 @@ export interface IndustryPriceboardQuote {
   volume?: number | null
 }
 
+/** No inferred denominator: a missing previous EOD volume yields no progress bar. */
+export function industryPriceboardVolumeProgress(currentVolume?: number | null, previousVolume?: number | null) {
+  if (typeof currentVolume !== "number" || !Number.isFinite(currentVolume) || currentVolume < 0) return null
+  if (typeof previousVolume !== "number" || !Number.isFinite(previousVolume) || previousVolume <= 0) return null
+  const ratio = currentVolume / previousVolume
+  return {
+    ratio,
+    fillPercent: Math.min(100, ratio * 100),
+    overflowPercent: Math.min(100, Math.max(0, (ratio - 1) * 100)),
+    exceeded: ratio > 1,
+  }
+}
+
 export type IndustryPriceboardTone =
   | "up"
   | "down"
