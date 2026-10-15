@@ -21,6 +21,7 @@ export interface LiveBoardStock {
   marketCapT: number
   lastClose?: number | null
   lastCloseDate?: string
+  previousSessionVolume?: number | null
 }
 
 export interface LiveStockQuote {
