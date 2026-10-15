@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { clampOrderbookRectToViewport, getSnappedOrderbookRect } from "../components/orderbook/orderbook-snap-layout.ts"
 import {
   DNSE_NORMAL_USER_CHANNEL_LIMIT,
   buildDnseBoardSubscriptionPlan,
@@ -927,4 +928,40 @@ test("HOSE liquidity and foreign mini-charts compress lunch to one dashed bounda
   const foreign = contextStripSource.split('title="Mua bán nước ngoài"')[1]?.split('title="Tác động VNINDEX"')[0] ?? ""
   assert.ok(liquidity.includes("<ComparisonLineChart series={["))
   assert.ok(foreign.includes("<ComparisonLineChart zeroReference series={["))
+})
+
+test("QEO-415 orderbook snap uses a viewport quarter with minimum foreign-card visibility", () => {
+  assert.deepEqual(getSnappedOrderbookRect(1600, 900), {
+    x: 788, y: 438, width: 800, height: 450,
+  })
+  // Narrow laptop: widen and heighten only enough to retain two-column foreign card.
+  assert.deepEqual(getSnappedOrderbookRect(1366, 768), {
+    x: 604, y: 316, width: 750, height: 440,
+  })
+  // Phone: fit within the screen; the responsive NĐTNN card moves ahead of tape.
+  assert.deepEqual(getSnappedOrderbookRect(390, 844), {
+    x: 12, y: 410, width: 366, height: 422,
+  })
+  assert.deepEqual(getSnappedOrderbookRect(390, 640), {
+    x: 12, y: 188, width: 366, height: 440,
+  })
+  assert.deepEqual(getSnappedOrderbookRect(320, 400), {
+    x: 12, y: 12, width: 296, height: 376,
+  })
+  assert.deepEqual(clampOrderbookRectToViewport(
+    { x: 1000, y: 800, width: 780, height: 740 }, 1024, 768,
+  ), { x: 232, y: 12, width: 780, height: 740 })
+})
+
+test("QEO-415 snap control restores geometry, tracks viewport and prioritizes NĐTNN on narrow panes", () => {
+  assert.match(orderbookSource, /data-orderbook-action data-orderbook-snap type="button" aria-pressed=\{isSnapped\}/)
+  assert.match(orderbookSource, /onClick=\{\(event\) => \{ event\.stopPropagation\(\); toggleSnap\(\) \}\}/)
+  assert.match(orderbookSource, /beforeSnapRef\.current = \{ \.\.\.pos, \.\.\.size \}/)
+  assert.match(orderbookSource, /clampOrderbookRectToViewport\(previous, window\.innerWidth, window\.innerHeight\)/)
+  assert.match(orderbookSource, /getSnappedOrderbookRect\(window\.innerWidth, window\.innerHeight\)/)
+  assert.match(orderbookSource, /window\.addEventListener\("resize", syncSnappedViewport\)/)
+  assert.match(orderbookSource, /if \(moved\) \{ setIsSnapped\(false\); beforeSnapRef\.current = null \}/)
+  assert.match(orderbookSource, /if \(resized\) \{ setIsSnapped\(false\); beforeSnapRef\.current = null \}/)
+  assert.match(orderbookSource, /isSnapped \? "order-first @min-\[620px\]:order-none" : ""/)
+  assert.ok(orderbookSource.indexOf("data-orderbook-trade-card") < orderbookSource.indexOf("<ForeignRealtimeCard foreign="))
 })
