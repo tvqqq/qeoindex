@@ -43,7 +43,7 @@ const INDUSTRY_ORDER_KEY = "qeoindex:market-board-industry-order:v1"
 const PRICE_FORMATTER = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const VOLUME_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 })
 const FULL_COLUMN_WIDTH = "w-[232px] min-w-[232px] max-w-[232px]"
-const COMPACT_COLUMN_WIDTH = "w-[152px] min-w-[152px] max-w-[152px]"
+const COMPACT_COLUMN_WIDTH = "w-[136px] min-w-[136px] max-w-[136px]"
 
 function formatPrice(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—"
@@ -95,7 +95,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         type="button"
         onClick={() => onOpen(stock.ticker)}
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
-        className={`grid min-w-0 flex-1 items-center gap-1 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[minmax(46px,1fr)_58px]"}`}
+        className={`grid min-w-0 flex-1 items-center ${showPriceVolume ? "gap-1" : "gap-0.5"} text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[minmax(42px,1fr)_52px]"}`}
       >
         <span className="truncate font-ticker font-bold tracking-tight transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
         {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
@@ -676,7 +676,7 @@ function ColumnHeader({
 
 function TableLabels({ showPriceVolume }: { showPriceVolume: boolean }) {
   return (
-    <div className={`grid h-[22px] items-center gap-1 border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[14px_minmax(46px,1fr)_58px]"}`}>
+    <div className={`grid h-[22px] items-center ${showPriceVolume ? "gap-1" : "gap-0.5"} border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[14px_minmax(42px,1fr)_52px]"}`}>
       <span />
       <span>Mã</span>
       {showPriceVolume ? <span className="text-right">Giá</span> : null}
