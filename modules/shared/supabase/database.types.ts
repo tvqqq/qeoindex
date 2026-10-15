@@ -4959,6 +4959,15 @@ export type Database = {
       }
     }
     Functions: {
+      backfill_market_insight_qeo_ex_vnindex_prefix: {
+        Args: {
+          p_anchor: string
+          p_dry_run?: boolean
+          p_expected_anchor_hash: string
+          p_start: string
+        }
+        Returns: Json
+      }
       claim_market_ai_conclusion: {
         Args: {
           p_as_of: string

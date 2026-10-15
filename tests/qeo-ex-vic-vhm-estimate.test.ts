@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -263,4 +263,50 @@ test("full Qeo history is paginated and valuation renders one aligned four-serie
   assert.match(view, /isolatedDot\("qeoEstimatedVnindexValue"/)
   assert.match(view, /connectNulls=\{false\}/)
   assert.match(view, /valuationRangeYears, data\.sessionDate/)
+})
+
+
+test("historical reverse prefix migration is fixed-window, provenance-bound, dry-run-first, and insert-only", () => {
+  const migrationName = readdirSync(new URL("../supabase/migrations/", import.meta.url))
+    .find((name) => name.endsWith("_qeo408_historical_vni_prefix.sql"))
+  assert.ok(migrationName, "the historical prefix migration must be present")
+  const migration = source("supabase/migrations/" + migrationName)
+  const functionBody = migration.slice(
+    migration.indexOf("create or replace function public.backfill_market_insight_qeo_ex_vnindex_prefix"),
+    migration.indexOf("$function$;", migration.indexOf("create or replace function public.backfill_market_insight_qeo_ex_vnindex_prefix")),
+  )
+
+  assert.match(functionBody, /p_start date,[\s\S]*p_anchor date,[\s\S]*p_expected_anchor_hash text,[\s\S]*p_dry_run boolean default true/)
+  assert.match(functionBody, /date '2026-10-01'[\s\S]*date '2026-10-13'/)
+  assert.match(functionBody, /p_expected_anchor_hash !~ '\^\[0-9a-f\]\{64\}\$'/)
+  assert.match(functionBody, /pg_advisory_xact_lock\([\s\S]*market_insight_qeo_ex_vnindex_daily/)
+  assert.match(functionBody, /v_anchor\.estimated_vnindex_value is distinct from 1719\.42::numeric/)
+  assert.match(functionBody, /v_anchor\.calculation_input_hash is distinct from p_expected_anchor_hash/)
+  assert.match(functionBody, /source_candidate_count is distinct from 1753/)
+  assert.match(functionBody, /source_hose_count is distinct from 413/)
+  assert.match(functionBody, /retained_member_count is distinct from 411/)
+  assert.match(functionBody, /v_session_date < date '2026-10-09' then 1752[\s\S]*else 1753/)
+  assert.match(functionBody, /v_candidate_count <> v_expected_candidate_count[\s\S]*v_candidate_count <> v_rating\.provider_row_count/)
+  assert.match(functionBody, /v_rating\.provider is distinct from 'kfsp'/)
+  assert.match(functionBody, /v_rating\.contract_version is distinct from v_anchor\.source_contract_version/)
+  assert.match(functionBody, /select count\(\*\)::integer into v_rating_run_count[\s\S]*r\.status = 'completed'[\s\S]*completed_at/)
+  assert.match(functionBody, /v_hose_count <> 413/)
+  assert.match(functionBody, /v_vic_vhm_count <> 2/)
+  assert.match(functionBody, /timezone\('Asia\/Ho_Chi_Minh', c\.fetched_at\)[\s\S]*time '15:00'/)
+  assert.match(functionBody, /for share/)
+  assert.match(functionBody, /select \* into v_existing[\s\S]*q\.session_date = \(v_point ->> 'session_date'\)::date\s+for share/)
+  assert.match(functionBody, /where m\.session_date = \(v_point ->> 'session_date'\)::date\s+order by m\.ticker\s+for share/)
+  assert.match(functionBody, /PROVIDER_VALUATION_SESSION_GAP/)
+  assert.match(functionBody, /v_next_estimated_value \* v_next_reference_cap \/ v_next_current_cap/)
+  assert.match(functionBody, /qeo-ex-vic-vhm-reverse-prefix-v1/)
+  assert.match(functionBody, /pg_catalog\.sha256/)
+  assert.match(functionBody, /'next_session_chain_hash', v_next_chain_hash/)
+  assert.match(functionBody, /'anchor_calculation_input_hash', p_expected_anchor_hash/)
+  assert.match(functionBody, /'pe_mode', v_pe_mode/)
+  assert.match(functionBody, /'pb_mode', v_pb_mode/)
+  assert.match(functionBody, /if p_dry_run then[\s\S]*return jsonb_build_object[\s\S]*insert into public\.market_insight_qeo_ex_vnindex_daily/)
+  assert.match(functionBody, /EXISTING_DAILY_ROW_MISMATCH/)
+  assert.match(functionBody, /EXISTING_MEMBER_ROWS_MISMATCH/)
+  assert.doesNotMatch(functionBody, /^\s*(update|delete)\s/im)
+  assert.match(migration, /revoke all on function public\.backfill_market_insight_qeo_ex_vnindex_prefix[\s\S]*to service_role/)
 })
