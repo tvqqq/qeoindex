@@ -16,7 +16,7 @@ function point(tradingDate: string, pe: number | null, pb: number | null): Valua
   return { tradingDate, pe, pb }
 }
 
-async function loadValuationSnapshot() {
+async function loadValuationSnapshot(): Promise<typeof import("../modules/research/market-insight/valuation-snapshot")> {
   const modulePath = path.resolve("modules/research/market-insight/valuation-snapshot.ts")
   assert.ok(fs.existsSync(modulePath), "QEO-190 must add a pure valuation snapshot helper")
   return import(pathToFileURL(modulePath).href)
@@ -122,4 +122,119 @@ test("QEO-190 wires the selected PE/PB metric and history window into a compact 
   assert.match(visibleSurface, /σ so với TB/)
   assert.match(visibleSurface, /Chưa đủ dữ liệu/)
   assert.doesNotMatch(visibleSurface, /mục tiêu giá|target price|upside|downside/i, "valuation snapshot must stay descriptive rather than become a price forecast")
+})
+
+test("valuation overlay merges disjoint full-date histories and preserves a valid-null-valid Qeo index gap", async () => {
+  const { mergeValuationHistories } = await loadValuationSnapshot()
+  const originalHistory = ["2025-10-02", "2026-10-04"].map((tradingDate, index) => ({
+    tradingDate,
+    price: 1300 + index,
+    pe: 15 + index,
+    pb: 1.8 + index / 10,
+    pe1StdUp: 16 + index,
+    pe1StdDown: 14 + index,
+    pe2StdUp: 17 + index,
+    pe2StdDown: 13 + index,
+    pb1StdUp: 2 + index / 10,
+    pb1StdDown: 1.6 + index / 10,
+    pb2StdUp: 2.2 + index / 10,
+    pb2StdDown: 1.4 + index / 10,
+  }))
+  const qeoHistory = [
+    {
+      tradingDate: "2026-10-01",
+      status: "available" as const,
+      unavailableReason: null,
+      estimatedVnindexValue: 1290.25,
+      pe: 17.5,
+      peMode: "positive_subset" as const,
+      peMemberCount: 122,
+      peTotalMemberCount: 350,
+      peMarketCapCoveragePct: 81.25,
+      pb: null,
+      pbMode: "unavailable" as const,
+      pbMemberCount: 0,
+      pbTotalMemberCount: 350,
+      pbMarketCapCoveragePct: 0,
+      sourceHoseCount: 413,
+      retainedMemberCount: 411,
+      providerBreadthCount: 369,
+      sourceObservedTo: "2026-10-01T08:05:00.000Z",
+      baseSessionDate: "2026-10-01",
+      baseVnindexValue: 1290.25,
+    },
+    {
+      tradingDate: "2026-10-02",
+      status: "unavailable" as const,
+      unavailableReason: "PREVIOUS_MARKET_SESSION_ESTIMATE_MISSING",
+      estimatedVnindexValue: null,
+      pe: 18.25,
+      peMode: "positive_subset" as const,
+      peMemberCount: 120,
+      peTotalMemberCount: 350,
+      peMarketCapCoveragePct: 82.75,
+      pb: null,
+      pbMode: "unavailable" as const,
+      pbMemberCount: 0,
+      pbTotalMemberCount: 350,
+      pbMarketCapCoveragePct: 0,
+      sourceHoseCount: 413,
+      retainedMemberCount: 411,
+      providerBreadthCount: 370,
+      sourceObservedTo: "2026-10-02T08:05:00.000Z",
+      baseSessionDate: null,
+      baseVnindexValue: null,
+    },
+    {
+      tradingDate: "2026-10-03",
+      status: "available" as const,
+      unavailableReason: null,
+      estimatedVnindexValue: 1305.75,
+      pe: null,
+      peMode: "unavailable" as const,
+      peMemberCount: 0,
+      peTotalMemberCount: 411,
+      peMarketCapCoveragePct: 0,
+      pb: 2.15,
+      pbMode: "positive_subset" as const,
+      pbMemberCount: 205,
+      pbTotalMemberCount: 411,
+      pbMarketCapCoveragePct: 73.5,
+      sourceHoseCount: 413,
+      retainedMemberCount: 411,
+      providerBreadthCount: 371,
+      sourceObservedTo: "2026-10-03T08:05:00.000Z",
+      baseSessionDate: "2026-10-01",
+      baseVnindexValue: 1290.25,
+    },
+  ]
+
+  const merged = mergeValuationHistories(originalHistory, qeoHistory)
+
+  assert.deepEqual(merged.map((item) => item.tradingDate), [
+    "2025-10-02",
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-03",
+    "2026-10-04",
+  ])
+  assert.equal(merged[0].tradingDate.slice(5), merged[2].tradingDate.slice(5), "full ISO dates keep equal DD-MM labels from different years distinct")
+  assert.notEqual(merged[0].tradingDate, merged[2].tradingDate)
+  assert.equal(merged[0].vnindex, 1300, "original VNINDEX price remains mapped to the index line")
+  assert.equal(merged[0].qeoEstimatedVnindexValue, null)
+  assert.equal(merged[0].qeoPe, null)
+  assert.equal(merged[0].qeoPeMemberCount, null)
+  assert.deepEqual(merged.slice(1, 4).map((item) => item.qeoEstimatedVnindexValue), [1290.25, null, 1305.75])
+  assert.equal(merged[2].vnindex, null)
+  assert.equal(merged[2].pe, null)
+  assert.equal(merged[2].qeoStatus, "unavailable")
+  assert.equal(merged[2].qeoPe, 18.25)
+  assert.equal(merged[2].qeoPeMemberCount, 120)
+  assert.equal(merged[2].qeoPeMarketCapCoveragePct, 82.75)
+  assert.equal(merged[2].qeoSourceObservedTo, "2026-10-02T08:05:00.000Z")
+  assert.equal(merged[3].qeoPe, null)
+  assert.equal(merged[3].qeoPb, 2.15)
+  assert.equal(merged[4].vnindex, 1301, "the last original-only point remains on the index line")
+  assert.equal(merged[4].qeoStatus, null)
+  assert.equal(merged[4].qeoEstimatedVnindexValue, null)
 })

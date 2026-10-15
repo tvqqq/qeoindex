@@ -114,7 +114,7 @@ test("QEO-134 risk and valuation charts avoid excess top whitespace", () => {
 
   assert.match(riskChart, /h-\[260px\]/)
   assert.match(riskChart, /AreaChart data=\{data\} margin=\{\{ top: 6, right: 16, left: -20, bottom: 0 \}\}/)
-  assert.match(valuationChart, /<div className="space-y-1">/)
+  assert.match(valuationChart, /<div className="space-y-1" data-valuation-qeo-overlay>/)
   assert.match(valuationChart, /ComposedChart data=\{data\} margin=\{\{ top: 4, right: 28, left: 10, bottom: 0 \}\}/)
   assert.doesNotMatch(marketHealth, /shadow-xl flex flex-col justify-between/)
   assert.ok((marketHealth.match(/px-4 pb-4 pt-2 sm:px-5 sm:pb-5 sm:pt-3/g) || []).length >= 2, "both chart bodies should use compact top padding")
