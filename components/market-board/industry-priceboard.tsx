@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { BarChart3, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
 import { getSectorIcon } from "@/components/stock-identity"
+import styles from "@/app/market-board-performance.module.css"
 import {
   averagePriceboardChange,
   defaultIndustryColumnOrder,
@@ -11,6 +12,7 @@ import {
   industryLabelForStock,
   industryPriceboardBackground,
   industryPriceboardBreadth,
+  industryPriceboardVolumeProgress,
   moveIndustryColumn,
   moveIndustryColumnBy,
   normalizeSavedIndustryOrder,
@@ -77,17 +79,41 @@ type CompactStockRowProps = {
 
 const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen, showPriceVolume }: CompactStockRowProps) {
   const change = quoteIsValid(quote) ? quote.changePercent : null
+  const progress = showPriceVolume ? industryPriceboardVolumeProgress(quote?.volume, stock.previousSessionVolume) : null
+  const background = industryPriceboardBackground(quote)
   return (
     <div
-      className="board-stock-row group flex h-[25px] items-center gap-0.5 rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow,filter] duration-100 hover:border-white/35 hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
-      style={{ backgroundColor: industryPriceboardBackground(quote) }}
+      className="board-stock-row group relative flex h-[25px] items-center gap-0.5 overflow-hidden rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow] duration-100 hover:border-white/35 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
+      style={{ backgroundColor: showPriceVolume ? "rgba(255, 255, 255, 0.025)" : background }}
+      title={progress ? `KL hôm nay ${VOLUME_FORMATTER.format(quote!.volume!)} / phiên trước ${VOLUME_FORMATTER.format(stock.previousSessionVolume!)} · ${(progress.ratio * 100).toFixed(1)}%` : undefined}
     >
+      {progress ? (
+        <>
+          <span
+            data-priceboard-volume-fill
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 origin-left rounded-full motion-safe:transition-transform motion-safe:duration-700 motion-safe:ease-out"
+            style={{ backgroundColor: background, transform: `scaleX(${progress.fillPercent / 100})` }}
+          />
+          {progress.exceeded ? (
+            <>
+              <span
+                data-priceboard-volume-overflow
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-[2px] left-0 w-full origin-left rounded-full bg-white/[0.12] motion-safe:transition-transform motion-safe:duration-700 motion-safe:ease-out"
+                style={{ transform: `scaleX(${progress.overflowPercent / 100})` }}
+              />
+              <span key={Math.floor(progress.ratio * 10)} aria-hidden="true" className={`${styles.volumeSurgeMarker} pointer-events-none absolute right-[3px] top-[7px] h-[9px] w-[3px] rounded-full bg-white/65`} />
+            </>
+          ) : null}
+        </>
+      ) : null}
       <button
         type="button"
         aria-label={watched ? `Bỏ ${stock.ticker} khỏi Theo dõi` : `Thêm ${stock.ticker} vào Theo dõi`}
         aria-pressed={watched}
         onClick={() => onToggleWatch(stock.ticker)}
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-2 transition-colors hover:text-amber-300 focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
+        className="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-2 transition-colors hover:text-amber-300 focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand"
       >
         <Star className={`h-[11px] w-[11px] ${watched ? "fill-amber-300 text-amber-300" : ""}`} />
       </button>
@@ -95,7 +121,7 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
         type="button"
         onClick={() => onOpen(stock.ticker)}
         aria-label={`Mở sổ lệnh ${stock.ticker}`}
-        className={`grid min-w-0 flex-1 items-center ${showPriceVolume ? "gap-1" : "gap-0.5"} text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[minmax(42px,1fr)_52px]"}`}
+        className={`relative z-10 grid min-w-0 flex-1 items-center gap-0.5 text-left font-sans text-[12px] font-semibold leading-none text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-brand ${showPriceVolume ? "grid-cols-[48px_48px_54px_minmax(34px,1fr)]" : "grid-cols-[minmax(42px,1fr)_52px]"}`}
       >
         <span className="truncate font-ticker font-bold tracking-tight transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
         {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
@@ -676,7 +702,7 @@ function ColumnHeader({
 
 function TableLabels({ showPriceVolume }: { showPriceVolume: boolean }) {
   return (
-    <div className={`grid h-[22px] items-center ${showPriceVolume ? "gap-1" : "gap-0.5"} border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_minmax(34px,1fr)_56px_54px_39px]" : "grid-cols-[14px_minmax(42px,1fr)_52px]"}`}>
+    <div className={`grid h-[22px] items-center gap-0.5 border-b border-white/[0.07] px-1.5 font-sans text-[10px] font-medium text-muted-2 ${showPriceVolume ? "grid-cols-[14px_48px_48px_54px_minmax(34px,1fr)]" : "grid-cols-[14px_minmax(42px,1fr)_52px]"}`}>
       <span />
       <span>Mã</span>
       {showPriceVolume ? <span className="text-right">Giá</span> : null}

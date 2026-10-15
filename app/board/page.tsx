@@ -19,17 +19,18 @@ import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { getEodForeignRoom } from "@/modules/eod/shares"
 import { getVn30Membership } from "@/modules/market/board/vn30-membership"
+import { getPreviousSessionVolumes } from "@/modules/market/board/previous-session-volume"
 import styles from "../market-board-performance.module.css"
 
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v10"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v11"
 const BOARD_CACHE_IO_BUDGET_MS = 600
 const BOARD_INTRADAY_CACHE_IO_BUDGET_MS = 600
 const BOARD_SSR_SLOW_STAGE_MS = 3_000
 
-type BoardSsrStage = "total" | "auth" | "canonical" | "seed" | "membership" | "overview" | "quotes" | "history-cache"
+type BoardSsrStage = "total" | "auth" | "canonical" | "seed" | "membership" | "overview" | "quotes" | "history-cache" | "previous-volume"
 
 async function measureBoardSsrStage<T>(stage: BoardSsrStage, operation: () => Promise<T>): Promise<T> {
   const startedAt = performance.now()
@@ -67,10 +68,11 @@ function vietnamDateKey(now: Date) {
 async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniverseSnapshot): Promise<InitialBoardData> {
   const currentDay = vietnamDateKey(now)
   const tickers = canonical.stocks.map((stock) => stock.ticker)
-  const [snapshots, liveQuotes, intraday5m] = await Promise.all([
+  const [snapshots, liveQuotes, intraday5m, previousVolumes] = await Promise.all([
     measureBoardSsrStage("overview", () => getCanonicalBoardOverviewSnapshots(tickers)),
     measureBoardSsrStage("quotes", () => fetchLiveBatchQuotes(tickers)),
     measureBoardSsrStage("history-cache", () => getCachedIntraday5mSnapshot(tickers, now, { ioBudgetMs: BOARD_INTRADAY_CACHE_IO_BUDGET_MS })),
+    measureBoardSsrStage("previous-volume", () => getPreviousSessionVolumes(tickers, currentDay)),
   ])
 
   const cachedRowsBySymbol = intraday5m?.rows
@@ -89,6 +91,7 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
       exchange: stock.exchange || "",
       kfspSector: stock.sector || sectorForTicker(stock.ticker),
       averageVolume50d: stock.averageVolume50d,
+      previousSessionVolume: previousVolumes[stock.ticker] ?? null,
       marketCapT: stock.marketCapBillion / 1000,
       lastClose: lastClosePrice,
       lastCloseDate: snap?.session_date || "",
