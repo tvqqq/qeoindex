@@ -940,7 +940,7 @@ test("QEO-415 orderbook snap uses a viewport quarter with minimum foreign-card v
   })
   // Phone: fit within the screen; the responsive NĐTNN card moves ahead of tape.
   assert.deepEqual(getSnappedOrderbookRect(390, 844), {
-    x: 12, y: 410, width: 366, height: 422,
+    x: 12, y: 392, width: 366, height: 440,
   })
   assert.deepEqual(getSnappedOrderbookRect(390, 640), {
     x: 12, y: 188, width: 366, height: 440,
@@ -950,7 +950,7 @@ test("QEO-415 orderbook snap uses a viewport quarter with minimum foreign-card v
   })
   assert.deepEqual(clampOrderbookRectToViewport(
     { x: 1000, y: 800, width: 780, height: 740 }, 1024, 768,
-  ), { x: 232, y: 12, width: 780, height: 740 })
+  ), { x: 232, y: 16, width: 780, height: 740 })
 })
 
 test("QEO-415 snap control restores geometry, tracks viewport and prioritizes NĐTNN on narrow panes", () => {
