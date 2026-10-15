@@ -119,6 +119,15 @@
       ]
     },
     {
+      "path": "tests/board-ssr-bootstrap.test.ts",
+      "owner": "market",
+      "invariant": "Keep board SSR history cache-only, bounded, and faithful to same-day fallback and quote precedence.",
+      "bucket": "canonical",
+      "suites": [
+        "fast"
+      ]
+    },
+    {
       "path": "tests/build-impact.test.ts",
       "owner": "tooling",
       "invariant": "Preserve the current build impact contract.",

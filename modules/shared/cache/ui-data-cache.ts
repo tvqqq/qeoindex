@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis"
 import { getCache } from "@vercel/functions"
+import { createIoBudget } from "./io-budget.ts"
 
 const REDIS_PREFIX = "qeoindex:ui:v1"
 
@@ -26,11 +27,27 @@ type UiCacheOptions<T> = {
   validate: (value: unknown) => value is T
   shouldCache?: (value: T) => boolean
   useSharedRedis?: boolean
+  ioBudgetMs?: number
   load: () => Promise<T>
 }
 
 type UiCacheInvalidation = Pick<UiCacheOptions<unknown>, "namespace" | "key" | "tag"> & {
   useSharedRedis?: boolean
+}
+
+type UiCacheRuntime = {
+  get: (key: string) => Promise<unknown>
+  set: (key: string, value: unknown, options: { ttl: number; tags: string[]; name: string }) => Promise<unknown>
+}
+
+type UiCacheRedis = {
+  get: <T = unknown>(key: string) => Promise<T | null>
+  set: (key: string, value: unknown, options: { ex: number }) => Promise<unknown>
+}
+
+type UiCacheAdapters = {
+  getCache?: (options: { namespace: string }) => UiCacheRuntime
+  getRedis?: () => UiCacheRedis | null
 }
 
 /**
@@ -49,42 +66,32 @@ export async function readThroughUiCache<T>({
   validate,
   shouldCache = () => true,
   useSharedRedis = true,
+  ioBudgetMs,
   load,
-}: UiCacheOptions<T>): Promise<T> {
-  const cache = getCache({ namespace })
+}: UiCacheOptions<T>, adapters: UiCacheAdapters = {}): Promise<T> {
+  const cache = (adapters.getCache ?? getCache)({ namespace })
+  const ioBudget = createIoBudget(ioBudgetMs)
 
-  try {
-    const cached = await cache.get(key)
-    if (validate(cached)) return cached
-  } catch {
-    // Runtime Cache is an optimization; continue to Redis/canonical source.
-  }
+  const runtimeCacheRead = await ioBudget.run(() => cache.get(key))
+  if (runtimeCacheRead.status === "completed" && validate(runtimeCacheRead.value)) return runtimeCacheRead.value
 
-  const redisClient = useSharedRedis ? getRedis() : null
+  const redisClient = useSharedRedis ? (adapters.getRedis ?? getRedis)() : null
   const redisKey = sharedRedisKey(namespace, key)
-  if (redisClient) {
-    try {
-      const cached = await redisClient.get<unknown>(redisKey)
-      if (validate(cached)) {
-        try {
-          await cache.set(key, cached, { ttl: ttlSeconds, tags: [tag], name })
-        } catch {
-          // Redis hit remains usable even if the regional L1 write fails.
-        }
-        return cached
-      }
-    } catch {
-      // Redis is optional; canonical loading remains available.
+  if (redisClient && runtimeCacheRead.status !== "timed-out") {
+    const redisCacheRead = await ioBudget.run(() => redisClient.get<unknown>(redisKey))
+    if (redisCacheRead.status === "completed" && validate(redisCacheRead.value)) {
+      await ioBudget.run(() => cache.set(key, redisCacheRead.value, { ttl: ttlSeconds, tags: [tag], name }))
+      return redisCacheRead.value
     }
   }
 
   const fresh = await load()
   if (!shouldCache(fresh)) return fresh
 
-  await Promise.allSettled([
-    cache.set(key, fresh, { ttl: ttlSeconds, tags: [tag], name }),
-    redisClient ? redisClient.set(redisKey, fresh, { ex: ttlSeconds }) : Promise.resolve(),
-  ])
+  await ioBudget.run(() => Promise.allSettled([
+    Promise.resolve().then(() => cache.set(key, fresh, { ttl: ttlSeconds, tags: [tag], name })),
+    redisClient ? Promise.resolve().then(() => redisClient.set(redisKey, fresh, { ex: ttlSeconds })) : Promise.resolve(),
+  ]))
   return fresh
 }
 

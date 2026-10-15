@@ -71,7 +71,7 @@ test("QEO-270 latest cache fallback is freshness-gated while the market is live"
   assert.match(serviceSource, /if \(!status\.isLiveSession\) return true/)
   assert.match(serviceSource, /isRecentFiveMinuteSnapshot\(value\.generatedAt, now\)/)
   assert.equal(
-    serviceSource.match(/isUsableLatestCachedIntradaySnapshot\(cachedLatest, symbols, now\)/g)?.length,
+    serviceSource.match(/isUsableLatestCachedIntradaySnapshot\(value, symbols, now\)/g)?.length,
     2,
   )
 })

@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { readThroughUiCache } from "../modules/shared/cache/ui-data-cache.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
@@ -34,6 +36,109 @@ test("P1 UI reads use Runtime Cache with optional shared Redis", () => {
   assert.match(researchRoute, /getResearchLogData/)
   assert.match(researchRoute, /pagination\.nextCursor/)
   assert.match(researchRoute, /getResearchReviewData/)
+})
+
+test("optional UI cache budget stops after a stalled Runtime Cache read and still loads canonical data", async () => {
+  let redisReads = 0
+  let writes = 0
+  let loads = 0
+  const startedAt = Date.now()
+  const value = await readThroughUiCache({
+    namespace: "test",
+    key: "stalled-read",
+    tag: "test",
+    name: "test",
+    ttlSeconds: 10,
+    ioBudgetMs: 35,
+    validate: (candidate): candidate is string => typeof candidate === "string",
+    load: async () => {
+      loads += 1
+      return "canonical"
+    },
+  }, {
+    getCache: () => ({
+      get: () => new Promise<unknown>(() => {}),
+      set: async () => { writes += 1 },
+    }),
+    getRedis: () => ({
+      get: async <T>() => {
+        redisReads += 1
+        return null as T | null
+      },
+      set: async () => { writes += 1 },
+    }),
+  })
+
+  assert.equal(value, "canonical")
+  assert.equal(loads, 1)
+  assert.equal(redisReads, 0, "a timed-out Runtime Cache read must not start the next cache read")
+  assert.equal(writes, 0, "the exhausted cache budget must not start cache writes")
+  assert.ok(Date.now() - startedAt < 500)
+})
+
+test("optional UI cache budget bounds cache writes after a valid canonical load", async () => {
+  let runtimeWrites = 0
+  let redisWrites = 0
+  const startedAt = Date.now()
+  const value = await readThroughUiCache({
+    namespace: "test",
+    key: "stalled-write",
+    tag: "test",
+    name: "test",
+    ttlSeconds: 10,
+    ioBudgetMs: 35,
+    validate: (candidate): candidate is string => typeof candidate === "string",
+    load: async () => "canonical",
+  }, {
+    getCache: () => ({
+      get: async () => null,
+      set: async () => {
+        runtimeWrites += 1
+        return new Promise<never>(() => {})
+      },
+    }),
+    getRedis: () => ({
+      get: async <T>() => null as T | null,
+      set: async () => {
+        redisWrites += 1
+        return new Promise<never>(() => {})
+      },
+    }),
+  })
+
+  assert.equal(value, "canonical")
+  assert.equal(runtimeWrites, 1)
+  assert.equal(redisWrites, 1)
+  assert.ok(Date.now() - startedAt < 500, "cache writes must not delay the valid canonical result indefinitely")
+})
+
+test("omitting the UI cache budget keeps the default read-through await behavior", async () => {
+  let releaseRuntimeRead: ((value: unknown) => void) | undefined
+  const pendingRuntimeRead = new Promise<unknown>((resolve) => { releaseRuntimeRead = resolve })
+  let resolved = false
+  const read = readThroughUiCache({
+    namespace: "test",
+    key: "default-read",
+    tag: "test",
+    name: "test",
+    ttlSeconds: 10,
+    validate: (candidate): candidate is string => typeof candidate === "string",
+    load: async () => "canonical",
+  }, {
+    getCache: () => ({
+      get: () => pendingRuntimeRead,
+      set: async () => undefined,
+    }),
+    getRedis: () => null,
+  }).then((value) => {
+    resolved = true
+    return value
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(resolved, false)
+  releaseRuntimeRead?.(null)
+  assert.equal(await read, "canonical")
 })
 
 test("P1.1 scanner and market history miss paths are bounded", () => {
