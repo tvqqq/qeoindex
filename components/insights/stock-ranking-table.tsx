@@ -347,7 +347,7 @@ export function StockRankingTable({
             <SortableHead sortKey="stockRrgState" activeKey={sort.key} direction={sort.direction} onSort={onSort} label="RRG cổ phiếu" metricKey="kfsp_stock_rrg_state" onOpenGuide={onOpenGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-300" />
             <SortableHead sortKey="weeklyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={onSort} definition={overviewField("weekly_change_pct")} metricKey="weekly_change_pct" onOpenGuide={onOpenGuide} className="px-1 text-xs font-extrabold uppercase text-cyan-200" />
             <SortableHead sortKey="monthlyChangePercent" activeKey={sort.key} direction={sort.direction} onSort={onSort} definition={overviewField("monthly_change_pct")} metricKey="monthly_change_pct" onOpenGuide={onOpenGuide} className="px-1 text-xs font-extrabold uppercase text-violet-200" />
-            <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={onSort} label="Qeo composite" metricKey="kfsp_composite_score" onOpenGuide={onOpenGuide} className="px-1 text-xs font-extrabold uppercase text-brand" />
+            <SortableHead sortKey="ratingScore" activeKey={sort.key} direction={sort.direction} onSort={onSort} label="Điểm tổng hợp" metricKey="kfsp_composite_score" onOpenGuide={onOpenGuide} className="px-1 text-xs font-extrabold uppercase text-brand" />
           </TableRow>
         </TableHeader>
         <TableBody>

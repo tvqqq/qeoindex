@@ -233,7 +233,7 @@ test("sector stock popup keeps canonical toolbar semantics and delegates table U
 
   assert.doesNotMatch(sectorPanel, /modalUniverse|Top 100/, "sector popup must not keep the obsolete Top 100 switch")
   assert.match(sectorPanel, /Tất cả · \{ratings\.length\} mã/)
-  assert.match(sectorPanel, /Nguồn KFSP · điểm Qeo/)
+  assert.match(sectorPanel, /Nguồn KFSP · điểm tổng hợp/)
   assert.match(sectorPanel, /SelectTrigger aria-label="Lọc theo ngành" className="h-10 w-full min-w-64 border-white\/10 bg-cell px-3 text-sm sm:text-base font-bold text-white hover:bg-white\/\[0\.05\] sm:w-80"/)
   assert.match(sectorPanel, /placeholder="Tìm mã hoặc tên\.\.\."[^>]*className="h-10 border-white\/10 bg-cell pl-9 text-sm sm:text-base text-white placeholder:text-muted focus-visible:border-brand\/50 focus-visible:ring-brand\/20"/)
   assert.match(sectorPanel, /<StockRankingTable\b/)
@@ -269,7 +269,7 @@ test("QEO-151 leading-sector card body renders ticker and Qeo Composite for each
   assert.match(sectorPanel, /data-sector-top-stocks/)
   assert.match(sectorPanel, /topStocks\.map\(\(stock, stockIndex\) =>/)
   assert.match(sectorPanel, /stock\.ticker/)
-  assert.match(sectorPanel, /Qeo Composite/)
+  assert.match(sectorPanel, /Điểm tổng hợp/)
   assert.match(sectorPanel, /formatNumber\(stock\.ratingScore, 1\)/)
 })
 

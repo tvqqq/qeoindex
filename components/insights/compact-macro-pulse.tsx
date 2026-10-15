@@ -152,7 +152,7 @@ export function CompactMacroPulse({ pulse }: { pulse?: CompactMacroPulseData | n
       </div>
 
       <p className="mt-2.5 text-[10px] leading-4 text-slate-500">
-        TradingView timestamp là thời điểm QeoIndex đọc snapshot; ngoài giờ giao dịch có thể phản ánh last close. Macro chỉ cung cấp context và không ghi đè tín hiệu price/volume nội địa.
+        TradingView timestamp là thời điểm hệ thống đọc snapshot; ngoài giờ giao dịch có thể phản ánh last close. Macro chỉ cung cấp context và không ghi đè tín hiệu price/volume nội địa.
       </p>
     </div>
   )

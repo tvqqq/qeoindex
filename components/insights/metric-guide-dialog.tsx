@@ -72,7 +72,7 @@ function sourceBadge(source: MetricSource) {
     case "kfsp":
       return <Badge variant="outline" className="border-cyan-400/30 bg-cyan-400/10 text-cyan-300 text-[11px]">KFSP</Badge>
     case "qeoindex":
-      return <Badge variant="outline" className="border-brand/30 bg-brand/10 text-brand text-[11px]">QeoIndex derived</Badge>
+      return <Badge variant="outline" className="border-brand/30 bg-brand/10 text-brand text-[11px]">Chỉ số suy ra</Badge>
     case "market_feed":
       return <Badge variant="outline" className="border-amber-400/30 bg-amber-400/10 text-amber-300 text-[11px]">Market feed</Badge>
   }
@@ -361,7 +361,7 @@ export function MetricGuideDialog({ open, onOpenChange, initialMetricKey }: Metr
         <div className="flex shrink-0 items-center justify-between border-t border-white/[0.08] bg-[#0c1322] px-5 py-3 text-xs text-muted-2">
           <div className="flex items-center gap-2">
             <span className="inline-block size-2 rounded-full bg-emerald-400"></span>
-            <span>QeoIndex Standard Semantic Registry</span>
+            <span>Hướng dẫn chỉ báo</span>
           </div>
           <Button
             variant="outline"
