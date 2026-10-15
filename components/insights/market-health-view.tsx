@@ -512,6 +512,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
             />
 
             <Tooltip
+              position={{ x: 0 }}
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null
                 const item = payload[0].payload as ValuationPoint
@@ -522,7 +523,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                 const coverage = metric === "PE" ? item.qeoPeMarketCapCoveragePct : item.qeoPbMarketCapCoveragePct
                 const receivedTimestamp = receivedAt(item.qeoSourceObservedTo)
                 return (
-                  <div className="max-w-[min(280px,calc(100vw-32px))] break-words space-y-1 rounded-lg border border-white/15 bg-[#08131e] p-2.5 font-mono text-xs shadow-xl">
+                  <div className="max-w-[min(280px,calc(100vw-112px))] break-words space-y-1 rounded-lg border border-white/15 bg-[#08131e] p-2.5 font-mono text-xs shadow-xl">
                     <p className="mb-1 text-[11px] text-slate-400">{item.tradingDate}</p>
                     <p className="font-bold text-blue-400">VNINDEX: {item.vnindex?.toFixed(2) ?? "—"}</p>
                     <p className="font-bold text-lime-400">{metric} KFSP: {originalMetric?.toFixed(2) ?? "—"}</p>
