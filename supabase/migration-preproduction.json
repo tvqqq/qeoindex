@@ -235,10 +235,10 @@
     {
       "logicalName": "qeo408_historical_vni_prefix",
       "repositoryVersion": "20261015100000",
-      "productionVersion": null,
-      "state": "REPO_AHEAD",
-      "evidence": "PR #655 exact-head migration-drift registration; production function apply and assigned version are still pending",
-      "rationale": "Adds a separate service-role-only, source-backed reverse-prefix recovery RPC for the eight published sessions before the immutable 2026-10-13 anchor. Keep repository history ahead until exact-head drift, zero-to-latest replay, generated Database types, and contracts pass; promote to a mapped production version only after the separately gated dry-run/publish and production readback."
+      "productionVersion": "20261015114547",
+      "state": "MAPPED",
+      "evidence": "PR #655 exact-head ddb7bf3e65982185a5fb2c1c38eca224a73aa25c passed Verify job 116402496246 (1,473 tests and build), DB Drift job 116402496172, zero-to-latest DB replay, and generated-types parity; production migration 20261015114547 was applied and read back; guarded dry-run, publish, and idempotent replay passed.",
+      "rationale": "Supabase assigned production version 20261015114547 while repository replay retains the reviewed filename/version 20261015100000. The dry-run validated all eight stored prefix sessions with zero writes; wrong anchor hash/window were rejected; publication inserted eight rows; an identical replay inserted zero and matched all eight. Full summary/member fingerprints for Oct 13–15 remained unchanged."
     }
   ]
 }
