@@ -372,12 +372,12 @@ export function SectorMapPanel({
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-brand">Signal ranking & screener</div>
-                <h2 id="sector-modal-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu theo Qeo composite</h2>
+                <h2 id="sector-modal-title" className="mt-0.5 text-xl font-bold text-white tracking-tight sm:text-2xl font-sans">Top cổ phiếu theo Điểm tổng hợp</h2>
                 <p className="mt-0.5 text-xs font-medium text-slate-400 italic">Điểm cao hỗ trợ so sánh, không phải lệnh mua.</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Badge variant="outline" className="h-7 border-up/30 bg-up/10 px-3 text-xs font-bold text-up">Nguồn KFSP · điểm Qeo</Badge>
+              <Badge variant="outline" className="h-7 border-up/30 bg-up/10 px-3 text-xs font-bold text-up">Nguồn KFSP · điểm tổng hợp</Badge>
               <button type="button" onClick={() => setSelectedModalSector(null)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white" aria-label="Đóng popup (ESC)"><X className="size-5" /></button>
             </div>
           </div>
@@ -458,7 +458,7 @@ export function SectorMapPanel({
                 <div data-sector-top-stocks className="mt-4 flex-1 border-t border-white/[0.07] pt-3">
                   <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">
                     <span>Top cổ phiếu</span>
-                    <span>Qeo Composite</span>
+                    <span>Điểm tổng hợp</span>
                   </div>
                   {topStocks.length > 0 ? (
                     <div className="space-y-1.5">
@@ -473,12 +473,12 @@ export function SectorMapPanel({
                             </div>
                             <p className="truncate font-sans text-[10px] text-slate-500">{stock.companyName}</p>
                           </div>
-                          <strong className="shrink-0 rounded-md border border-purple-400/20 bg-purple-400/10 px-1.5 py-0.5 font-mono text-[11px] font-black text-purple-200" aria-label={`Qeo Composite ${formatNumber(stock.ratingScore, 1)}`}>{formatNumber(stock.ratingScore, 1)}</strong>
+                          <strong className="shrink-0 rounded-md border border-purple-400/20 bg-purple-400/10 px-1.5 py-0.5 font-mono text-[11px] font-black text-purple-200" aria-label={`Điểm tổng hợp ${formatNumber(stock.ratingScore, 1)}`}>{formatNumber(stock.ratingScore, 1)}</strong>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-dashed border-white/[0.06] bg-white/[0.015] px-2 py-3 text-center font-sans text-[11px] text-slate-500">Chưa có dữ liệu Qeo Composite cho ngành này.</div>
+                    <div className="rounded-lg border border-dashed border-white/[0.06] bg-white/[0.015] px-2 py-3 text-center font-sans text-[11px] text-slate-500">Chưa có dữ liệu điểm tổng hợp cho ngành này.</div>
                   )}
                 </div>
               </button>

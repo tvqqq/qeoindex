@@ -67,7 +67,7 @@ test("Insights is one continuous dashboard without primary tabs or a sticky sect
   }
   assert.doesNotMatch(content, /Điều hướng dashboard Insights|href="#sau-phien"/, "the removed section navigator must stay removed")
   assert.match(content, /<details[^>]*className="group[^"]*"/)
-  assert.match(content, /Top cổ phiếu theo Qeo composite/)
+  assert.match(content, /Top cổ phiếu theo Điểm tổng hợp/)
   assert.doesNotMatch(content, /Tổng quan VNIndex|Market pulse/, "duplicate Top 100 market summary must stay removed")
   assert.match(content, /data\.marketClose\?\.isStale/)
   assert.match(content, /Dữ liệu thị trường cũ \(Stale\)/)

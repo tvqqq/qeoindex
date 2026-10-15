@@ -129,7 +129,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
     horizon: "1D",
     direction: "higher_is_risk",
     beginner: {
-      what: "Chỉ số đo lường mức độ rủi ro thị trường ngắn hạn theo công thức heuristic của QeoIndex, thang điểm 5–95.",
+      what: "Chỉ số đo lường mức độ rủi ro thị trường ngắn hạn theo công thức heuristic của hệ thống, thang điểm 5–95.",
       read: "<= 35 là rủi ro thấp, xu hướng ổn định; 36–60 là trung bình, cần chọn lọc; > 60 là rủi ro cao, ưu tiên phòng thủ.",
       combineWith: ["market_breadth", "market_liquidity", "vnindex_close"],
       notMeaning: "Không phải xác suất thị trường giảm và không phải model độc quyền của KFSP.",
@@ -297,7 +297,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
     horizon: "1W-2W",
     direction: "higher_is_supportive",
     beginner: {
-      what: "Sức mạnh giá tương đối ngắn hạn của cổ phiếu so với thị trường trong read-model của QeoIndex, thang điểm 0–100.",
+      what: "Sức mạnh giá tương đối ngắn hạn của cổ phiếu so với thị trường trong read-model của hệ thống, thang điểm 0–100.",
       read: ">= 70: sức mạnh ngắn hạn vượt trội; 40–69: trung tính; < 40: yếu ngắn hạn.",
       combineWith: ["rs_medium", "kfsp_stock_rrg_state", "weekly_change_pct"],
       notMeaning: "Không phải chỉ báo RSI 14 phiên; không dùng mốc cân bằng 100 của RRG.",
@@ -413,7 +413,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
       what: "Phần trăm thay đổi giá của cổ phiếu trong cửa sổ 1 tuần theo tính toán của provider.",
       read: "Tăng mạnh (> +5%) cho thấy đà bứt phá ngắn hạn; giảm sâu (> -5%) cảnh báo áp lực chốt lời/bán mạnh.",
       combineWith: ["monthly_change_pct", "price_vs_sma20_pct", "volume_vs_previous_session_pct"],
-      notMeaning: "Đây là biến động cửa sổ provider, không phải delta snapshot 7D trong dialog lịch sử của QeoIndex.",
+      notMeaning: "Đây là biến động cửa sổ provider, không phải delta snapshot 7D trong dialog lịch sử.",
     },
     ai: {
       meaning: "1-week price change percentage calculated in provider snapshot window.",
@@ -439,7 +439,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
       what: "Phần trăm thay đổi giá của cổ phiếu trong cửa sổ 1 tháng theo provider.",
       read: "Thể hiện xu hướng giá trung hạn; so sánh với 1W để biết đà tăng đang tăng tốc hay chững lại.",
       combineWith: ["weekly_change_pct", "rs_medium", "price_vs_sma50_pct"],
-      notMeaning: "Không phải delta snapshot 30D của QeoIndex history dialog.",
+      notMeaning: "Không phải delta snapshot 30D của dialog lịch sử.",
     },
     ai: {
       meaning: "1-month price change percentage calculated in provider snapshot window.",
@@ -454,7 +454,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
   },
   {
     key: "kfsp_composite_score",
-    label: "Qeo composite",
+    label: "Điểm tổng hợp",
     aliases: ["rating", "rating_score", "kfsp_composite_score", "diem_tong_hop"],
     category: "quality",
     source: "qeoindex",
@@ -462,7 +462,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
     horizon: "daily",
     direction: "higher_is_supportive",
     beginner: {
-      what: "Điểm tổng hợp do QeoIndex tính bằng trung bình cộng số học (arithmetic mean) của các chỉ số sẵn có: 4M, CANSLIM, RS-S cổ phiếu, RS-S ngành.",
+      what: "Điểm tổng hợp do hệ thống tính bằng trung bình cộng số học (arithmetic mean) của các chỉ số sẵn có: 4M, CANSLIM, RS-S cổ phiếu, RS-S ngành.",
       read: ">= 75: thuộc nhóm toàn diện hàng đầu; 60–74: khá tốt; < 50: thiếu động lực tổng thể. Các thành phần null bị loại khỏi phép tính trung bình.",
       combineWith: ["kfsp_score_4m", "kfsp_canslim_score", "rs_short", "kfsp_stock_rrg_state"],
       notMeaning: "Không phải khuyến nghị của provider, không phải xác suất tăng giá và không phải alpha đã backtest.",
@@ -1193,7 +1193,7 @@ export const INSIGHTS_METRIC_SEMANTICS: readonly InsightMetricSemantic[] = [
       ],
       forbiddenInferences: ["Do not fabricate RRG coordinates when only categorical state is published."],
     },
-    provenanceNote: "Mô hình luân chuyển RRG ngành của QeoIndex.",
+    provenanceNote: "Mô hình luân chuyển RRG ngành của hệ thống.",
   },
   {
     key: "effort_result",

@@ -85,10 +85,10 @@ test("QEO-186 persists KFSP candidate returns and feeds same-session candidates 
   assert.match(normalizer, /estimated_index_points:\s*contributor\.estimatedIndexPoints/)
 })
 
-test("QEO-186 UI discloses that index-point contribution is a Qeo estimate from KFSP inputs", () => {
+test("QEO-186 UI discloses that index-point contribution is an estimate from KFSP inputs", () => {
   const dashboard = read("components/insights/market-close-dashboard.tsx")
   const contributors = read("components/insights/vnindex-contributors-view.tsx")
-  assert.match(`${dashboard}\n${contributors}`, /Qeo[^\n]*(ước tính|estimate)[^\n]*KFSP/i)
+  assert.match(`${dashboard}\n${contributors}`, /Ước tính từ vốn hóa & biến động giá KFSP/)
 })
 
 import "./qeo188-leadership-concentration.cases.ts"

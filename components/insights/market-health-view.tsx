@@ -439,8 +439,8 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
   }
 
   const qeoMetricValue = (item: ValuationPoint) => metric === "PE" ? item.qeoPe : item.qeoPb
-  const qeoMetricLegend = metric === "PE" ? "P/E Qeo · loại VIC/VHM" : "P/B Qeo · loại VIC/VHM"
-  const qeoMetricTooltip = metric === "PE" ? "P/E nhóm có P/E dương · loại VIC/VHM" : "P/B nhóm có P/B dương · loại VIC/VHM"
+  const qeoMetricLegend = metric === "PE" ? "P/E (trừ VIN)" : "P/B (trừ VIN)"
+  const qeoMetricTooltip = metric === "PE" ? "P/E (trừ VIN) · nhóm có P/E dương" : "P/B (trừ VIN) · nhóm có P/B dương"
   const receivedAt = (value: string | null) => {
     if (!value || !Number.isFinite(new Date(value).getTime())) return null
     return new Date(value).toLocaleString("vi-VN", {
@@ -467,7 +467,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
         </div>
         <div className="flex items-center gap-1.5 text-orange-400">
           <span className="w-4 border-t-2 border-dashed border-orange-400" />
-          <span>Qeo VNINDEX · loại VIC/VHM</span>
+          <span>VNI (trừ VIN)</span>
         </div>
         <div className="flex items-center gap-1.5 text-fuchsia-400">
           <span className="w-4 border-t-2 border-dotted border-fuchsia-400" />
@@ -527,7 +527,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                     <p className="mb-1 text-[11px] text-slate-400">{item.tradingDate}</p>
                     <p className="font-bold text-blue-400">VNINDEX: {item.vnindex?.toFixed(2) ?? "—"}</p>
                     <p className="font-bold text-lime-400">{metric} KFSP: {originalMetric?.toFixed(2) ?? "—"}</p>
-                    <p className="font-bold text-orange-400">Qeo VNINDEX · loại VIC/VHM: {item.qeoEstimatedVnindexValue?.toFixed(2) ?? "—"}</p>
+                    <p className="font-bold text-orange-400">VNI (trừ VIN): {item.qeoEstimatedVnindexValue?.toFixed(2) ?? "—"}</p>
                     <p className="font-bold text-fuchsia-400">{qeoMetricTooltip}: {estimateMetric?.toFixed(2) ?? "—"}</p>
                     <p className="text-[10px] text-slate-400">
                       {count == null || total == null ? "— mã" : `${count}/${total} mã`}
@@ -536,7 +536,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
                     </p>
                     {receivedTimestamp && (
                       <p className="text-[10px] text-slate-500">
-                        Qeo nhận lúc {receivedTimestamp} ICT; không phải timestamp cập nhật từ nhà cung cấp.
+                        Hệ thống nhận snapshot lúc {receivedTimestamp} ICT; không phải timestamp cập nhật từ nhà cung cấp.
                       </p>
                     )}
                   </div>
@@ -633,7 +633,7 @@ function ValuationBandChart({ data, metric, show1SD, show2SD }: ValuationChartPr
               dot={isolatedDot("qeoEstimatedVnindexValue", "#f97316")}
               connectNulls={false}
               activeDot={{ r: 4, fill: "#f97316" }}
-              name="Qeo VNINDEX · loại VIC/VHM"
+              name="VNI (trừ VIN)"
             />
             <Line
               yAxisId="valuation"
@@ -750,9 +750,9 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
 
           <section className="mt-5 space-y-3 border-t border-white/[0.08] pt-4" data-qeo-ex-vnindex-estimate>
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-100">Qeo ước tính · HOSE loại VIC, VHM</h3>
+              <h3 className="text-sm font-bold text-slate-100">VNI (trừ VIN) · HOSE loại VIC, VHM</h3>
               <p className="text-[11px] leading-5 text-slate-400">
-                Ước tính độc lập của Qeo từ dữ liệu cổ phiếu HOSE của KFSP; không phải VNINDEX chính thức hoặc danh sách thành phần chính thức. Thời điểm ghi nhận là lúc Qeo nhận dữ liệu, không phải timestamp cập nhật từ nhà cung cấp.
+                Ước tính độc lập từ dữ liệu cổ phiếu HOSE của KFSP; không phải VNINDEX chính thức hoặc danh sách thành phần chính thức. “Trừ VIN” ở đây nghĩa là loại đúng hai mã VIC và VHM. Thời điểm ghi nhận là lúc hệ thống nhận dữ liệu, không phải timestamp cập nhật từ nhà cung cấp.
               </p>
             </div>
               {latestQeoEstimate && latestQeoEstimate.tradingDate !== data.sessionDate && (
@@ -772,7 +772,7 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
                     const ratioName = isPe ? "P/E" : "P/B"
                     return (
                       <div key={metric} className="rounded-lg border border-white/[0.07] bg-black/15 px-2.5 py-2">
-                        <p className="font-semibold text-amber-200">{ratioName} nhóm có {ratioName} dương</p>
+                        <p className="font-semibold text-amber-200">{ratioName} (trừ VIN) · nhóm có {ratioName} dương</p>
                         <p className="font-mono text-slate-200">{value == null ? "—" : value.toFixed(2)}</p>
                         <p>{memberCount}/{totalMemberCount} mã · {coverage == null ? "chưa có độ phủ vốn hóa" : `${coverage.toFixed(2)}% vốn hóa`}</p>
                       </div>
@@ -791,7 +791,7 @@ export function MarketHealthView({ data, history = [] }: MarketHealthViewProps) 
                   {latestQeoEstimate.providerBreadthCount == null ? "" : ` · đối chiếu độ rộng VNINDEX ${latestQeoEstimate.providerBreadthCount} mã`}
                 </p>
                 <p>
-                  Chỉ số nối phiên theo vốn hóa tham chiếu từ biến động giá KFSP; P/E/P/B là trung bình điều hòa theo vốn hóa của nhóm có bội số dương. Mã thiếu, bằng 0 hoặc âm không tham gia mẫu số; số mã và độ phủ vốn hóa được hiển thị ở trên.
+                  VNI (trừ VIN) nối phiên theo vốn hóa tham chiếu từ biến động giá KFSP; P/E/P/B (trừ VIN) là trung bình điều hòa theo vốn hóa của nhóm có bội số dương. “Trừ VIN” ở đây loại đúng hai mã VIC và VHM. Mã thiếu, bằng 0 hoặc âm không tham gia mẫu số; số mã và độ phủ vốn hóa được hiển thị ở trên.
                 </p>
               </div>
             )}

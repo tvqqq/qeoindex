@@ -53,7 +53,7 @@ test("rating table exposes keyboard modal, grouped dashboard tabs, standalone Wy
   assert.match(insightsDashboard, /function RatingDialog/)
   assert.match(insightsDashboard, /aria-label={`Mở hồ sơ rating \$\{row\.ticker\}`}/)
   assert.match(insightsDashboard, /event\.key === "Enter" \|\| event\.key === " "/)
-  assert.match(insightsDashboard, /QeoIndex state radar/)
+  assert.match(insightsDashboard, /Radar trạng thái thị trường/)
   assert.match(insightsDashboard, /RatingHistoryChart/)
   assert.match(insightsDashboard, /AccumulationHeatmap/)
   assert.match(insightsDashboard, /showSectorGroups/)
