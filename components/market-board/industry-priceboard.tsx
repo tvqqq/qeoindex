@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { BarChart3, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
 import { getSectorIcon } from "@/components/stock-identity"
-import styles from "@/app/market-board-performance.module.css"
 import {
   averagePriceboardChange,
   defaultIndustryColumnOrder,
@@ -104,16 +103,13 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
             style={{ backgroundColor: background, width: `${progress.fillPercent}%` }}
           />
           {progress.exceeded ? (
-            <>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
-                <span
-                  data-priceboard-volume-overflow
-                  className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
-                  style={{ width: `${progress.overflowPercent}%` }}
-                />
-              </span>
-              <span key={Math.floor(progress.ratio * 10)} aria-hidden="true" className={`${styles.volumeSurgeMarker} pointer-events-none absolute right-[3px] top-[7px] h-[9px] w-[3px] rounded-full bg-white/65`} />
-            </>
+            <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
+              <span
+                data-priceboard-volume-overflow
+                className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
+                style={{ width: `${progress.overflowPercent}%` }}
+              />
+            </span>
           ) : null}
         </>
       ) : null}
