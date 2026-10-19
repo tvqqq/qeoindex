@@ -35,7 +35,7 @@ import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { IndustryPriceboard } from "@/components/market-board/industry-priceboard"
 import { MarketContextStrip } from "@/components/market-board/market-context-strip"
-import { industryLabelForStock } from "@/modules/market/board/industry-priceboard"
+import { industryLabelForStock, reconcileBoardSessionVolume } from "@/modules/market/board/industry-priceboard"
 import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { isTradingSessionOpen, isLunchBreak } from "@/modules/market/realtime/session-countdown"
@@ -107,6 +107,9 @@ type QuoteReconcileResponse = {
     change: number | null
     changePercent: number | null
     volume: number | null
+    volumeSessionDay?: string
+    volumeAsOf?: string
+    volumeSource?: "supabase-snapshot" | "dnse-ws"
     foreignBuyVolume?: number | null
     foreignSellVolume?: number | null
     foreignBuyValue?: number | null
@@ -741,6 +744,9 @@ export function LiveMarketBoard({
         change: 0,
         changePercent: 0,
         volume: 0,
+        volumeSessionDay: undefined,
+        volumeAsOf: undefined,
+        volumeSource: undefined,
         foreignBuyVolume: undefined,
         foreignSellVolume: undefined,
         foreignBuyValue: undefined,
@@ -931,6 +937,7 @@ export function LiveMarketBoard({
           const changePercent = reference > 0
             ? (change / reference) * 100
             : (quote.changePercent ?? existing?.changePercent ?? 0)
+          const stableVolume = reconcileBoardSessionVolume(existing, quote, requestedSessionDay)
 
           nextQuotes[symbol] = {
             ...(existing ?? {}),
@@ -941,7 +948,10 @@ export function LiveMarketBoard({
             floor: quote.floor === null ? undefined : (quote.floor ?? existing?.floor),
             change,
             changePercent,
-            volume: hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume),
+            volume: stableVolume?.volume ?? (hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume)),
+            volumeSessionDay: stableVolume?.volumeSessionDay,
+            volumeAsOf: stableVolume?.volumeAsOf,
+            volumeSource: stableVolume?.volumeSource,
             foreignBuyVolume: hasCurrentSessionForeignEvidence ? existing?.foreignBuyVolume : (hasNewerLiveQuote ? existing?.foreignBuyVolume : (quote.foreignBuyVolume ?? existing?.foreignBuyVolume)),
             foreignSellVolume: hasCurrentSessionForeignEvidence ? existing?.foreignSellVolume : (hasNewerLiveQuote ? existing?.foreignSellVolume : (quote.foreignSellVolume ?? existing?.foreignSellVolume)),
             foreignBuyValue: hasCurrentSessionForeignEvidence ? existing?.foreignBuyValue : (hasNewerLiveQuote ? existing?.foreignBuyValue : (quote.foreignBuyValue ?? existing?.foreignBuyValue)),
@@ -1231,6 +1241,12 @@ export function LiveMarketBoard({
             if (reference > 0) dailyReferences.current[ticker] = reference
             const change = reference > 0 ? price - reference : previous?.change
             const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
+            const stableVolume = reconcileBoardSessionVolume(previous, totalVolume > 0 ? {
+              volume: totalVolume,
+              volumeSessionDay: vietnamSessionDay(now),
+              volumeAsOf: receivedAt,
+              volumeSource: "dnse-ws",
+            } : null, vietnamSessionDay(now))
             return {
               ...previous,
               symbol: ticker,
@@ -1240,7 +1256,10 @@ export function LiveMarketBoard({
               floor: floor ? (floor > 1000 ? floor / 1000 : floor) : previous?.floor,
               change,
               changePercent,
-              volume: totalVolume || previous?.volume,
+              volume: stableVolume?.volume ?? previous?.volume,
+              volumeSessionDay: stableVolume?.volumeSessionDay,
+              volumeAsOf: stableVolume?.volumeAsOf,
+              volumeSource: stableVolume?.volumeSource,
               updatedAt: receivedAt,
             }
           })
@@ -1703,6 +1722,7 @@ export function LiveMarketBoard({
             userId={userId}
             canonicalSymbols={canonicalSymbols}
             vn30Membership={vn30Membership}
+            sessionDay={currentSessionDay}
             showPriceVolume={showIndustryPriceVolume}
           />
         ) : mode === "sector" ? (
