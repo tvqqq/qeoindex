@@ -1406,7 +1406,8 @@ export function LiveMarketBoard({
   }, [reconnectKey, pushFiveMinuteClose, trackedSymbols, canonicalTrackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote, scheduleMarketUiCommit])
 
   const normalizedQuery = query.trim().toUpperCase()
-  const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
+  // Recompute on state updates so an open tab follows a session-day rollover.
+  const currentSessionDay = vietnamSessionDay()
   const displayQuotes = useMemo(() => {
     let next: Record<string, LiveStockQuote | IndexQuote> | null = null
     for (const stock of universe) {
