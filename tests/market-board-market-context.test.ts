@@ -263,7 +263,7 @@ test("combined indices preserve original labels below bar with gaps only between
   assert.ok(summary.includes("border-amber-400/35"))
   assert.ok(summary.includes('data-index-breadth-progress'))
   assert.ok(summary.includes("Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}"))
-  assert.ok(summary.includes("w-full overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes("w-full gap-[3px] overflow-hidden rounded-full bg-zinc-800"))
   assert.ok(summary.includes("total > 0"))
   assert.ok(summary.includes("indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])"))
   assert.ok(summary.includes("progress.shares[0]"))
