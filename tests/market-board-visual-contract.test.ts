@@ -276,13 +276,17 @@ test("market card cleanup preserves one-row desktop fit, visible breadth and exp
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   const impact = contextStripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
   assert.ok(summary.includes("data-index-breadth-progress"))
-  const bar = summary.indexOf('relative flex w-full gap-[3px] overflow-hidden rounded-full bg-zinc-800')
-  const counts = summary.indexOf('chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]"')
+  const bar = summary.indexOf('relative flex w-full overflow-hidden rounded-full bg-zinc-800')
+  const counts = summary.indexOf('chartHeader ? "h-[18px] text-xs leading-[18px]"')
   assert.ok(bar >= 0 && counts > bar)
   assert.equal(summary.includes("data-index-breadth-summary"), false)
   assert.ok(summary.includes('progress.centers[0]'))
   assert.ok(summary.includes('progress.centers[1]'))
   assert.ok(summary.includes('progress.centers[2]'))
+  assert.ok(summary.includes('-skew-x-[26deg]'))
+  assert.ok(summary.includes("data-index-breadth-slant"))
+  assert.ok(summary.includes('progress.shares[0] > 0 && (progress.shares[1] > 0 || progress.shares[2] > 0)'))
+  assert.ok(summary.includes('progress.shares[1] > 0 && progress.shares[2] > 0'))
   assert.ok(summary.includes('motion-safe:transition-[left]'))
   assert.ok(summary.includes('progress.shares[0] > 0 ? <span'))
   assert.ok(summary.includes('progress.shares[1] > 0 ? <span'))
@@ -529,7 +533,7 @@ test("Chart 1m compact headers are equal-height and footer owns ICT and one refr
   assert.ok(summary.includes('chartHeader ? "text-[clamp(18px,1.8vw,24px)]"'))
   assert.ok(summary.includes('chartHeader ? "text-[clamp(14px,1.3vw,18px)]"'))
   assert.ok(summary.includes('chartHeader ? "justify-end text-xs"'))
-  assert.ok(summary.includes('chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]"'))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
   assert.ok(footer.includes('id="market-board-chart-ict-clock"'))
   assert.ok(footer.includes('onClick={onRefresh}'))
   assert.ok(footer.includes('disabled={isRefreshing}'))
@@ -542,7 +546,7 @@ test("Chart 1m compact headers are equal-height and footer owns ICT and one refr
   assert.equal(chart.includes("History theo timeframe từ DNSE"), false)
 })
 
-test("Chart 1m keeps percent beside label and original colored counts below gapped bar on right", () => {
+test("Chart 1m keeps original counts below slanted bar and follows the segment centers", () => {
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   const chart = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
   assert.ok(summary.includes('chartHeader ? "min-w-0" : "contents"'))
@@ -551,8 +555,12 @@ test("Chart 1m keeps percent beside label and original colored counts below gapp
   assert.ok(summary.includes('grid h-[132px] min-w-0 grid-cols-1'))
   assert.ok(summary.includes('sm:h-[96px] sm:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]'))
   assert.ok(summary.includes('chartHeader ? "justify-end text-xs"'))
-  assert.ok(summary.includes('chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]"'))
-  assert.ok(summary.includes("relative flex w-full gap-[3px] overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
+  assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[0]}%` }}'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[1]}%` }}'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[2]}%` }}'))
+  assert.equal(summary.includes('style={chartHeader ? undefined :'), false)
   assert.ok(chart.includes('sm:h-[96px] xl:hidden'))
   assert.equal(summary.includes('h-[160px]'), false)
 })
