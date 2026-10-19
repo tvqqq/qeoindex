@@ -103,15 +103,13 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
             style={{ backgroundColor: background, width: `${progress.fillPercent}%` }}
           />
           {progress.exceeded ? (
-            <>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
-                <span
-                  data-priceboard-volume-overflow
-                  className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
-                  style={{ width: `${progress.overflowPercent}%` }}
-                />
-              </span>
-            </>
+            <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
+              <span
+                data-priceboard-volume-overflow
+                className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
+                style={{ width: `${progress.overflowPercent}%` }}
+              />
+            </span>
           ) : null}
         </>
       ) : null}
