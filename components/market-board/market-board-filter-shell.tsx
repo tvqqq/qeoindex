@@ -98,7 +98,7 @@ function mergeBatchQuotes(
     if (!quote?.price || !Number.isFinite(quote.price) || quote.price <= 0) continue
     const existing = next[symbol]
     const previous = existing && !isIndexQuote(existing) ? existing : undefined
-    const stableVolume = reconcileBoardSessionVolume(previous, quote, vietnamSessionDay())
+    const stableVolume = reconcileBoardSessionVolume(previous, { ...quote, volume: quote.volume ?? undefined }, vietnamSessionDay())
     next[symbol] = {
       ...previous,
       symbol,
