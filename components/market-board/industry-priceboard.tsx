@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { BarChart3, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
 import { getSectorIcon } from "@/components/stock-identity"
-import styles from "@/app/market-board-performance.module.css"
 import {
   averagePriceboardChange,
   defaultIndustryColumnOrder,
@@ -112,7 +111,6 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
                   style={{ width: `${progress.overflowPercent}%` }}
                 />
               </span>
-              <span key={Math.floor(progress.ratio * 10)} aria-hidden="true" className={`${styles.volumeSurgeMarker} pointer-events-none absolute right-[3px] top-[7px] h-[9px] w-[3px] rounded-full bg-white/65`} />
             </>
           ) : null}
         </>
