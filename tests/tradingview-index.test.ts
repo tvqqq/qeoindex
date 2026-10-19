@@ -265,6 +265,34 @@ test("QEO-409 bounds 1m history requests and preserves real partial results per 
   assert.match(routeSource, /INDEX_CHART_SYMBOLS\.some\(\(symbol\) => candles\[symbol\]\.length > 0\)/)
 })
 
+test("QEO-422 races index history to the first valid transport and retains real partial windows", () => {
+  // A real response taking longer than the former 4s public timeout remains eligible.
+  assert.match(historySource, /PUBLIC_CHART_TIMEOUT_MS = 12_000/)
+  assert.match(historySource, /OHLC_ATTEMPT_TIMEOUT_MS = 8_000/)
+  assert.match(historySource, /SIGNED_HEDGE_DELAY_MS = 2_000/)
+
+  // Fast public success wins before the signed hedge; a winner aborts its losing peers.
+  assert.match(historySource, /const publicRace = Promise\.any\(publicAttempts\.map/)
+  assert.match(historySource, /const signedRace = new Promise/)
+  assert.match(historySource, /hedgeTimer = setTimeout\(/)
+  assert.match(historySource, /await Promise\.any\(\[publicRace, signedRace\]\)/)
+  assert.match(historySource, /clearTimeout\(hedgeTimer\)[\s\S]*abortController\.abort\(\)/)
+  assert.match(historySource, /AbortSignal\.any\(\[cancellationSignal, AbortSignal\.timeout\(PUBLIC_CHART_TIMEOUT_MS\)\]\)/)
+  assert.match(historySource, /AbortSignal\.any\(\[cancellationSignal, AbortSignal\.timeout\(OHLC_ATTEMPT_TIMEOUT_MS\)\]\)/)
+
+  // Windows are combined only within one transport, preserving successful real windows.
+  assert.match(historySource, /Promise\.allSettled\(windows\.map\(loadWindow\)\)/)
+  assert.match(historySource, /segments\.flatMap\(\(result\) => result\.status === "fulfilled" \? result\.value : \[\]\)/)
+  assert.match(historySource, /openapi INDEX\/symbol \$\{sourceResolution\}/)
+  assert.match(historySource, /openapi DERIVATIVE\/symbol \$\{sourceResolution\}/)
+  assert.match(historySource, /DNSE OHLC unavailable for \$\{symbol\} \$\{resolution\}/)
+  assert.match(historySource, /symbol === "VNINDEX" \? \["index", "stock"\] : \["derivative"\]/)
+
+  // Failure diagnostics remain bounded and the route logs all compact attempt labels.
+  assert.match(historySource, /\.slice\(0, 1_400\)/)
+  assert.match(routeSource, /message\.slice\(0, 1_400\)/)
+})
+
 test("QEO-410 previous-session level comes from the immediately prior trading session, not the new open", () => {
   const previousClose = { time: epoch("2026-10-09T07:44:00Z"), open: 1700, high: 1704, low: 1699, close: 1702.45, volume: 100 }
   const todayOpen = { time: epoch("2026-10-12T02:00:00Z"), open: 1699, high: 1701, low: 1698, close: 1700, volume: 50 }
