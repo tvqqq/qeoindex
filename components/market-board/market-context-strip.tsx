@@ -673,10 +673,27 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
       </div>
       <div
         className={`min-w-0 ${chartHeader ? "mt-1.5" : "mt-auto pt-1"}`}
-        aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
+        role="img"
+        aria-label={hasBreadth ? `Tổng ${total} mã: tăng ${breadth[0]}, đứng giá ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
         data-index-breadth-progress
       >
+        <div
+          data-index-breadth-summary
+          className={`mb-1 flex min-w-0 items-baseline gap-1 whitespace-nowrap font-sans font-semibold tabular-nums ${chartHeader ? "text-[11px] sm:text-xs" : "text-[10px]"}`}
+          aria-hidden="true"
+        >
+          <span className="text-zinc-400">Tổng <strong className="text-zinc-100">{hasBreadth ? total : "—"}</strong> mã</span>
+          <span className="inline-flex items-baseline font-bold">
+            <span className="text-zinc-500">(</span>
+            <span className="text-emerald-400"><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>{hasBreadth ? breadth[0] : "—"}</span></span>
+            <span className="text-zinc-500">/</span>
+            <span className="text-amber-300"><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>{hasBreadth ? breadth[1] : "—"}</span></span>
+            <span className="text-zinc-500">/</span>
+            <span className="text-rose-400"><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>{hasBreadth ? breadth[2] : "—"}</span></span>
+            <span className="text-zinc-500">)</span>
+          </span>
+        </div>
         <div className={`relative flex w-full overflow-hidden rounded-full bg-zinc-800 ${chartHeader ? "h-[9px]" : "h-[8px]"}`} aria-hidden="true">
           {hasBreadth && total > 0 ? <>
             <span className={`bg-[#22c98a] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[0]}%` }} />
@@ -684,11 +701,6 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
             <span className={`bg-[#ff4757] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[2]}%` }} />
           </> : null}
           {breadthSweepRevision > 0 ? <span key={breadthSweepRevision} className="market-breadth-change-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3" /> : null}
-        </div>
-        <div className={`mt-1 w-full font-sans font-bold tabular-nums ${chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]" : "relative h-[14px] text-[9px] leading-[14px]"}`} aria-hidden="true">
-          <span className={`whitespace-nowrap text-emerald-400 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
-          <span className={`whitespace-nowrap text-amber-300 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
-          <span className={`whitespace-nowrap text-red-400 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
         </div>
       </div>
       </div>
