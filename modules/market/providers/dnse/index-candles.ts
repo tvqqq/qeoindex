@@ -2,6 +2,7 @@ import "server-only"
 
 import { createHmac, randomUUID } from "node:crypto"
 import { buildDnseRequestWindows } from "@/modules/market/providers/dnse/request-windows"
+import { raceHistoryTransports } from "@/modules/market/providers/dnse/history-race"
 import {
   normalizeCandleBar,
   resampleCandleSeries,
@@ -247,7 +248,6 @@ export async function fetchDnseIndexCandleHistory(
   const to = Math.floor(now.getTime() / 1000)
   const from = to - config.lookbackDays * 24 * 60 * 60
   const failures = new Map<string, string>()
-  const abortController = new AbortController()
   const publicAttempts = PUBLIC_CHART_BASE_URLS.flatMap((baseUrl) =>
     publicKindsFor(symbol).flatMap((kind) =>
       publicResolutionCandidates(config.sourceResolution).map((sourceResolution) => ({
@@ -273,7 +273,7 @@ export async function fetchDnseIndexCandleHistory(
     throw new Error(message)
   })
 
-  const publicRace = Promise.any(publicAttempts.map((attempt) => trackFailure(
+  const runPublic = (cancellationSignal: AbortSignal) => Promise.any(publicAttempts.map((attempt) => trackFailure(
     attempt,
     runOhlcAttempt(
       symbol,
@@ -288,40 +288,36 @@ export async function fetchDnseIndexCandleHistory(
         symbol,
         from: window.from,
         to: window.to,
-      }, abortController.signal)),
+      }, cancellationSignal)),
     ),
   )))
 
   const signedResolutions = resolution === "1" ? ["1", "1m"] : [config.sourceResolution]
-  let hedgeTimer: ReturnType<typeof setTimeout> | undefined
-  const signedRace = new Promise<OhlcAttemptResult>((resolve, reject) => {
-    hedgeTimer = setTimeout(() => {
-      const signedAttempts = signedResolutions.map((sourceResolution) =>
-        openApiAttemptFor(symbol, sourceResolution, from, to),
-      )
-      const candidates = signedAttempts.map((attempt) => trackFailure(
+  const runSigned = (cancellationSignal: AbortSignal) => {
+    const signedAttempts = signedResolutions.map((sourceResolution) =>
+      openApiAttemptFor(symbol, sourceResolution, from, to),
+    )
+    return Promise.any(signedAttempts.map((attempt) => trackFailure(
+      attempt,
+      runOhlcAttempt(
+        symbol,
+        resolution,
+        limit,
+        from,
+        to,
+        windows,
         attempt,
-        runOhlcAttempt(
-          symbol,
-          resolution,
-          limit,
-          from,
-          to,
-          windows,
-          attempt,
-          async (window) => normalizeDnseChartHistory(await signedGet({
-            ...attempt.params,
-            from: window.from,
-            to: window.to,
-          }, abortController.signal)),
-        ),
-      ))
-      void Promise.any(candidates).then(resolve, reject)
-    }, SIGNED_HEDGE_DELAY_MS)
-  })
+        async (window) => normalizeDnseChartHistory(await signedGet({
+          ...attempt.params,
+          from: window.from,
+          to: window.to,
+        }, cancellationSignal)),
+      ),
+    )))
+  }
 
   try {
-    const { attempt, bars } = await Promise.any([publicRace, signedRace])
+    const { attempt, bars } = await raceHistoryTransports(runPublic, runSigned, SIGNED_HEDGE_DELAY_MS)
     return {
       symbol,
       resolution,
@@ -331,8 +327,5 @@ export async function fetchDnseIndexCandleHistory(
     }
   } catch {
     throw new Error(`DNSE OHLC unavailable for ${symbol} ${resolution} (${[...failures.values()].join("; ").slice(0, 1_400)})`)
-  } finally {
-    if (hedgeTimer !== undefined) clearTimeout(hedgeTimer)
-    abortController.abort()
   }
 }
