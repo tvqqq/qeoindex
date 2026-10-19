@@ -424,7 +424,7 @@ test("QEO-419 exact prior-session EOD read is bounded and seeded into the board"
   assert.match(stocks, /previousSessionVolume\?: number \| null/)
   assert.match(source, /showPriceVolume \? industryPriceboardVolumeProgress\(verifiedVolume\?\.volume, stock\.previousSessionVolume\) : null/)
   assert.match(source, /style=\{\{ backgroundColor: showPriceVolume \? "rgba\(255, 255, 255, 0\.025\)" : background \}\}/)
-  assert.match(source, /key=\{Math\.floor\(progress\.ratio \* 10\)\}/)
+  assert.equal(source.includes("key={Math.floor(progress.ratio * 10)}"), false)
   assert.doesNotMatch(css, /volumeSurgeMarker|volumeSurgeOnce/)
   assert.match(css, /prefers-reduced-motion: reduce/)
 })
