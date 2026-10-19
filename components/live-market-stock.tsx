@@ -33,6 +33,10 @@ export interface LiveStockQuote {
   change?: number
   changePercent: number
   volume?: number
+  /** Trusted cumulative matched volume evidence; untagged broker volumes are display-only. */
+  volumeSessionDay?: string
+  volumeAsOf?: string
+  volumeSource?: "supabase-snapshot" | "dnse-ws"
   foreignBuyValue?: number
   foreignSellValue?: number
   foreignBuyVolume?: number

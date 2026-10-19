@@ -7,6 +7,7 @@ import { getVnTimeSeconds } from "@/modules/market/realtime/session-countdown"
 import { getCanonicalUniverse } from "@/modules/market/universe/index"
 import { MARKET_UNIVERSE_MAX_SIZE } from "@/modules/market/universe/selection"
 import { getCanonicalBoardOverviewSnapshots } from "@/modules/shared/supabase/board-overview"
+import { verifiedBoardSessionVolume } from "@/modules/market/board/industry-priceboard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -110,6 +111,20 @@ export async function POST(request: Request) {
           foreignNetValue: 0,
         }
       }
+    }
+
+    // Broker batch volumes have no provider day/as-of. Only verified same-day
+    // snapshot volumes can refresh the priceboard's cumulative-volume progress.
+    for (const symbol of symbols) {
+      const snapshot = snapshots[symbol]
+      if (!quotes[symbol] || !snapshot) continue
+      const evidence = verifiedBoardSessionVolume({
+        volume: snapshot.total_volume,
+        volumeSessionDay: snapshot.session_date,
+        volumeAsOf: snapshot.updated_at,
+        volumeSource: "supabase-snapshot",
+      }, calendarDate)
+      if (evidence) quotes[symbol] = { ...quotes[symbol], ...evidence }
     }
 
     const missingSymbols = symbols.filter((symbol) => !quotes[symbol]?.price || Number(quotes[symbol].price) <= 0)

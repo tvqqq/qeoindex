@@ -209,6 +209,17 @@ test("orderbook popup restores pre-freeze pointer drag and live stream while pre
   assert.match(orderbookSource, /will-change-\[width,height,left,top\]/)
   assert.match(orderbookSource, /const startResize = useCallback\(/)
 })
+test("QEO-426 restores only authenticated same-session volume evidence after F5", () => {
+  assert.match(boardSource, /qeoindex:board:session-volume:v1:/)
+  assert.match(boardSource, /window\.sessionStorage\.getItem\(key\)/)
+  assert.match(boardSource, /cached\?\.day === day/)
+  assert.match(boardSource, /reconcileBoardSessionVolume\(existing, cachedVolume, day\)/)
+  assert.match(boardSource, /verifiedBoardSessionVolume\(quote, currentDay\)/)
+  assert.match(boardSource, /window\.addEventListener\("pagehide", persist\)/)
+  assert.match(boardSource, /document\.addEventListener\("visibilitychange", onVisibilityChange\)/)
+  assert.match(boardSource, /window\.sessionStorage\.removeItem\(key\)/)
+})
+
 test("compact priceboard keeps fixed anchors, packs industries into lanes, and exposes a stable row hover", () => {
   assert.match(priceboardSource, /data-industry-column="watchlist" data-market-board-industry-column/)
   assert.match(priceboardSource, /data-industry-column="vn30" data-market-board-industry-column/)

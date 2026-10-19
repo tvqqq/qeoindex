@@ -1,3 +1,46 @@
+import { vietnamDateKey } from "../calendar.ts"
+
+/** Verified cumulative matched shares from a named, same-session source. */
+export interface BoardSessionVolume {
+  volume: number
+  volumeSessionDay: string
+  volumeAsOf: string
+  volumeSource: "supabase-snapshot" | "dnse-ws"
+}
+
+/** Discard old-day, future-day, invalid, or unproven quote volumes. */
+export function verifiedBoardSessionVolume(
+  candidate: Partial<BoardSessionVolume> | null | undefined,
+  sessionDay: string,
+): BoardSessionVolume | null {
+  if (!candidate || candidate.volumeSessionDay !== sessionDay || !/^\d{4}-\d{2}-\d{2}$/.test(sessionDay)) return null
+  if (typeof candidate.volume !== "number" || !Number.isSafeInteger(candidate.volume) || candidate.volume < 0) return null
+  if (candidate.volumeSource !== "supabase-snapshot" && candidate.volumeSource !== "dnse-ws") return null
+  const asOf = typeof candidate.volumeAsOf === "string" ? Date.parse(candidate.volumeAsOf) : Number.NaN
+  if (!Number.isFinite(asOf) || vietnamDateKey(new Date(asOf)) !== sessionDay) return null
+  return {
+    volume: candidate.volume,
+    volumeSessionDay: sessionDay,
+    volumeAsOf: candidate.volumeAsOf!,
+    volumeSource: candidate.volumeSource,
+  }
+}
+
+/** Keep cumulative volume monotonic across late REST, SSR and WS frames in one session.
+ * Genuine downward provider corrections require an explicit source-time reconciliation path. */
+export function reconcileBoardSessionVolume(
+  previous: Partial<BoardSessionVolume> | null | undefined,
+  incoming: Partial<BoardSessionVolume> | null | undefined,
+  sessionDay: string,
+): BoardSessionVolume | null {
+  const current = verifiedBoardSessionVolume(previous, sessionDay)
+  const next = verifiedBoardSessionVolume(incoming, sessionDay)
+  if (!next) return current
+  if (!current) return next
+  if (Date.parse(next.volumeAsOf) < Date.parse(current.volumeAsOf) || next.volume < current.volume) return current
+  return next
+}
+
 export interface IndustryPriceboardStock {
   ticker: string
   rank: number
