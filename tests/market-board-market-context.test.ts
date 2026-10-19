@@ -274,7 +274,7 @@ test("combined index breadth has slanted separators and moving count labels unde
   assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
   for (const i of [0, 1, 2]) {
     assert.ok(summary.includes(`progress.shares[${i}] > 0 ? <span`))
-    assert.ok(summary.includes(`left: \`${progress.centers[${i}]}%\``))
+    assert.ok(summary.includes("left: `${progress.centers[" + i + "]}%`"))
   }
   assert.equal(summary.includes("gap-[3px]"), false)
   assert.equal((summary.match(/data-index-breadth-slant/g) ?? []).length, 2)
