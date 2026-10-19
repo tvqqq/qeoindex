@@ -311,7 +311,7 @@ test("market context numbers, chart traces, and headers honor motion reduction",
   assert.ok(contextStripSource.includes('motion-safe:animate-pulse'))
   assert.ok(contextStripSource.includes('motion-safe:transition-[width]'))
   assert.ok(contextStripSource.includes('motion-safe:duration-700 motion-safe:ease-in-out'))
-  assert.ok(contextStripSource.includes('motion-safe:transition-[left]'))
+  assert.ok(contextStripSource.includes('motion-safe:transition-[width]'))
   assert.ok(contextStripSource.includes('key={breadthSweepRevision}'))
   assert.ok(contextStripSource.includes('key={hasBreadth ? breadth[0] : "missing"}'))
   assert.ok(contextStripSource.includes('key={entry.contribution}'))
