@@ -35,7 +35,7 @@ import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { IndustryPriceboard } from "@/components/market-board/industry-priceboard"
 import { MarketContextStrip } from "@/components/market-board/market-context-strip"
-import { industryLabelForStock, reconcileBoardSessionVolume } from "@/modules/market/board/industry-priceboard"
+import { industryLabelForStock, reconcileBoardSessionVolume, verifiedBoardSessionVolume, type BoardSessionVolume } from "@/modules/market/board/industry-priceboard"
 import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { isTradingSessionOpen, isLunchBreak } from "@/modules/market/realtime/session-countdown"
@@ -874,6 +874,62 @@ export function LiveMarketBoard({
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
   const trackedSymbols = useMemo(() => new Set(symbolList), [symbolList])
+  // Recover the last verified in-tab DNSE numerator after F5, before the stream catches up.
+  // pagehide persists once per navigation; no per-tick storage churn or cross-day fallback.
+  useEffect(() => {
+    const key = `qeoindex:board:session-volume:v1:${userId}`
+    const day = vietnamSessionDay()
+
+    try {
+      const raw = window.sessionStorage.getItem(key)
+      const cached = raw ? JSON.parse(raw) as { day?: string; volumes?: Record<string, Partial<BoardSessionVolume>> } : null
+      if (cached?.day === day && cached.volumes && typeof cached.volumes === "object" && !Array.isArray(cached.volumes)) {
+        const next = { ...quotesRef.current }
+        let changed = false
+        for (const [symbol, cachedVolume] of Object.entries(cached.volumes)) {
+          if (!trackedSymbols.has(symbol)) continue
+          const existing = next[symbol]
+          if (!existing || "value" in existing) continue
+          const stable = reconcileBoardSessionVolume(existing, cachedVolume, day)
+          if (!stable || (existing.volume === stable.volume && existing.volumeAsOf === stable.volumeAsOf)) continue
+          next[symbol] = { ...existing, ...stable }
+          changed = true
+        }
+        if (changed) {
+          quotesRef.current = next
+          latestCommittedQuotesRef.current = next
+          quotesDirtyRef.current = false
+          setQuotes(next)
+          setOrderingQuotes(next)
+        }
+      }
+    } catch { /* sessionStorage is optional */ }
+
+    const persist = () => {
+      try {
+        const currentDay = vietnamSessionDay()
+        const volumes: Record<string, BoardSessionVolume> = {}
+        for (const [symbol, quote] of Object.entries(quotesRef.current)) {
+          if ("value" in quote) continue
+          const evidence = verifiedBoardSessionVolume(quote, currentDay)
+          if (evidence) volumes[symbol] = evidence
+        }
+        if (Object.keys(volumes).length > 0) {
+          window.sessionStorage.setItem(key, JSON.stringify({ day: currentDay, volumes }))
+        } else {
+          window.sessionStorage.removeItem(key)
+        }
+      } catch { /* sessionStorage is optional */ }
+    }
+    const onVisibilityChange = () => { if (document.visibilityState === "hidden") persist() }
+    window.addEventListener("pagehide", persist)
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      window.removeEventListener("pagehide", persist)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [trackedSymbols, userId])
+
   const hasSufficientSsrHistory = useMemo(() => {
     if (!initialHistories || symbolList.length === 0) return false
     let covered = 0
