@@ -278,7 +278,7 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
 test("Theo dõi keeps all four fields even when other lanes hide Giá/KL", () => {
   const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
   assert.match(source, /className=\{\`\$\{FULL_COLUMN_WIDTH\}[^]*?data-industry-column="watchlist"/)
-  assert.match(source, /<TableLabels showPriceVolume \/>[\s\S]*?<StockRows stocks=\{watchlistStocks\}[^>]*showPriceVolume \/>/)
+  assert.match(source, /<TableLabels showPriceVolume \/>[\s\S]*?<StockRows stocks=\{watchlistStocks\}[^>]*showPriceVolume watchlistPercentColor \/>/)
   assert.match(source, /data-industry-column="vn30"[^]*?<TableLabels showPriceVolume=\{showPriceVolume\}/)
   assert.match(source, /<StockRows stocks=\{stocks\}[^>]*showPriceVolume=\{showPriceVolume\}/)
   assert.match(source, /className="truncate font-ticker font-bold tracking-tight[^"]*group-hover:font-extrabold/)

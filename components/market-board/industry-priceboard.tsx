@@ -75,10 +75,14 @@ type CompactStockRowProps = {
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
   showPriceVolume: boolean
+  watchlistPercentColor: boolean
 }
 
-const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen, showPriceVolume }: CompactStockRowProps) {
+const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen, showPriceVolume, watchlistPercentColor }: CompactStockRowProps) {
   const change = quoteIsValid(quote) ? quote.changePercent : null
+  const percentTextColor = !watchlistPercentColor || change === null
+    ? ""
+    : change > 0 ? "text-up" : change < 0 ? "text-down" : "text-ref"
   const progress = showPriceVolume ? industryPriceboardVolumeProgress(quote?.volume, stock.previousSessionVolume) : null
   const background = industryPriceboardBackground(quote)
   return (
@@ -126,26 +130,27 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
       >
         <span className="truncate font-ticker font-bold tracking-tight transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
         {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
-        <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
+        <span className={`truncate text-right tabular-nums ${percentTextColor}`} title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
         </span>
         {showPriceVolume ? <span className="truncate text-right text-[10px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span> : null}
       </button>
     </div>
   )
-}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch && previous.showPriceVolume === next.showPriceVolume)
+}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch && previous.showPriceVolume === next.showPriceVolume && previous.watchlistPercentColor === next.watchlistPercentColor)
 
-function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen, showPriceVolume }: {
+function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen, showPriceVolume, watchlistPercentColor = false }: {
   stocks: readonly IndustryPriceboardStock[]
   displayQuotes: Readonly<Record<string, BoardQuote>>
   watchedSymbols: ReadonlySet<string>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
   showPriceVolume: boolean
+  watchlistPercentColor?: boolean
 }) {
   if (stocks.length === 0) return <div className="px-2 py-4 text-center text-[11px] text-muted-2">Chưa có mã phù hợp</div>
   return <div className="space-y-[4px] p-1">{stocks.map((stock) => (
-    <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} showPriceVolume={showPriceVolume} />
+    <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} showPriceVolume={showPriceVolume} watchlistPercentColor={watchlistPercentColor} />
   ))}</div>
 }
 
@@ -514,7 +519,7 @@ export function IndustryPriceboard({
             </div>
           </div>
           <TableLabels showPriceVolume />
-          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume />
+          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume watchlistPercentColor />
         </section>
 
         <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="vn30" data-market-board-industry-column>

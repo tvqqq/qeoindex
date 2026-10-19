@@ -224,6 +224,30 @@ test("compact priceboard keeps fixed anchors, packs industries into lanes, and e
   assert.match(boardSource, /mode === "sector" && boardView === "industry"/)
 })
 
+test("only Theo dõi uses up/down/reference text colors for valid percent changes", () => {
+  const row = priceboardSource.split("const CompactStockRow =")[1]?.split("function StockRows(")[0] ?? ""
+  const rows = priceboardSource.split("function StockRows(")[1]?.split("export function IndustryPriceboard(")[0] ?? ""
+  const watchlist = priceboardSource.split('data-industry-column="watchlist"')[1]?.split('data-industry-column="vn30"')[0] ?? ""
+  const vn30 = priceboardSource.split('data-industry-column="vn30"')[1]?.split("industryLanes.map")[0] ?? ""
+  const industry = priceboardSource.split("industryLanes.map")[1]?.split("Kéo tiêu đề ngành")[0] ?? ""
+
+  // Use verified change; an unavailable quote stays neutral, genuine 0 is reference yellow.
+  assert.ok(row.includes("const change = quoteIsValid(quote) ? quote.changePercent : null"))
+  assert.ok(row.includes('!watchlistPercentColor || change === null'))
+  assert.ok(row.includes('change > 0 ? "text-up" : change < 0 ? "text-down" : "text-ref"'))
+  assert.ok(row.includes('className={`truncate text-right tabular-nums ${percentTextColor}`}'))
+  assert.ok(rows.includes("watchlistPercentColor = false"))
+  assert.ok(rows.includes("watchlistPercentColor={watchlistPercentColor}"))
+  assert.ok(row.includes("previous.watchlistPercentColor === next.watchlistPercentColor"))
+
+  // Never derive this from watched status: starred tickers can appear in VN30 and industry lanes.
+  assert.match(watchlist, /<StockRows[^>]*?showPriceVolume watchlistPercentColor \/>/)
+  assert.match(vn30, /<StockRows[^>]*?showPriceVolume=\{showPriceVolume\} \/>/)
+  assert.match(industry, /<StockRows[^>]*?showPriceVolume=\{showPriceVolume\} \/>/)
+  assert.equal(vn30.includes("watchlistPercentColor"), false)
+  assert.equal(industry.includes("watchlistPercentColor"), false)
+})
+
 test("classic Bảng điện remains the default with the original six sector grid and chart rows", () => {
   assert.match(boardSource, /const \[boardView, setBoardView\] = useState<BoardView>\("classic"\)/)
   assert.match(boardSource, /grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6/)
