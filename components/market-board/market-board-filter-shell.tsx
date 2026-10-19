@@ -18,6 +18,7 @@ import {
 } from "@/components/live-market-board"
 import type { LiveStockQuote } from "@/components/live-market-stock"
 import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
+import { reconcileBoardSessionVolume } from "@/modules/market/board/industry-priceboard"
 import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { MARKET_SESSION_RESET_EVENT } from "@/modules/market/realtime/session-ui"
 import {
@@ -48,6 +49,9 @@ type BatchQuote = {
   change: number | null
   changePercent: number | null
   volume: number | null
+  volumeSessionDay?: string
+  volumeAsOf?: string
+  volumeSource?: "supabase-snapshot" | "dnse-ws"
   foreignBuyVolume?: number | null
   foreignSellVolume?: number | null
   foreignBuyValue?: number | null
@@ -94,6 +98,7 @@ function mergeBatchQuotes(
     if (!quote?.price || !Number.isFinite(quote.price) || quote.price <= 0) continue
     const existing = next[symbol]
     const previous = existing && !isIndexQuote(existing) ? existing : undefined
+    const stableVolume = reconcileBoardSessionVolume(previous, quote, vietnamSessionDay())
     next[symbol] = {
       ...previous,
       symbol,
@@ -103,7 +108,10 @@ function mergeBatchQuotes(
       floor: quote.floor === null ? undefined : (quote.floor ?? previous?.floor),
       change: quote.change ?? previous?.change,
       changePercent: quote.changePercent ?? previous?.changePercent ?? 0,
-      volume: quote.volume ?? previous?.volume,
+      volume: stableVolume?.volume ?? (quote.volume ?? previous?.volume),
+      volumeSessionDay: stableVolume?.volumeSessionDay,
+      volumeAsOf: stableVolume?.volumeAsOf,
+      volumeSource: stableVolume?.volumeSource,
       foreignBuyVolume: quote.foreignBuyVolume ?? previous?.foreignBuyVolume,
       foreignSellVolume: quote.foreignSellVolume ?? previous?.foreignSellVolume,
       foreignBuyValue: quote.foreignBuyValue ?? previous?.foreignBuyValue,
