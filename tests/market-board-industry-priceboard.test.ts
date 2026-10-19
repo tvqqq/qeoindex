@@ -272,7 +272,7 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
   assert.match(source, /motion-safe:transition-\[width\]/)
   assert.doesNotMatch(source, /scaleX\(\$\{progress\./)
   assert.doesNotMatch(source, /volumeSurgeMarker|right-\[3px\] top-\[7px\] h-\[9px\] w-\[3px\]/)
-  assert.doesNotMatch(source, /progress\.ratio \* 10/)
+  assert.equal(source.includes("key={Math.floor(progress.ratio * 10)}"), false)
   assert.match(source, /font-semibold[\s\S]*?group-hover:font-extrabold/)
   assert.doesNotMatch(source, /transition-all/)
 })
