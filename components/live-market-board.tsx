@@ -993,7 +993,7 @@ export function LiveMarketBoard({
           const changePercent = reference > 0
             ? (change / reference) * 100
             : (quote.changePercent ?? existing?.changePercent ?? 0)
-          const stableVolume = reconcileBoardSessionVolume(existing, quote, requestedSessionDay)
+          const stableVolume = reconcileBoardSessionVolume(existing, { ...quote, volume: quote.volume ?? undefined }, requestedSessionDay)
 
           nextQuotes[symbol] = {
             ...(existing ?? {}),
