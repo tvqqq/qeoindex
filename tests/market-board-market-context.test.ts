@@ -251,7 +251,7 @@ test("breadth progress preserves exact provider ratios including zero and invali
   }
 })
 
-test("combined indices preserve original labels below bar with gaps only between nonzero color segments", () => {
+test("combined index breadth has slanted separators and moving count labels under each segment", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
@@ -263,7 +263,7 @@ test("combined indices preserve original labels below bar with gaps only between
   assert.ok(summary.includes("border-amber-400/35"))
   assert.ok(summary.includes('data-index-breadth-progress'))
   assert.ok(summary.includes("Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}"))
-  assert.ok(summary.includes("w-full gap-[3px] overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes("w-full overflow-hidden rounded-full bg-zinc-800"))
   assert.ok(summary.includes("total > 0"))
   assert.ok(summary.includes("indexBreadthProgress([breadth[0] ?? 0, breadth[1] ?? 0, breadth[2] ?? 0])"))
   assert.ok(summary.includes("progress.shares[0]"))
@@ -271,18 +271,26 @@ test("combined indices preserve original labels below bar with gaps only between
   assert.ok(summary.includes("progress.shares[2]"))
   assert.equal(summary.includes("data-index-breadth-summary"), false)
   assert.equal(summary.includes('Tổng <strong'), false)
-  assert.ok(summary.includes("relative flex w-full gap-[3px] overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
   for (const i of [0, 1, 2]) {
     assert.ok(summary.includes(`progress.shares[${i}] > 0 ? <span`))
-    assert.ok(summary.includes(`progress.centers[${i}]`))
+    assert.ok(summary.includes(`left: \`${progress.centers[${i}]}%\``))
   }
+  assert.equal(summary.includes("gap-[3px]"), false)
+  assert.equal((summary.match(/data-index-breadth-slant/g) ?? []).length, 2)
+  assert.ok(summary.includes("progress.shares[0] > 0 && (progress.shares[1] > 0 || progress.shares[2] > 0)"))
+  assert.ok(summary.includes("progress.shares[1] > 0 && progress.shares[2] > 0"))
+  assert.ok(summary.includes('left: `${progress.shares[0] + progress.shares[1]}%`'))
+  assert.ok(summary.includes("-skew-x-[26deg]"))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
+  assert.equal(summary.includes('grid h-[18px] grid-cols-3'), false)
   assert.ok(summary.includes("▲{hasBreadth ? breadth[0] : \"—\"}"))
   assert.ok(summary.includes("–{hasBreadth ? breadth[1] : \"—\"}"))
   assert.ok(summary.includes("▼{hasBreadth ? breadth[2] : \"—\"}"))
-  assert.ok(summary.includes('motion-safe:transition-[left]'))
+  assert.ok(summary.includes('breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""'))
   assert.ok(summary.includes("motion-safe:duration-700 motion-safe:ease-in-out"))
   assert.ok(summary.includes('breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""'))
-  assert.ok(summary.includes("relative flex w-full gap-[3px] overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
   assert.ok(summary.includes('hasBreadth ? breadth[0] : "—"'))
   assert.equal(summary.includes('data-index-breadth-inline'), false)
   assert.equal(summary.includes('mt-0.5 flex justify-between gap-1 text-[9px]'), false)
