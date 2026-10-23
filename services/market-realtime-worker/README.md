@@ -51,7 +51,7 @@ docker compose -f deploy/upcloud/docker-compose.upcloud.yml build --pull
 docker compose -f deploy/upcloud/docker-compose.upcloud.yml up --no-build --abort-on-container-exit --exit-code-from market-realtime-worker
 ```
 
-The worker intentionally exits outside Monday–Friday 08:55–14:50 `Asia/Ho_Chi_Minh`.
+The worker intentionally exits outside Monday–Friday 08:45–14:50 `Asia/Ho_Chi_Minh`. It starts at the VN30F1M session open; stale-stream recovery remains inactive until the regular 09:00 stock session.
 
 During the manual market-hours smoke, verify:
 
