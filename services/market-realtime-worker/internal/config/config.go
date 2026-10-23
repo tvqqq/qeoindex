@@ -126,7 +126,7 @@ func csvValues(raw string) []string {
 func (c Config) Window(now time.Time) (time.Time, time.Time, bool) {
 	local := now.In(c.Location)
 	if local.Weekday() == time.Saturday || local.Weekday() == time.Sunday { return time.Time{}, time.Time{}, false }
-	start := time.Date(local.Year(), local.Month(), local.Day(), 8, 55, 0, 0, c.Location)
+	start := time.Date(local.Year(), local.Month(), local.Day(), 8, 45, 0, 0, c.Location)
 	end := time.Date(local.Year(), local.Month(), local.Day(), 14, 50, 0, 0, c.Location)
 	return start, end, !local.Before(start) && local.Before(end)
 }
