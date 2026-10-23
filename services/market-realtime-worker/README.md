@@ -9,7 +9,7 @@ A stateless Go worker owns the canonical DNSE Market Board feed and the centrali
 - DNSE socket 2: VNINDEX, VN30, HNX and UPCOM market-index channels plus one `ohlc.1.json` subscription for `VN30F1M`; this stays on the existing socket and does not increase the six-socket budget;
 - a bounded HTTP poll of DNSE's VNINDEX basket-influence endpoint every 12 seconds; validated provider rows join the same authenticated market relay as the index and stock frames;
 - DNSE sockets 3–6: up to four deterministic 50-symbol supplemental shards carrying `top_price.G1.json`, `tick_extra.G1.json`, `foreign.G1.json`, and `expected_price.G1.json` (maximum 200 memberships/socket); QEO-222 adds the auction expected-price feed so ATO/ATC indicative price and quantity survive centralization;
-- no supplemental `ohlc.1.json` subscription is created; popup mini-chart motion is synthesized from canonical ticks;
+- no supplemental OHLC socket or symbol shards are created; stock popup mini-chart motion is synthesized from canonical ticks, while genuine futures OHLCV frames are relayed unchanged;
 - Market Board relay batches are latest-state oriented and publish at **100 ms by default** (bounded 25–1000 ms); the durable `dnse-market` checkpoint remains approximately 1 Hz;
 - QEO-224 orderbook fanout uses ten deterministic in-memory shards and flushes relay batches at **50 ms by default** (bounded 20–500 ms); `ORDERBOOK_REALTIME_FLUSH_MS=200` remains a separate checkpoint/recovery setting and must not be treated as the relay cadence;
 - live orderbook relay delivery is independent from checkpoint persistence; a slow or failed checkpoint cannot head-of-line block the authenticated browser relay;
