@@ -153,6 +153,7 @@ Do **not** reintroduce `content-visibility` or naive row virtualization without 
 - Daily performance is anchored to the official/reference previous close, never to the session open.
 - The initial SSR quote uses the best available live/snapshot/reference source in that order.
 - DNSE 1-minute OHLC events are normalized into the board's 5-minute chart buckets.
+- The worker's existing index socket also subscribes to `ohlc.1.json` for `VN30F1M` and relays genuine `T=b` candles. Its latest-state buffer keeps symbol, provider `symbolType`/contract and resolution distinct, orders updates by the provider candle time, and never fills missing OHLCV fields. The worker starts at 08:45 ICT for this futures feed; stale-stream recovery remains inactive until 09:00.
 - Price-unit normalization prevents feeds expressed in thousands from flattening VND-scaled histories.
 - After close, cached intraday history and persisted snapshots keep prices/charts visible without labeling them as a live WebSocket tick.
 
