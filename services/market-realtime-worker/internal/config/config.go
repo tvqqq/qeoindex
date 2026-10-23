@@ -11,7 +11,7 @@ import (
 
 const (
 	MarketTimezone = "Asia/Ho_Chi_Minh"
-	MarketOpen     = "08:55"
+	MarketOpen     = "08:45"
 	MarketClose    = "14:50"
 )
 
