@@ -6,7 +6,7 @@ A stateless Go worker owns the canonical DNSE Market Board feed and the centrali
 
 - canonical stock universe: `vn_top_stocks`, maximum 200 symbols;
 - DNSE socket 1: `tick.G1.json` for the canonical stock set; this same tick stream feeds both Market Board and popup quote/mini-chart behavior;
-- DNSE socket 2: VNINDEX, VN30, HNX and UPCOM market-index channels;
+- DNSE socket 2: VNINDEX, VN30, HNX and UPCOM market-index channels plus one `ohlc.1.json` subscription for `VN30F1M`; this stays on the existing socket and does not increase the six-socket budget;
 - a bounded HTTP poll of DNSE's VNINDEX basket-influence endpoint every 12 seconds; validated provider rows join the same authenticated market relay as the index and stock frames;
 - DNSE sockets 3–6: up to four deterministic 50-symbol supplemental shards carrying `top_price.G1.json`, `tick_extra.G1.json`, `foreign.G1.json`, and `expected_price.G1.json` (maximum 200 memberships/socket); QEO-222 adds the auction expected-price feed so ATO/ATC indicative price and quantity survive centralization;
 - no supplemental `ohlc.1.json` subscription is created; popup mini-chart motion is synthesized from canonical ticks;
