@@ -53,6 +53,7 @@ func IndexChannels() []Channel {
 		{Name: "market_index.VN30.json"},
 		{Name: "market_index.HNX.json"},
 		{Name: "market_index.UPCOM.json"},
+		{Name: "ohlc.1.json", Symbols: []string{"VN30F1M"}},
 	}
 }
 

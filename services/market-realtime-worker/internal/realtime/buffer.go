@@ -33,7 +33,20 @@ func frameKey(frame Frame) (string, bool) {
 	}
 	typ = strings.TrimSpace(typ)
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
-	if (typ != "t" && typ != "mi" && typ != "f" && typ != "index-impact") || symbol == "" {
+	if symbol == "" {
+		return "", false
+	}
+	if typ == "b" {
+		symbolType, _ := frame["symbolType"].(string)
+		symbolType = strings.ToUpper(strings.TrimSpace(symbolType))
+		resolution, _ := frame["resolution"].(string)
+		resolution = strings.ToUpper(strings.TrimSpace(resolution))
+		if resolution == "" {
+			return "", false
+		}
+		return typ + ":" + symbol + ":" + symbolType + ":" + resolution, true
+	}
+	if typ != "t" && typ != "mi" && typ != "f" && typ != "index-impact" {
 		return "", false
 	}
 	return typ + ":" + symbol, true
@@ -96,7 +109,7 @@ func (b *Buffer) Requeue(frames []Frame) {
 func providerOrderedFrame(frame Frame) bool {
 	typ, _ := frame["T"].(string)
 	switch strings.TrimSpace(typ) {
-	case "mi", "f", "index-impact":
+	case "mi", "f", "index-impact", "b":
 		return true
 	default:
 		return false
@@ -123,6 +136,8 @@ func providerFrameTime(frame Frame) (time.Time, bool) {
 	switch strings.TrimSpace(typ) {
 	case "mi":
 		return parseProviderFrameTime(frame["transactTime"])
+	case "b":
+		return parseProviderFrameTime(frame["time"])
 	case "f":
 		return parseProviderFrameTime(frame["multicastReceiveTime"])
 	case "index-impact":

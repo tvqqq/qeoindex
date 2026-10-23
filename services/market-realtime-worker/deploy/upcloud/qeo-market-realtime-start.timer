@@ -1,8 +1,8 @@
 [Unit]
-Description=Start QeoIndex realtime worker at 08:55 ICT on trading weekdays
+Description=Start QeoIndex realtime worker at 08:45 ICT on trading weekdays
 
 [Timer]
-OnCalendar=Mon..Fri *-*-* 01:55:00 UTC
+OnCalendar=Mon..Fri *-*-* 01:45:00 UTC
 Persistent=true
 AccuracySec=1s
 RandomizedDelaySec=0

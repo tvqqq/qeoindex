@@ -6,10 +6,10 @@ A stateless Go worker owns the canonical DNSE Market Board feed and the centrali
 
 - canonical stock universe: `vn_top_stocks`, maximum 200 symbols;
 - DNSE socket 1: `tick.G1.json` for the canonical stock set; this same tick stream feeds both Market Board and popup quote/mini-chart behavior;
-- DNSE socket 2: VNINDEX, VN30, HNX and UPCOM market-index channels;
+- DNSE socket 2: VNINDEX, VN30, HNX and UPCOM market-index channels plus one `ohlc.1.json` subscription for `VN30F1M`; this stays on the existing socket and does not increase the six-socket budget;
 - a bounded HTTP poll of DNSE's VNINDEX basket-influence endpoint every 12 seconds; validated provider rows join the same authenticated market relay as the index and stock frames;
 - DNSE sockets 3–6: up to four deterministic 50-symbol supplemental shards carrying `top_price.G1.json`, `tick_extra.G1.json`, `foreign.G1.json`, and `expected_price.G1.json` (maximum 200 memberships/socket); QEO-222 adds the auction expected-price feed so ATO/ATC indicative price and quantity survive centralization;
-- no supplemental `ohlc.1.json` subscription is created; popup mini-chart motion is synthesized from canonical ticks;
+- no supplemental OHLC socket or symbol shards are created; stock popup mini-chart motion is synthesized from canonical ticks, while genuine futures OHLCV frames are relayed unchanged;
 - Market Board relay batches are latest-state oriented and publish at **100 ms by default** (bounded 25–1000 ms); the durable `dnse-market` checkpoint remains approximately 1 Hz;
 - QEO-224 orderbook fanout uses ten deterministic in-memory shards and flushes relay batches at **50 ms by default** (bounded 20–500 ms); `ORDERBOOK_REALTIME_FLUSH_MS=200` remains a separate checkpoint/recovery setting and must not be treated as the relay cadence;
 - live orderbook relay delivery is independent from checkpoint persistence; a slow or failed checkpoint cannot head-of-line block the authenticated browser relay;
@@ -51,13 +51,13 @@ docker compose -f deploy/upcloud/docker-compose.upcloud.yml build --pull
 docker compose -f deploy/upcloud/docker-compose.upcloud.yml up --no-build --abort-on-container-exit --exit-code-from market-realtime-worker
 ```
 
-The worker intentionally exits outside Monday–Friday 08:55–14:50 `Asia/Ho_Chi_Minh`.
+The worker intentionally exits outside Monday–Friday 08:45–14:50 `Asia/Ho_Chi_Minh`. It starts at the VN30F1M session open; stale-stream recovery remains inactive until the regular 09:00 stock session.
 
 During the manual market-hours smoke, verify:
 
-1. JSON logs show `ticks`, `indexes`, and four orderbook supplemental streams at full universe without printing credentials.
+1. JSON logs show `ticks`, `indexes` (five channels, including the single VN30F1M OHLC subscription), and four orderbook supplemental streams at full universe without printing credentials.
 2. `market_realtime_bus` row `dnse-market` keeps the existing bounded 1 Hz recovery contract; orderbook checkpoint rows advance independently and may trail live relay messages by roughly one checkpoint interval.
-3. Market Board receives authenticated worker relay changes end-to-end with no canonical browser DNSE socket.
+3. Market Board receives authenticated worker relay changes end-to-end with no canonical browser DNSE socket; verify authentic `VN30F1M` 1-minute `T=b` frames preserve provider OHLCV through the relay.
 4. Opening popup orderbooks creates only authenticated worker relay traffic in the browser; Chrome Network shows no `ws-openapi.dnse.com.vn` connection.
 5. Multiple browsers viewing the same symbol do not increase the DNSE provider socket count; capacity proof covers at least 100 distinct symbols while provider sockets remain bounded by six.
 6. During ATO/ATC, `expected_price.G1.json` produces `T=e` state and the popup updates both indicative match price and indicative quantity without replacing the last actually matched quote.
@@ -87,6 +87,6 @@ sudo systemctl enable --now qeo-market-realtime-start.timer
 sudo systemctl enable --now qeo-market-realtime-stop.timer
 ```
 
-The start timer fires at 01:55 UTC (08:55 ICT) and the stop timer at 07:50 UTC (14:50 ICT), Monday–Friday. Both are persistent for reboot recovery, while the worker's own market-window check remains the final guardrail.
+The start timer fires at 01:45 UTC (08:45 ICT) and the stop timer at 07:50 UTC (14:50 ICT), Monday–Friday. Both are persistent for reboot recovery, while the worker's own market-window check remains the final guardrail.
 
 Rollback is the inverse: disable both timers, stop `qeo-market-realtime.service`, and only then restore a previous ingestion worker if required. Never run two producers concurrently.

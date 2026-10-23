@@ -216,3 +216,33 @@ func TestCombineCheckpointFramesPreservesRetainedValuesAndIndexNameIdentity(t *t
 		t.Fatalf("MI frame keyed only by indexName was dropped: %v", gotIndex)
 	}
 }
+
+func TestCheckpointFrameKeySeparatesOHLCInstrumentContractAndResolution(t *testing.T) {
+	frames := []realtime.Frame{
+		{"T": "b", "symbol": "VN30", "symbolType": "VN30", "resolution": "1"},
+		{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1"},
+		{"T": "b", "symbol": "41I1G5000", "symbolType": "VN30F1M", "resolution": "1"},
+		{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "5"},
+	}
+	keys := make(map[string]struct{}, len(frames))
+	for _, frame := range frames {
+		key, ok := checkpointFrameKey(frame)
+		if !ok {
+			t.Fatalf("OHLC identity was rejected: %v", frame)
+		}
+		keys[key] = struct{}{}
+	}
+	if len(keys) != len(frames) {
+		t.Fatalf("OHLC contract or resolution keys collided: %v", keys)
+	}
+}
+
+func TestCombineCheckpointFramesKeepsNewerOHLCOverRetainedFrame(t *testing.T) {
+	newer := realtime.Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_740), "close": 1882.2}
+	older := realtime.Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_739), "close": 1881.9}
+
+	merged := combineCheckpointFrames([]realtime.Frame{newer}, []realtime.Frame{older}, maxRealtimePayloadBytes)
+	if len(merged) != 1 || merged[0]["close"] != 1882.2 {
+		t.Fatalf("older retained OHLC displaced current candle: %v", merged)
+	}
+}

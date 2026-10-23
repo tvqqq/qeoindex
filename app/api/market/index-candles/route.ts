@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     console.warn("[market/index-candles] DNSE history unavailable", {
       resolution,
       failedSymbols: Object.keys(errors),
-      reasons: Object.fromEntries(Object.entries(errors).map(([symbol, message]) => [symbol, message.slice(0, 300)])),
+      reasons: Object.fromEntries(Object.entries(errors).map(([symbol, message]) => [symbol, message.slice(0, 1_400)])),
     })
   }
   const data = {

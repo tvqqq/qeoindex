@@ -227,7 +227,17 @@ func contextFrameSessionDate(frame realtime.Frame, typ string) (string, bool) {
 
 func contextFrameSourceTime(frame realtime.Frame, typ string) (time.Time, bool) {
 	var sourceTime time.Time
-	if typ == "f" {
+	if typ == "b" {
+		providerTime, ok := parseProviderImpactTime(frame["time"])
+		if !ok {
+			return time.Time{}, false
+		}
+		var valid bool
+		sourceTime, valid = providerTime.asOf()
+		if !valid {
+			return time.Time{}, false
+		}
+	} else if typ == "f" {
 		providerTime, ok := parseProviderImpactTime(frame["multicastReceiveTime"])
 		if !ok {
 			return time.Time{}, false
@@ -290,7 +300,7 @@ func combineCheckpointFrames(current, retained []realtime.Frame, maxBytes int) [
 		if index, exists := positions[key]; exists {
 			currentFrame := out[index]
 			typ, _ := frame["T"].(string)
-			if typ == "f" || typ == "index-impact" {
+			if typ == "f" || typ == "index-impact" || typ == "b" {
 				if typ == "f" && hasForeignSnapshotAmounts(frame) && !hasForeignSnapshotAmounts(currentFrame) {
 					out[index] = cloneRealtimeFrame(frame)
 					continue
@@ -339,6 +349,16 @@ func checkpointFrameKey(frame realtime.Frame) (string, bool) {
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
 	if symbol == "" || typ == "" {
 		return "", false
+	}
+	if typ == "b" {
+		symbolType, _ := frame["symbolType"].(string)
+		symbolType = strings.ToUpper(strings.TrimSpace(symbolType))
+		resolution, _ := frame["resolution"].(string)
+		resolution = strings.ToUpper(strings.TrimSpace(resolution))
+		if resolution == "" {
+			return "", false
+		}
+		return typ + ":" + symbol + ":" + symbolType + ":" + resolution, true
 	}
 	return typ + ":" + symbol, true
 }

@@ -67,6 +67,13 @@ func TestBufferRejectsOlderProviderFramesAndAcceptsEqualTimeCorrections(t *testi
 			correct: Frame{"T": "index-impact", "symbol": "VNINDEX", "providerAsOf": "2026-10-05T02:22:20.077Z", "marker": "correction"},
 			field:   "marker",
 		},
+		{
+			name:    "futures OHLC",
+			newer:   Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_740), "close": 1882.1},
+			older:   Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_739), "close": 1881.9, "_qeoWorkerReceivedAt": int64(1_791_200_000_000)},
+			correct: Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_740), "close": 1882.2},
+			field:   "close",
+		},
 	}
 
 	for _, tt := range tests {
@@ -86,6 +93,35 @@ func TestBufferRejectsOlderProviderFramesAndAcceptsEqualTimeCorrections(t *testi
 				t.Fatalf("equal-time provider correction was not accepted: %#v", frames)
 			}
 		})
+	}
+}
+
+func TestBufferSeparatesOHLCByInstrumentContractAndResolution(t *testing.T) {
+	b := NewBuffer(524288)
+	b.Push(Frame{"T": "b", "symbol": "VN30", "symbolType": "VN30", "resolution": "1", "time": float64(1_791_167_740), "close": 1880.0})
+	b.Push(Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_740), "close": 1882.1})
+	b.Push(Frame{"T": "b", "symbol": "41I1G5000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_740), "close": 1883.1})
+	b.Push(Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "5", "time": float64(1_791_167_740), "close": 1882.1})
+
+	frames := b.Drain()
+	if len(frames) != 4 {
+		t.Fatalf("expected spot, two futures contracts, and a separate resolution; got %#v", frames)
+	}
+}
+
+func TestBufferDoesNotInventMissingOHLCFields(t *testing.T) {
+	b := NewBuffer(524288)
+	incomplete := Frame{"T": "b", "symbol": "41I1G4000", "symbolType": "VN30F1M", "resolution": "1", "time": float64(1_791_167_740), "open": 1880.0}
+	b.Push(incomplete)
+
+	frames := b.Drain()
+	if len(frames) != 1 || frames[0]["open"] != 1880.0 {
+		t.Fatalf("incomplete provider frame was not preserved as received: %#v", frames)
+	}
+	for _, field := range []string{"high", "low", "close", "volume"} {
+		if _, exists := frames[0][field]; exists {
+			t.Fatalf("buffer fabricated missing %s in %#v", field, frames[0])
+		}
 	}
 }
 

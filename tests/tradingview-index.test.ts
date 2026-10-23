@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { parseTradingViewIndexes } from "../modules/market/providers/tradingview/index.ts"
+import { raceHistoryTransports } from "../modules/market/providers/dnse/history-race.ts"
 import {
   EMPTY_VNINDEX_ACCUMULATOR,
   accumulateVnindexFrame,
@@ -263,6 +264,89 @@ test("QEO-409 bounds 1m history requests and preserves real partial results per 
   assert.match(historySource, /normalizeDnseChartHistory\(await signedGet/)
   assert.match(routeSource, /DNSE history unavailable/)
   assert.match(routeSource, /INDEX_CHART_SYMBOLS\.some\(\(symbol\) => candles\[symbol\]\.length > 0\)/)
+})
+
+test("QEO-422 races index history before route timeout while retaining real partial windows", () => {
+  assert.match(historySource, /cause\.code/)
+  assert.match(historySource, /case "ENOTFOUND": return "dns_not_found"/)
+  assert.match(historySource, /case "ETIMEDOUT": return "network_timeout"/)
+  assert.match(historySource, /PUBLIC_CHART_TIMEOUT_MS = 12_000/)
+  assert.match(historySource, /OHLC_ATTEMPT_TIMEOUT_MS = 8_000/)
+  assert.match(historySource, /SIGNED_HEDGE_DELAY_MS = 2_000/)
+  assert.match(historySource, /raceHistoryTransports\(runPublic, runSigned, SIGNED_HEDGE_DELAY_MS\)/)
+  assert.match(historySource, /if \(!bars\.length\)/)
+  assert.match(historySource, /Promise\.allSettled\(windows\.map\(loadWindow\)\)/)
+  assert.match(historySource, /segments\.flatMap\(\(result\) => result\.status === "fulfilled" \? result\.value : \[\]\)/)
+  assert.match(historySource, /openapi INDEX\/symbol \$\{sourceResolution\}/)
+  assert.match(historySource, /openapi DERIVATIVE\/symbol \$\{sourceResolution\}/)
+  assert.match(historySource, /DNSE OHLC unavailable for \$\{symbol\} \$\{resolution\}/)
+  assert.match(historySource, /symbol === "VNINDEX" \? \["index", "stock"\] : \["derivative"\]/)
+  assert.match(routeSource, /message\.slice\(0, 1_400\)/)
+})
+
+test("QEO-422 keeps slow public history eligible after starting and then cancels the signed hedge", async () => {
+  let hedgeStarted = false
+  let hedgeAborted = false
+
+  const result = await raceHistoryTransports(
+    () => new Promise<string>((resolve) => setTimeout(() => resolve("public"), 35)),
+    (signal) => {
+      hedgeStarted = true
+      return new Promise<string>((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          hedgeAborted = true
+          reject(new Error("hedge aborted"))
+        }, { once: true })
+      })
+    },
+    5,
+  )
+
+  assert.equal(result, "public")
+  assert.equal(hedgeStarted, true)
+  assert.equal(hedgeAborted, true)
+})
+
+test("QEO-422 returns the signed hedge and aborts a stalled public transport", async () => {
+  let publicAborted = false
+
+  const result = await raceHistoryTransports(
+    (signal) => new Promise<string>((_resolve, reject) => {
+      signal.addEventListener("abort", () => {
+        publicAborted = true
+        reject(new Error("public aborted"))
+      }, { once: true })
+    }),
+    async () => "signed",
+    5,
+  )
+
+  assert.equal(result, "signed")
+  assert.equal(publicAborted, true)
+})
+
+test("QEO-422 skips signed fallback for fast public history and rejects when every transport fails", async () => {
+  let signedStarted = false
+  const result = await raceHistoryTransports(
+    async () => "public",
+    async () => {
+      signedStarted = true
+      return "signed"
+    },
+    20,
+  )
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(result, "public")
+  assert.equal(signedStarted, false)
+
+  await assert.rejects(
+    raceHistoryTransports(
+      async () => { throw new Error("public failed") },
+      async () => { throw new Error("signed failed") },
+      5,
+    ),
+    (error: unknown) => error instanceof AggregateError && error.errors.length === 2,
+  )
 })
 
 test("QEO-410 previous-session level comes from the immediately prior trading session, not the new open", () => {
