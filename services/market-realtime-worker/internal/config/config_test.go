@@ -40,6 +40,7 @@ func TestStaleWatchSkipsPreopenAndLunch(t *testing.T) {
 		at   string
 		want bool
 	}{
+		{"2026-09-14T08:45:00+07:00", false},
 		{"2026-09-14T08:58:00+07:00", false},
 		{"2026-09-14T10:00:00+07:00", true},
 		{"2026-09-14T12:00:00+07:00", false},
