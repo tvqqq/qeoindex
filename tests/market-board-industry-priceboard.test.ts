@@ -10,6 +10,8 @@ import {
   industryPriceboardChangeIntensity,
   industryPriceboardTone,
   industryPriceboardVolumeProgress,
+  reconcileBoardSessionVolume,
+  verifiedBoardSessionVolume,
   moveIndustryColumn,
   moveIndustryColumnBy,
   mergeIndustryOrderIntoSettings,
@@ -269,8 +271,8 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
   assert.match(source, /data-priceboard-volume-overflow/)
   assert.match(source, /motion-safe:transition-\[width\]/)
   assert.doesNotMatch(source, /scaleX\(\$\{progress\./)
-  assert.match(source, /volumeSurgeMarker/)
-  assert.match(source, /progress\.ratio \* 10/)
+  assert.doesNotMatch(source, /volumeSurgeMarker|right-\[3px\] top-\[7px\] h-\[9px\] w-\[3px\]/)
+  assert.equal(source.includes("key={Math.floor(progress.ratio * 10)}"), false)
   assert.match(source, /font-semibold[\s\S]*?group-hover:font-extrabold/)
   assert.doesNotMatch(source, /transition-all/)
 })
@@ -278,7 +280,7 @@ test("compact stock rows protect price/volume fit and strengthen hover affordanc
 test("Theo dõi keeps all four fields even when other lanes hide Giá/KL", () => {
   const source = readFileSync(new URL("../components/market-board/industry-priceboard.tsx", import.meta.url), "utf8")
   assert.match(source, /className=\{\`\$\{FULL_COLUMN_WIDTH\}[^]*?data-industry-column="watchlist"/)
-  assert.match(source, /<TableLabels showPriceVolume \/>[\s\S]*?<StockRows stocks=\{watchlistStocks\}[^>]*showPriceVolume \/>/)
+  assert.match(source, /<TableLabels showPriceVolume \/>[\s\S]*?<StockRows stocks=\{watchlistStocks\}[^>]*showPriceVolume watchlistPercentColor \/>/)
   assert.match(source, /data-industry-column="vn30"[^]*?<TableLabels showPriceVolume=\{showPriceVolume\}/)
   assert.match(source, /<StockRows stocks=\{stocks\}[^>]*showPriceVolume=\{showPriceVolume\}/)
   assert.match(source, /className="truncate font-ticker font-bold tracking-tight[^"]*group-hover:font-extrabold/)
@@ -370,6 +372,41 @@ test("QEO-419 volume progress uses exact prior session denominator and never gue
   })
 })
 
+test("QEO-426 volume provenance rejects stale sessions, invalid volume, and unverified broker quotes", () => {
+  const today = "2026-10-19"
+  const current = { volume: 900, volumeSessionDay: today, volumeAsOf: "2026-10-19T03:10:00.000Z", volumeSource: "supabase-snapshot" as const }
+  assert.deepEqual(verifiedBoardSessionVolume(current, today), current)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volume: 0 }, today)?.volume, 0)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volume: -1 }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volume: Number.NaN }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volume: 1.5 }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volumeSource: undefined }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volumeSessionDay: "2026-10-16" }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volumeAsOf: "2026-10-16T03:10:00.000Z" }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ ...current, volumeAsOf: "not-a-time" }, today), null)
+  assert.equal(verifiedBoardSessionVolume({ volume: 3_000 }, today), null)
+})
+
+test("QEO-426 preserves cumulative numerator across reload, late REST, and new session", () => {
+  const today = "2026-10-19"
+  const ssr = { volume: 900, volumeSessionDay: today, volumeAsOf: "2026-10-19T03:05:00.000Z", volumeSource: "supabase-snapshot" as const }
+  const live = { volume: 1200, volumeSessionDay: today, volumeAsOf: "2026-10-19T03:07:00.000Z", volumeSource: "dnse-ws" as const }
+  assert.deepEqual(reconcileBoardSessionVolume(null, ssr, today), ssr)
+  assert.deepEqual(reconcileBoardSessionVolume(ssr, live, today), live)
+  assert.deepEqual(reconcileBoardSessionVolume(live, ssr, today), live, "F5/late REST must not roll back fresher WS")
+  assert.deepEqual(reconcileBoardSessionVolume(live, { ...live, volume: 700, volumeAsOf: "2026-10-19T03:08:00.000Z" }, today), live, "reordered cumulative counts must not shrink")
+  assert.deepEqual(reconcileBoardSessionVolume(live, { ...live, volume: 1500, volumeAsOf: "2026-10-19T03:06:00.000Z" }, today), live, "older provider evidence must not win")
+  const same = { ...live, volumeAsOf: "2026-10-19T03:08:00.000Z" }
+  assert.deepEqual(reconcileBoardSessionVolume(live, same, today), same)
+  assert.deepEqual(reconcileBoardSessionVolume(live, { volume: 1800 }, today), live, "untagged VPS has no authority over volume progress")
+  assert.equal(reconcileBoardSessionVolume(live, null, "2026-10-20"), null, "previous session must never be carried forward")
+  const nextDay = { ...ssr, volume: 0, volumeSessionDay: "2026-10-20", volumeAsOf: "2026-10-20T02:05:00.000Z" }
+  assert.deepEqual(reconcileBoardSessionVolume(live, nextDay, "2026-10-20"), nextDay)
+  assert.deepEqual(industryPriceboardVolumeProgress(reconcileBoardSessionVolume(ssr, live, today)?.volume, 1000), {
+    ratio: 1.2, fillPercent: 100, overflowPercent: 19.999999999999996, exceeded: true,
+  })
+})
+
 test("QEO-419 exact prior-session EOD read is bounded and seeded into the board", () => {
   const loader = readFileSync(new URL("../modules/market/board/previous-session-volume.ts", import.meta.url), "utf8")
   const page = readFileSync(new URL("../app/board/page.tsx", import.meta.url), "utf8")
@@ -385,9 +422,9 @@ test("QEO-419 exact prior-session EOD read is bounded and seeded into the board"
   assert.match(page, /getPreviousSessionVolumes\(tickers, currentDay\)/)
   assert.match(page, /previousSessionVolume: previousVolumes\[stock\.ticker\] \?\? null/)
   assert.match(stocks, /previousSessionVolume\?: number \| null/)
-  assert.match(source, /showPriceVolume \? industryPriceboardVolumeProgress\(quote\?\.volume, stock\.previousSessionVolume\) : null/)
+  assert.match(source, /showPriceVolume \? industryPriceboardVolumeProgress\(verifiedVolume\?\.volume, stock\.previousSessionVolume\) : null/)
   assert.match(source, /style=\{\{ backgroundColor: showPriceVolume \? "rgba\(255, 255, 255, 0\.025\)" : background \}\}/)
-  assert.match(source, /key=\{Math\.floor\(progress\.ratio \* 10\)\}/)
-  assert.match(css, /@keyframes volumeSurgeOnce/)
+  assert.equal(source.includes("key={Math.floor(progress.ratio * 10)}"), false)
+  assert.doesNotMatch(css, /volumeSurgeMarker|volumeSurgeOnce/)
   assert.match(css, /prefers-reduced-motion: reduce/)
 })

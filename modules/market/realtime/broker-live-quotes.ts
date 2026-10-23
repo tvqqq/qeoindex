@@ -7,6 +7,9 @@ export interface LiveBatchQuote {
   change: number | null
   changePercent: number | null
   volume: number | null
+  volumeSessionDay?: string
+  volumeAsOf?: string
+  volumeSource?: "supabase-snapshot" | "dnse-ws"
   high?: number | null
   low?: number | null
   avgPrice?: number | null

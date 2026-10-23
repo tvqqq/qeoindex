@@ -35,7 +35,7 @@ import { useOrderBooks } from "@/components/orderbook/orderbook-context"
 import { LiveMoverCard, LiveStockRow, type LiveBoardStock, type LiveStockQuote } from "@/components/live-market-stock"
 import { IndustryPriceboard } from "@/components/market-board/industry-priceboard"
 import { MarketContextStrip } from "@/components/market-board/market-context-strip"
-import { industryLabelForStock } from "@/modules/market/board/industry-priceboard"
+import { industryLabelForStock, reconcileBoardSessionVolume, verifiedBoardSessionVolume, type BoardSessionVolume } from "@/modules/market/board/industry-priceboard"
 import type { Vn30Membership } from "@/modules/market/board/vn30-membership-contract"
 import { mergeFiveMinuteClose, normalizeEpochSeconds, normalizeMarketPrice, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { isTradingSessionOpen, isLunchBreak } from "@/modules/market/realtime/session-countdown"
@@ -107,6 +107,9 @@ type QuoteReconcileResponse = {
     change: number | null
     changePercent: number | null
     volume: number | null
+    volumeSessionDay?: string
+    volumeAsOf?: string
+    volumeSource?: "supabase-snapshot" | "dnse-ws"
     foreignBuyVolume?: number | null
     foreignSellVolume?: number | null
     foreignBuyValue?: number | null
@@ -741,6 +744,9 @@ export function LiveMarketBoard({
         change: 0,
         changePercent: 0,
         volume: 0,
+        volumeSessionDay: undefined,
+        volumeAsOf: undefined,
+        volumeSource: undefined,
         foreignBuyVolume: undefined,
         foreignSellVolume: undefined,
         foreignBuyValue: undefined,
@@ -868,6 +874,62 @@ export function LiveMarketBoard({
   const symbolList = useMemo(() => universe.map((stock) => stock.ticker), [universe])
   const symbolKey = symbolList.join(",")
   const trackedSymbols = useMemo(() => new Set(symbolList), [symbolList])
+  // Recover the last verified in-tab DNSE numerator after F5, before the stream catches up.
+  // pagehide persists once per navigation; no per-tick storage churn or cross-day fallback.
+  useEffect(() => {
+    const key = `qeoindex:board:session-volume:v1:${userId}`
+    const day = vietnamSessionDay()
+
+    try {
+      const raw = window.sessionStorage.getItem(key)
+      const cached = raw ? JSON.parse(raw) as { day?: string; volumes?: Record<string, Partial<BoardSessionVolume>> } : null
+      if (cached?.day === day && cached.volumes && typeof cached.volumes === "object" && !Array.isArray(cached.volumes)) {
+        const next = { ...quotesRef.current }
+        let changed = false
+        for (const [symbol, cachedVolume] of Object.entries(cached.volumes)) {
+          if (!trackedSymbols.has(symbol)) continue
+          const existing = next[symbol]
+          if (!existing || "value" in existing) continue
+          const stable = reconcileBoardSessionVolume(existing, cachedVolume, day)
+          if (!stable || (existing.volume === stable.volume && existing.volumeAsOf === stable.volumeAsOf)) continue
+          next[symbol] = { ...existing, ...stable }
+          changed = true
+        }
+        if (changed) {
+          quotesRef.current = next
+          latestCommittedQuotesRef.current = next
+          quotesDirtyRef.current = false
+          setQuotes(next)
+          setOrderingQuotes(next)
+        }
+      }
+    } catch { /* sessionStorage is optional */ }
+
+    const persist = () => {
+      try {
+        const currentDay = vietnamSessionDay()
+        const volumes: Record<string, BoardSessionVolume> = {}
+        for (const [symbol, quote] of Object.entries(quotesRef.current)) {
+          if ("value" in quote) continue
+          const evidence = verifiedBoardSessionVolume(quote, currentDay)
+          if (evidence) volumes[symbol] = evidence
+        }
+        if (Object.keys(volumes).length > 0) {
+          window.sessionStorage.setItem(key, JSON.stringify({ day: currentDay, volumes }))
+        } else {
+          window.sessionStorage.removeItem(key)
+        }
+      } catch { /* sessionStorage is optional */ }
+    }
+    const onVisibilityChange = () => { if (document.visibilityState === "hidden") persist() }
+    window.addEventListener("pagehide", persist)
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      window.removeEventListener("pagehide", persist)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [trackedSymbols, userId])
+
   const hasSufficientSsrHistory = useMemo(() => {
     if (!initialHistories || symbolList.length === 0) return false
     let covered = 0
@@ -931,6 +993,7 @@ export function LiveMarketBoard({
           const changePercent = reference > 0
             ? (change / reference) * 100
             : (quote.changePercent ?? existing?.changePercent ?? 0)
+          const stableVolume = reconcileBoardSessionVolume(existing, { ...quote, volume: quote.volume ?? undefined }, requestedSessionDay)
 
           nextQuotes[symbol] = {
             ...(existing ?? {}),
@@ -941,7 +1004,10 @@ export function LiveMarketBoard({
             floor: quote.floor === null ? undefined : (quote.floor ?? existing?.floor),
             change,
             changePercent,
-            volume: hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume),
+            volume: stableVolume?.volume ?? (hasNewerLiveQuote ? existing?.volume : (quote.volume ?? existing?.volume)),
+            volumeSessionDay: stableVolume?.volumeSessionDay,
+            volumeAsOf: stableVolume?.volumeAsOf,
+            volumeSource: stableVolume?.volumeSource,
             foreignBuyVolume: hasCurrentSessionForeignEvidence ? existing?.foreignBuyVolume : (hasNewerLiveQuote ? existing?.foreignBuyVolume : (quote.foreignBuyVolume ?? existing?.foreignBuyVolume)),
             foreignSellVolume: hasCurrentSessionForeignEvidence ? existing?.foreignSellVolume : (hasNewerLiveQuote ? existing?.foreignSellVolume : (quote.foreignSellVolume ?? existing?.foreignSellVolume)),
             foreignBuyValue: hasCurrentSessionForeignEvidence ? existing?.foreignBuyValue : (hasNewerLiveQuote ? existing?.foreignBuyValue : (quote.foreignBuyValue ?? existing?.foreignBuyValue)),
@@ -1231,6 +1297,12 @@ export function LiveMarketBoard({
             if (reference > 0) dailyReferences.current[ticker] = reference
             const change = reference > 0 ? price - reference : previous?.change
             const changePercent = reference > 0 ? ((price - reference) / reference) * 100 : previous?.changePercent ?? 0
+            const stableVolume = reconcileBoardSessionVolume(previous, totalVolume > 0 ? {
+              volume: totalVolume,
+              volumeSessionDay: vietnamSessionDay(now),
+              volumeAsOf: receivedAt,
+              volumeSource: "dnse-ws",
+            } : null, vietnamSessionDay(now))
             return {
               ...previous,
               symbol: ticker,
@@ -1240,7 +1312,10 @@ export function LiveMarketBoard({
               floor: floor ? (floor > 1000 ? floor / 1000 : floor) : previous?.floor,
               change,
               changePercent,
-              volume: totalVolume || previous?.volume,
+              volume: stableVolume?.volume ?? previous?.volume,
+              volumeSessionDay: stableVolume?.volumeSessionDay,
+              volumeAsOf: stableVolume?.volumeAsOf,
+              volumeSource: stableVolume?.volumeSource,
               updatedAt: receivedAt,
             }
           })
@@ -1387,7 +1462,8 @@ export function LiveMarketBoard({
   }, [reconnectKey, pushFiveMinuteClose, trackedSymbols, canonicalTrackedSymbols, sessionOpen, triggerWhaleAlert, updateLiveQuote, scheduleMarketUiCommit])
 
   const normalizedQuery = query.trim().toUpperCase()
-  const currentSessionDay = useMemo(() => vietnamSessionDay(), [])
+  // Recompute on state updates so an open tab follows a session-day rollover.
+  const currentSessionDay = vietnamSessionDay()
   const displayQuotes = useMemo(() => {
     let next: Record<string, LiveStockQuote | IndexQuote> | null = null
     for (const stock of universe) {
@@ -1703,6 +1779,7 @@ export function LiveMarketBoard({
             userId={userId}
             canonicalSymbols={canonicalSymbols}
             vn30Membership={vn30Membership}
+            sessionDay={currentSessionDay}
             showPriceVolume={showIndustryPriceVolume}
           />
         ) : mode === "sector" ? (

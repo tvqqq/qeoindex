@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { BarChart3, RotateCcw, Search, Star } from "lucide-react"
 import type { LiveBoardStock, LiveStockQuote } from "@/components/live-market-stock"
 import { getSectorIcon } from "@/components/stock-identity"
-import styles from "@/app/market-board-performance.module.css"
 import {
   averagePriceboardChange,
   defaultIndustryColumnOrder,
@@ -13,6 +12,7 @@ import {
   industryPriceboardBackground,
   industryPriceboardBreadth,
   industryPriceboardVolumeProgress,
+  verifiedBoardSessionVolume,
   moveIndustryColumn,
   moveIndustryColumnBy,
   normalizeSavedIndustryOrder,
@@ -38,6 +38,7 @@ type IndustryPriceboardProps = {
   userId: string
   canonicalSymbols: readonly string[]
   vn30Membership: Vn30Membership | null
+  sessionDay: string
   showPriceVolume?: boolean
 }
 
@@ -75,17 +76,23 @@ type CompactStockRowProps = {
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
   showPriceVolume: boolean
+  watchlistPercentColor: boolean
+  sessionDay: string
 }
 
-const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen, showPriceVolume }: CompactStockRowProps) {
+const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, onToggleWatch, onOpen, showPriceVolume, watchlistPercentColor, sessionDay }: CompactStockRowProps) {
   const change = quoteIsValid(quote) ? quote.changePercent : null
-  const progress = showPriceVolume ? industryPriceboardVolumeProgress(quote?.volume, stock.previousSessionVolume) : null
+  const percentTextColor = !watchlistPercentColor || change === null
+    ? ""
+    : change > 0 ? "text-up" : change < 0 ? "text-down" : "text-ref"
+  const verifiedVolume = showPriceVolume ? verifiedBoardSessionVolume(quote, sessionDay) : null
+  const progress = showPriceVolume ? industryPriceboardVolumeProgress(verifiedVolume?.volume, stock.previousSessionVolume) : null
   const background = industryPriceboardBackground(quote)
   return (
     <div
       className="board-stock-row group relative isolate flex h-[25px] items-center gap-0.5 overflow-hidden rounded-full border border-white/[0.07] px-1 transition-[border-color,box-shadow] duration-100 hover:border-white/35 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)]"
       style={{ backgroundColor: showPriceVolume ? "rgba(255, 255, 255, 0.025)" : background }}
-      title={progress ? `KL hôm nay ${VOLUME_FORMATTER.format(quote!.volume!)} / phiên trước ${VOLUME_FORMATTER.format(stock.previousSessionVolume!)} · ${(progress.ratio * 100).toFixed(1)}%` : undefined}
+      title={progress ? `KL hôm nay ${VOLUME_FORMATTER.format(verifiedVolume!.volume)} / phiên trước ${VOLUME_FORMATTER.format(stock.previousSessionVolume!)} · ${(progress.ratio * 100).toFixed(1)}% · ${verifiedVolume!.volumeSource} ${verifiedVolume!.volumeAsOf}` : undefined}
     >
       {progress ? (
         <>
@@ -96,16 +103,13 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
             style={{ backgroundColor: background, width: `${progress.fillPercent}%` }}
           />
           {progress.exceeded ? (
-            <>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
-                <span
-                  data-priceboard-volume-overflow
-                  className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
-                  style={{ width: `${progress.overflowPercent}%` }}
-                />
-              </span>
-              <span key={Math.floor(progress.ratio * 10)} aria-hidden="true" className={`${styles.volumeSurgeMarker} pointer-events-none absolute right-[3px] top-[7px] h-[9px] w-[3px] rounded-full bg-white/65`} />
-            </>
+            <span aria-hidden="true" className="pointer-events-none absolute inset-x-[4px] bottom-[2px] h-[2px] overflow-hidden rounded-full">
+              <span
+                data-priceboard-volume-overflow
+                className="block h-full rounded-full bg-white/40 motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-out"
+                style={{ width: `${progress.overflowPercent}%` }}
+              />
+            </span>
           ) : null}
         </>
       ) : null}
@@ -126,26 +130,28 @@ const CompactStockRow = memo(function CompactStockRow({ stock, quote, watched, o
       >
         <span className="truncate font-ticker font-bold tracking-tight transition-[color,font-weight] group-hover:font-extrabold group-hover:text-white">{stock.ticker}</span>
         {showPriceVolume ? <span className="truncate text-right text-[11px] tabular-nums">{formatPrice(quote?.price)}</span> : null}
-        <span className="truncate text-right tabular-nums" title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
+        <span className={`truncate text-right tabular-nums ${percentTextColor}`} title={typeof change === "number" ? `Thay đổi ${formatPercent(change)}` : "Chưa có biến động hợp lệ"}>
           {formatPercent(change)}
         </span>
         {showPriceVolume ? <span className="truncate text-right text-[10px] tabular-nums text-white/55">{formatVolume(quote?.volume)}</span> : null}
       </button>
     </div>
   )
-}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch && previous.showPriceVolume === next.showPriceVolume)
+}, (previous, next) => previous.stock === next.stock && previous.quote === next.quote && previous.watched === next.watched && previous.onOpen === next.onOpen && previous.onToggleWatch === next.onToggleWatch && previous.showPriceVolume === next.showPriceVolume && previous.watchlistPercentColor === next.watchlistPercentColor && previous.sessionDay === next.sessionDay)
 
-function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen, showPriceVolume }: {
+function StockRows({ stocks, displayQuotes, watchedSymbols, onToggleWatch, onOpen, showPriceVolume, watchlistPercentColor = false, sessionDay }: {
   stocks: readonly IndustryPriceboardStock[]
   displayQuotes: Readonly<Record<string, BoardQuote>>
   watchedSymbols: ReadonlySet<string>
   onToggleWatch: (ticker: string) => void
   onOpen: (ticker: string) => void
   showPriceVolume: boolean
+  watchlistPercentColor?: boolean
+  sessionDay: string
 }) {
   if (stocks.length === 0) return <div className="px-2 py-4 text-center text-[11px] text-muted-2">Chưa có mã phù hợp</div>
   return <div className="space-y-[4px] p-1">{stocks.map((stock) => (
-    <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} showPriceVolume={showPriceVolume} />
+    <CompactStockRow key={stock.ticker} stock={stock} quote={displayQuotes[stock.ticker]} watched={watchedSymbols.has(stock.ticker)} onToggleWatch={onToggleWatch} onOpen={onOpen} showPriceVolume={showPriceVolume} watchlistPercentColor={watchlistPercentColor} sessionDay={sessionDay} />
   ))}</div>
 }
 
@@ -161,6 +167,7 @@ export function IndustryPriceboard({
   userId,
   canonicalSymbols,
   vn30Membership,
+  sessionDay,
   showPriceVolume = true,
 }: IndustryPriceboardProps) {
   const railRef = useRef<HTMLDivElement>(null)
@@ -514,7 +521,7 @@ export function IndustryPriceboard({
             </div>
           </div>
           <TableLabels showPriceVolume />
-          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume />
+          <StockRows stocks={watchlistStocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} sessionDay={sessionDay} showPriceVolume watchlistPercentColor />
         </section>
 
         <section className={`${columnWidth} flex shrink-0 flex-col rounded-[15px] border border-white/[0.10] bg-[#0b0f14]`} data-industry-column="vn30" data-market-board-industry-column>
@@ -532,7 +539,7 @@ export function IndustryPriceboard({
           ) : null}
           <TableLabels showPriceVolume={showPriceVolume} />
           {vn30Membership ? (
-            <StockRows stocks={vn30Stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
+            <StockRows stocks={vn30Stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} sessionDay={sessionDay} showPriceVolume={showPriceVolume} />
           ) : (
             <div className="px-2 py-4 text-center text-[11px] text-muted-2">Không có dữ liệu VN30</div>
           )}
@@ -589,7 +596,7 @@ export function IndustryPriceboard({
                     />
                   </header>
                   <TableLabels showPriceVolume={showPriceVolume} />
-                  <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} showPriceVolume={showPriceVolume} />
+                  <StockRows stocks={stocks} displayQuotes={displayQuotes} watchedSymbols={watchedSymbols} onToggleWatch={stableToggleWatch} onOpen={stableOpen} sessionDay={sessionDay} showPriceVolume={showPriceVolume} />
                 </section>
               )
             })}

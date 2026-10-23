@@ -20,12 +20,13 @@ import type { IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { getEodForeignRoom } from "@/modules/eod/shares"
 import { getVn30Membership } from "@/modules/market/board/vn30-membership"
 import { getPreviousSessionVolumes } from "@/modules/market/board/previous-session-volume"
+import { verifiedBoardSessionVolume } from "@/modules/market/board/industry-priceboard"
 import styles from "../market-board-performance.module.css"
 
 export const dynamic = "force-dynamic"
 
 const INITIAL_HISTORY_POINTS = 90
-const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v11"
+const BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v12"
 const BOARD_CACHE_IO_BUDGET_MS = 600
 const BOARD_INTRADAY_CACHE_IO_BUDGET_MS = 600
 const BOARD_SSR_SLOW_STAGE_MS = 3_000
@@ -65,6 +66,11 @@ function vietnamDateKey(now: Date) {
   }).format(now)
 }
 
+function isPositiveVolumeMap(value: unknown): value is Record<string, number> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value)
+    && Object.values(value).every((volume) => typeof volume === "number" && Number.isSafeInteger(volume) && volume > 0))
+}
+
 async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniverseSnapshot): Promise<InitialBoardData> {
   const currentDay = vietnamDateKey(now)
   const tickers = canonical.stocks.map((stock) => stock.ticker)
@@ -72,7 +78,17 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
     measureBoardSsrStage("overview", () => getCanonicalBoardOverviewSnapshots(tickers)),
     measureBoardSsrStage("quotes", () => fetchLiveBatchQuotes(tickers)),
     measureBoardSsrStage("history-cache", () => getCachedIntraday5mSnapshot(tickers, now, { ioBudgetMs: BOARD_INTRADAY_CACHE_IO_BUDGET_MS })),
-    measureBoardSsrStage("previous-volume", () => getPreviousSessionVolumes(tickers, currentDay)),
+    measureBoardSsrStage("previous-volume", () => readThroughUiCache({
+      namespace: "board-previous-volume-v1",
+      key: `${canonical.runId}:${currentDay}`,
+      tag: "board-previous-volume",
+      name: "Previous completed trading-session volume",
+      ttlSeconds: 1800,
+      ioBudgetMs: BOARD_CACHE_IO_BUDGET_MS,
+      validate: isPositiveVolumeMap,
+      shouldCache: (volumes) => Object.keys(volumes).length > 0,
+      load: () => getPreviousSessionVolumes(tickers, currentDay),
+    })),
   ])
 
   const cachedRowsBySymbol = intraday5m?.rows
@@ -116,6 +132,13 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
     const lastBarClose = intraday.length > 0 ? (intraday[intraday.length - 1].close ?? (intraday[intraday.length - 1] as any)?.c) : null
 
     const latestPrice = live?.price || snap?.latest_price || cachedRow?.price || snap?.reference_price || lastBarClose
+    // VPS quote has no session/as-of metadata: never use its volume as a verified progress numerator.
+    const currentVolume = verifiedBoardSessionVolume({
+      volume: snap?.total_volume,
+      volumeSessionDay: snap?.session_date,
+      volumeAsOf: snap?.updated_at,
+      volumeSource: "supabase-snapshot",
+    }, currentDay)
     // Reference is exchange metadata (previous-session close), never today's open/current price.
     const ref = live?.reference ?? snap?.reference_price ?? cachedRow?.reference ?? null
 
@@ -130,7 +153,8 @@ async function loadInitialBoardDataCanonical(now: Date, canonical: CanonicalUniv
         floor: live?.floor ?? snap?.floor_price ?? undefined,
         change,
         changePercent,
-        volume: live?.volume || snap?.total_volume || 0,
+        volume: currentVolume?.volume ?? live?.volume ?? 0,
+        ...(currentVolume ?? {}),
         foreignNetValue: live?.foreignNetValue ?? (snap?.foreign_flow as any)?.foreignNetValue,
         foreignBuyValue: live?.foreignBuyValue ?? (snap?.foreign_flow as any)?.totalBuyValue,
         foreignSellValue: live?.foreignSellValue ?? (snap?.foreign_flow as any)?.totalSellValue,

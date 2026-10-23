@@ -226,34 +226,32 @@ test("market headers omit LIVE/Chậm and partial labels without losing provenan
   assert.equal(stripSource.includes("Top 200 partial</span>"), false)
 })
 
-test("breadth progress places labels below exact proportion centers, keeping narrow labels separate", () => {
+test("breadth progress preserves exact provider ratios including zero and invalid counts", () => {
   const example = indexBreadthProgress([52, 56, 230])
   assert.equal(example.total, 338)
   assert.equal(example.shares.length, 3)
   assert.ok(Math.abs(example.shares.reduce((a, b) => a + b, 0) - 100) < 1e-9)
-  assert.ok(Math.abs(example.centers[0] - (100 * 26 / 338)) < 1e-9)
-  assert.ok(Math.abs(example.centers[1] - (100 * (52 + 28) / 338)) < 1e-9)
-  assert.ok(Math.abs(example.centers[2] - (100 * (52 + 56 + 115) / 338)) < 1e-9)
+  assert.ok(Math.abs(example.shares[0] - (100 * 52 / 338)) < 1e-9)
+  assert.ok(Math.abs(example.shares[1] - (100 * 56 / 338)) < 1e-9)
+  assert.ok(Math.abs(example.shares[2] - (100 * 230 / 338)) < 1e-9)
 
-  const vn30 = indexBreadthProgress([4, 3, 23])
-  assert.equal(vn30.total, 30)
-  assert.ok(vn30.centers[0] >= 7 && vn30.centers[2] <= 93)
-  assert.ok(vn30.centers[1] - vn30.centers[0] >= 13 - 1e-9)
-  assert.ok(vn30.centers[2] - vn30.centers[1] >= 13 - 1e-9)
-
-  for (const counts of [[0, 0, 30], [1, 1, 998], [998, 1, 1], [0, 0, 0], [0, 25, 0]] as [number, number, number][]) {
-    const result = indexBreadthProgress(counts)
-    assert.ok(result.shares.every(Number.isFinite))
-    assert.ok(result.centers.every(Number.isFinite))
-    assert.ok(result.centers[0] >= 7 && result.centers[2] <= 93)
-    assert.ok(result.centers[1] - result.centers[0] >= 13 - 1e-9)
-    assert.ok(result.centers[2] - result.centers[1] >= 13 - 1e-9)
-  }
-  assert.deepEqual(indexBreadthProgress([0, 0, 0]), { total: 0, shares: [0, 0, 0], centers: [16, 50, 84] })
+  const onlyDown = indexBreadthProgress([0, 0, 30])
+  assert.equal(onlyDown.total, 30)
+  assert.deepEqual(onlyDown.shares, [0, 0, 100])
+  assert.equal(indexBreadthProgress([0, 25, 0]).total, 25)
+  assert.deepEqual(indexBreadthProgress([0, 25, 0]).shares, [0, 100, 0])
+  assert.deepEqual(indexBreadthProgress([0, 0, 0]).shares, [0, 0, 0])
   assert.deepEqual(indexBreadthProgress([Number.NaN, -1, 0]).shares, [0, 0, 0])
+  for (const counts of [[52, 56, 230], [0, 0, 30], [0, 25, 0], [0, 0, 0]] as const) {
+    const centers = indexBreadthProgress(counts).centers
+    assert.ok(centers[0] >= 7)
+    assert.ok(centers[1] - centers[0] >= 13)
+    assert.ok(centers[2] - centers[1] >= 13)
+    assert.ok(centers[2] <= 93)
+  }
 })
 
-test("combined indices use smaller levels, larger point changes, colored percent pills and segment-following breadth labels", () => {
+test("combined index breadth has slanted separators and moving count labels under each segment", () => {
   const summary = stripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,17px)]"))
   assert.ok(summary.includes("text-[clamp(12px,1.05vw,15px)]"))
@@ -271,11 +269,25 @@ test("combined indices use smaller levels, larger point changes, colored percent
   assert.ok(summary.includes("progress.shares[0]"))
   assert.ok(summary.includes("progress.shares[1]"))
   assert.ok(summary.includes("progress.shares[2]"))
-  assert.ok(summary.includes("mt-1 w-full font-sans font-bold tabular-nums"))
-  assert.ok(summary.includes("progress.centers[0]"))
-  assert.ok(summary.includes("progress.centers[1]"))
-  assert.ok(summary.includes("progress.centers[2]"))
-  assert.ok(summary.includes("motion-safe:transition-[left]"))
+  assert.equal(summary.includes("data-index-breadth-summary"), false)
+  assert.equal(summary.includes('Tổng <strong'), false)
+  assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
+  for (const i of [0, 1, 2]) {
+    assert.ok(summary.includes(`progress.shares[${i}] > 0 ? <span`))
+    assert.ok(summary.includes("left: `${progress.centers[" + i + "]}%`"))
+  }
+  assert.equal(summary.includes("gap-[3px]"), false)
+  assert.equal((summary.match(/data-index-breadth-slant/g) ?? []).length, 2)
+  assert.ok(summary.includes("progress.shares[0] > 0 && (progress.shares[1] > 0 || progress.shares[2] > 0)"))
+  assert.ok(summary.includes("progress.shares[1] > 0 && progress.shares[2] > 0"))
+  assert.ok(summary.includes('left: `${progress.shares[0] + progress.shares[1]}%`'))
+  assert.ok(summary.includes("-skew-x-[26deg]"))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
+  assert.equal(summary.includes('grid h-[18px] grid-cols-3'), false)
+  assert.ok(summary.includes("▲{hasBreadth ? breadth[0] : \"—\"}"))
+  assert.ok(summary.includes("–{hasBreadth ? breadth[1] : \"—\"}"))
+  assert.ok(summary.includes("▼{hasBreadth ? breadth[2] : \"—\"}"))
+  assert.ok(summary.includes('breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""'))
   assert.ok(summary.includes("motion-safe:duration-700 motion-safe:ease-in-out"))
   assert.ok(summary.includes('breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""'))
   assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
@@ -308,8 +320,9 @@ test("index levels use direction icons; real count revisions animate and values 
   assert.ok(summary.includes('market-breadth-change-sweep'))
   assert.ok(summary.includes('font-sans font-extrabold leading-none tabular-nums'))
   assert.ok(summary.includes("data-index-breadth-progress"))
-  assert.ok(summary.includes("progress.centers[0]"))
-  assert.ok(summary.includes("progress.centers[2]"))
+  assert.ok(summary.includes('progress.centers[0]'))
+  assert.ok(summary.includes('progress.centers[2]'))
+  assert.ok(summary.includes('role="img"'))
   assert.ok(summary.includes('hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined'))
   assert.ok(summary.includes('key={hasBreadth ? breadth[0] : "missing"}'))
   assert.ok(summary.includes('key={hasBreadth ? breadth[1] : "missing"}'))

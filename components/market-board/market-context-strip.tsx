@@ -673,22 +673,39 @@ function IndexedSummary({ label, quote, day, breadth: sourceBreadth, onOpen, fre
       </div>
       <div
         className={`min-w-0 ${chartHeader ? "mt-1.5" : "mt-auto pt-1"}`}
+        role="img"
         aria-label={hasBreadth ? `Mã tăng ${breadth[0]}, ngang ${breadth[1]}, giảm ${breadth[2]}` : "Chưa có độ rộng hợp lệ trong phiên"}
         title={sourceBreadth ? `${sourceBreadth.source} · cập nhật ${formatAsOf(sourceBreadth.sourceUpdatedAt)} · chỉ số có thể chứa mã chưa giao dịch` : "Chưa có độ rộng hợp lệ trong phiên"}
         data-index-breadth-progress
       >
+
         <div className={`relative flex w-full overflow-hidden rounded-full bg-zinc-800 ${chartHeader ? "h-[9px]" : "h-[8px]"}`} aria-hidden="true">
           {hasBreadth && total > 0 ? <>
-            <span className={`bg-[#22c98a] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[0]}%` }} />
-            <span className={`bg-amber-400 ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[1]}%` }} />
-            <span className={`bg-[#ff4757] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[2]}%` }} />
+            {progress.shares[0] > 0 ? <span className={`bg-[#22c98a] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[0]}%` }} /> : null}
+            {progress.shares[1] > 0 ? <span className={`bg-amber-400 ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[1]}%` }} /> : null}
+            {progress.shares[2] > 0 ? <span className={`bg-[#ff4757] ${breadthFresh ? "motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ width: `${progress.shares[2]}%` }} /> : null}
+            {/* The track-colored slash separates true regions without distorting small constituent shares. */}
+            {progress.shares[0] > 0 && (progress.shares[1] > 0 || progress.shares[2] > 0) ? (
+              <span
+                data-index-breadth-slant
+                className={`pointer-events-none absolute -inset-y-1 z-10 w-[3px] -translate-x-1/2 -skew-x-[26deg] bg-[#111511] ${breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`}
+                style={{ left: `${progress.shares[0]}%` }}
+              />
+            ) : null}
+            {progress.shares[1] > 0 && progress.shares[2] > 0 ? (
+              <span
+                data-index-breadth-slant
+                className={`pointer-events-none absolute -inset-y-1 z-10 w-[3px] -translate-x-1/2 -skew-x-[26deg] bg-[#111511] ${breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`}
+                style={{ left: `${progress.shares[0] + progress.shares[1]}%` }}
+              />
+            ) : null}
           </> : null}
           {breadthSweepRevision > 0 ? <span key={breadthSweepRevision} className="market-breadth-change-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3" /> : null}
         </div>
-        <div className={`mt-1 w-full font-sans font-bold tabular-nums ${chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]" : "relative h-[14px] text-[9px] leading-[14px]"}`} aria-hidden="true">
-          <span className={`whitespace-nowrap text-emerald-400 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
-          <span className={`whitespace-nowrap text-amber-300 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
-          <span className={`whitespace-nowrap text-red-400 ${chartHeader ? "" : "absolute top-0 -translate-x-1/2 motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out"}`} style={chartHeader ? undefined : { left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
+        <div className={`relative mt-1 w-full font-sans font-bold tabular-nums ${chartHeader ? "h-[18px] text-xs leading-[18px]" : "h-[14px] text-[9px] leading-[14px]"}`} aria-hidden="true">
+          <span className={`absolute top-0 -translate-x-1/2 whitespace-nowrap text-emerald-400 ${breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ left: `${progress.centers[0]}%` }}><span key={hasBreadth ? breadth[0] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▲{hasBreadth ? breadth[0] : "—"}</span></span>
+          <span className={`absolute top-0 -translate-x-1/2 whitespace-nowrap text-amber-300 ${breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ left: `${progress.centers[1]}%` }}><span key={hasBreadth ? breadth[1] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>–{hasBreadth ? breadth[1] : "—"}</span></span>
+          <span className={`absolute top-0 -translate-x-1/2 whitespace-nowrap text-red-400 ${breadthFresh ? "motion-safe:transition-[left] motion-safe:duration-700 motion-safe:ease-in-out" : ""}`} style={{ left: `${progress.centers[2]}%` }}><span key={hasBreadth ? breadth[2] : "missing"} className={hasBreadth && breadthFresh ? "market-breadth-count-tick" : undefined}>▼{hasBreadth ? breadth[2] : "—"}</span></span>
         </div>
       </div>
       </div>

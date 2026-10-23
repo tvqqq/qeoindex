@@ -209,6 +209,17 @@ test("orderbook popup restores pre-freeze pointer drag and live stream while pre
   assert.match(orderbookSource, /will-change-\[width,height,left,top\]/)
   assert.match(orderbookSource, /const startResize = useCallback\(/)
 })
+test("QEO-426 restores only authenticated same-session volume evidence after F5", () => {
+  assert.match(boardSource, /qeoindex:board:session-volume:v1:/)
+  assert.match(boardSource, /window\.sessionStorage\.getItem\(key\)/)
+  assert.match(boardSource, /cached\?\.day === day/)
+  assert.match(boardSource, /reconcileBoardSessionVolume\(existing, cachedVolume, day\)/)
+  assert.match(boardSource, /verifiedBoardSessionVolume\(quote, currentDay\)/)
+  assert.match(boardSource, /window\.addEventListener\("pagehide", persist\)/)
+  assert.match(boardSource, /document\.addEventListener\("visibilitychange", onVisibilityChange\)/)
+  assert.match(boardSource, /window\.sessionStorage\.removeItem\(key\)/)
+})
+
 test("compact priceboard keeps fixed anchors, packs industries into lanes, and exposes a stable row hover", () => {
   assert.match(priceboardSource, /data-industry-column="watchlist" data-market-board-industry-column/)
   assert.match(priceboardSource, /data-industry-column="vn30" data-market-board-industry-column/)
@@ -222,6 +233,30 @@ test("compact priceboard keeps fixed anchors, packs industries into lanes, and e
   assert.match(priceboardSource, /data-market-board-screenshot-rail/)
   assert.match(priceboardSource, /min-h-\[62px\]/)
   assert.match(boardSource, /mode === "sector" && boardView === "industry"/)
+})
+
+test("only Theo dõi uses up/down/reference text colors for valid percent changes", () => {
+  const row = priceboardSource.split("const CompactStockRow =")[1]?.split("function StockRows(")[0] ?? ""
+  const rows = priceboardSource.split("function StockRows(")[1]?.split("export function IndustryPriceboard(")[0] ?? ""
+  const watchlist = priceboardSource.split('data-industry-column="watchlist"')[1]?.split('data-industry-column="vn30"')[0] ?? ""
+  const vn30 = priceboardSource.split('data-industry-column="vn30"')[1]?.split("industryLanes.map")[0] ?? ""
+  const industry = priceboardSource.split("industryLanes.map")[1]?.split("Kéo tiêu đề ngành")[0] ?? ""
+
+  // Use verified change; an unavailable quote stays neutral, genuine 0 is reference yellow.
+  assert.ok(row.includes("const change = quoteIsValid(quote) ? quote.changePercent : null"))
+  assert.ok(row.includes('!watchlistPercentColor || change === null'))
+  assert.ok(row.includes('change > 0 ? "text-up" : change < 0 ? "text-down" : "text-ref"'))
+  assert.ok(row.includes('className={`truncate text-right tabular-nums ${percentTextColor}`}'))
+  assert.ok(rows.includes("watchlistPercentColor = false"))
+  assert.ok(rows.includes("watchlistPercentColor={watchlistPercentColor}"))
+  assert.ok(row.includes("previous.watchlistPercentColor === next.watchlistPercentColor"))
+
+  // Never derive this from watched status: starred tickers can appear in VN30 and industry lanes.
+  assert.match(watchlist, /<StockRows[^>]*?showPriceVolume watchlistPercentColor \/>/)
+  assert.match(vn30, /<StockRows[^>]*?showPriceVolume=\{showPriceVolume\} \/>/)
+  assert.match(industry, /<StockRows[^>]*?showPriceVolume=\{showPriceVolume\} \/>/)
+  assert.equal(vn30.includes("watchlistPercentColor"), false)
+  assert.equal(industry.includes("watchlistPercentColor"), false)
 })
 
 test("classic Bảng điện remains the default with the original six sector grid and chart rows", () => {
@@ -252,12 +287,24 @@ test("market card cleanup preserves one-row desktop fit, visible breadth and exp
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   const impact = contextStripSource.split("function ImpactChart(")[1]?.split("export function MarketContextStrip")[0] ?? ""
   assert.ok(summary.includes("data-index-breadth-progress"))
-  assert.ok(summary.includes('relative flex w-full overflow-hidden rounded-full bg-zinc-800'))
-  assert.ok(summary.includes('mt-1 w-full font-sans font-bold tabular-nums'))
-  assert.ok(summary.includes('style={chartHeader ? undefined : { left: `${progress.centers[0]}%` }}'))
-  assert.ok(summary.includes('style={chartHeader ? undefined : { left: `${progress.centers[1]}%` }}'))
-  assert.ok(summary.includes('style={chartHeader ? undefined : { left: `${progress.centers[2]}%` }}'))
+  const bar = summary.indexOf('relative flex w-full overflow-hidden rounded-full bg-zinc-800')
+  const counts = summary.indexOf('chartHeader ? "h-[18px] text-xs leading-[18px]"')
+  assert.ok(bar >= 0 && counts > bar)
+  assert.equal(summary.includes("data-index-breadth-summary"), false)
+  assert.ok(summary.includes('progress.centers[0]'))
+  assert.ok(summary.includes('progress.centers[1]'))
+  assert.ok(summary.includes('progress.centers[2]'))
+  assert.ok(summary.includes('-skew-x-[26deg]'))
+  assert.ok(summary.includes("data-index-breadth-slant"))
+  assert.ok(summary.includes('progress.shares[0] > 0 && (progress.shares[1] > 0 || progress.shares[2] > 0)'))
+  assert.ok(summary.includes('progress.shares[1] > 0 && progress.shares[2] > 0'))
   assert.ok(summary.includes('motion-safe:transition-[left]'))
+  assert.ok(summary.includes('progress.shares[0] > 0 ? <span'))
+  assert.ok(summary.includes('progress.shares[1] > 0 ? <span'))
+  assert.ok(summary.includes('progress.shares[2] > 0 ? <span'))
+  assert.ok(summary.includes('▲{hasBreadth ? breadth[0]'))
+  assert.ok(summary.includes('–{hasBreadth ? breadth[1]'))
+  assert.ok(summary.includes('▼{hasBreadth ? breadth[2]'))
   assert.ok(summary.includes('rounded-full border font-sans font-extrabold'))
   assert.ok(impact.includes('grid h-[80px]'))
   assert.equal(impact.includes('Tổng điểm kéo tăng và kéo giảm của các mã hiển thị'), false)
@@ -311,7 +358,7 @@ test("market context numbers, chart traces, and headers honor motion reduction",
   assert.ok(contextStripSource.includes('motion-safe:animate-pulse'))
   assert.ok(contextStripSource.includes('motion-safe:transition-[width]'))
   assert.ok(contextStripSource.includes('motion-safe:duration-700 motion-safe:ease-in-out'))
-  assert.ok(contextStripSource.includes('motion-safe:transition-[left]'))
+  assert.ok(contextStripSource.includes('motion-safe:transition-[width]'))
   assert.ok(contextStripSource.includes('key={breadthSweepRevision}'))
   assert.ok(contextStripSource.includes('key={hasBreadth ? breadth[0] : "missing"}'))
   assert.ok(contextStripSource.includes('key={entry.contribution}'))
@@ -497,7 +544,7 @@ test("Chart 1m compact headers are equal-height and footer owns ICT and one refr
   assert.ok(summary.includes('chartHeader ? "text-[clamp(18px,1.8vw,24px)]"'))
   assert.ok(summary.includes('chartHeader ? "text-[clamp(14px,1.3vw,18px)]"'))
   assert.ok(summary.includes('chartHeader ? "justify-end text-xs"'))
-  assert.ok(summary.includes('chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]"'))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
   assert.ok(footer.includes('id="market-board-chart-ict-clock"'))
   assert.ok(footer.includes('onClick={onRefresh}'))
   assert.ok(footer.includes('disabled={isRefreshing}'))
@@ -510,7 +557,7 @@ test("Chart 1m compact headers are equal-height and footer owns ICT and one refr
   assert.equal(chart.includes("History theo timeframe từ DNSE"), false)
 })
 
-test("Chart 1m keeps percent beside label, metrics and three breadth counts in the right-hand column", () => {
+test("Chart 1m keeps original counts below slanted bar and follows the segment centers", () => {
   const summary = contextStripSource.split("function IndexedSummary(")[1]?.split("function ContextCard(")[0] ?? ""
   const chart = readFileSync(new URL("../components/index-chart/index-chart-modal.tsx", import.meta.url), "utf8")
   assert.ok(summary.includes('chartHeader ? "min-w-0" : "contents"'))
@@ -519,8 +566,12 @@ test("Chart 1m keeps percent beside label, metrics and three breadth counts in t
   assert.ok(summary.includes('grid h-[132px] min-w-0 grid-cols-1'))
   assert.ok(summary.includes('sm:h-[96px] sm:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]'))
   assert.ok(summary.includes('chartHeader ? "justify-end text-xs"'))
-  assert.ok(summary.includes('chartHeader ? "grid h-[18px] grid-cols-3 gap-1 text-center text-xs leading-[18px]"'))
-  assert.ok(summary.includes('style={chartHeader ? undefined : { left:'))
+  assert.ok(summary.includes('chartHeader ? "h-[18px] text-xs leading-[18px]"'))
+  assert.ok(summary.includes("relative flex w-full overflow-hidden rounded-full bg-zinc-800"))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[0]}%` }}'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[1]}%` }}'))
+  assert.ok(summary.includes('style={{ left: `${progress.centers[2]}%` }}'))
+  assert.equal(summary.includes('style={chartHeader ? undefined :'), false)
   assert.ok(chart.includes('sm:h-[96px] xl:hidden'))
   assert.equal(summary.includes('h-[160px]'), false)
 })

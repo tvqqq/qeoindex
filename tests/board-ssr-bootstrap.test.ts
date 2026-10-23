@@ -67,6 +67,7 @@ test("the authenticated board renders through its cache-only history path withou
     "@/modules/eod/shares": "export const getEodForeignRoom = (...args) => globalThis.__boardSsrMocks.getEodForeignRoom(...args)",
     "@/modules/market/board/vn30-membership": "export const getVn30Membership = (...args) => globalThis.__boardSsrMocks.getVn30Membership(...args)",
     "@/modules/market/board/previous-session-volume": "export const getPreviousSessionVolumes = (...args) => globalThis.__boardSsrMocks.getPreviousSessionVolumes(...args)",
+    "@/modules/market/board/industry-priceboard": "export const verifiedBoardSessionVolume = (quote, day) => quote?.volumeSessionDay === day && Number.isInteger(quote?.volume) && quote?.volume >= 0 && quote?.volumeAsOf ? quote : null",
     "../market-board-performance.module.css": "export default { performanceSurface: 'surface' }",
     "react/jsx-runtime": "export function jsx(type, props, key) { return { type, props, key } }; export const jsxs = jsx; export const Fragment = Symbol.for('react.fragment')",
   }
@@ -113,7 +114,7 @@ test("the authenticated board renders through its cache-only history path withou
       stocks: [{ ticker: "ABC", rank: 1, sector: "Technology", exchange: "HOSE", averageVolume50d: 100, marketCapBillion: 1_000 }],
     }),
     getCanonicalBoardOverviewSnapshots: async () => ({
-      ABC: { latest_price: 10, reference_price: 9, session_date: today, intraday_1m: historyPoints },
+      ABC: { latest_price: 10, reference_price: 9, session_date: today, total_volume: 7, updated_at: new Date().toISOString(), intraday_1m: historyPoints },
     }),
     isTradingSessionOpen: () => false,
     getMarketSessionStatus: () => ({ isLiveSession: false, ttlSeconds: 60, cacheBucketKey: "closed" }),
@@ -165,6 +166,8 @@ test("the authenticated board renders through its cache-only history path withou
   assert.deepEqual(board.props.initialHistories.ABC, historyPoints, "same-day Supabase intraday history remains the miss fallback")
   assert.equal(board.props.initialQuotes.ABC.price, 10.5, "live quote precedence remains intact")
   assert.equal(board.props.initialQuotes.ABC.reference, 9.5, "live reference precedence remains intact")
+  assert.equal(board.props.initialQuotes.ABC.volume, 7, "verified same-day volume beats timestamp-free VPS SSR volume")
+  assert.equal(board.props.initialQuotes.ABC.volumeSessionDay, today)
   assert.equal(board.props.universe[0].previousSessionVolume, 2, "previous completed-session volume stays available on the SSR universe")
 })
 
@@ -174,7 +177,7 @@ test("board SSR and VN30 cache calls opt into finite I/O budgets without changin
   const uiCache = source("modules/shared/cache/ui-data-cache.ts")
   const intraday = source("modules/market/realtime/intraday-5m-service.ts")
 
-  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v11"/)
+  assert.match(page, /BOARD_SSR_CACHE_NAMESPACE = "board-ssr-v12"/)
   assert.match(page, /getCachedIntraday5mSnapshot\(tickers, now, \{ ioBudgetMs: BOARD_INTRADAY_CACHE_IO_BUDGET_MS \}\)/)
   assert.doesNotMatch(page, /getIntraday5mSnapshot/)
   assert.match(page, /ioBudgetMs: BOARD_CACHE_IO_BUDGET_MS/)

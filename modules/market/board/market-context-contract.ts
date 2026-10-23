@@ -5,12 +5,7 @@ const VIETNAM_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 })
 
-/**
- * Position breadth labels under their actual green/flat/red segments.
- * In narrow columns, limit label centers to 7–93% and keep at least 13%
- * between adjacent labels so tiny/zero-width segments cannot stack text.
- * The bar shares remain exact provider counts (no artificial min widths).
- */
+/** Exact reported advance/flat/decline shares; never pad zero-width segments. */
 export function indexBreadthProgress(counts: readonly [number, number, number]) {
   const safeCount = (value: number) => Number.isSafeInteger(value) && value >= 0 ? value : 0
   const up = safeCount(counts[0])
