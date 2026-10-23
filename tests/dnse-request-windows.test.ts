@@ -194,7 +194,7 @@ test("QEO-196 keeps the bounded Go worker runtime foundation", () => {
   assert.match(streamSource, /stale/i)
   assert.match(streamSource, /backoff/i)
   assert.match(configSource, /Asia\/Ho_Chi_Minh/)
-  assert.match(configSource, /08:55/)
+  assert.match(configSource, /MarketOpen\s*=\s*"08:45"/)
   assert.match(configSource, /14:50/)
   assert.match(configSource, /MARKET_UNIVERSE_REFRESH_MS/)
   assert.match(supabaseSource, /market_realtime_bus/)
@@ -268,7 +268,7 @@ test("QEO-225 exposes the worker relay on loopback only and keeps existing marke
   assert.match(envExample, /^QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS=50$/m)
   assert.match(service, /WorkingDirectory=\/opt\/qeoindex\/repo\/services\/market-realtime-worker/)
   assert.match(service, /--no-build/)
-  assert.match(startTimer, /01:55:00\s+UTC/)
+  assert.match(startTimer, /01:45:00\s+UTC/)
   assert.match(startTimer, /Persistent=true/)
   assert.match(stopTimer, /07:50:00\s+UTC/)
   assert.match(stopTimer, /Persistent=true/)
@@ -342,7 +342,12 @@ test("QEO-216 provider ownership still uses four bounded supplemental sockets an
   assert.match(marketRouter, /func \(r \*marketFrameRouter\) OnOrderbookFrame[\s\S]*r\.pushMarket\(stamped\)[\s\S]*r\.orderbook\.Push\(stamped\)/)
   assert.match(config, /QEO_MARKET_REALTIME_ORDERBOOK_FLUSH_MS/)
   assert.match(config, /50/)
-  assert.doesNotMatch(stream, /func OrderbookChannels[\s\S]*ohlc\.1\.json/)
+  const orderbookChannels = stream.match(/func OrderbookChannels[\s\S]*?\n\}/)?.[0] ?? ""
+  const indexChannels = stream.match(/func IndexChannels[\s\S]*?\n\}/)?.[0] ?? ""
+  assert.ok(orderbookChannels, "orderbook feed channels must remain defined")
+  assert.doesNotMatch(orderbookChannels, /ohlc\.1\.json/)
+  assert.match(indexChannels, /Name: "ohlc\.1\.json"/)
+  assert.match(indexChannels, /Symbols: \[\]string\{"VN30F1M"\}/)
 })
 
 test("QEO-216 historical private Broadcast policy remains scoped even though QEO-225 no longer consumes it", () => {
