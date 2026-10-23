@@ -39,3 +39,31 @@ func TestOrderbookChannelsIncludeAuctionExpectedPrice(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexChannelsIncludeFuturesOHLCOnTheExistingIndexStream(t *testing.T) {
+	channels := IndexChannels()
+	wantNames := []string{
+		"market_index.VNINDEX.json",
+		"market_index.VN30.json",
+		"market_index.HNX.json",
+		"market_index.UPCOM.json",
+		"ohlc.1.json",
+	}
+	if len(channels) != len(wantNames) {
+		t.Fatalf("expected %d index-stream channels, got %d", len(wantNames), len(channels))
+	}
+	for index, wantName := range wantNames {
+		if channels[index].Name != wantName {
+			t.Fatalf("channel %d=%q want %q", index, channels[index].Name, wantName)
+		}
+		if wantName == "ohlc.1.json" {
+			if len(channels[index].Symbols) != 1 || channels[index].Symbols[0] != "VN30F1M" {
+				t.Fatalf("futures OHLC channel must subscribe only VN30F1M, got %#v", channels[index].Symbols)
+			}
+			continue
+		}
+		if len(channels[index].Symbols) != 0 {
+			t.Fatalf("market-index channel %s unexpectedly scoped to symbols: %#v", wantName, channels[index].Symbols)
+		}
+	}
+}
