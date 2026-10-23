@@ -57,7 +57,7 @@ During the manual market-hours smoke, verify:
 
 1. JSON logs show `ticks`, `indexes` (five channels, including the single VN30F1M OHLC subscription), and four orderbook supplemental streams at full universe without printing credentials.
 2. `market_realtime_bus` row `dnse-market` keeps the existing bounded 1 Hz recovery contract; orderbook checkpoint rows advance independently and may trail live relay messages by roughly one checkpoint interval.
-3. Market Board receives authenticated worker relay changes end-to-end with no canonical browser DNSE socket.
+3. Market Board receives authenticated worker relay changes end-to-end with no canonical browser DNSE socket; verify authentic `VN30F1M` 1-minute `T=b` frames preserve provider OHLCV through the relay.
 4. Opening popup orderbooks creates only authenticated worker relay traffic in the browser; Chrome Network shows no `ws-openapi.dnse.com.vn` connection.
 5. Multiple browsers viewing the same symbol do not increase the DNSE provider socket count; capacity proof covers at least 100 distinct symbols while provider sockets remain bounded by six.
 6. During ATO/ATC, `expected_price.G1.json` produces `T=e` state and the popup updates both indicative match price and indicative quantity without replacing the last actually matched quote.
