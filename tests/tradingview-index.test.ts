@@ -267,6 +267,9 @@ test("QEO-409 bounds 1m history requests and preserves real partial results per 
 })
 
 test("QEO-422 races index history before route timeout while retaining real partial windows", () => {
+  assert.match(historySource, /cause\.code/)
+  assert.match(historySource, /case "ENOTFOUND": return "dns_not_found"/)
+  assert.match(historySource, /case "ETIMEDOUT": return "network_timeout"/)
   assert.match(historySource, /PUBLIC_CHART_TIMEOUT_MS = 12_000/)
   assert.match(historySource, /OHLC_ATTEMPT_TIMEOUT_MS = 8_000/)
   assert.match(historySource, /SIGNED_HEDGE_DELAY_MS = 2_000/)
