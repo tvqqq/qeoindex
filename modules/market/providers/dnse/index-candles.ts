@@ -23,6 +23,20 @@ const SIGNED_HEDGE_DELAY_MS = 2_000
 
 function dnseFailureCode(reason: unknown) {
   if (!(reason instanceof Error)) return "failed"
+  const cause = (reason as Error & { cause?: unknown }).cause
+  if (cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string") {
+    switch (cause.code) {
+      case "EAI_AGAIN": return "dns_retry"
+      case "ENOTFOUND": return "dns_not_found"
+      case "ETIMEDOUT": return "network_timeout"
+      case "UND_ERR_CONNECT_TIMEOUT": return "connect_timeout"
+      case "ECONNRESET": return "connection_reset"
+      case "ECONNREFUSED": return "connection_refused"
+      case "ECONNABORTED": return "connection_aborted"
+      case "EHOSTUNREACH": return "host_unreachable"
+      case "ENETUNREACH": return "network_unreachable"
+    }
+  }
   if (reason.name === "TimeoutError" || /timed? ?out|timeout/i.test(reason.message)) return "timeout"
   if (reason.name === "AbortError") return "aborted"
   const status = reason.message.match(/^HTTP (\d{3})$/)
