@@ -87,6 +87,6 @@ sudo systemctl enable --now qeo-market-realtime-start.timer
 sudo systemctl enable --now qeo-market-realtime-stop.timer
 ```
 
-The start timer fires at 01:55 UTC (08:55 ICT) and the stop timer at 07:50 UTC (14:50 ICT), Monday–Friday. Both are persistent for reboot recovery, while the worker's own market-window check remains the final guardrail.
+The start timer fires at 01:45 UTC (08:45 ICT) and the stop timer at 07:50 UTC (14:50 ICT), Monday–Friday. Both are persistent for reboot recovery, while the worker's own market-window check remains the final guardrail.
 
 Rollback is the inverse: disable both timers, stop `qeo-market-realtime.service`, and only then restore a previous ingestion worker if required. Never run two producers concurrently.
