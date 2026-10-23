@@ -55,7 +55,7 @@ The worker intentionally exits outside Monday–Friday 08:45–14:50 `Asia/Ho_Ch
 
 During the manual market-hours smoke, verify:
 
-1. JSON logs show `ticks`, `indexes`, and four orderbook supplemental streams at full universe without printing credentials.
+1. JSON logs show `ticks`, `indexes` (five channels, including the single VN30F1M OHLC subscription), and four orderbook supplemental streams at full universe without printing credentials.
 2. `market_realtime_bus` row `dnse-market` keeps the existing bounded 1 Hz recovery contract; orderbook checkpoint rows advance independently and may trail live relay messages by roughly one checkpoint interval.
 3. Market Board receives authenticated worker relay changes end-to-end with no canonical browser DNSE socket.
 4. Opening popup orderbooks creates only authenticated worker relay traffic in the browser; Chrome Network shows no `ws-openapi.dnse.com.vn` connection.
