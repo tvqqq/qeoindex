@@ -478,3 +478,29 @@ test("realtime health keeps feature authorization and delegates proxy origins to
   assert.match(route, /status: 400, headers: NO_STORE_HEADERS/)
   assert.match(route, /Cache-Control.*no-store/)
 })
+
+
+test("realtime token uses the shared proxy-origin guard after feature auth", () => {
+  const route = source("app/api/market/realtime-token/route.ts")
+  const authIndex = route.indexOf('const auth = await requireApiFeature("market_board")')
+  const guardIndex = route.indexOf("if (!isSessionMutationOriginAllowed(request))")
+  const secretIndex = route.indexOf("const secret = process.env.QEO_MARKET_REALTIME_SIGNING_SECRET")
+
+  assert.ok(authIndex >= 0 && guardIndex > authIndex, "feature auth must precede origin validation")
+  assert.ok(secretIndex > guardIndex, "secret lookup must follow origin validation")
+  assert.match(route, /status: 403,[\s\S]*?headers: NO_STORE_HEADERS/)
+  assert.match(route, /if \(!secret\)[\s\S]*?status: 503,[\s\S]*?headers: NO_STORE_HEADERS/)
+  assert.match(route, /return NextResponse\.json\(\{ ok: true, token, expiresAt \}, \{ headers: NO_STORE_HEADERS \}\)/)
+
+  withMutationOriginEnvironment({ NODE_ENV: "production", APP_URL: "https://qeoindex-staging.web.app" }, () => {
+    assert.equal(isSessionMutationOriginAllowed(originRequest(
+      "http://internal-app-host:8080/api/market/realtime-token",
+      "https://qeoindex-staging.web.app",
+    )), true)
+    assert.equal(isSessionMutationOriginAllowed(originRequest("http://internal-app-host:8080/api/market/realtime-token")), true)
+    assert.equal(isSessionMutationOriginAllowed(originRequest(
+      "http://internal-app-host:8080/api/market/realtime-token",
+      "https://attacker.example",
+    )), false)
+  })
+})
