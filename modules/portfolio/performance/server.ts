@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { ServerAuthContext } from "@/modules/auth/server"
+import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
 import { fetchDnseIndexCandleHistory } from "@/modules/market/providers/dnse/index-candles"
 import {
   getCachedIntraday5mSnapshot,
@@ -206,7 +207,11 @@ export async function getPortfolioPerformanceContext(
   }> = []
 
   if (firstTransactionDate && allTickers.length > 0) {
-    const rawResult = await context.supabase
+    const rawClient = getSupabaseServerClient()
+    if (!rawClient) {
+      dbFailure("load-market_ohlcv_raw_daily", new Error("Service-role Supabase client is not configured"))
+    }
+    const rawResult = await rawClient
       .from("market_ohlcv_raw_daily")
       .select("ticker,session_date,close,source_price_unit,price_basis")
       .in("ticker", allTickers)

@@ -463,3 +463,18 @@ test("session mutations retain missing and request-url same-origin behavior whil
   assert.match(post, /if \(!sameOrigin\(request\)\)/)
   assert.match(deleteHandler, /if \(!sameOrigin\(request\)\)/)
 })
+
+test("realtime health keeps feature authorization and delegates proxy origins to the shared guard", () => {
+  const route = source("app/api/market/realtime-health/route.ts")
+  const authIndex = route.indexOf('const auth = await requireApiFeature("market_board")')
+  const guardIndex = route.indexOf("if (!sameOrigin(request) || !contentLengthAllowed(request))")
+  const secretIndex = route.indexOf("const secret = process.env.QEO_MARKET_REALTIME_SIGNING_SECRET")
+
+  assert.ok(authIndex >= 0 && guardIndex > authIndex, "feature authorization must precede origin/body checks")
+  assert.ok(secretIndex > guardIndex, "the signing secret must be read after the origin/body guard")
+  assert.match(route, /function sameOrigin\(request: Request\)[\s\S]*?isSessionMutationOriginAllowed\(request\)/)
+  assert.match(route, /MAX_BODY_BYTES = 12 \* 1024/)
+  assert.match(route, /if \(!secret\)[\s\S]*?status: 503[\s\S]*?NO_STORE_HEADERS/)
+  assert.match(route, /status: 400, headers: NO_STORE_HEADERS/)
+  assert.match(route, /Cache-Control.*no-store/)
+})
