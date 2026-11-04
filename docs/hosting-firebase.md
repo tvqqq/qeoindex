@@ -2,7 +2,10 @@
 
 Tracking: [QEO-45](https://linear.app/qeoindex/issue/QEO-45).
 Production domain: `https://qeoindex.qeoqeo.com`.
-Firebase project target: `qeoindex` (https://console.firebase.google.com/u/0/project/qeoindex/overview).
+Firebase project target: `qeoindex-vn` (https://console.firebase.google.com/u/0/project/qeoindex-vn/overview).
+Backend: `qeoindex-web`, region `asia-southeast1`.
+Staging: `https://qeoindex-web--qeoindex-vn.asia-southeast1.hosted.app`.
+The original `qeoindex` project is not the selected deployment target.
 GitHub: `tvqqq/qeoindex`, branch `main`, root `/`.
 
 **Code portability is not deployment acceptance.** A real Firebase App Hosting
@@ -41,7 +44,7 @@ BUILD and RUNTIME. Vercel builds omit it and retain Workflow World,
 Runtime Cache, analytics, and existing routes. No schema changes are
 necessary just to migrate the frontend.
 
-## Console setup for Firebase project `qeoindex`
+## Console setup for Firebase project `qeoindex-vn`
 
 1. In Firebase Console → **App Hosting**, enable **Blaze billing** if prompted.
    A billing budget alert is not a hard $0 cap. `apphosting.yaml` configures
@@ -81,7 +84,8 @@ necessary just to migrate the frontend.
 8. Only then connect `qeoindex.qeoqeo.com` to Firebase in Console,
    update `APP_URL`/Auth redirect allowlists/OAuth callbacks and confirm
    DNS/TLS. Keep the prior Vercel deployment available as rollback with
-   its Cron Jobs disabled.
+   its Cron Jobs disabled. A quota-paused Vercel team is not a ready rollback;
+   resolve availability and matching signer configuration before claiming it is tested.
 
 ## Previously disabled production schedules (2026-11-04)
 
@@ -100,10 +104,47 @@ For **old Vercel deployment Cron Jobs**, open
 Vercel → `stockos` → Settings → Cron Jobs → **Disable Cron Jobs**.
 Source config `crons: []` applies to future deployments only.
 
+## Realtime relay configuration and signing-key rotation
+
+The independent realtime relay remains on `qeo-onidel`; do not deploy it into
+App Hosting or change the independent EOD worker. Configure the frontend
+`NEXT_PUBLIC_QEO_MARKET_REALTIME_URL=wss://realtime.qeoqeo.com/ws` and a
+Secret Manager reference for server-only `QEO_MARKET_REALTIME_SIGNING_SECRET`.
+The signing value must match the relay's protected environment file at
+`/opt/qeoindex/env/market-realtime-worker.env` (mode `0600`). Its
+`QEO_MARKET_REALTIME_ALLOWED_ORIGINS` must explicitly include production and
+the Firebase staging origin; do not use a wildcard. Preserve its market-hours
+service schedule. Root administration requires the existing Supabase Auth UUID
+allowlist in server-only `ROOT_ADMIN_USER_IDS`, never an email allowlist.
+
+Rotate in this order:
+
+1. Create a new Secret Manager version without disabling versions still used
+   by serving, tagged, or rollback revisions. Keep values out of logs and Git.
+2. Synchronize the relay and the frontend signer during a controlled window;
+   preserve a protected rollback configuration and verify the values match
+   without printing them. Do not start the relay outside its normal schedule
+   merely to claim live market acceptance.
+3. Let the next reviewed Git rollout pin the new version. Verify its runtime
+   reference, authenticated token path, and relay handshake during market hours.
+4. Before disabling an old version, inspect **all retained Cloud Run revision
+   tags and traffic assignments**, as well as rollback dependencies. Remove
+   stale tags from failed revisions that are no longer needed. A tagged revision
+   referencing a disabled secret can block a later traffic update even at 0%.
+5. Disable the old version only after dependent revisions and rollback plans
+   have been handled. Do not reactivate an exposed key to repair routing.
+
+If a build succeeds but routing fails because of a stale revision tag, inspect
+Cloud Run Revision History, remove only the obsolete tag, and use an already
+built healthy revision for a controlled staging recovery. Do not rebuild
+repeatedly. Verify a subsequent legitimate Git rollout reaches App Hosting
+`Current` without manual traffic recovery before declaring Git deployment
+healthy. A successful Cloud Build alone does not prove rollout success.
+
 ## Rollback / reactivation
 
 If Firebase staging fails, do not change DNS. After production cutover,
-rollback points DNS to the verified Vercel deployment and restores
+rollback points DNS to a verified, runnable Vercel deployment and restores
 `APP_URL`/auth domains, **without** enabling a duplicate cron.
 To reactivate paused Supabase jobs later, selectively call
 `cron.alter_job(job_id := ..., active := true)` only after verifying
