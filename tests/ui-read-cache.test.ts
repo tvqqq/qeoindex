@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { readThroughUiCache } from "../modules/shared/cache/ui-data-cache.ts"
+import { getHostingCache } from "../modules/shared/cache/hosting-runtime-cache.ts"
+import { isFirebaseAppHosting, supportsManagedWorkflows } from "../modules/shared/hosting.ts"
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
@@ -10,7 +12,7 @@ function source(path: string) {
 
 test("P1 UI reads use Runtime Cache with optional shared Redis", () => {
   const cache = source("modules/shared/cache/ui-data-cache.ts")
-  assert.match(cache, /getCache/)
+  assert.match(cache, /getHostingCache/)
   assert.match(cache, /Redis\.fromEnv/)
   assert.match(cache, /cache\.get\(key\)/)
   assert.match(cache, /redisClient\.get/)
@@ -203,4 +205,15 @@ test("P2 Singapore runtime and bounded DNSE UI batching remain enabled", () => {
   assert.match(board, /let messageQueue: string\[\] = \[\]/)
   assert.match(board, /window\.requestAnimationFrame\(flushMessageQueue\)/)
   assert.match(board, /window\.cancelAnimationFrame\(messageFrame\)/)
+})
+
+test("Firebase read tier never invokes Vercel Runtime Cache and requires shared Redis for cross-instance hits", async () => {
+  const cache = getHostingCache({ namespace: "market-board-v11" }, { QEO_HOSTING_PROVIDER: "firebase" })
+  assert.equal(await cache.get("same-key"), null)
+  assert.equal(await cache.set("same-key", "value", { ttl: 60, tags: ["market-board"], name: "test" }), undefined)
+  assert.equal(await cache.expireTag("market-board"), undefined)
+  assert.equal(await cache.get("same-key"), null, "Firebase must not retain process-local writes across requests")
+  assert.equal(isFirebaseAppHosting({ QEO_HOSTING_PROVIDER: "firebase" }), true)
+  assert.equal(supportsManagedWorkflows({ QEO_HOSTING_PROVIDER: "firebase" }), false)
+  assert.equal(supportsManagedWorkflows({ VERCEL_ENV: "production" }), true)
 })

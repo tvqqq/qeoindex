@@ -41,4 +41,6 @@ const nextConfig = {
   },
 }
 
-export default withWorkflow(nextConfig)
+// Firebase runs request-scoped Cloud Run; do not compile Vercel's managed
+// durable Workflow routes into its Next.js deployment.
+export default process.env.QEO_HOSTING_PROVIDER === "firebase" ? nextConfig : withWorkflow(nextConfig)

@@ -8,6 +8,7 @@ import {
 } from "./manual-job-capabilities.ts"
 import { sanitizeAdminValue } from "./redact.ts"
 import { validateChangeReason } from "./request-security.ts"
+import { supportsManagedWorkflows } from "../shared/hosting.ts"
 import type { AdminJobGroup, AdminManualPolicy, AdminManualPurpose } from "./types.ts"
 
 export { ALLOWLISTED_MANUAL_JOB_KEYS, type AllowlistedManualJobKey }
@@ -223,6 +224,7 @@ function normalizeResearchBackfillParams(params?: ManualJobParams) {
 
 async function runResearchReportsBackfillDispatch(input: DispatchManualAdminJobInput): Promise<Record<string, unknown>> {
   const params = normalizeResearchBackfillParams(input.params)
+  if (!supportsManagedWorkflows()) throw new Error("Workflow temporarily paused on Firebase App Hosting")
   const { start } = await import("workflow/api")
   const { researchReportsBackfillWorkflow } = await import("../../workflows/research-reports-backfill-workflow.ts")
   const startedAt = new Date().toISOString()

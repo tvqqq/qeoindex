@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis"
-import { getCache } from "@vercel/functions"
+import { getHostingCache } from "@/modules/shared/cache/hosting-runtime-cache"
 
 import { intradaySnapshot, isRecentFiveMinuteSnapshot, type IntradayPoint } from "@/modules/market/realtime/intraday-5m"
 import { fetchYahooFiveMinuteSnapshot } from "@/modules/market/providers/yahoo/history"
@@ -262,7 +262,7 @@ export async function getCachedIntraday5mSnapshot(
 ): Promise<IntradaySnapshot | null> {
   const bucketKey = snapshotCacheKey(symbols, now)
   const latestKey = latestSnapshotCacheKey(symbols, now)
-  const cache = getCache({ namespace: "market-board-v11" })
+  const cache = getHostingCache({ namespace: "market-board-v11" })
   const redisClient = getRedis()
 
   const candidates = [
@@ -295,7 +295,7 @@ export async function getIntraday5mSnapshot(symbols: string[] | readonly string[
   return snapshotCoalescer.get(key, async () => {
     const snapshot = await fetchSnapshot(symbols, now)
     const latestKey = latestSnapshotCacheKey(symbols, now)
-    const cache = getCache({ namespace: "market-board-v11" })
+    const cache = getHostingCache({ namespace: "market-board-v11" })
     const redisClient = getRedis()
     const writeTtl = secondsToNextBucket(now)
     const latestTtl = 86400

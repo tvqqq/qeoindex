@@ -5,6 +5,7 @@ import { runAiCouncilDebateOperation } from "@/modules/ai-council/operations"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { isFirebaseAppHosting, pausedWorkflowResponse } from "@/modules/shared/hosting"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -44,6 +45,8 @@ export async function GET(request: NextRequest) {
   if (ratingDate && (!/^\d{4}-\d{2}-\d{2}$/.test(ratingDate) || !parsedRatingDate || !Number.isFinite(parsedRatingDate.getTime()))) {
     return NextResponse.json({ ok: false, error: "INVALID_RATING_DATE" }, { status: 400 })
   }
+
+  if (isFirebaseAppHosting()) return pausedWorkflowResponse()
 
   try {
     const result = await runAiCouncilDebateOperation(supabase, ratingDate)

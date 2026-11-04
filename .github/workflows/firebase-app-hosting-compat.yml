@@ -1,0 +1,48 @@
+name: Firebase App Hosting Compatibility
+
+on:
+  pull_request:
+    paths:
+      - "apphosting.yaml"
+      - "next.config.mjs"
+      - "app/**"
+      - "modules/shared/**"
+      - "modules/market/**"
+      - "modules/admin/**"
+      - "instrumentation.ts"
+      - "tests/ui-read-cache.test.ts"
+      - "tests/ai-council-workflow-boundary.test.ts"
+      - ".github/workflows/firebase-app-hosting-compat.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-app-hosting-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firebase-build:
+    runs-on: ubuntu-latest
+    env:
+      QEO_HOSTING_PROVIDER: firebase
+      QEO_ALERTS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Firebase portability contracts
+        run: |
+          node --test tests/ui-read-cache.test.ts tests/ai-council-workflow-boundary.test.ts
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Firebase environment Next.js build
+        run: pnpm build

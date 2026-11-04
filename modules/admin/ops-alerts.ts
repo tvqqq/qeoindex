@@ -44,6 +44,11 @@ function channelCandidates() {
 }
 
 async function slackToken() {
+  const directToken = process.env.SLACK_BOT_TOKEN?.trim()
+  if (directToken) return directToken
+  if (process.env.QEO_HOSTING_PROVIDER === "firebase") {
+    throw new Error("SLACK_BOT_TOKEN is not configured for Firebase App Hosting")
+  }
   return getToken(connectorId(), {
     subject: { type: "app" },
     scopes: ["chat:write", "chat:write.public", "channels:read"],
@@ -120,7 +125,9 @@ export async function getSlackOpsHealth() {
 }
 
 export async function notifyOpsError(input: OpsErrorInput) {
-  if (process.env.VERCEL_ENV !== "production" && process.env.NODE_ENV === "production") return { sent: false, reason: "non-production" }
+  if (process.env.NODE_ENV !== "production") return { sent: false, reason: "non-production" }
+  if (process.env.QEO_HOSTING_PROVIDER === "firebase" && process.env.QEO_ALERTS_ENABLED !== "true") return { sent: false, reason: "staging-alerts-disabled" }
+  if (process.env.QEO_HOSTING_PROVIDER !== "firebase" && process.env.VERCEL_ENV !== "production") return { sent: false, reason: "non-production" }
   if (!shouldSend(input)) return { sent: false, reason: "deduped" }
 
   try {
@@ -131,7 +138,9 @@ export async function notifyOpsError(input: OpsErrorInput) {
       return { sent: false, reason: "channel-not-found" }
     }
 
-    const deployment = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ""
+    const deployment = process.env.QEO_HOSTING_PROVIDER === "firebase"
+      ? (process.env.APP_URL || "")
+      : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ""
     const metadata = compactMetadata(input.metadata)
     const location = [input.method, input.path].filter(Boolean).join(" ")
     const details = [location, input.status ? `HTTP ${input.status}` : "", metadata].filter(Boolean).join(" · ")

@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis"
-import { getCache } from "@vercel/functions"
+import { getHostingCache } from "./hosting-runtime-cache.ts"
 import { createIoBudget } from "./io-budget.ts"
 
 const REDIS_PREFIX = "qeoindex:ui:v1"
@@ -52,7 +52,7 @@ type UiCacheAdapters = {
 
 /**
  * Short-lived read-through cache for UI-facing canonical data.
- * Vercel Runtime Cache is the regional L1; Upstash Redis is an optional shared L2.
+ * On Vercel, Runtime Cache is L1; on Firebase, Upstash Redis provides shared L2.
  * Dynamic route projections may opt out of Redis when their key space cannot be
  * enumerated safely for immediate write invalidation.
  * The canonical loader remains authoritative and cache failures always fail open.
@@ -69,7 +69,7 @@ export async function readThroughUiCache<T>({
   ioBudgetMs,
   load,
 }: UiCacheOptions<T>, adapters: UiCacheAdapters = {}): Promise<T> {
-  const cache = (adapters.getCache ?? getCache)({ namespace })
+  const cache = (adapters.getCache ?? getHostingCache)({ namespace })
   const ioBudget = createIoBudget(ioBudgetMs)
 
   const runtimeCacheRead = await ioBudget.run(() => cache.get(key))
@@ -97,7 +97,7 @@ export async function readThroughUiCache<T>({
 
 /** Globally expires the Runtime Cache tag and removes the shared Redis copy. */
 export async function invalidateUiCache({ namespace, key, tag, useSharedRedis = true }: UiCacheInvalidation) {
-  const cache = getCache({ namespace })
+  const cache = getHostingCache({ namespace })
   const redisClient = useSharedRedis ? getRedis() : null
   const redisKey = sharedRedisKey(namespace, key)
 

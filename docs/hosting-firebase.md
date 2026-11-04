@@ -1,103 +1,119 @@
-# Firebase App Hosting migration — staging ONLY
+# QeoIndex → Firebase App Hosting (staging acceptance before DNS cutover)
 
-This is **not** a production cutover. Canonical operations remain
-[HANDOVER.md](./HANDOVER.md), tracked in [QEO-45](https://linear.app/qeoindex/issue/QEO-45).
+Tracking: [QEO-45](https://linear.app/qeoindex/issue/QEO-45).
+Production domain: `https://qeoindex.qeoqeo.com`.
+Firebase project target: `qeoindex` (https://console.firebase.google.com/u/0/project/qeoindex/overview).
+GitHub: `tvqqq/qeoindex`, branch `main`, root `/`.
 
-## Evidence and CPU investigation (2026-11-04)
+**Code portability is not deployment acceptance.** A real Firebase App Hosting
+backend, its build logs, secrets, runtime tests, and custom DNS still require
+provider-side setup. Do not switch the production domain on a CI build alone.
 
-- User screenshot: Vercel Hobby Fluid Active CPU 3h50/4h (95.8%),
-  `stockos` accounts for 99.3% of team usage.
-- Runtime error clusters identify timeouts in `/api/market/intraday` and
-  `/api/market/metric-history`. These **do not** establish CPU attribution.
-- Connected Vercel observability schema and billing APIs return 404. Hobby
-  runtime logs have ~1h retention, so route-level CPU cannot yet be proven.
-- Current mitigations: per-instance single-flight for 5m intraday cache
-  misses; complete writes to shared cache before response; 20s per-user
-  memoization for authenticated metric replay. Verify effects with
-  comparable traffic windows before claiming quantified CPU savings.
+## Why
 
-## Temporary CPU pause (2026-11-04, QEO-45)
+- Vercel Hobby Fluid Active CPU reached ~3h50/4h (user screenshot dated 2026-11-04);
+  `stockos` accounted for 99.3% of team usage. Route-level CPU attribution is
+  unavailable; earlier Vercel errors in intraday/metric-history are NOT proof.
+- PR #664 added per-instance cold-miss coalescing, bounded metric replay cache
+  and authenticated production origin checks.
+- PR #665 removed Vercel Cron declarations and paused Supabase cron jobs
+  that call Vercel. The **previous deployed Vercel Cron remains active unless
+  separately disabled in Vercel Settings** or a new deployment replaces it.
+- Current EOD owner: independent UpCloud `qeo-eod.timer` at 15:01 ICT
+  weekdays. Verified from `services/eod-worker` and `system_job_runs`.
+  Keep it running; do NOT deploy it into App Hosting.
 
-- In **production Supabase**, `research-reports-daily-0705-ict` and
-  `qeoindex-chart-universe-bootstrap-retry` were set inactive via
-  `cron.alter_job(active := false)`. `qeoindex-eod-pipeline-1515-ict`
-  was **already inactive**. They were not unscheduled/deleted.
-- `system_settings['ai_council.llm_enabled'] = false` temporarily stops
-  the LLM debate stage. This is **not** a global UI/manual-endpoint
-  feature flag; avoid manually dispatching Council/EOD during the pause.
-- Supabase Edge jobs `market-universe-monthly-0710-ict`,
-  `sync-universe-5m`, `sync-universe-5m-afternoon`, and internal
-  `qeo-board-intraday-minute` stay enabled.
-- `vercel.json` declares **no future Vercel Cron Jobs**. To stop the
-  schedule currently associated with the *previously deployed* Vercel
-  artifact, open **Vercel → stockos → Settings → Cron Jobs → Disable
-  Cron Jobs**. Editing this file alone does NOT disable already deployed
-  Cron Jobs while Vercel deployment is paused.
-- Restore selectively after hosting acceptance: reactivate relevant
-  Supabase jobs via `cron.alter_job(job_id := ..., active := true)`;
-  remove the temporary `ai_council.llm_enabled` override (only if still
-  the QEO-45 override, since none existed beforehand), and restore
-  `vercel.json` scheduling only if Vercel is intentionally kept as
-  scheduler owner. Confirm there is exactly one owner first.
+## Runtime contract
 
-## Firebase requirements
+| Component | Firebase behavior | Hard acceptance gate |
+| --- | --- | --- |
+| Next.js SSR / API | Firebase App Hosting adapter; Node 24 | Verify actual build of Next.js 16.3.6 and authenticated end-to-end routes |
+| Supabase Auth, RLS, storage | Existing Supabase `glwhhrmejlonhyorvtzm` in Singapore | Copy public keys and service-role secret with build/runtime scopes; no auth leaks |
+| UI/market caches | `getHostingCache` returns no-op for Vercel-specific L1; existing Upstash Redis is shared L2 | **Redis credentials required** for acceptable multi-instance CPU; verify invalidation |
+| Managed workflow starts | 503 `WORKFLOW_PAUSED_FOR_FIREBASE_MIGRATION` on Firebase; Vercel unaffected | Separate durable worker needed before re-enabling |
+| Direct AI Council jobs | Explicitly paused (503) on Firebase | Does not disable deterministic Council inside independently deployed UpCloud EOD |
+| Cron jobs | No Vercel `crons` in source; Supabase Vercel-targeting jobs inactive | Never run two scheduling owners |
+| Slack alerts | Direct `SLACK_BOT_TOKEN` on Firebase, or Vercel Connect on Vercel | Firebase staging `QEO_ALERTS_ENABLED=false` |
+| Vercel Analytics / Speed Insights | Not rendered on Firebase | Use Firebase/Cloud Run logs/metrics |
 
-1. Enable Blaze billing for Firebase App Hosting. Free tier is an allowance,
-   not a hard $0 guarantee. Set budget alerts and Cloud Run spend caps.
-2. Create a separate **staging backend** linked to `tvqqq/qeoindex`.
-   Keep the production domain `qeoindex.qeoqeo.com` unchanged.
-3. Configure Node 24 and verify the actual Next.js 16.3.6 App Hosting
-   build. Recent framework versions may have preview support.
-4. Store secrets only in Firebase Secret Manager/console, never in Git.
-   Migrate keys in `.env.example`: Supabase auth/service role, providers,
-   Redis, OpenAI, schedulers, root-admin, and alerting.
-5. Set `APP_URL` for staging origin; validate callback URLs and app origins.
-   `NODE_ENV=production` must never allow localhost mutation origins.
+`QEO_HOSTING_PROVIDER=firebase` is set from `apphosting.yaml` for
+BUILD and RUNTIME. Vercel builds omit it and retain Workflow World,
+Runtime Cache, analytics, and existing routes. No schema changes are
+necessary just to migrate the frontend.
 
-## Blocking runtime compatibility gates
+## Console setup for Firebase project `qeoindex`
 
-- **Durable workflows:** `withWorkflow(nextConfig)` and `workflow/api`
-  depend on managed durable backend on Vercel. EOD, AI Council,
-  Daily Signals, report analysis, retries and callbacks must move to a
-  proven Postgres World/worker implementation, or an already accepted
-  Supabase-first worker, with identical persistence/step semantics.
-  Merely running Next.js on Firebase does NOT migrate workflow storage.
-- **Cache:** Replace `@vercel/functions` `getCache` calls in
-  `modules/shared/cache/ui-data-cache.ts`,
-  `modules/market/realtime/intraday-5m-service.ts`,
-  and `app/api/market/cache/invalidate/route.ts` with a portable
-  adapter (Upstash Redis already exists as optional L2). Verify TTLs,
-  invalidation and degraded fallback.
-- **Scheduler:** `vercel.json` now declares `crons: []` (QEO-45 temporary
-  pause), but an **existing production deployment retains its old schedule**
-  until Cron Jobs is disabled in Vercel Project Settings or a new successful
-  production deployment replaces it. Signals Daily historically ran at 07:00
-  ICT. Migrate to a supported scheduler with machine-secret authorization
-  and idempotency before re-enabling; prevent duplicate dispatches.
-- **Alerts:** `@vercel/connect` is used for Slack token provisioning.
-  Introduce a portable token/alert mechanism and verify failure handling.
-- **Network & security:** smoke Supabase SG connectivity and RLS,
-  authenticated cookies, origin controls, OAuth callback, streaming
-  providers, Next image/PDF, and CDN/SSR behavior on Firebase.
+1. In Firebase Console → **App Hosting**, enable **Blaze billing** if prompted.
+   A billing budget alert is not a hard $0 cap. `apphosting.yaml` configures
+   `cpu: 1`, `memoryMiB: 1024`, `minInstances: 0`, `maxInstances: 2`,
+   `concurrency: 40`, and `cpuAlwaysAllocated: false`. Monitor costs.
+2. Create one backend (suggested name: `qeoindex-web`), GitHub repo
+   `tvqqq/qeoindex`, live branch `main`, root `/`, region Singapore
+   `asia-southeast1` if available, Node 24. Keep Firebase's default
+   subdomain as **staging**; do not attach production DNS yet.
+3. In backend Settings → Environment, configure **BUILD+RUNTIME** public
+   values `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   Set `APP_URL` to Firebase's assigned staging origin, update after DNS
+   cutover. Firebase console variables override `apphosting.yaml` values;
+   do not overwrite `QEO_HOSTING_PROVIDER=firebase` or staging alert flag.
+4. Use Firebase Secret Manager/App Hosting secret references for
+   `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL` and
+   `UPSTASH_REDIS_REST_TOKEN`. The Redis URL is not necessarily secret,
+   but credentials should never be pasted into source control.
+   For optional screens, configure Notion data-source IDs/API token,
+   provider keys, and other entries from `.env.example`.
+   Keep `OPENAI_API_KEY`, Council scheduler secrets, and
+   `QEO_ALERTS_ENABLED` off unless truly needed.
+5. Trigger a single App Hosting rollout of the reviewed main commit. Review
+   its *actual* framework adapter logs and test the assigned URL; the
+   GitHub Firebase-compat workflow only verifies an alternate Next.js build.
+   Next.js 16.x may have preview support, so a passing GitHub build alone
+   is not sufficient.
+6. Smoke anonymous → login → authenticated market board (Top 200),
+   intraday mini-charts, stock OHLCV, portfolio, research, administration
+   permission checks and origin protection. Verify canonical Supabase reads
+   and RLS, Upstash cache hits/TTL/invalidation, Next images, SSR RSC,
+   browser realtime WebSocket connectivity, and logs.
+7. Confirm disabled workflow/Council endpoints return 503 and do not
+   enqueue any jobs. Observe the independent EOD `qeo-eod.timer` ownership.
+   After at least one normal market session, compare vCPU, requests, latency,
+   bandwidth and projected Cloud Run cost to the Vercel baseline.
+8. Only then connect `qeoindex.qeoqeo.com` to Firebase in Console,
+   update `APP_URL`/Auth redirect allowlists/OAuth callbacks and confirm
+   DNS/TLS. Keep the prior Vercel deployment available as rollback with
+   its Cron Jobs disabled.
 
-## Rollout gate (never skip)
+## Previously disabled production schedules (2026-11-04)
 
-1. Get GitHub CI green and merge performance/staging config once.
-   Do not manually invoke a second Vercel deployment.
-2. Connect Firebase staging, set envs, and inspect build logs.
-3. Smoke public/login, board, chart, portfolio, insights, admin mutation
-   protections, cache invalidation and latency.
-4. Run controlled EOD, Signals Daily, AI Council and research workflow
-   acceptance **without double-writing production state**.
-5. Compare CPU/requests/bandwidth and potential Blaze costs against current
-   usage over a complete trading session.
-6. Only then switch the production domain and disable old scheduling in a
-   coordinated change. Rollback by restoring old routing and scheduler
-   ownership; confirm no two active EOD jobs exist.
+`cron.job` records in Supabase project `glwhhrmejlonhyorvtzm`:
 
-## Official docs
+- Inactive: `qeoindex-eod-pipeline-1515-ict` (already inactive, replaced
+  by independent EOD worker), `research-reports-daily-0705-ict`,
+  `qeoindex-chart-universe-bootstrap-retry`.
+- Active: `sync-universe-5m`, `sync-universe-5m-afternoon`,
+  `market-universe-monthly-0710-ict` (all Supabase Edge),
+  and `qeo-board-intraday-minute` (in-database).
+- `system_settings['ai_council.llm_enabled']=false` pauses LLM Council
+  but is not a global gate for the separately deployed EOD worker.
 
+For **old Vercel deployment Cron Jobs**, open
+Vercel → `stockos` → Settings → Cron Jobs → **Disable Cron Jobs**.
+Source config `crons: []` applies to future deployments only.
+
+## Rollback / reactivation
+
+If Firebase staging fails, do not change DNS. After production cutover,
+rollback points DNS to the verified Vercel deployment and restores
+`APP_URL`/auth domains, **without** enabling a duplicate cron.
+To reactivate paused Supabase jobs later, selectively call
+`cron.alter_job(job_id := ..., active := true)` only after verifying
+the new durable workflow owner. Remove the QEO-45
+`ai_council.llm_enabled` override only upon explicit Council reactivation.
+
+## Official sources
+
+- https://firebase.google.com/docs/app-hosting/get-started
 - https://firebase.google.com/docs/app-hosting/configure
-- https://firebase.google.com/docs/app-hosting/costs
 - https://firebase.google.com/docs/app-hosting/frameworks-tooling
-- https://github.com/vercel/workflow
+- https://firebase.google.com/docs/app-hosting/costs
+- https://workflow-sdk.dev/worlds/postgres

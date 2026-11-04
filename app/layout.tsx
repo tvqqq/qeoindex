@@ -55,8 +55,8 @@ export default async function RootLayout({
         <TooltipProvider>
           <AppAuthGate serverSessionPresent={serverSessionAuthenticated}>{children}</AppAuthGate>
         </TooltipProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
-        {process.env.NODE_ENV === 'production' && <SpeedInsights />}
+        {process.env.NODE_ENV === 'production' && process.env.QEO_HOSTING_PROVIDER !== 'firebase' && <Analytics />}
+        {process.env.NODE_ENV === 'production' && process.env.QEO_HOSTING_PROVIDER !== 'firebase' && <SpeedInsights />}
       </body>
     </html>
   )
