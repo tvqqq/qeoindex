@@ -35,5 +35,5 @@ test("Vercel no longer schedules the legacy AI Council EOD workflow after unifie
   const crons = config.crons ?? []
   assert.equal(crons.some((cron) => cron.path === "/api/ai-council/eod"), false)
   assert.equal(crons.some((cron) => cron.path === "/api/qeoindex/eod"), false, "QeoIndex EOD is owned by Supabase pg_cron, not Vercel cron")
-  assert.equal(crons.some((cron) => cron.path === "/api/signals/daily"), true, "unrelated daily signals cron must be preserved")
+  assert.equal(crons.some((cron) => cron.path === "/api/signals/daily"), false, "QEO-45 temporarily disables Vercel Signals daily cron to avoid CPU burn")
 })

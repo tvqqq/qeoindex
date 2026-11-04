@@ -16,6 +16,30 @@ This is **not** a production cutover. Canonical operations remain
   memoization for authenticated metric replay. Verify effects with
   comparable traffic windows before claiming quantified CPU savings.
 
+## Temporary CPU pause (2026-11-04, QEO-45)
+
+- In **production Supabase**, `research-reports-daily-0705-ict` and
+  `qeoindex-chart-universe-bootstrap-retry` were set inactive via
+  `cron.alter_job(active := false)`. `qeoindex-eod-pipeline-1515-ict`
+  was **already inactive**. They were not unscheduled/deleted.
+- `system_settings['ai_council.llm_enabled'] = false` temporarily stops
+  the LLM debate stage. This is **not** a global UI/manual-endpoint
+  feature flag; avoid manually dispatching Council/EOD during the pause.
+- Supabase Edge jobs `market-universe-monthly-0710-ict`,
+  `sync-universe-5m`, `sync-universe-5m-afternoon`, and internal
+  `qeo-board-intraday-minute` stay enabled.
+- `vercel.json` declares **no future Vercel Cron Jobs**. To stop the
+  schedule currently associated with the *previously deployed* Vercel
+  artifact, open **Vercel → stockos → Settings → Cron Jobs → Disable
+  Cron Jobs**. Editing this file alone does NOT disable already deployed
+  Cron Jobs while Vercel deployment is paused.
+- Restore selectively after hosting acceptance: reactivate relevant
+  Supabase jobs via `cron.alter_job(job_id := ..., active := true)`;
+  remove the temporary `ai_council.llm_enabled` override (only if still
+  the QEO-45 override, since none existed beforehand), and restore
+  `vercel.json` scheduling only if Vercel is intentionally kept as
+  scheduler owner. Confirm there is exactly one owner first.
+
 ## Firebase requirements
 
 1. Enable Blaze billing for Firebase App Hosting. Free tier is an allowance,
@@ -44,10 +68,12 @@ This is **not** a production cutover. Canonical operations remain
   and `app/api/market/cache/invalidate/route.ts` with a portable
   adapter (Upstash Redis already exists as optional L2). Verify TTLs,
   invalidation and degraded fallback.
-- **Scheduler:** `vercel.json` runs `/api/signals/daily` at 07:00 ICT.
-  Migrate to Supabase `pg_cron` with machine-secret authorization and
-  idempotency. The canonical EOD Supabase cron already runs at 15:15 ICT.
-  Prevent duplicate dispatches during cutover.
+- **Scheduler:** `vercel.json` now declares `crons: []` (QEO-45 temporary
+  pause), but an **existing production deployment retains its old schedule**
+  until Cron Jobs is disabled in Vercel Project Settings or a new successful
+  production deployment replaces it. Signals Daily historically ran at 07:00
+  ICT. Migrate to a supported scheduler with machine-secret authorization
+  and idempotency before re-enabling; prevent duplicate dispatches.
 - **Alerts:** `@vercel/connect` is used for Slack token provisioning.
   Introduce a portable token/alert mechanism and verify failure handling.
 - **Network & security:** smoke Supabase SG connectivity and RLS,

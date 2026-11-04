@@ -20,16 +20,14 @@ function readTextFile(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
 
-test("catalog matches vercel.json cron schedules exactly", () => {
+test("QEO-45 temporarily disables all Vercel cron jobs without losing historical schedule metadata", () => {
   const vercel = readJsonFile("vercel.json")
   const crons = (vercel.crons || []) as Array<{ path: string; schedule: string }>
-  const signalsCron = crons.find((c) => c.path === "/api/signals/daily")
-  assert.ok(signalsCron)
-  assert.equal(signalsCron.schedule, "0 0 * * 1-5")
+  assert.deepEqual(crons, [], "no scheduled invocation should be declared for a new Vercel deployment")
 
   const signalsDef = ADMIN_JOB_CATALOG.find((j) => j.key === "signals.daily")
   assert.ok(signalsDef)
-  assert.equal(signalsDef.scheduleUtc, signalsCron.schedule)
+  assert.equal(signalsDef.scheduleUtc, "0 0 * * 1-5", "retain historical cadence for audit and reactivation")
   assert.equal(signalsDef.scheduleIct, "07:00 T2-T6")
   assert.equal(signalsDef.scheduleKind, "workflow")
   assert.equal(signalsDef.scheduleDays, "weekdays")
