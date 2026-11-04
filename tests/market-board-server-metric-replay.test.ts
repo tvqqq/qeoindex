@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { createTtlSingleFlight } from "../modules/shared/cache/ttl-single-flight.ts"
 
 import {
   buildBoardMetricReplay, preferObservedReplay,
@@ -102,4 +103,36 @@ test("unattended capture is a database cron reading worker checkpoint, never a b
   assert.match(ui, /180_000/)
   assert.match(ui, /Biểu đồ: DNSE chỉ Top 200/)
   assert.doesNotMatch(api, /FINHAY_OAUTH|DNSE_API_KEY/)
+})
+
+test("CPU guard: concurrent requests share one load, success is reused until TTL", async () => {
+  let nowMs = 1_000
+  let calls = 0
+  const cache = createTtlSingleFlight<number>({ ttlMs: 20_000, now: () => nowMs })
+  const load = async () => { calls += 1; return 42 }
+  const values = await Promise.all(Array.from({ length: 15 }, () => cache.get("user-1:2026-10-07", load)))
+  assert.deepEqual(values, Array(15).fill(42))
+  assert.equal(calls, 1)
+  assert.equal(await cache.get("user-1:2026-10-07", load), 42)
+  assert.equal(calls, 1)
+  assert.equal(await cache.get("user-2:2026-10-07", load), 42)
+  assert.equal(calls, 2, "user-scoped cache keys must not share records")
+  nowMs += 20_001
+  assert.equal(await cache.get("user-1:2026-10-07", load), 42)
+  assert.equal(calls, 3, "expired read models must refresh")
+})
+
+test("CPU guard: rejected loads never poison the cache or the pending map", async () => {
+  const cache = createTtlSingleFlight<number>({ ttlMs: 20_000 })
+  let calls = 0
+  await assert.rejects(cache.get("session", async () => { calls += 1; throw new Error("DB unavailable") }), /DB unavailable/)
+  assert.equal(await cache.get("session", async () => { calls += 1; return 7 }), 7)
+  assert.equal(calls, 2)
+})
+
+test("CPU guard: route authorization precedes user-scoped metric replay cache", () => {
+  const source = readFileSync(new URL("../app/api/market/metric-history/route.ts", import.meta.url), "utf8")
+  assert.ok(source.indexOf('requireApiFeature("market_board")') < source.indexOf("replayCache.get("))
+  assert.match(source, /auth\.context\.user\.id/)
+  assert.match(source, /Cache-Control": "private, no-store/)
 })

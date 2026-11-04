@@ -215,3 +215,10 @@ test("at 9:00 AM on a trading day, session starts and reference anchors to previ
   // Session start seconds for 2026-08-18 is 09:00 ICT (02:00 UTC)
   assert.equal(vietnamSessionStartSeconds("2026-08-18"), Math.floor(Date.UTC(2026, 7, 18, 2, 0, 0) / 1000))
 })
+
+test("CPU guard: intraday 5m cold misses are coalesced and cache writes complete", () => {
+  const source = readFileSync(new URL("../modules/market/realtime/intraday-5m-service.ts", import.meta.url), "utf8")
+  assert.match(source, /snapshotCoalescer\.get\(key, async \(\) =>/)
+  assert.match(source, /await Promise\.allSettled\(\[/)
+  assert.doesNotMatch(source, /void Promise\.allSettled\(\[/)
+})

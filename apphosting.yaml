@@ -1,0 +1,9 @@
+# Firebase App Hosting STAGING only. Do not attach production domain yet.
+# Blaze billing required; maxInstances limits scaling, not spending.
+# Workflow runtime, Vercel Runtime Cache, Cron and Slack must migrate before cutover.
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 40

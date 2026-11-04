@@ -8,9 +8,12 @@ import { getMarketSessionStatus, getVnTimeSeconds } from "@/modules/market/realt
 import { sessionTimestampSeconds, shouldAcceptRealtimeMiniChart } from "@/modules/market/realtime/session-ui"
 import { fetchLiveBatchQuotes } from "@/modules/market/realtime/broker-live-quotes"
 import { readFirstValidCacheValue } from "@/modules/shared/cache/io-budget"
+import { createTtlSingleFlight } from "@/modules/shared/cache/ttl-single-flight"
 
 export const FETCH_CONCURRENCY = 12
 const INTRADAY_CACHE_VERSION = "market-universe:v11"
+// Coalesce simultaneous cold misses in each instance; shared cache handles cross-instance reuse.
+const snapshotCoalescer = createTtlSingleFlight<IntradaySnapshot>({ ttlMs: 0 })
 
 const MORNING_FINAL_BAR_SECONDS = 11 * 3600 + 25 * 60
 const LUNCH_START_SECONDS = 11 * 3600 + 30 * 60
@@ -288,22 +291,25 @@ export async function getIntraday5mSnapshot(symbols: string[] | readonly string[
   const cached = await getCachedIntraday5mSnapshot(symbols, now)
   if (cached) return cached
 
-  const snapshot = await fetchSnapshot(symbols, now)
   const key = snapshotCacheKey(symbols, now)
-  const latestKey = latestSnapshotCacheKey(symbols, now)
-  const cache = getCache({ namespace: "market-board-v11" })
-  const redisClient = getRedis()
-  const writeTtl = secondsToNextBucket(now)
-  const latestTtl = 86400
+  return snapshotCoalescer.get(key, async () => {
+    const snapshot = await fetchSnapshot(symbols, now)
+    const latestKey = latestSnapshotCacheKey(symbols, now)
+    const cache = getCache({ namespace: "market-board-v11" })
+    const redisClient = getRedis()
+    const writeTtl = secondsToNextBucket(now)
+    const latestTtl = 86400
 
-  void Promise.allSettled([
-    cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top Stocks 5m snapshot" }),
-    cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top Stocks 5m latest" }),
-    redisClient ? redisClient.set(key, snapshot, { ex: writeTtl }) : Promise.resolve(),
-    redisClient ? redisClient.set(latestKey, snapshot, { ex: latestTtl }) : Promise.resolve(),
-  ])
+    // Ensure cache writes finish before a serverless invocation can be terminated.
+    await Promise.allSettled([
+      cache.set(key, snapshot, { ttl: writeTtl, tags: ["market-board"], name: "Top Stocks 5m snapshot" }),
+      cache.set(latestKey, snapshot, { ttl: latestTtl, tags: ["market-board"], name: "Top Stocks 5m latest" }),
+      redisClient ? redisClient.set(key, snapshot, { ex: writeTtl }) : Promise.resolve(),
+      redisClient ? redisClient.set(latestKey, snapshot, { ex: latestTtl }) : Promise.resolve(),
+    ])
 
-  return snapshot
+    return snapshot
+  })
 }
 
 export function parseSymbols(request: Request) {

@@ -163,6 +163,10 @@ A current-session manual smoke is accepted only when evidence shows:
 
 For fast troubleshooting, inspect `system_job_runs`, `system_job_phases`, latest `market_universe_runs`, `stock_orderbook_snapshots`, `wyckoff_scan_runs`, `market_ohlcv_history`, and `market_ohlcv_bootstrap_state` before interpreting EOD UI state. For interactive chart-data issues, separately inspect `chart_ohlcv_intraday`, `chart_ohlcv_provenance_batches`, `chart_ohlcv_cold_manifests`, and the canonical chart-data API/service path.
 
+## Firebase hosting staging (not production cutover)
+
+See [hosting-firebase.md](./hosting-firebase.md) for Firebase App Hosting staging, cost controls and mandatory durable-workflow/cache/cron/security compatibility gates. Vercel remains the production runtime until tested cutover; do not run parallel EOD schedulers.
+
 ## Required release gates
 
 ### ChatGPT inline code → automatic PR / merge / production

@@ -50,7 +50,8 @@ export function validateAdminMutationRequest(
     allowedOrigins.add(`https://${process.env.VERCEL_URL}`)
   }
 
-  const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production"
+  // Production is not exclusive to Vercel: protect Firebase App Hosting origins too.
+  const isProduction = process.env.NODE_ENV === "production"
   if (!isProduction) {
     allowedOrigins.add("http://localhost:3000")
     allowedOrigins.add("http://127.0.0.1:3000")
