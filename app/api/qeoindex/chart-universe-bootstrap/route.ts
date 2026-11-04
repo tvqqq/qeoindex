@@ -5,6 +5,7 @@ import { start } from "workflow/api"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { pausedWorkflowResponse, supportsManagedWorkflows } from "@/modules/shared/hosting"
 import { chartUniverseBootstrapWorkflow } from "@/workflows/chart-universe-bootstrap"
 
 export const runtime = "nodejs"
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest) {
   if (!requestedTransitionId) {
     return NextResponse.json({ ok: false, error: "transitionId must be a UUID." }, { status: 400 })
   }
+
+  if (!supportsManagedWorkflows()) return pausedWorkflowResponse()
 
   try {
     const startedAt = new Date().toISOString()

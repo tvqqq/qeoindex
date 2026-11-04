@@ -96,3 +96,54 @@ test("Council evidence refs tolerate only the observed metric's harmless display
   }], packet)
   assert.equal(wrongUnit.valid, false)
 })
+
+test("Firebase App Hosting builds without Vercel Workflow World and pauses all workflow dispatch", () => {
+  const nextConfig = source("next.config.mjs")
+  const hosting = source("modules/shared/hosting.ts")
+  const firebaseConfig = source("apphosting.yaml")
+  assert.match(nextConfig, /QEO_HOSTING_PROVIDER === "firebase" \? nextConfig : withWorkflow\(nextConfig\)/)
+  assert.match(hosting, /WORKFLOW_PAUSED_FOR_FIREBASE_MIGRATION/)
+  assert.match(firebaseConfig, /variable: QEO_HOSTING_PROVIDER/)
+  assert.match(firebaseConfig, /value: firebase/)
+  assert.match(firebaseConfig, /minInstances: 0/)
+  assert.match(firebaseConfig, /cpuAlwaysAllocated: false/)
+
+  for (const route of [
+    "app/api/signals/daily/route.ts",
+    "app/api/ai-council/eod/route.ts",
+    "app/api/qeoindex/eod/route.ts",
+    "app/api/qeoindex/chart-universe-bootstrap/route.ts",
+    "app/api/research-reports/daily/route.ts",
+    "app/api/research-reports/images/backfill/route.ts",
+    "app/api/admin/qeoindex/eod/retry/route.ts",
+  ]) {
+    const code = source(route)
+    const guard = code.indexOf("if (!supportsManagedWorkflows()) return pausedWorkflowResponse()")
+    const dispatch = code.indexOf("await start(")
+    assert.ok(guard >= 0 && dispatch > guard, `${route} must pause before starting a workflow on Firebase`)
+  }
+  const admin = source("modules/admin/jobs.ts")
+  assert.ok(admin.indexOf("if (!supportsManagedWorkflows())") < admin.indexOf('await import("workflow/api")'))
+
+  for (const route of ["app/api/ai-council/daily/route.ts", "app/api/ai-council/debate-daily/route.ts"]) {
+    const code = source(route)
+    assert.match(code, /if \(isFirebaseAppHosting\(\)\) return pausedWorkflowResponse\(\)/)
+  }
+})
+
+test("Firebase Hosting redirects Vercel-specific cache and ops integrations to portable fallbacks", () => {
+  const adapter = source("modules/shared/cache/hosting-runtime-cache.ts")
+  const uiCache = source("modules/shared/cache/ui-data-cache.ts")
+  const marketCache = source("modules/market/realtime/intraday-5m-service.ts")
+  const invalidator = source("app/api/market/cache/invalidate/route.ts")
+  const alerting = source("modules/admin/ops-alerts.ts")
+  const layout = source("app/layout.tsx")
+  assert.match(adapter, /if \(isFirebaseAppHosting\(env\)\)/)
+  assert.match(adapter, /await import\("@vercel\/functions"\)/)
+  assert.match(uiCache, /getHostingCache/)
+  assert.match(marketCache, /getHostingCache/)
+  assert.match(invalidator, /getHostingCache/)
+  assert.match(alerting, /SLACK_BOT_TOKEN/)
+  assert.match(alerting, /QEO_ALERTS_ENABLED/)
+  assert.match(layout, /QEO_HOSTING_PROVIDER !== 'firebase'/)
+})

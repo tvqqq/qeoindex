@@ -592,6 +592,7 @@ export const ADMIN_ENVIRONMENT_INVENTORY: AdminEnvironmentItem[] = [
   environmentItem("AI_COUNCIL_LLM_TICKERS", "ai_council", "AI Council LLM Tickers (Env)", "internal"),
   environmentItem("AI_COUNCIL_RESEARCH_TICKERS", "ai_council", "AI Council Research Tickers (Env)", "internal"),
 
+  environmentItem("SLACK_BOT_TOKEN", "integration", "Firebase Slack Bot Token", "secret"),
   environmentItem("SLACK_CONNECTOR", "integration", "Slack Connector Slug", "internal"),
   environmentItem("SLACK_ALERT_CHANNEL", "integration", "Slack Alert Channel Name", "internal"),
   environmentItem("SLACK_ALERT_CHANNEL_ID", "integration", "Slack Alert Channel ID", "internal"),
@@ -601,6 +602,8 @@ export const ADMIN_ENVIRONMENT_INVENTORY: AdminEnvironmentItem[] = [
   environmentItem("NEXT_PUBLIC_APP_URL", "system", "Next.js Public App URL", "public"),
   environmentItem("QSTASH_TOKEN", "system", "Upstash QStash Token", "secret"),
 
+  environmentItem("QEO_HOSTING_PROVIDER", "system", "Hosting Provider", "public"),
+  environmentItem("QEO_ALERTS_ENABLED", "system", "Firebase Ops Alerts Enabled", "public"),
   environmentItem("NODE_ENV", "system", "Node Environment", "public"),
   environmentItem("VERCEL_ENV", "system", "Vercel Environment", "public"),
   environmentItem("VERCEL_URL", "system", "Vercel Deployment URL", "public"),

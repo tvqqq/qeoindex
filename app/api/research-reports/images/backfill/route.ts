@@ -5,6 +5,7 @@ import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { normalizeResearchReportSummaryImageBackfillMaxReports } from "@/modules/research-reports/summary-image-backfill"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { pausedWorkflowResponse, supportsManagedWorkflows } from "@/modules/shared/hosting"
 import { researchReportSummaryImageBackfillWorkflow } from "@/workflows/research-report-summary-image-backfill-workflow"
 
 export const runtime = "nodejs"
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
   if (!(await isAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
+
+  if (!supportsManagedWorkflows()) return pausedWorkflowResponse()
 
   try {
     let body: Record<string, unknown> = {}

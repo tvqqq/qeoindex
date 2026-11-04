@@ -1,9 +1,22 @@
-# Firebase App Hosting STAGING only. Do not attach production domain yet.
-# Blaze billing required; maxInstances limits scaling, not spending.
-# Workflow runtime, Vercel Runtime Cache, Cron and Slack must migrate before cutover.
+# Firebase project qeoindex — App Hosting staging profile.
+# Config alone does not create a backend, secrets, DNS, or a billing cap.
+# Firebase App Hosting requires Blaze. Keep production DNS on Vercel
+# until auth, market reads, cache, and disabled workflow routes are verified.
 runConfig:
   cpu: 1
   memoryMiB: 1024
   minInstances: 0
   maxInstances: 2
   concurrency: 40
+  cpuAlwaysAllocated: false
+
+env:
+  - variable: QEO_HOSTING_PROVIDER
+    value: firebase
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: QEO_ALERTS_ENABLED
+    value: "false"
+    availability:
+      - RUNTIME

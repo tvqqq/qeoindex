@@ -4,6 +4,7 @@ import { start } from "workflow/api"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
 import { getSupabaseServerClient } from "@/modules/shared/supabase/server"
+import { pausedWorkflowResponse, supportsManagedWorkflows } from "@/modules/shared/hosting"
 import { qeoindexEodPipeline } from "@/workflows/qeoindex-eod-pipeline"
 
 export const runtime = "nodejs"
@@ -79,6 +80,8 @@ async function trigger(request: NextRequest) {
       return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 400 })
     }
   }
+
+  if (!supportsManagedWorkflows()) return pausedWorkflowResponse()
 
   try {
     const run = await start(qeoindexEodPipeline, [startedAt])

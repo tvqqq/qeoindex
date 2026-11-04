@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { start } from "workflow/api"
 
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
+import { pausedWorkflowResponse, supportsManagedWorkflows } from "@/modules/shared/hosting"
 import { notifyOpsError } from "@/modules/admin/ops-alerts"
 import { dailySignalWorkflow } from "@/workflows/daily-signal-workflow"
 
@@ -16,6 +17,8 @@ export async function GET(request: NextRequest) {
   )) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
+
+  if (!supportsManagedWorkflows()) return pausedWorkflowResponse()
 
   try {
     const startedAt = new Date().toISOString()

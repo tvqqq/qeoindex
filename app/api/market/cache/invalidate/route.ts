@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { Redis } from "@upstash/redis"
-import { getCache } from "@vercel/functions"
+import { getHostingCache } from "@/modules/shared/cache/hosting-runtime-cache"
 
 import { clearServerSessionCache } from "@/app/api/market/session/route"
 import { isMachineRequestAuthorized } from "@/modules/auth/machine"
@@ -37,9 +37,9 @@ export async function POST(request: Request) {
   cleared.push("in-memory-session-cache")
 
   try {
-    const marketCache = getCache({ namespace: "market-board-v8" })
+    const marketCache = getHostingCache({ namespace: "market-board-v8" })
     await marketCache.expireTag("market-board")
-    cleared.push("vercel-runtime-cache:market-board")
+    cleared.push("hosting-runtime-cache:market-board")
   } catch {
     // Runtime cache is optional in local/test environments.
   }

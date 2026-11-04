@@ -11,7 +11,8 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
     routeType: context.routeType,
   })
 
-  if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.VERCEL_ENV !== "production") return
+  if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.NODE_ENV !== "production") return
+  if (process.env.QEO_HOSTING_PROVIDER !== "firebase" && process.env.VERCEL_ENV !== "production") return
 
   try {
     const { notifyOpsError } = await import("@/modules/admin/ops-alerts")

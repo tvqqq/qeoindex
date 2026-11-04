@@ -4,6 +4,7 @@ import { start } from "workflow/api"
 import { validateAdminMutationRequest } from "@/modules/admin/request-security"
 import { requireApiRoot } from "@/modules/auth/root"
 import { qeoindexEodRetry } from "@/workflows/qeoindex-eod-retry"
+import { pausedWorkflowResponse, supportsManagedWorkflows } from "@/modules/shared/hosting"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -34,6 +35,8 @@ export async function POST(request: Request) {
       { status: originValidation.status, headers: NO_STORE },
     )
   }
+
+  if (!supportsManagedWorkflows()) return pausedWorkflowResponse()
 
   try {
     const body = await request.json() as Record<string, unknown>
