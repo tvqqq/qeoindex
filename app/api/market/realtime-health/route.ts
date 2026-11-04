@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto"
 import { NextResponse } from "next/server"
 
 import { requireApiFeature } from "@/modules/auth/server"
+import { isSessionMutationOriginAllowed } from "@/modules/auth/request-security"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,8 +42,7 @@ function latencySummary(value: unknown) {
 }
 
 function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin")
-  return !origin || origin === new URL(request.url).origin
+  return isSessionMutationOriginAllowed(request)
 }
 
 function contentLengthAllowed(request: Request) {

@@ -29,6 +29,8 @@ Supabase Auth user
 
 Never use `getSupabaseServerClient()` / the service-role key for user-owned rows. Service-role access bypasses RLS and is reserved for trusted infrastructure tasks such as canonical market snapshots. The infrastructure client now fails closed if `SUPABASE_SERVICE_ROLE_KEY` is missing; it does not fall back to a public anon key.
 
+The portfolio risk and performance readers verify portfolio ownership with the user-scoped client before using the service-role client for the shared `market_ohlcv_raw_daily` table, whose RLS denies authenticated reads. That privileged read is limited to the verified portfolio's transaction tickers and date range; all portfolio-owned rows continue through the user-scoped client.
+
 ## Per-user tables
 
 - `profiles`: profile fields keyed by `auth.users.id`.
