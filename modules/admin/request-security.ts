@@ -1,4 +1,4 @@
-import { validateMutationOrigin } from "@/modules/auth/request-security"
+import { validateMutationOrigin } from "../auth/request-security.ts"
 
 export function validateChangeReason(value: unknown): string | null {
   if (typeof value !== "string") return null
