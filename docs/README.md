@@ -46,6 +46,7 @@ See `HANDOVER.md` for the full contract and safety gates.
 | [`auth.md`](./auth.md) | Supabase Auth, sessions, feature gates and RLS ownership. |
 | [`UI_LESSONS_LEARNED.md`](./UI_LESSONS_LEARNED.md) | Mandatory UI performance/interaction lessons. |
 | [`build-performance.md`](./build-performance.md) | Build/cache performance guidance. |
+| [`hosting-firebase.md`](./hosting-firebase.md) | Firebase staging, CPU evidence, compatibility gates and rollback; not yet production. |
 | [`finhay-live-adapter.md`](./finhay-live-adapter.md) | Optional Finhay live adapter contract. |
 
 ## Active automation and database docs
