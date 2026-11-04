@@ -10,6 +10,12 @@ The authenticated browser session is synchronized to the server through `/api/au
 
 Protected server pages and browser-facing API routes verify that server session through `modules/auth/server.ts` before loading protected data.
 
+## Proxy origin checks
+
+The `/api/auth/session` mutation guard checks the browser's `Origin` against the request URL and the configured application origin. When Firebase App Hosting serves the app behind a proxy, set `APP_URL` to the externally visible HTTPS origin so the browser's origin is allowed even if the request URL reflects an internal host. The allowlist does not use `Host`, `X-Forwarded-Host`, or `X-Forwarded-Proto`.
+
+Session mutations keep accepting requests without an `Origin` header for compatibility. Admin mutations remain stricter and reject a missing `Origin`.
+
 ## RLS data flow
 
 ```text

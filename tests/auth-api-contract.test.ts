@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
+import { isSessionMutationOriginAllowed, validateMutationOrigin } from "../modules/auth/request-security.ts"
+import { validateAdminMutationRequest } from "../modules/admin/request-security.ts"
+
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 }
@@ -338,4 +341,125 @@ test("QEO-225 persists sampled browser relay telemetry for post-incident correla
   assert.match(route, /user_hash/)
   assert.match(route, /createHmac/)
   assert.doesNotMatch(route, /auth\.context\.user\.id[^\n]*console/)
+})
+
+
+const MUTATION_ORIGIN_ENV_KEYS = [
+  "APP_URL",
+  "NEXT_PUBLIC_APP_URL",
+  "VERCEL_PROJECT_PRODUCTION_URL",
+  "VERCEL_URL",
+  "NODE_ENV",
+] as const
+
+function withMutationOriginEnvironment(overrides: Partial<Record<(typeof MUTATION_ORIGIN_ENV_KEYS)[number], string>>, run: () => void) {
+  const original = new Map<string, string | undefined>()
+  for (const key of MUTATION_ORIGIN_ENV_KEYS) {
+    original.set(key, process.env[key])
+    delete process.env[key]
+  }
+  Object.assign(process.env, overrides)
+
+  try {
+    run()
+  } finally {
+    for (const [key, value] of original) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+}
+
+function originRequest(url: string, origin?: string, headers: Record<string, string> = {}) {
+  const requestHeaders = new Headers(headers)
+  if (origin !== undefined) requestHeaders.set("Origin", origin)
+  return new Request(url, { headers: requestHeaders })
+}
+
+test("shared mutation origin validation allows the configured Firebase origin behind an internal proxy URL", () => {
+  withMutationOriginEnvironment({ NODE_ENV: "production", APP_URL: "https://qeoindex-staging.web.app" }, () => {
+    const request = originRequest("http://internal-app-host:8080/api/auth/session", "https://qeoindex-staging.web.app")
+    assert.deepEqual(validateMutationOrigin(request), { ok: true })
+  })
+})
+
+test("shared mutation origin validation does not trust forwarded or Host headers", () => {
+  withMutationOriginEnvironment({ NODE_ENV: "production", APP_URL: "https://qeoindex-staging.web.app" }, () => {
+    const request = originRequest("http://internal-app-host:8080/api/auth/session", "https://attacker.example", {
+      Host: "attacker.example",
+      "X-Forwarded-Host": "attacker.example",
+      "X-Forwarded-Proto": "https",
+    })
+    const result = validateMutationOrigin(request)
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 403)
+  })
+})
+
+test("shared mutation origin validation rejects null and malformed origins and ignores malformed configuration", () => {
+  withMutationOriginEnvironment({
+    NODE_ENV: "production",
+    APP_URL: "://bad-url",
+    NEXT_PUBLIC_APP_URL: "http://[",
+    VERCEL_PROJECT_PRODUCTION_URL: "[",
+    VERCEL_URL: "[",
+  }, () => {
+    for (const origin of ["null", "not an origin"]) {
+      const result = validateMutationOrigin(originRequest("http://internal-app-host:8080/api/auth/session", origin))
+      assert.equal(result.ok, false)
+      assert.equal(result.status, 403)
+    }
+
+    const malformedConfigResult = validateMutationOrigin(
+      originRequest("http://internal-app-host:8080/api/auth/session", "https://unconfigured.example"),
+      { appUrl: "://also-bad" },
+    )
+    assert.equal(malformedConfigResult.ok, false)
+    assert.equal(malformedConfigResult.status, 403)
+  })
+})
+
+test("shared mutation origin validation rejects localhost in production and allows local development", () => {
+  withMutationOriginEnvironment({ NODE_ENV: "production" }, () => {
+    const result = validateMutationOrigin(originRequest("https://app.example/api", "http://localhost:3000"))
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 403)
+  })
+
+  withMutationOriginEnvironment({ NODE_ENV: "development" }, () => {
+    assert.deepEqual(validateMutationOrigin(originRequest("http://internal/api", "http://localhost:3000")), { ok: true })
+  })
+})
+
+test("admin mutation validation still rejects a missing Origin header", () => {
+  withMutationOriginEnvironment({ NODE_ENV: "production", APP_URL: "https://app.example" }, () => {
+    const result = validateAdminMutationRequest(originRequest("https://app.example/api/admin"))
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 403)
+  })
+})
+
+test("session mutations retain missing and request-url same-origin behavior while checking both write methods", () => {
+  withMutationOriginEnvironment({ NODE_ENV: "production", APP_URL: "https://qeoindex-staging.web.app" }, () => {
+    assert.equal(isSessionMutationOriginAllowed(originRequest("http://internal-app-host:8080/api/auth/session")), true)
+    assert.equal(isSessionMutationOriginAllowed(originRequest(
+      "http://internal-app-host:8080/api/auth/session",
+      "http://internal-app-host:8080",
+    )), true)
+    assert.equal(isSessionMutationOriginAllowed(originRequest(
+      "http://internal-app-host:8080/api/auth/session",
+      "https://qeoindex-staging.web.app",
+    )), true)
+    assert.equal(isSessionMutationOriginAllowed(originRequest(
+      "http://internal-app-host:8080/api/auth/session",
+      "https://attacker.example",
+    )), false)
+  })
+
+  const route = source("app/api/auth/session/route.ts")
+  const post = route.slice(route.indexOf("export async function POST"), route.indexOf("export async function DELETE"))
+  const deleteHandler = route.slice(route.indexOf("export async function DELETE"))
+  assert.match(route, /function sameOrigin\(request: Request\)[\s\S]*?isSessionMutationOriginAllowed\(request\)/)
+  assert.match(post, /if \(!sameOrigin\(request\)\)/)
+  assert.match(deleteHandler, /if \(!sameOrigin\(request\)\)/)
 })
