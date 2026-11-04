@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireApiFeature } from "@/modules/auth/server"
+import { isSessionMutationOriginAllowed } from "@/modules/auth/request-security"
 import { mintMarketRealtimeToken } from "@/modules/market/realtime/relay-token"
 
 export const runtime = "nodejs"
@@ -15,9 +16,7 @@ export async function POST(request: Request) {
   const auth = await requireApiFeature("market_board")
   if (!auth.ok) return auth.response
 
-  const origin = request.headers.get("origin")
-  const expectedOrigin = new URL(request.url).origin
-  if (origin && origin !== expectedOrigin) {
+  if (!isSessionMutationOriginAllowed(request)) {
     return NextResponse.json({ ok: false, message: "Origin not allowed." }, {
       status: 403,
       headers: NO_STORE_HEADERS,
