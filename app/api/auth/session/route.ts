@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isSessionMutationOriginAllowed } from "@/modules/auth/request-security"
 
 import {
   AUTH_COOKIE_NAME,
@@ -17,8 +18,7 @@ const NO_STORE_HEADERS = {
 }
 
 function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin")
-  return !origin || origin === new URL(request.url).origin
+  return isSessionMutationOriginAllowed(request)
 }
 
 function cookieMaxAge(accessToken: string) {
