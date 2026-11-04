@@ -603,6 +603,13 @@
       ]
     },
     {
+      "path": "tests/qeo-ex-vic-vhm-estimate.test.ts",
+      "owner": "market",
+      "invariant": "Qeo EOD exclusion estimates preserve financial arithmetic, source identity, continuity, and visible isolated observations.",
+      "bucket": "canonical",
+      "suites": ["fast", "db", "ui-contracts"]
+    },
+    {
       "path": "tests/market-insight-schema.test.ts",
       "owner": "market",
       "invariant": "Preserve the current market insight schema contract.",
@@ -829,9 +836,7 @@
       "owner": "portfolio",
       "invariant": "Keep shared RAW Daily reads owner-gated, bounded, validated, and fail-closed.",
       "bucket": "canonical",
-      "suites": [
-        "fast"
-      ]
+      "suites": ["fast"]
     },
     {
       "path": "tests/qeo-106-yahoo-adjusted-basis.test.ts",
@@ -877,17 +882,6 @@
       "suites": [
         "fast",
         "db"
-      ]
-    },
-    {
-      "path": "tests/qeo-ex-vic-vhm-estimate.test.ts",
-      "owner": "market",
-      "invariant": "Qeo EOD exclusion estimates preserve financial arithmetic, source identity, continuity, and visible isolated observations.",
-      "bucket": "canonical",
-      "suites": [
-        "fast",
-        "db",
-        "ui-contracts"
       ]
     },
     {

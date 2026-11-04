@@ -464,7 +464,6 @@ test("session mutations retain missing and request-url same-origin behavior whil
   assert.match(deleteHandler, /if \(!sameOrigin\(request\)\)/)
 })
 
-
 test("realtime health keeps feature authorization and delegates proxy origins to the shared guard", () => {
   const route = source("app/api/market/realtime-health/route.ts")
   const authIndex = route.indexOf('const auth = await requireApiFeature("market_board")')
