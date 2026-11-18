@@ -1,6 +1,6 @@
 # QeoIndex documentation
 
-Last reviewed: 2026-09-13.
+Last reviewed: 2026-11-18 (Claude Cowork onboarding and hosting/scheduler reconciliation).
 
 This file is the navigation and lifecycle contract for repository documentation. It prevents historical plans, rollout notes, and temporary handoffs from becoming competing architecture sources.
 
@@ -21,17 +21,17 @@ Linear is the source of truth for current issue status, sequencing, blockers, an
 
 - Canonical stock universe: latest published `vn_top_stocks`, capped at 200 tickers.
 - Operational persistence: Supabase-first.
-- Canonical EOD scheduler: Supabase `pg_cron` job `qeoindex-eod-pipeline-1515-ict` at 15:15 ICT on trading weekdays.
+- EOD owner: independent `qeo-eod.timer` at 15:01 ICT weekdays; the former Supabase 15:15 scheduler is recorded inactive. Verify active ownership before schedule changes.
 - EOD architecture: `supabase-first-eod-v4-dag`.
 - Wyckoff operational timeframes: exactly `1D` + `1W` completed bars.
 - Persistent raw Wyckoff OHLCV: `1D` only; `1W` is deterministically derived.
 - Interactive chart raw OHLCV: canonical `1m` lives in the isolated `chart_ohlcv_intraday` hot store plus private `chart-ohlcv` cold storage; it does not widen the Wyckoff/EOD table contract.
 - Unsupported derived intraday chart timeframes must render unavailable rather than fabricate candles until the timeframe engine owns their aggregation.
 - Notion/other external knowledge systems may be downstream analytical or research layers, but they are not the active operational EOD state store.
-- Production release path: merge once to `main` → one Vercel Git Integration deployment → smoke the live system.
+- Latest recorded frontend production: Firebase App Hosting `qeoindex-vn` / `qeoindex-web` (QEO-45 cutover, 2026-11-05). Merge once to `main` → one configured Git rollout → verify serving SHA and smoke the live system. Reconcile stale Vercel-only AGENTS prose before operational changes.
 - Private operations tooling stays outside the public Next.js route tree; QEO-211 is a separate loopback-bound service exposed only through Tailscale.
 
-See `HANDOVER.md` for the full contract and safety gates.
+See [`HANDOVER.md`](./HANDOVER.md) for the full contract, **Claude Cowork: start here**, code ownership, access/configuration, troubleshooting and safety gates. [`../CLAUDE.md`](../CLAUDE.md) is the Claude entry point; it links here rather than creating a competing handover.
 
 ## Active core docs
 
@@ -46,7 +46,7 @@ See `HANDOVER.md` for the full contract and safety gates.
 | [`auth.md`](./auth.md) | Supabase Auth, sessions, feature gates and RLS ownership. |
 | [`UI_LESSONS_LEARNED.md`](./UI_LESSONS_LEARNED.md) | Mandatory UI performance/interaction lessons. |
 | [`build-performance.md`](./build-performance.md) | Build/cache performance guidance. |
-| [`hosting-firebase.md`](./hosting-firebase.md) | Firebase staging, CPU evidence, compatibility gates and rollback; not yet production. |
+| [`hosting-firebase.md`](./hosting-firebase.md) | Firebase configuration, dated production cutover evidence, compatibility gates, signing-key rotation and rollback. |
 | [`finhay-live-adapter.md`](./finhay-live-adapter.md) | Optional Finhay live adapter contract. |
 
 ## Active automation and database docs
@@ -90,6 +90,9 @@ If historical material conflicts with an Active document, the Active document wi
 8. Never put credentials, bearer tokens, private provider payloads, or secret-bearing URLs in docs.
 
 ## Docs-only release checklist
+
+Executable checks below belong in GitHub Actions under the inline-only policy; do not run them locally/remotely by default.
+
 
 - No active doc contradicts the canonical universe, EOD v4, Supabase-first, Wyckoff 1D/1W, or isolated interactive-chart `1m` contracts.
 - No links remain to deleted repo-wide handoff files.
