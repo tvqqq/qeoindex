@@ -1,4 +1,4 @@
-# QeoIndex → Firebase App Hosting (staging acceptance before DNS cutover)
+# QeoIndex — Firebase App Hosting operations
 
 Tracking: [QEO-45](https://linear.app/qeoindex/issue/QEO-45).
 Production domain: `https://qeoindex.qeoqeo.com`.
@@ -8,9 +8,18 @@ Staging: `https://qeoindex-web--qeoindex-vn.asia-southeast1.hosted.app`.
 The original `qeoindex` project is not the selected deployment target.
 GitHub: `tvqqq/qeoindex`, branch `main`, root `/`.
 
-**Code portability is not deployment acceptance.** A real Firebase App Hosting
-backend, its build logs, secrets, runtime tests, and custom DNS still require
-provider-side setup. Do not switch the production domain on a CI build alone.
+**Code portability is not deployment acceptance.** A passing CI build alone does not certify a serving rollout, authenticated behavior, DNS or scheduler ownership. Use the dated evidence and current provider readback, not the presence of configuration files.
+
+
+## Production cutover evidence
+
+The [QEO-45 discussion](https://linear.app/qeoindex/issue/QEO-45) records completed production cutover on **2026-11-05**. Firebase `qeoindex-vn` / `qeoindex-web` served `5404b074bbbc2cb7c2df2aef7384c75094f38b49` at the official domain over HTTPS; existing Supabase session and authenticated Board worked. `APP_URL` was changed to the official origin, the domain became Connected and was removed from Vercel `stockos`. Vercel Cron Jobs were disabled.
+
+A Firebase traffic-only rollback 006 → 005 → 006 was tested. The preserved, quota-paused Vercel deployment was not the accepted rollback. Do not describe it as ready without new verification.
+
+The setup sequence below preserves migration procedure, not an instruction to repeat DNS cutover or recreate the backend. Recheck actual rollout/traffic, secret references and timer ownership before any operational change. This documentation update did not perform a new provider/runtime health audit.
+
+Normal-market realtime handshake/data acceptance, representative full-session cost/performance and resolution of the independently recorded 2026-11-04 EOD statement timeout were not established by cutover. Notion was explicitly skipped. Current follow-up work belongs in Linear.
 
 ## Why
 
@@ -20,8 +29,9 @@ provider-side setup. Do not switch the production domain on a CI build alone.
 - PR #664 added per-instance cold-miss coalescing, bounded metric replay cache
   and authenticated production origin checks.
 - PR #665 removed Vercel Cron declarations and paused Supabase cron jobs
-  that call Vercel. The **previous deployed Vercel Cron remains active unless
-  separately disabled in Vercel Settings** or a new deployment replaces it.
+  that call Vercel. That source change did not itself disable Cron Jobs on the existing deployment;
+  the separate Vercel Settings toggle was verified Disabled during migration
+  (see dated cutover evidence above).
 - Current EOD owner: independent UpCloud `qeo-eod.timer` at 15:01 ICT
   weekdays. Verified from `services/eod-worker` and `system_job_runs`.
   Keep it running; do NOT deploy it into App Hosting.
@@ -44,7 +54,7 @@ BUILD and RUNTIME. Vercel builds omit it and retain Workflow World,
 Runtime Cache, analytics, and existing routes. No schema changes are
 necessary just to migrate the frontend.
 
-## Console setup for Firebase project `qeoindex-vn`
+## Original staging/setup sequence (historical procedure; do not repeat cutover)
 
 1. In Firebase Console → **App Hosting**, enable **Blaze billing** if prompted.
    A billing budget alert is not a hard $0 cap. `apphosting.yaml` configures
@@ -143,9 +153,7 @@ healthy. A successful Cloud Build alone does not prove rollout success.
 
 ## Rollback / reactivation
 
-If Firebase staging fails, do not change DNS. After production cutover,
-rollback points DNS to a verified, runnable Vercel deployment and restores
-`APP_URL`/auth domains, **without** enabling a duplicate cron.
+Prefer an explicitly approved, healthy Firebase revision with verified traffic-only rollback. Inspect retained revision tags and secret dependencies before switching traffic. DNS rollback to Vercel is an exceptional recovery option only after proving that runtime is runnable, its signer/origin/Auth configuration matches and its Cron Jobs remain disabled. Restore `APP_URL`/auth domains as required, **without** enabling a duplicate cron. Do not infer rollback readiness from the preserved project alone.
 To reactivate paused Supabase jobs later, selectively call
 `cron.alter_job(job_id := ..., active := true)` only after verifying
 the new durable workflow owner. Remove the QEO-45

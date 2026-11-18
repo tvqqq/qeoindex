@@ -10,6 +10,7 @@ Official domain: <https://qeoindex.qeoqeo.com>.
 
 Agents and maintainers should read these files in order:
 
+0. [`CLAUDE.md`](./CLAUDE.md) — Claude Cowork / Claude Code entry point (open its linked files explicitly).
 1. [`AGENTS.md`](./AGENTS.md) — repository invariants and Next.js version warning.
 2. [`docs/README.md`](./docs/README.md) — documentation map, source-of-truth hierarchy, and lifecycle rules.
 3. [`docs/HANDOVER.md`](./docs/HANDOVER.md) — canonical active production architecture and release/operations contract.
@@ -18,7 +19,12 @@ Agents and maintainers should read these files in order:
 
 Current work status belongs in Linear. Historical implementation context belongs in Git history and the explicitly historical `docs/superpowers/specs` / `docs/superpowers/plans` records, not in competing next-agent handoff files.
 
+For the complete onboarding sequence, engineering handoff roles, code map, configuration, troubleshooting and evidence requirements, read **Claude Cowork: start here** in [`docs/HANDOVER.md`](./docs/HANDOVER.md).
+
 ## Local setup
+
+The commands below describe developer setup; agents follow the inline-only execution policy in `AGENTS.md` and do not run shell/build/test commands by default. Do not copy existing secret-bearing environment files into a handoff.
+
 
 ```bash
 pnpm install
@@ -42,20 +48,8 @@ Use the more specific test suites documented in the touched domain. Database-cha
 
 ## Production deployment
 
-The product is **QeoIndex**. The existing Vercel infrastructure project remains `tvqqq/stockos` as a legacy deployment identifier; do not treat that slug as the product brand. The official public domain is <https://qeoindex.qeoqeo.com>. The `stockos-beryl.vercel.app` alias is retained only as an infrastructure fallback until explicitly retired.
+The latest approved cutover evidence in [QEO-45](https://linear.app/qeoindex/issue/QEO-45) records Firebase App Hosting production on 2026-11-05: project `qeoindex-vn`, backend `qeoindex-web`, Singapore. The official domain remains <https://qeoindex.qeoqeo.com>. Vercel `tvqqq/stockos` is the preserved former frontend, with Cron Jobs disabled in that acceptance record.
 
-Production uses a **single deployment path**:
+Read the canonical [handover](./docs/HANDOVER.md#hosting-evidence-and-ownership) and [hosting runbook](./docs/hosting-firebase.md) before release work. Older AGENTS/provider-specific prose still needs reconciliation with the actual active provider; do not infer today's deployment or scheduler state from a historical document.
 
-```text
-feature/work branch
-  -> validate + commit + push
-  -> merge/squash once to main
-  -> Vercel Git Integration auto-deploys main
-  -> verify READY + smoke production
-```
-
-`main` is the only deployment-enabled Git branch. Do **not** run `vercel --prod`, `vercel deploy --prod`, or a Deploy Hook after pushing/merging the same release to `main`; doing so creates duplicate production deployments.
-
-Use Vercel tooling only to inspect deployment status/logs and production health. A manual production deployment is an exceptional recovery path and requires explicit authorization plus confirmation that Git auto-deploy will not also run for that release.
-
-After the Git-triggered deployment, verify the official domain, the fallback Vercel alias when retained, and the APIs touched by the change. Deployment success alone is not a production smoke test.
+The routine release contract remains feature branch → reviewed PR → exact-head required GitHub Actions/reviews green → squash merge to `main` → one configured Git rollout → verify serving SHA and runtime smoke. Never bypass protections or manually redeploy the same release to verify it. Realtime and EOD worker images are independently deployed; a frontend merge does not update them.
